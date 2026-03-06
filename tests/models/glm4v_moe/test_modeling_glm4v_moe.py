@@ -27,7 +27,7 @@ from transformers.testing_utils import (
     cleanup,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     run_first,
     slow,
     torch_device,
@@ -168,6 +168,9 @@ class Glm4vMoeVisionText2TextModelTester:
         patch_size = config.vision_config.patch_size
         patches_per_side = self.image_size // patch_size
 
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[:, 1 : 1 + self.num_image_tokens] = 1
+
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_grid_thw": torch.tensor(
@@ -175,6 +178,7 @@ class Glm4vMoeVisionText2TextModelTester:
             ),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "mm_token_type_ids": mm_token_type_ids,
         }
         return config, inputs_dict
 
@@ -294,7 +298,9 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 @require_torch
 @slow
 class Glm4vMoeIntegrationTest(unittest.TestCase):
-    model = None
+    @classmethod
+    def setUpClass(cls):
+        cls.model = None
 
     @classmethod
     def get_model(cls):
@@ -432,7 +438,7 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
 
     @run_first
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Glm4vMoeForConditionalGeneration.from_pretrained(
             "zai-org/GLM-4.5V",

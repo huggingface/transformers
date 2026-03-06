@@ -11,10 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib.metadata
 import os
 import re
 from collections.abc import Callable
+from contextlib import contextmanager
 from types import ModuleType
+
+from packaging import version as pkg_version
 
 from ..utils import ENV_VARS_TRUE_VALUES, logging
 from ..utils.import_utils import is_kernels_available
@@ -28,10 +32,29 @@ try:
         Device,
         LayerRepository,
         Mode,
-        get_kernel,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
     )
+    from kernels import (
+        get_kernel as get_kernel_hub,
+    )
+    from kernels import (
+        use_kernel_forward_from_hub as _kernels_use_kernel_forward_from_hub,
+    )
+
+    # Try to import FuncRepository, fallback if not available
+    try:
+        from kernels import FuncRepository
+    except ImportError:
+        FuncRepository = None
+
+    # Try to import use_kernel_func_from_hub, fallback if not available
+    try:
+        from kernels import use_kernel_func_from_hub as _kernels_use_kernel_func_from_hub
+
+        _has_use_kernel_func_from_hub = True
+    except ImportError:
+        _has_use_kernel_func_from_hub = False
 
     _TRANSFORMERS_USE_HUB_KERNELS = os.environ.get("USE_HUB_KERNELS", "YES").upper()
     _kernels_available = True
@@ -39,8 +62,6 @@ try:
 
     def use_kernel_forward_from_hub(layer_name: str):
         if _kernels_enabled:
-            from kernels import use_kernel_forward_from_hub as _kernels_use_kernel_forward_from_hub
-
             return _kernels_use_kernel_forward_from_hub(layer_name)
         else:
             logger.warning_once(
@@ -48,7 +69,22 @@ try:
             )
             return lambda cls: cls
 
-    _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository]] = {
+    def use_kernel_func_from_hub(func_name: str):
+        if _kernels_enabled and _has_use_kernel_func_from_hub:
+            return _kernels_use_kernel_func_from_hub(func_name)
+        else:
+            if not _has_use_kernel_func_from_hub:
+                logger.warning_once(
+                    "use_kernel_func_from_hub is not available in the installed kernels version. "
+                    "Please upgrade kernels to use this feature."
+                )
+            else:
+                logger.warning_once(
+                    f"kernels hub usage is disabled through the environment USE_HUB_KERNELS={_TRANSFORMERS_USE_HUB_KERNELS}"
+                )
+            return lambda func: func
+
+    _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository | dict[Mode, LayerRepository]]] = {
         "MultiScaleDeformableAttention": {
             "cuda": LayerRepository(
                 repo_id="kernels-community/deformable-detr",
@@ -78,6 +114,12 @@ try:
             "xpu": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/rmsnorm",
+                    layer_name="RMSNorm",
+                )
+            },
+            "mps": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/mlx_rmsnorm",
                     layer_name="RMSNorm",
                 )
             },
@@ -111,13 +153,25 @@ try:
                     layer_name="MegaBlocksMoeMLP",
                 )
             },
+            "xpu": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/megablocks",
+                    layer_name="MegaBlocksMoeMLP",
+                )
+            },
+            "cpu": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/megablocks",
+                    layer_name="CPUMegaBlocksMoeMLP",
+                )
+            },
         },
         "FastGELU": {
             "cuda": {
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                     repo_id="kernels-community/activation",
                     layer_name="FastGELU",
-                    version=">=0.0.4,<0.1.0",
+                    version=1,
                 )
             }
         },
@@ -126,7 +180,7 @@ try:
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                     repo_id="kernels-community/activation",
                     layer_name="QuickGELU",
-                    version=">=0.0.4,<0.1.0",
+                    version=1,
                 )
             }
         },
@@ -135,32 +189,47 @@ try:
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                     repo_id="kernels-community/activation",
                     layer_name="NewGELU",
-                    version=">=0.0.4,<0.1.0",
+                    version=1,
                 )
             }
         },
         "SiLU": {
             "cuda": {
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation", layer_name="Silu", version=">=0.1.0"
+                    repo_id="kernels-community/activation", layer_name="Silu", version=1
                 )
             }
         },
         "GeLU": {
             "cuda": {
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation", layer_name="Gelu", version=">=0.1.0"
+                    repo_id="kernels-community/activation", layer_name="Gelu", version=1
                 )
             }
         },
         "GeluTanh": {
             "cuda": {
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation", layer_name="GeluTanh", version=">=0.1.0"
+                    repo_id="kernels-community/activation", layer_name="GeluTanh", version=1
                 )
             }
         },
     }
+
+    # Add function kernel mappings if FuncRepository is available
+    if FuncRepository is not None:
+        _KERNEL_MAPPING["rotary_pos_emb"] = {
+            "xpu": {
+                Mode.INFERENCE: FuncRepository(
+                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+                )
+            },
+            "cuda": {
+                Mode.INFERENCE: FuncRepository(
+                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+                )
+            },
+        }
 
     def has_key(d, key):
         return key in d or any(isinstance(v, dict) and has_key(v, key) for v in d.values())
@@ -187,6 +256,12 @@ except ImportError:
 
         return decorator
 
+    def use_kernel_func_from_hub(*args, **kwargs):
+        def decorator(func):
+            return func
+
+        return decorator
+
     class LayerRepository:
         def __init__(self, *args, **kwargs):
             raise RuntimeError("LayerRepository requires `kernels` to be installed. Run `pip install kernels`.")
@@ -199,9 +274,16 @@ except ImportError:
     def register_kernel_mapping(*args, **kwargs):
         raise RuntimeError("register_kernel_mapping requires `kernels` to be installed. Run `pip install kernels`.")
 
+    def register_kernel_mapping_transformers(*args, **kwargs):
+        raise RuntimeError(
+            "register_kernel_mapping_transformers requires `kernels` to be installed. Run `pip install kernels`."
+        )
+
 
 _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
-    "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d"},
+    "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d", "version": 1},
+    "mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
+    "falcon_mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
@@ -216,7 +298,7 @@ def is_kernel(attn_implementation: str | None) -> bool:
 
 
 def load_and_register_attn_kernel(
-    attn_implementation: str, attention_wrapper: Callable | None = None
+    attn_implementation: str, attention_wrapper: Callable | None = None, allow_all_kernels: bool = False
 ) -> ModuleType | None:
     """
     Load and register the kernel associated to `attn_implementation`.
@@ -227,6 +309,9 @@ def load_and_register_attn_kernel(
             have a wrapper around the `flash_attn_var_len` call, and the same goes for `sdpa` and `eager`.
             They just prepare the arguments properly. This is mostly used for continious batching, where we
             want the `paged` wrapper, which calls the paged cache.
+        allow_all_kernels (`bool`, optional):
+            Whether to load kernels from unverified hub repos, if it is a custom kernel outside of the `kernels-community`
+            hub repository.
     """
     from ..masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
     from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -255,7 +340,7 @@ def load_and_register_attn_kernel(
 
     # Load the kernel from hub
     try:
-        kernel = get_kernel(repo_id, revision=rev)
+        kernel = get_kernel(repo_id, revision=rev, allow_all_kernels=allow_all_kernels)
     except Exception as e:
         raise ValueError(f"An error occurred while trying to load from '{repo_id}': {e}.")
     # correctly wrap the kernel
@@ -277,18 +362,20 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     if kernel_name in mapping and isinstance(mapping[kernel_name], ModuleType):
         return mapping[kernel_name]
     if kernel_name not in _HUB_KERNEL_MAPPING:
-        logger.warning(f"Kernel {kernel_name} not found in _HUB_KERNEL_MAPPING")
+        logger.warning_once(f"Kernel {kernel_name} not found in _HUB_KERNEL_MAPPING")
         mapping[kernel_name] = None
         return None
     if _kernels_available:
-        from kernels import get_kernel
-
         try:
             repo_id = _HUB_KERNEL_MAPPING[kernel_name]["repo_id"]
+            revision = _HUB_KERNEL_MAPPING[kernel_name].get("revision", None)
             version = _HUB_KERNEL_MAPPING[kernel_name].get("version", None)
-            kernel = get_kernel(repo_id, version=version)
+            kernel = get_kernel(repo_id, revision=revision, version=version)
             mapping[kernel_name] = kernel
         except FileNotFoundError:
+            mapping[kernel_name] = None
+        except AssertionError:
+            # Happens when torch is built without an accelerator backend; fall back to slow path.
             mapping[kernel_name] = None
 
     else:
@@ -307,7 +394,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
         if callable(is_kernel_available) and is_kernel_available():
             # Try to import the module "{kernel_name}" from parent package level
             try:
-                module = importlib.import_module(f"{kernel_name}")
+                module = importlib.import_module(f"{new_kernel_name}")
                 mapping[kernel_name] = module
                 return module
             except Exception:
@@ -318,11 +405,90 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     return mapping[kernel_name]
 
 
+def get_kernel(
+    kernel_name: str,
+    revision: str | None = None,
+    version: int | str | None = None,
+    allow_all_kernels: bool = False,
+) -> ModuleType:
+    from .. import __version__
+
+    if not _kernels_available:
+        raise ImportError(
+            "`kernels` is either not installed or uses an incompatible version. Please install the latest version "
+            "with `pip install -U kernels`."
+        )
+
+    repo_parent = kernel_name.split("/")[0]
+    # all `kernels-community` repos are trusted by default!
+    if repo_parent != "kernels-community" and not allow_all_kernels:
+        raise ValueError(
+            "You need to specify `allow_all_kernels=True` to use kernels outside of the `kernels-community` repository"
+        )
+
+    user_agent = {"framework": "transformers", "version": __version__, "repo_id": kernel_name}
+    kernels_version = importlib.metadata.version("kernels")
+    if pkg_version.parse(kernels_version) >= pkg_version.parse("0.10.4"):
+        return get_kernel_hub(kernel_name, revision=revision, version=version, user_agent=user_agent)
+    else:
+        return get_kernel_hub(kernel_name, revision=revision, version=version)
+
+
+def use_kernelized_func(module_names: list[Callable] | Callable):
+    """
+    This decorator attaches the target function as an attribute of the module.
+    The function must already be decorated with @use_kernel_func_from_hub
+    this decorator then wraps it as an nn.Module internally.
+    When kernelize is later applied to the full model, the function can be accessed as a regular module attribute and kernelized just like any other layer.
+    The kernelization is performed in place, modifying the module directly.
+    """
+    if isinstance(module_names, Callable):
+        module_names = [module_names]
+
+    def decorator(cls):
+        orig_init = cls.__init__
+
+        def new_init(self, *args, **kwargs):
+            orig_init(self, *args, **kwargs)
+            for fn in module_names:
+                # we hardcode the name of the function to "rotary_fn" for now
+                setattr(self, "rotary_fn", fn)
+
+        cls.__init__ = new_init
+        return cls
+
+    return decorator
+
+
+# Whether to allow hub kernels coming from untrusted repos, i.e. repos outside `kernels-community`
+ALLOW_ALL_KERNELS = False
+
+
+@contextmanager
+def allow_all_hub_kernels():
+    """
+    Context manager used to adjust the value of the global `ALLOW_HUB_KERNELS`. This is needed, as this argument
+    cannot be forwarded directly to the `__init__` of the models, where we set the attention implementation.
+    """
+    global ALLOW_ALL_KERNELS
+
+    try:
+        ALLOW_ALL_KERNELS = True
+
+        yield
+    finally:
+        # Set back the original
+        ALLOW_ALL_KERNELS = False
+
+
 __all__ = [
     "LayerRepository",
     "use_kernel_forward_from_hub",
+    "use_kernel_func_from_hub",
     "register_kernel_mapping",
     "register_kernel_mapping_transformers",
     "replace_kernel_forward_from_hub",
     "lazy_load_kernel",
-]
+    "get_kernel",
+    "use_kernelized_func",
+]  # type: ignore

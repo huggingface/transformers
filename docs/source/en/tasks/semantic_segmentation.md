@@ -31,7 +31,7 @@ Before you begin, make sure you have all the necessary libraries installed:
 
 ```py
 # uncomment to install the necessary libraries
-!pip install -q datasets transformers evaluate accelerate
+!pip install -q datasets transformers evaluate accelerate trackio
 ```
 
 We encourage you to log in to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to log in:
@@ -219,7 +219,7 @@ Start by loading a smaller subset of the SceneParse150 dataset from the 🤗 Dat
 ```py
 >>> from datasets import load_dataset
 
->>> ds = load_dataset("scene_parse_150", split="train[:50]")
+>>> ds = load_dataset("merve/scene_parse_150", split="train[:50]")
 ```
 
 Split the dataset's `train` split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
@@ -436,6 +436,8 @@ At this point, only three steps remain:
 ...     save_steps=20,
 ...     eval_steps=20,
 ...     logging_steps=1,
+...     report_to="trackio",
+...     run_name="scene-parse-150",
 ...     eval_accumulation_steps=5,
 ...     remove_unused_columns=False,
 ...     push_to_hub=True,

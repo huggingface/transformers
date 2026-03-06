@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     cleanup,
     get_gpu_count,
     is_torch_available,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -59,11 +58,13 @@ if is_torch_available():
     from transformers.integrations.executorch import export_with_dynamic_cache
 
 
+# FIXME: offloaded cache is skipped becase it needs `offload_only_non_sliding=False`
+# but we can't configure cache through `generate()`
 TEST_CACHE_IMPLEMENTATIONS = [
     cache_name
     for cache_name in ALL_CACHE_IMPLEMENTATIONS
     # TODO (joao): offloaded_hybrid == offloaded_hybrid_chunked, deprecate one of them
-    if cache_name != "offloaded_hybrid"
+    if cache_name not in ["offloaded", "offloaded_hybrid", "offloaded_static", "offloaded_hybrid_chunked"]
 ]
 
 
@@ -164,7 +165,7 @@ class CacheIntegrationTest(unittest.TestCase):
         # Sanity check: a cache was used
         self.assertIsInstance(gen_out.past_key_values, Cache)
         # Confirm that the output matches expectations
-        decoded = self.tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
@@ -175,7 +176,7 @@ class CacheIntegrationTest(unittest.TestCase):
         """
         _skip_on_failed_cache_prerequisites(self, cache_implementation)
         if cache_implementation == "offloaded_hybrid_chunked":
-            # TODO (joao, cyril): something is off with `offloaded_hybrid_chunked` aka `OffloadedHybridCache`: the
+            # TODO (joao, cyril): something is off with `offloaded_hybrid_chunked`: the
             # output sequence (and the corresponding beam scores, if we add `output_scores=True`) are significantly
             # different from the other caches.
             self.skipTest("`offloaded_hybrid_chunked` fails this test")
@@ -201,7 +202,7 @@ class CacheIntegrationTest(unittest.TestCase):
         # At least one of the sequences requires multiple beam indices -> `reorder_cache` had to shift things around
         self.assertTrue(any(len(set(beams_in_sequence)) > 1 for beams_in_sequence in gen_out.beam_indices))
         # Confirm that the output matches expectations
-        decoded = self.tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
     @parameterized.expand([("quanto"), ("HQQ")])
@@ -243,7 +244,7 @@ class CacheIntegrationTest(unittest.TestCase):
 
         self.assertIsInstance(gen_out.past_key_values, QuantizedCache)
 
-        decoded = self.tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, expected_generation)
 
         # Check that something is actually quantized
@@ -264,7 +265,7 @@ class CacheIntegrationTest(unittest.TestCase):
         }
 
         gen_out = self.model.generate(**inputs, **generation_kwargs)
-        decoded = self.tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
         # Now with extra left-padding
@@ -272,7 +273,7 @@ class CacheIntegrationTest(unittest.TestCase):
         inputs_expanded = inputs_expanded.to(self.model.device)
         self.assertTrue(inputs.input_ids.shape[1] < inputs_expanded.input_ids.shape[1])
         gen_out = self.model.generate(**inputs_expanded, **generation_kwargs)
-        decoded = self.tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
 
@@ -297,11 +298,11 @@ class CacheHardIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-4B", device_map="auto", dtype=torch.bfloat16)
         inputs = tokenizer(["Here's everything I know about cats. Cats"], return_tensors="pt").to(model.device)
 
-        set_seed(0)
+        set_seed(42)
         gen_out = model.generate(
             **inputs, do_sample=True, top_k=5, max_new_tokens=256, return_dict_in_generate=True, output_scores=True
         )
-        decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         # sum of the scores for the generated tokens
         input_length = inputs.input_ids.shape[1]
         score_sum = sum(score[0][gen_out.sequences[0][input_length + idx]] for idx, score in enumerate(gen_out.scores))
@@ -347,23 +348,23 @@ class CacheHardIntegrationTest(unittest.TestCase):
         ).to(model.device)
         generation_kwargs = {"do_sample": False, "max_new_tokens": 10, "return_dict_in_generate": True}
 
-        set_seed(0)
+        set_seed(42)
         gen_out = model.generate(**inputs, **generation_kwargs)
-        decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, dynamic"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
             self.assertIsInstance(gen_out.past_key_values, DynamicCache)  # sanity check
 
-        set_seed(0)
+        set_seed(42)
         gen_out = model.generate(**inputs, **generation_kwargs, cache_implementation="static", disable_compile=True)
-        decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, static, eager"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
             self.assertIsInstance(gen_out.past_key_values, StaticCache)  # sanity check
 
-        set_seed(0)
+        set_seed(42)
         gen_out = model.generate(**inputs, **generation_kwargs, cache_implementation="static")
-        decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, static, compiled"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
             self.assertIsInstance(gen_out.past_key_values, StaticCache)  # sanity check
@@ -427,7 +428,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
             outputs = model.generate(
                 **new_inputs, past_key_values=past_key_values, max_new_tokens=40, disable_compile=True
             )
-            response = tokenizer.batch_decode(outputs)[0]
+            response = tokenizer.decode(outputs)[0]
             responses.append(response)
 
         EXPECTED_DECODED_TEXT = [
@@ -467,10 +468,13 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
         # Check that the caches are the same
         for layer_idx in range(len(no_parallelism_cache)):
-            for kv_idx in range(2):  # 0 = key, 1 = value
-                torch.testing.assert_close(
-                    actual=parallelism_cache[layer_idx][kv_idx], expected=no_parallelism_cache[layer_idx][kv_idx]
-                )
+            torch.testing.assert_close(
+                actual=parallelism_cache.layers[layer_idx].keys, expected=no_parallelism_cache.layers[layer_idx].keys
+            )
+            torch.testing.assert_close(
+                actual=parallelism_cache.layers[layer_idx].values,
+                expected=no_parallelism_cache.layers[layer_idx].values,
+            )
 
     @require_torch_gpu
     def test_static_cache_no_cuda_graph_skips(self):
@@ -492,7 +496,6 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
     @require_torch_multi_accelerator
     @slow
-    @require_read_token
     def test_static_cache_multi_accelerator(self):
         """Regression test for #35164: static cache with multi-accelerator"""
 
@@ -683,10 +686,8 @@ class CacheExportIntegrationTest(unittest.TestCase):
         """
         Tests that static cache works with `torch.export()`
         """
-        if not is_torch_greater_or_equal("2.3"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
-        set_seed(0)
+        set_seed(42)
         device = torch_device
         dtype = "bfloat16"
         cache_implementation = "static"
@@ -767,7 +768,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
 
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
-        set_seed(0)
+        set_seed(42)
         model_id = "hf-internal-testing/tiny-random-Gemma3ForCausalLM"
         model = AutoModelForCausalLM.from_pretrained(model_id)
         model.eval()
@@ -842,14 +843,15 @@ class SyntheticCacheTest(unittest.TestCase):
     def test_static_cache_out_of_bounds(self):
         """Test StaticCache raises IndexError for out-of-bounds positions."""
         static_cache = StaticCache(config=self.config, max_cache_len=self.max_cache_len)
-        pos_out_of_bounds = torch.tensor([self.max_cache_len])  # Position >= max_cache_len
+        prefill = torch.tensor([1.0, 2.0, 3.0, 4.0])[None, None, :, None]
+        # Fill-up the cache
+        static_cache.update(key_states=prefill, value_states=prefill, layer_idx=0)
 
         with self.assertRaises(IndexError):
             static_cache.update(
                 key_states=torch.tensor([[[[1.0]]]]),
                 value_states=torch.tensor([[[[1.0]]]]),
                 layer_idx=0,
-                cache_kwargs={"cache_position": pos_out_of_bounds},
             )
 
     def test_static_cache(self):
@@ -864,13 +866,12 @@ class SyntheticCacheTest(unittest.TestCase):
         """
         # Scenario 1: Fill up to near capacity
         static_cache = StaticCache(config=self.config, max_cache_len=self.max_cache_len)
-        prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
-        static_cache.update(key_states=prefill, value_states=prefill, layer_idx=0, cache_kwargs=None)
+        prefill = torch.tensor([1.0, 2.0])[None, None, :, None]
+        static_cache.update(key_states=prefill, value_states=prefill, layer_idx=0)
         static_cache.update(
             key_states=torch.tensor(3.0)[None, None, None, None],
             value_states=torch.tensor(3.0)[None, None, None, None],
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([2])},
         )
         self.assertEqual(
             static_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 0.0], "StaticCache Scenario 1 failed"

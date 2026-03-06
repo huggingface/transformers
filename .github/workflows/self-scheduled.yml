@@ -45,9 +45,10 @@ on:
         required: false
         type: string
     outputs:
-      report:
-        description: "Content of the report of new failures"
-        value: ${{ jobs.check_new_failures.outputs.report }}
+      is_infrastructure_ok:
+        description: "Whether the CI infrastructure (slack reporting and failure checking) succeeded"
+        value: ${{ jobs.send_results.outputs.is_slack_reporting_job_ok == 'true' && jobs.check_new_failures.outputs.is_check_failures_ok == 'true' }}
+
 
 env:
   HF_HOME: /mnt/cache
@@ -57,7 +58,7 @@ env:
   RUN_SLOW: yes
   # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access.
   # This token is created under the bot `hf-transformers-bot`.
-  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
 

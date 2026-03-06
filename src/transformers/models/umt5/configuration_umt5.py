@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023, The T5 Authors and HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,56 +14,23 @@
 """UMT5 model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="google/umt5-small")
 class UMT5Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`UMT5Model`]. It is used to instantiate a UMT5
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the UMT5
-    [google/umt5-small](https://huggingface.co/google/umt5-small) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Arguments:
-        vocab_size (`int`, *optional*, defaults to 250112):
-            Vocabulary size of the UMT5 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`UMT5Model`] or [`TFUMT5Model`].
-        d_model (`int`, *optional*, defaults to 512):
-            Size of the encoder layers and the pooler layer.
-        d_kv (`int`, *optional*, defaults to 64):
-            Size of the key, query, value projections per attention head. `d_kv` has to be equal to `d_model //
-            num_heads`.
-        d_ff (`int`, *optional*, defaults to 1024):
-            Size of the intermediate feed forward layer in each `UMT5Block`.
-        num_layers (`int`, *optional*, defaults to 8):
-            Number of hidden layers in the Transformer encoder.
-        num_decoder_layers (`int`, *optional*):
-            Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
-        num_heads (`int`, *optional*, defaults to 6):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        relative_attention_num_buckets (`int`, *optional*, defaults to 32):
-            The number of buckets to use for each attention layer.
-        relative_attention_max_distance (`int`, *optional*, defaults to 128):
-            The maximum distance of the longer sequences for the bucket separation.
-        dropout_rate (`float`, *optional*, defaults to 0.1):
-            The ratio for all dropout layers.
-        classifier_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for classifier.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
-            The epsilon used by the layer normalization layers.
-        initializer_factor (`float`, *optional*, defaults to 1):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-        feed_forward_proj (`string`, *optional*, defaults to `"gated-gelu"`):
-            Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
+    relative_attention_num_buckets (`int`, *optional*, defaults to 32):
+        The number of buckets to use for each attention layer.
+    relative_attention_max_distance (`int`, *optional*, defaults to 128):
+        The maximum distance of the longer sequences for the bucket separation.
+    feed_forward_proj (`str`, *optional*, defaults to `"gated-gelu"`):
+        Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`.
+    tokenizer_class (`str`, *optional*, defaults to `"T5Tokenizer"`):
+        The tokenizer's class name
     """
 
     model_type = "umt5"
@@ -94,13 +60,14 @@ class UMT5Config(PreTrainedConfig):
         is_encoder_decoder=True,
         use_cache=True,
         tokenizer_class="T5Tokenizer",
-        tie_word_embeddings=True,
         pad_token_id=0,
         eos_token_id=1,
         decoder_start_token_id=0,
         classifier_dropout=0.0,
+        is_decoder=False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
@@ -133,13 +100,16 @@ class UMT5Config(PreTrainedConfig):
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
+        self.tokenizer_class = tokenizer_class
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        # Force tie_word_embeddings to `True` for T5 family
+        kwargs.pop("tie_word_embeddings", None)
+        self.tie_word_embeddings = True
+
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
-            tokenizer_class=tokenizer_class,
-            tie_word_embeddings=tie_word_embeddings,
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
 

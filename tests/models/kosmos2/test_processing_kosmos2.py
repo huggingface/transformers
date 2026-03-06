@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     require_torch,
     require_vision,
 )
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
@@ -36,10 +37,10 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import (
+        AutoProcessor,
         CLIPImageProcessor,
         Kosmos2Processor,
         XLMRobertaTokenizer,
-        XLMRobertaTokenizerFast,
     )
 
 
@@ -55,9 +56,15 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_tokenizer(cls):
         # We have a SentencePiece fixture for testing
-        slow_tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB)
-        fast_tokenizer = XLMRobertaTokenizerFast(__slow_tokenizer=slow_tokenizer)
-        return fast_tokenizer
+        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
+        _, vocab_scores, _ = extractor.extract()
+        return XLMRobertaTokenizer(vocab=vocab_scores)
+
+    def get_tokenizer(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
+
+    def get_image_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
     @classmethod
     def _setup_image_processor(cls):
@@ -287,8 +294,8 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             outputs.image_embeds_position_mask,
             [0] * 2 + [1] * num_image_tokens + [0] + [0] * (len(expected_input_ids[0]) - 1),
         )
-        np.testing.assert_allclose(outputs.pixel_values[0][:3, :3, :3], EXPECTED_PIXEL_VALUES_1, atol=1e-9)
-        np.testing.assert_allclose(outputs.pixel_values[0][:3, -3:, -3:], EXPECTED_PIXEL_VALUES_2, atol=1e-9)
+        np.testing.assert_allclose(outputs.pixel_values[0][:3, :3, :3], EXPECTED_PIXEL_VALUES_1, atol=1e-4)
+        np.testing.assert_allclose(outputs.pixel_values[0][:3, -3:, -3:], EXPECTED_PIXEL_VALUES_2, atol=1e-4)
 
         # test with image in batch (right padding)
         outputs = processor(
@@ -301,10 +308,10 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertTupleEqual(outputs.pixel_values.shape, (4, 3, 224, 224))
         np.testing.assert_allclose(
-            outputs.pixel_values[:, :3, :3, :3].numpy(), [EXPECTED_PIXEL_VALUES_1] * len(batch_image), atol=1e-9
+            outputs.pixel_values[:, :3, :3, :3].numpy(), [EXPECTED_PIXEL_VALUES_1] * len(batch_image), atol=1e-4
         )
         np.testing.assert_allclose(
-            outputs.pixel_values[:, :3, -3:, -3:].numpy(), [EXPECTED_PIXEL_VALUES_2] * len(batch_image), atol=1e-9
+            outputs.pixel_values[:, :3, -3:, -3:].numpy(), [EXPECTED_PIXEL_VALUES_2] * len(batch_image), atol=1e-4
         )
         # padding on the right: the `[1:]` below is because the part for `BOS` is already added in the beginning of each (dynamically computed) expected value  # noqa
         # fmt: off

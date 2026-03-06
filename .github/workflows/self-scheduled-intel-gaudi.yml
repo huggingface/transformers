@@ -25,7 +25,7 @@ env:
   PT_HPU_LAZY_MODE: 0
   TRANSFORMERS_IS_CI: yes
   PT_ENABLE_INT64_SUPPORT: 1
-  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   HF_HOME: /mnt/cache/.cache/huggingface
 
 jobs:

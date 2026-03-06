@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,13 +14,11 @@
 """Tokenization class for CLVP."""
 
 import json
-import os
 from functools import lru_cache
-from typing import Optional
 
 import regex as re
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_python import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 from .number_normalizer import EnglishNormalizer
 
@@ -35,7 +32,6 @@ VOCAB_FILES_NAMES = {
 
 
 @lru_cache
-# Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
@@ -60,7 +56,6 @@ def bytes_to_unicode():
     return dict(zip(bs, cs))
 
 
-# Copied from transformers.models.gpt2.tokenization_gpt2.get_pairs
 def get_pairs(word):
     """
     Return set of symbol pairs in a word.
@@ -125,10 +120,6 @@ class ClvpTokenizer(PreTrainedTokenizer):
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (CLVP tokenizer detect beginning of words by the preceding space).
-        add_bos_token (`bool`, *optional*, defaults to `False`):
-            Whether to add `bos_token` in front of the sequence when add_special_tokens=True.
-        add_eos_token (`bool`, *optional*, defaults to `False`):
-            Whether to add `eos_token` in end of the sequence when add_special_tokens=True.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -147,8 +138,6 @@ class ClvpTokenizer(PreTrainedTokenizer):
         eos_token="[STOP]",
         pad_token="[STOP]",
         add_prefix_space=False,
-        add_bos_token=False,
-        add_eos_token=False,
         **kwargs,
     ):
         bos_token = AddedToken(bos_token, special=True) if isinstance(bos_token, str) else bos_token
@@ -156,10 +145,7 @@ class ClvpTokenizer(PreTrainedTokenizer):
         unk_token = AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token
         pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
 
-        self.add_bos_token = add_bos_token
-        self.add_eos_token = add_eos_token
         self._normalizer = None
-
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -183,8 +169,7 @@ class ClvpTokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             pad_token=pad_token,
             add_prefix_space=add_prefix_space,
-            add_bos_token=add_bos_token,
-            add_eos_token=add_eos_token,
+            special_tokens_pattern="none",
             **kwargs,
         )
 
@@ -201,7 +186,6 @@ class ClvpTokenizer(PreTrainedTokenizer):
     def get_vocab(self):
         return dict(self.encoder, **self.added_tokens_encoder)
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.bpe
     def bpe(self, token):
         if token in self.cache:
             return self.cache[token]
@@ -244,51 +228,6 @@ class ClvpTokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-    # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.build_inputs_with_special_tokens
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-        bos_token_id = [self.bos_token_id] if self.add_bos_token else []
-        eos_token_id = [self.eos_token_id] if self.add_eos_token else []
-
-        output = bos_token_id + token_ids_0 + eos_token_id
-
-        if token_ids_1 is not None:
-            output = output + bos_token_id + token_ids_1 + eos_token_id
-
-        return output
-
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.get_special_tokens_mask
-    def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
-    ) -> list[int]:
-        """
-        Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer `prepare_for_model` or `encode_plus` methods.
-
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not the token list is already formatted with special tokens for the model.
-
-        Returns:
-            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-        """
-        if already_has_special_tokens:
-            return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
-            )
-
-        if not self.add_bos_token:
-            return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=False
-            )
-
-        if token_ids_1 is None:
-            return [1] + ([0] * len(token_ids_0))
-        return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
-
     def _tokenize(self, text):
         """Tokenize a string."""
         bpe_tokens = []
@@ -306,17 +245,14 @@ class ClvpTokenizer(PreTrainedTokenizer):
 
         return bpe_tokens
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._convert_token_to_id
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._convert_id_to_token
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index)
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.convert_tokens_to_string
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
@@ -324,7 +260,7 @@ class ClvpTokenizer(PreTrainedTokenizer):
         return text
 
     def clean_up_tokenization(self, text):
-        text = "".join(text)
+        text = "".join(text) if isinstance(text, list) else text
         vocab_tokens = list(self.encoder.keys()) + list(self.added_tokens_encoder.keys())
 
         text = text.replace("[SPACE]", " ") if "[SPACE]" in vocab_tokens else text
@@ -332,36 +268,6 @@ class ClvpTokenizer(PreTrainedTokenizer):
 
         text = text.replace(self.unk_token, "").replace("   ", " ").replace("  ", " ")
         return text
-
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
-        if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return
-        vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-        merge_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
-        )
-
-        with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
-
-        index = 0
-        with open(merge_file, "w", encoding="utf-8") as writer:
-            writer.write("#version: 0.2\n")
-            for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
-                if index != token_index:
-                    logger.warning(
-                        f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive."
-                        " Please check that the tokenizer is not corrupted!"
-                    )
-                    index = token_index
-                writer.write(" ".join(bpe_tokens) + "\n")
-                index += 1
-
-        return vocab_file, merge_file
 
 
 __all__ = ["ClvpTokenizer"]

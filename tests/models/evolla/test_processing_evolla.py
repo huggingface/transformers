@@ -144,6 +144,8 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return protein_dict, message, expected_output
 
     def get_protein_tokenizer(self, **kwargs):
+        if "fix_mistral_regex" not in kwargs:
+            kwargs["fix_mistral_regex"] = True
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).protein_tokenizer
 
     def prepare_inputs_single(self):

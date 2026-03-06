@@ -40,7 +40,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -282,7 +281,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         self.model_tester.audio_channels = original_audio_channels
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_inference_equivalence
@@ -362,7 +361,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 _ = model_fa(dummy_input, **other_inputs)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_inference_equivalence_right_padding
@@ -698,9 +697,11 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 decoder_attention_mask=decoder_attention_mask,
                 **kwargs,
             )
-        self.assertTrue(
-            all(key not in outputs for key in ["encoder_attentions", "decoder_attentions", "cross_attentions"])
-        )
+
+        # in #43702, we introduced output_attentions/ hidden_states propagation to sub-configs
+        # self.assertTrue(
+        #     all(key not in outputs for key in ["encoder_attentions", "decoder_attentions", "cross_attentions"])
+        # )
         config.text_encoder.output_attentions = True  # inner model config -> will work
         config.audio_encoder.output_attentions = True
         config.decoder.output_attentions = True
@@ -899,7 +900,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.model_tester.audio_channels = original_audio_channels
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     def test_flash_attn_2_conversion(self):
@@ -1159,7 +1160,7 @@ class MusicgenIntegrationTests(unittest.TestCase):
         unconditional_inputs = model.get_unconditional_inputs(num_samples=2)
         unconditional_inputs = place_dict_on_device(unconditional_inputs, device=torch_device)
 
-        set_seed(0)
+        set_seed(42)
         output_values = model.generate(**unconditional_inputs, do_sample=True, max_new_tokens=10)
 
         # fmt: off
@@ -1240,7 +1241,7 @@ class MusicgenIntegrationTests(unittest.TestCase):
         input_ids = inputs.input_ids.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)
 
-        set_seed(0)
+        set_seed(42)
         output_values = model.generate(
             input_ids, attention_mask=attention_mask, do_sample=True, guidance_scale=None, max_new_tokens=10
         )

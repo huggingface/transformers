@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Deepseek AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,7 @@
 """
 Example of run command (run from root):
 
-python src/transformers/models/janus/convert_janus_weights_to_hf.py --repo_id deepseek-ai/Janus-Pro-1B --local_dir tmp/hub_code_in --output_dir tmp/hub_code_out --safe_serialization
+python src/transformers/models/janus/convert_janus_weights_to_hf.py --repo_id deepseek-ai/Janus-Pro-1B --local_dir tmp/hub_code_in --output_dir tmp/hub_code_out
 Using provided local directory: tmp/hub_code_in
 """
 
@@ -25,10 +24,8 @@ import gc
 import json
 import os
 import re
-from typing import Optional
 
 import torch
-from accelerate import init_empty_weights
 from huggingface_hub import snapshot_download
 
 from transformers import (
@@ -169,7 +166,7 @@ def convert_state_dict_to_hf(state_dict):
 
 
 def ensure_model_downloaded(
-    repo_id: Optional[str] = None, revision: Optional[str] = None, local_dir: Optional[str] = None
+    repo_id: str | None = None, revision: str | None = None, local_dir: str | None = None
 ) -> str:
     """
     Ensures model files are downloaded locally, downloads them if not.
@@ -245,7 +242,6 @@ def convert_model(
     text_model_id=None,
     output_dir=None,
     output_hub_path=None,
-    safe_serialization=True,
     revision=None,
 ):
     """Convert and save the model weights, processor, and configuration."""
@@ -404,7 +400,7 @@ def convert_model(
 
     # Initialize model with empty weights
     print("Creating empty model...")
-    with init_empty_weights():
+    with torch.device("meta"):
         model = JanusForConditionalGeneration(config)
 
     model.generation_config._from_model_config = False
@@ -431,10 +427,10 @@ def convert_model(
     # Save the model
     if output_dir:
         print(f"Saving model to {output_dir}...")
-        model.save_pretrained(output_dir, safe_serialization=safe_serialization)
+        model.save_pretrained(output_dir)
     if output_hub_path:
         print(f"Pushing model to hub at {output_hub_path}...")
-        model.push_to_hub(output_hub_path, safe_serialization=safe_serialization)
+        model.push_to_hub(output_hub_path)
 
     del state_dict, model
     gc.collect()
@@ -479,11 +475,6 @@ def main():
         help="Hub ID of the text model to get tokenizer from. Optional if tokenizer.json exists in the model directory.",
         required=False,
     )
-    parser.add_argument(
-        "--safe_serialization",
-        action="store_true",
-        help="Whether to save using safetensors",
-    )
     args = parser.parse_args()
 
     if args.output_dir is None and args.output_hub_path is None:
@@ -498,7 +489,6 @@ def main():
         text_model_id=args.text_model_id,
         output_dir=args.output_dir,
         output_hub_path=args.output_hub_path,
-        safe_serialization=args.safe_serialization,
         revision=args.revision,
     )
 

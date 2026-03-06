@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -38,8 +37,8 @@ from transformers import (
     TOKENIZER_MAPPING,
     AutoTokenizer,
     LayoutLMv3TokenizerFast,
-    PreTrainedTokenizer,
     PreTrainedTokenizerFast,
+    PythonBackend,
     logging,
 )
 from transformers.feature_extraction_utils import FeatureExtractionMixin
@@ -174,7 +173,6 @@ def get_architectures_from_config_class(config_class, arch_mappings, models_to_s
     """
     # A model architecture could appear in several mappings. For example, `BartForConditionalGeneration` is in
     #   - MODEL_FOR_PRETRAINING_MAPPING_NAMES
-    #   - MODEL_WITH_LM_HEAD_MAPPING_NAMES
     #   - MODEL_FOR_MASKED_LM_MAPPING_NAMES
     #   - MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
     # We avoid the duplication.
@@ -980,7 +978,7 @@ def get_config_overrides(config_class, processors):
         if isinstance(processor, PreTrainedTokenizerFast):
             tokenizer = processor
             break
-        elif isinstance(processor, PreTrainedTokenizer):
+        elif isinstance(processor, PythonBackend):
             tokenizer = processor
 
     if tokenizer is None:

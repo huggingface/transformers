@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta Platforms, Inc.and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,101 +13,48 @@
 # limitations under the License.
 """Mask2Former model configuration"""
 
-from typing import Optional
-
+from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ...utils import auto_docstring, logging
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="facebook/mask2former-swin-small-coco-instance")
 class Mask2FormerConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Mask2FormerModel`]. It is used to instantiate a
-    Mask2Former model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Mask2Former
-    [facebook/mask2former-swin-small-coco-instance](https://huggingface.co/facebook/mask2former-swin-small-coco-instance)
-    architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Currently, Mask2Former only supports the [Swin Transformer](swin) as backbone.
-
-    Args:
-        backbone_config (`PreTrainedConfig` or `dict`, *optional*, defaults to `SwinConfig()`):
-            The configuration of the backbone model. If unset, the configuration corresponding to
-            `swin-base-patch4-window12-384` will be used.
-        backbone (`str`, *optional*):
-            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
-            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
-            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, `False`):
-            Whether to use pretrained weights for the backbone.
-        use_timm_backbone (`bool`, *optional*, `False`):
-            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
-            library.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
-        feature_size (`int`, *optional*, defaults to 256):
-            The features (channels) of the resulting feature maps.
-        mask_feature_size (`int`, *optional*, defaults to 256):
-            The masks' features size, this value will also be used to specify the Feature Pyramid Network features'
-            size.
-        hidden_dim (`int`, *optional*, defaults to 256):
-            Dimensionality of the encoder layers.
-        encoder_feedforward_dim (`int`, *optional*, defaults to 1024):
-            Dimension of feedforward network for deformable detr encoder used as part of pixel decoder.
-        encoder_layers (`int`, *optional*, defaults to 6):
-            Number of layers in the deformable detr encoder used as part of pixel decoder.
-        decoder_layers (`int`, *optional*, defaults to 10):
-            Number of layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder.
-        dim_feedforward (`int`, *optional*, defaults to 2048):
-            Feature dimension in feedforward network for transformer decoder.
-        pre_norm (`bool`, *optional*, defaults to `False`):
-            Whether to use pre-LayerNorm or not for transformer decoder.
-        enforce_input_projection (`bool`, *optional*, defaults to `False`):
-            Whether to add an input projection 1x1 convolution even if the input channels and hidden dim are identical
-            in the Transformer decoder.
-        common_stride (`int`, *optional*, defaults to 4):
-            Parameter used for determining number of FPN levels used as part of pixel decoder.
-        ignore_value (`int`, *optional*, defaults to 255):
-            Category id to be ignored during training.
-        num_queries (`int`, *optional*, defaults to 100):
-            Number of queries for the decoder.
-        no_object_weight (`int`, *optional*, defaults to 0.1):
-            The weight to apply to the null (no object) class.
-        class_weight (`int`, *optional*, defaults to 2.0):
-            The weight for the cross entropy loss.
-        mask_weight (`int`, *optional*, defaults to 5.0):
-            The weight for the mask loss.
-        dice_weight (`int`, *optional*, defaults to 5.0):
-            The weight for the dice loss.
-        train_num_points (`str` or `function`, *optional*, defaults to 12544):
-            Number of points used for sampling during loss calculation.
-        oversample_ratio (`float`, *optional*, defaults to 3.0):
-            Oversampling parameter used for calculating no. of sampled points
-        importance_sample_ratio (`float`, *optional*, defaults to 0.75):
-            Ratio of points that are sampled via importance sampling.
-        init_std (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        init_xavier_std (`float`, *optional*, defaults to 1.0):
-            The scaling factor used for the Xavier initialization gain in the HM Attention map module.
-        use_auxiliary_loss (`boolean``, *optional*, defaults to `True`):
-            If `True` [`Mask2FormerForUniversalSegmentationOutput`] will contain the auxiliary losses computed using
-            the logits from each decoder's stage.
-        feature_strides (`list[int]`, *optional*, defaults to `[4, 8, 16, 32]`):
-            Feature strides corresponding to features generated from backbone network.
-        output_auxiliary_logits (`bool`, *optional*):
-            Should the model output its `auxiliary_logits` or not.
+    feature_size (`int`, *optional*, defaults to 256):
+        The features (channels) of the resulting feature maps.
+    mask_feature_size (`int`, *optional*, defaults to 256):
+        The masks' features size, this value will also be used to specify the Feature Pyramid Network features'
+        size.
+    encoder_feedforward_dim (`int`, *optional*, defaults to 1024):
+        Dimension of feedforward network for deformable detr encoder used as part of pixel decoder.
+    dim_feedforward (`int`, *optional*, defaults to 2048):
+        Feature dimension in feedforward network for transformer decoder.
+    pre_norm (`bool`, *optional*, defaults to `False`):
+        Whether to use pre-LayerNorm or not for transformer decoder.
+    enforce_input_projection (`bool`, *optional*, defaults to `False`):
+        Whether to add an input projection 1x1 convolution even if the input channels and hidden dim are identical
+        in the Transformer decoder.
+    common_stride (`int`, *optional*, defaults to 4):
+        Parameter used for determining number of FPN levels used as part of pixel decoder.
+    ignore_value (`int`, *optional*, defaults to 255):
+        Category id to be ignored during training.
+    num_queries (`int`, *optional*, defaults to 100):
+        Number of queries for the decoder.
+    train_num_points (`str` or `function`, *optional*, defaults to 12544):
+        Number of points used for sampling during loss calculation.
+    oversample_ratio (`float`, *optional*, defaults to 3.0):
+        Oversampling parameter used for calculating no. of sampled points
+    importance_sample_ratio (`float`, *optional*, defaults to 0.75):
+        Ratio of points that are sampled via importance sampling.
+    feature_strides (`list[int]`, *optional*, defaults to `[4, 8, 16, 32]`):
+        Feature strides corresponding to features generated from backbone network.
+    output_auxiliary_logits (`bool`, *optional*):
+        Should the model output its `auxiliary_logits` or not.
 
     Examples:
 
@@ -134,7 +80,7 @@ class Mask2FormerConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        backbone_config: Optional[dict] = None,
+        backbone_config: dict | PreTrainedConfig | None = None,
         feature_size: int = 256,
         mask_feature_size: int = 256,
         hidden_dim: int = 256,
@@ -161,41 +107,22 @@ class Mask2FormerConfig(PreTrainedConfig):
         init_xavier_std: float = 1.0,
         use_auxiliary_loss: bool = True,
         feature_strides: list[int] = [4, 8, 16, 32],
-        output_auxiliary_logits: Optional[bool] = None,
-        backbone: Optional[str] = None,
-        use_pretrained_backbone: bool = False,
-        use_timm_backbone: bool = False,
-        backbone_kwargs: Optional[dict] = None,
+        output_auxiliary_logits: bool | None = None,
         **kwargs,
     ):
-        if backbone_config is None and backbone is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
-            backbone_config = CONFIG_MAPPING["swin"](
-                image_size=224,
-                num_channels=3,
-                patch_size=4,
-                embed_dim=96,
-                depths=[2, 2, 18, 2],
-                num_heads=[3, 6, 12, 24],
-                window_size=7,
-                drop_path_rate=0.3,
-                use_absolute_embeddings=False,
-                out_features=["stage1", "stage2", "stage3", "stage4"],
-            )
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.pop("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
-
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
+            default_config_type="swin",
+            default_config_kwargs={
+                "depths": [2, 2, 18, 2],
+                "drop_path_rate": 0.3,
+                "out_features": ["stage1", "stage2", "stage3", "stage4"],
+            },
+            **kwargs,
         )
+
         # verify that the backbone is supported
-        if backbone_config is not None and backbone_config.model_type not in self.backbones_supported:
+        if backbone_config.model_type not in self.backbones_supported:
             logger.warning_once(
                 f"Backbone {backbone_config.model_type} is not a supported model and may not be compatible with Mask2Former. "
                 f"Supported model types: {','.join(self.backbones_supported)}"
@@ -230,10 +157,6 @@ class Mask2FormerConfig(PreTrainedConfig):
         self.feature_strides = feature_strides
         self.output_auxiliary_logits = output_auxiliary_logits
         self.num_hidden_layers = decoder_layers
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
-        self.backbone_kwargs = backbone_kwargs
 
         super().__init__(**kwargs)
 

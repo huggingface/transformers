@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_gemma3n.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -20,11 +19,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Sequence
-from typing import Any, Optional, Union
+from typing import Any, Literal
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
-from ...utils import is_timm_available, logging, requires_backends
+from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring, is_timm_available, logging, requires_backends
 
 
 if is_timm_available():
@@ -34,98 +33,34 @@ if is_timm_available():
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="google/gemma-3n-E4B")
 class Gemma3nTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Gemma3nTextModel`]. It is used to instantiate an
-    Gemma3nTextModel model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Gemma 3n E4B, e.g.
-    [google/gemma-3n-E4B](https://huggingface.co/google/gemma-3n-E4B).
-
-    Configuration objects that inherit from [`Gemma3nTextConfig`] and can be used to control the model outputs. Read
-    the documentation from [`Gemma3nTextConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 262400):
-            Vocabulary size of the Gemma3nText model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`Gemma3nTextModel`]
-        vocab_size_per_layer_input (`int`, *optional*, defaults to 262144):
-            Vocabulary size of the per-layer text embeddings that augment the standard embeddings.
-        hidden_size (`int`, *optional*, defaults to 2048):
-            Dimension of the hidden representations.
-        hidden_size_per_layer_input (`int`, *optional*, defaults to 256):
-            Dimension of the hidden representations for per-layer emebeddings.
-        intermediate_size (`int` or `Sequence[int]`, *optional*, defaults to 16384):
-            Dimension of the MLP representations. MatFormer configurations may wish to provide a sequence of integers
-            to account for variable intermediate_size values across layers. In such cases,
-            `len(intermediate_size) == num_hidden_layers`.
-        num_hidden_layers (`int`, *optional*, defaults to 35):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*, defaults to 2):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout this
-            [paper](https://huggingface.co/papers/2305.13245). If not specified, will default to `num_attention_heads`.
-        head_dim (`int`, *optional*, defaults to 256):
-            The attention head dimension.
-        hidden_activation (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the decoder. Will default to
-            `"gelu_pytorch_tanh"` if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"`
-            activation function.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*, defaults to 0):
-            Padding token id.
-        eos_token_id (`int`, *optional*, defaults to 1):
-            End of stream token id.
-        bos_token_id (`int`, *optional*, defaults to 2):
-            Beginning of stream token id.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        sliding_window (`int`, *optional*, defaults to 512):
-            This is the size of the sliding window used by local attention layers.
-        layer_types (`Optional`, *optional*):
-            A sequence of strings defining the attention type for that layer as either "sliding_attention" or
-            "full_attention". If not provided, `layer_types` will de inferred from `num_hidden_layers` using a pattern
-            of four "sliding_attention" layers followed one "full_attention". The last layer in the model should always
-            be a "full_attention" layer.
-        final_logit_softcapping (`float`, *optional*, defaults to 30.0):
-            Scaling factor when applying tanh softcapping on the logits.
-        altup_active_idx (`int`, *optional*, defaults to 0):
-            The index of the prediction from which AltUp will compute additional predictions or correct
-        altup_coef_clip (`float`, *optional*, defaults to 120.0):
-            The maximum amplitude of an AltUp prediction or correction coefficient weight.
-        altup_correct_scale (`bool`, *optional*, defaults to `True`):
-            If True, apply the `AltUp.correct_output_scale` to the corrected prediction at `altup_active_idx`.
-        altup_num_inputs (`int`, *optional*, defaults to 4):
-            The number of predictions that AltUp should be make given the input sequence.
-        num_kv_shared_layers (`int`, *optional*, defaults to 15):
-            The number of layer that share KV cache values. During the forward pass, the last `num_kv_shared_layers`
-            layers in the model "share" the KV values in that each local and global layer in this range uses the KV
-            cache values computed for the last local or global layer, respectively, before entering this range. The
-            value should be a multiple of the attention pattern size (see `layer_types` parameter).
-        laurel_rank (int, *optional*, defaults to 64):
-            The intermediate size for the linear projections in the Learned Augmented Residual Layer.
-        activation_sparsity_pattern (Sequence[float], *optional*):
-            The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
-            explicitly provide a sparsity value for each layer in the model. By default, the first 10 layers are
-            sparse with a sparsity factor of 0.95 and the rest are dense.
+    query_pre_attn_scalar (`float`, *optional*, defaults to 256):
+        scaling factor used on the attention scores
+    vocab_size_per_layer_input (`int`, *optional*, defaults to 262144):
+        Vocabulary size of the per-layer text embeddings that augment the standard embeddings.
+    hidden_size_per_layer_input (`int`, *optional*, defaults to 256):
+        Dimension of the hidden representations for per-layer emebeddings.
+    altup_active_idx (`int`, *optional*, defaults to 0):
+        The index of the prediction from which AltUp will compute additional predictions or correct
+    altup_coef_clip (`float`, *optional*, defaults to 120.0):
+        The maximum amplitude of an AltUp prediction or correction coefficient weight.
+    altup_correct_scale (`bool`, *optional*, defaults to `True`):
+        If True, apply the `AltUp.correct_output_scale` to the corrected prediction at `altup_active_idx`.
+    altup_num_inputs (`int`, *optional*, defaults to 4):
+        The number of predictions that AltUp should be make given the input sequence.
+    num_kv_shared_layers (`int`, *optional*, defaults to 15):
+        The number of layer that share KV cache values. During the forward pass, the last `num_kv_shared_layers`
+        layers in the model "share" the KV values in that each local and global layer in this range uses the KV
+        cache values computed for the last local or global layer, respectively, before entering this range. The
+        value should be a multiple of the attention pattern size (see `layer_types` parameter).
+    laurel_rank (int, *optional*, defaults to 64):
+        The intermediate size for the linear projections in the Learned Augmented Residual Layer.
+    activation_sparsity_pattern (Sequence[float], *optional*):
+        The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
+        explicitly provide a sparsity value for each layer in the model. By default, the first 10 layers are
+        sparse with a sparsity factor of 0.95 and the rest are dense.
 
     ```python
     >>> from transformers import Gemma3nTextModel, Gemma3nTextConfig
@@ -147,6 +82,9 @@ class Gemma3nTextConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.v_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
@@ -157,6 +95,7 @@ class Gemma3nTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    default_theta = {"global": 1_000_000.0, "local": 10_000.0}
 
     def __init__(
         self,
@@ -164,7 +103,7 @@ class Gemma3nTextConfig(PreTrainedConfig):
         vocab_size_per_layer_input: int = 262_144,
         hidden_size: int = 2048,
         hidden_size_per_layer_input: int = 256,
-        intermediate_size: Union[int, Sequence[int]] = 16_384,
+        intermediate_size: int | Sequence[int] = 16_384,
         num_hidden_layers: int = 35,
         num_attention_heads: int = 8,
         num_key_value_heads: int = 2,
@@ -177,11 +116,11 @@ class Gemma3nTextConfig(PreTrainedConfig):
         pad_token_id: int = 0,
         eos_token_id: int = 1,
         bos_token_id: int = 2,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        rope_parameters: dict[Literal["sliding_attention", "full_attention"], RopeParameters] | None = None,
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
         sliding_window: int = 512,
-        layer_types: Optional[Sequence[str]] = None,
+        layer_types: Sequence[str] | None = None,
         final_logit_softcapping: float = 30.0,
         altup_active_idx: int = 0,
         altup_coef_clip: float = 120.0,
@@ -189,16 +128,10 @@ class Gemma3nTextConfig(PreTrainedConfig):
         altup_num_inputs: int = 4,
         num_kv_shared_layers: int = 15,
         laurel_rank: int = 64,
-        activation_sparsity_pattern: Optional[Union[float, Sequence[float]]] = None,
+        activation_sparsity_pattern: float | Sequence[float] | None = None,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
-
         if isinstance(intermediate_size, Sequence) and (intsize_len := len(intermediate_size)) != num_hidden_layers:
             raise ValueError(
                 "intermediate_size must have an explicit intermediate size for every layer or one for all layers. "
@@ -207,6 +140,9 @@ class Gemma3nTextConfig(PreTrainedConfig):
         elif not isinstance(intermediate_size, Sequence):
             intermediate_size = [intermediate_size] * num_hidden_layers
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
         self.vocab_size_per_layer_input = vocab_size_per_layer_input
         self.max_position_embeddings = max_position_embeddings
@@ -225,9 +161,6 @@ class Gemma3nTextConfig(PreTrainedConfig):
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
         self.layer_types = layer_types
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
         if layer_types is None:
             self.layer_types = [
@@ -237,14 +170,6 @@ class Gemma3nTextConfig(PreTrainedConfig):
             self.layer_types = layer_types
 
         layer_type_validation(self.layer_types, self.num_hidden_layers)
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 1000000.0)
-        rope_local_base_freq = kwargs.get("rope_local_base_freq", 100000.0)
-        standardize_rope_params(
-            self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_local_base_freq}
-        )
-        rope_config_validation(self)
 
         self.hidden_size_per_layer_input = hidden_size_per_layer_input
         self.num_kv_shared_layers = num_kv_shared_layers
@@ -266,77 +191,97 @@ class Gemma3nTextConfig(PreTrainedConfig):
                 f"Expected {num_hidden_layers} values but got {len_asp}."
             )
         self.activation_sparsity_pattern = activation_sparsity_pattern
+        self.rope_parameters = rope_parameters
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
+
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
+        rope_scaling = kwargs.pop("rope_scaling", None)
+
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
+        # as arg in the inputs, we can safely assume that it is in the new format. New naming used -> new format
+        default_rope_params = {
+            "sliding_attention": {"rope_type": "default"},
+            "full_attention": {"rope_type": "default"},
+        }
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else default_rope_params
+        if rope_scaling is not None:
+            self.rope_parameters["full_attention"].update(rope_scaling)
+
+        # Set default values if not present
+        if self.rope_parameters.get("full_attention") is None:
+            self.rope_parameters["full_attention"] = {"rope_type": "default"}
+        self.rope_parameters["full_attention"].setdefault(
+            "rope_theta", kwargs.pop("rope_theta", self.default_theta["global"])
+        )
+        if self.rope_parameters.get("sliding_attention") is None:
+            self.rope_parameters["sliding_attention"] = {"rope_type": "default"}
+        self.rope_parameters["sliding_attention"].setdefault(
+            "rope_theta", kwargs.pop("rope_local_base_freq", self.default_theta["local"])
+        )
+
+        # Standardize and validate the correctness of rotary position embeddings parameters
+        self.standardize_rope_params()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
+        return kwargs
 
 
+@auto_docstring(checkpoint="google/gemma-3n-E4B")
 class Gemma3nAudioConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Gemma3nAudioEncoder`]. It is used to instantiate
-    an `Gemma3nAudioEncoder` model according to the specified arguments, defining the model architecture. Instantiating
-    a configuration with the defaults will yield a similar configuration to that of the Gemma 3n E4B, e.g.,
-    [google/gemma-3n-E4B](https://huggingface.co/google/gemma-3n-E4B).
-
-    Configuration objects that inherit from [`Gemma3nAudioConfig`] and can be used to control the model outputs. Read
-    the documentation from [`Gemma3nAudioConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 128):
-            Vocabulary size of the additional hard-token embeddings for audio model. These augment the embeddings
-            included in the `Gemma3nTextModel` to provide, e.g., the end of audio and audio soft token placeholder
-            tokens when converting `input_ids` to embeddings in the `Gemma3nForConditionalGeneration` model.
-        vocab_offset (`int`, *optional*, defaults to 262272):
-            Offset between the tokenizer vocab index for the token ids embedded by `Gemma3nMultimodalEmbedder` and the
-            0-indexed `Gemma3nMultimodalEmbedder.embedding` table.
-        input_feat_size (`int`, *optional*, defaults to 128):
-            The number of channels in each mel-spectrogram frame.
-        hidden_size (`int`, *optional*, defaults to 1536):
-            Dimension of the hidden representations.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        gradient_clipping (`float`, *optional*, defaults to 10000000000.0):
-            Clipping value used to stabilize extremely large gradient values.
-        conf_attention_chunk_size (`int`, *optional*, defaults to 12):
-            The sub-sequence size for local attention processing inside the Conformer ("conf") section of the
-            Universal Speech Model.
-        conf_attention_context_left (`int`, *optional*, defaults to 13):
-            The left context size of the local attention inside the Conformer ("conf") section of the
-            Universal Speech Model.
-        conf_attention_context_right (`int`, *optional*, defaults to 0):
-            The right context size of the local attention inside the Conformer ("conf") section of the
-            Universal Speech Model.
-        conf_attention_logit_cap (`float`, *optional*, defaults to 50.0):
-            Logit cap applied during local attention inside the Conformer ("conf") section of the
-            Universal Speech Model.
-        conf_num_attention_heads (`int`, *optional*, defaults to 8):
-            The number of attention heads in local attention inside the Conformer ("conf") section of the
-            Universal Speech Model.
-        conf_num_hidden_layers (`int`, *optional*, defaults to 12):
-            The number of layers that use local attention inside the Conformer ("conf") section of the
-            Universal Speech Model.
-        conf_conv_kernel_size (`int`, *optional*, defaults to 5):
-            Convolution kernel size for the conformer block inside the Conformer ("conf") section of the
-            Universal Speech Model.
-        conf_reduction_factor (`int`, *optional*, defaults to 4):
-            Reduction factor used in the conformer block inside the Conformer ("conf") section of the
-            Universal Speech Model.
-        conf_residual_weight (`float`, *optional*, defaults to 0.5):
-            Residual connection weight inside the Conformer ("conf") section of the
-            Universal Speech Model.
-        sscp_conv_channel_size (`tuple(int, int)`, *optional*, defaults to `(128, 32)`):
-            The channel sizes for the first and second convolutional layers in the Sub-sample Convolution Projection
-            ("sscp") section of the Universal Speech Model.
-        sscp_conv_group_norm_eps (`float`, *optional*, defaults to 0.001):
-            Epsilon used in group normalization in the subsample convolution projection in the Sub-sample Convolution
-            Projection ("sscp") section of the Universal Speech Model.
-        sscp_conv_kernel_size (`tuple(tuple(int, int), tuple(int, int))`, *optional*, defaults to `((3, 3), (3, 3))`):
-            Kernel sizes of the two convolutional layers in the subsample convolution projection  in the Sub-sample
-            Convolution Projection ("sscp") section of the Universal Speech Model. The kernel sizes are specified as a
-            tuple of height and width for each layer, where the height corresponds to the time dimension and the width
-            corresponds to the frequency dimension.
-        sscp_conv_stride_size (`tuple(tuple(int, int), tuple(int, int))`, *optional*, defaults to `((2, 2), (2, 2))`):
-            Stride sizes of the two convolutional layers in the subsample convolution projection in the Sub-sample
-            Convolution Projection ("sscp") section of the Universal Speech Model. The stride sizes are specified as a
-            tuple of height and width for each layer, where the height corresponds to the time dimension and the width
-            corresponds to the frequency dimension.
+    vocab_offset (`int`, *optional*, defaults to 262272):
+        Offset between the tokenizer vocab index for the token ids embedded by `Gemma3nMultimodalEmbedder` and the
+        0-indexed `Gemma3nMultimodalEmbedder.embedding` table.
+    input_feat_size (`int`, *optional*, defaults to 128):
+        The number of channels in each mel-spectrogram frame.
+    gradient_clipping (`float`, *optional*, defaults to 10000000000.0):
+        Clipping value used to stabilize extremely large gradient values.
+    conf_attention_chunk_size (`int`, *optional*, defaults to 12):
+        The sub-sequence size for local attention processing inside the Conformer ("conf") section of the
+        Universal Speech Model.
+    conf_attention_context_left (`int`, *optional*, defaults to 13):
+        The left context size of the local attention inside the Conformer ("conf") section of the
+        Universal Speech Model.
+    conf_attention_context_right (`int`, *optional*, defaults to 0):
+        The right context size of the local attention inside the Conformer ("conf") section of the
+        Universal Speech Model.
+    conf_attention_logit_cap (`float`, *optional*, defaults to 50.0):
+        Logit cap applied during local attention inside the Conformer ("conf") section of the
+        Universal Speech Model.
+    conf_num_attention_heads (`int`, *optional*, defaults to 8):
+        The number of attention heads in local attention inside the Conformer ("conf") section of the
+        Universal Speech Model.
+    conf_num_hidden_layers (`int`, *optional*, defaults to 12):
+        The number of layers that use local attention inside the Conformer ("conf") section of the
+        Universal Speech Model.
+    conf_conv_kernel_size (`int`, *optional*, defaults to 5):
+        Convolution kernel size for the conformer block inside the Conformer ("conf") section of the
+        Universal Speech Model.
+    conf_reduction_factor (`int`, *optional*, defaults to 4):
+        Reduction factor used in the conformer block inside the Conformer ("conf") section of the
+        Universal Speech Model.
+    conf_residual_weight (`float`, *optional*, defaults to 0.5):
+        Residual connection weight inside the Conformer ("conf") section of the
+        Universal Speech Model.
+    sscp_conv_channel_size (`tuple(int, int)`, *optional*, defaults to `(128, 32)`):
+        The channel sizes for the first and second convolutional layers in the Sub-sample Convolution Projection
+        ("sscp") section of the Universal Speech Model.
+    sscp_conv_group_norm_eps (`float`, *optional*, defaults to 0.001):
+        Epsilon used in group normalization in the subsample convolution projection in the Sub-sample Convolution
+        Projection ("sscp") section of the Universal Speech Model.
+    sscp_conv_kernel_size (`tuple(tuple(int, int), tuple(int, int))`, *optional*, defaults to `((3, 3), (3, 3))`):
+        Kernel sizes of the two convolutional layers in the subsample convolution projection  in the Sub-sample
+        Convolution Projection ("sscp") section of the Universal Speech Model. The kernel sizes are specified as a
+        tuple of height and width for each layer, where the height corresponds to the time dimension and the width
+        corresponds to the frequency dimension.
+    sscp_conv_stride_size (`tuple(tuple(int, int), tuple(int, int))`, *optional*, defaults to `((2, 2), (2, 2))`):
+        Stride sizes of the two convolutional layers in the subsample convolution projection in the Sub-sample
+        Convolution Projection ("sscp") section of the Universal Speech Model. The stride sizes are specified as a
+        tuple of height and width for each layer, where the height corresponds to the time dimension and the width
+        corresponds to the frequency dimension.
 
     Example:
 
@@ -407,35 +352,19 @@ class Gemma3nAudioConfig(PreTrainedConfig):
         self.sscp_conv_stride_size = sscp_conv_stride_size
 
 
+@auto_docstring(checkpoint="google/gemma-3n-E4B")
 class Gemma3nVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration for a timm backbone [`TimmWrapper`]. It is used to
-    instantiate an timm model model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the Gemma 3n E4B
-    vision tower, e.g. [google/gemma-3n-E4B](https://huggingface.co/google/gemma-3n-E4B).
-
-    Configuration objects inherit from [`Gemma3nVisionConfig`] and can be used to control the model outputs. Read the
-    documentation from [`Gemma3nVisionConfig`] for more information.
-
-    Config loads imagenet label descriptions and stores them in `id2label` attribute, `label2id` attribute for default
-    imagenet models is set to `None` due to occlusions in the label descriptions.
-
-    Args:
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        do_pooling (`bool`, *optional*, defaults to `False`):
-            Whether to do pooling for the last_hidden_state in `TimmWrapper` or not.
-        architecture (`str`, *optional*, defaults to `"mobilenetv5_300m_enc"`):
-            Determines vision architecture for TimmWrapper.
-        hidden_size (`int`, *optional*, defaults to 2048):
-            Dimension of the hidden representations.
-        vocab_size (`int`, *optional*, defaults to 128):
-            Vocabulary size of the additional hard-token embeddings for vision model.
-        vocab_offset (`int`, *optional*, defaults to 262144):
-            Offset between the tokenizer vocab index for the token ids embedded by `Gemma3nMultimodalEmbedder` and the
-            0-indexed `Gemma3nMultimodalEmbedder.embedding` table.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
+    architecture (`str`, *optional*, defaults to `"resnet50"`):
+        The timm architecture to load.
+    do_pooling (`bool`, *optional*, defaults to `True`):
+        Whether to do pooling for the last_hidden_state in `TimmWrapperModel` or not.
+    model_args (`dict[str, Any]`, *optional*):
+        Additional keyword arguments to pass to the `timm.create_model` function. e.g. `model_args={"depth": 3}`
+        for `timm/vit_base_patch32_clip_448.laion2b_ft_in12k_in1k` to create a model with 3 blocks. Defaults to `None`.
+    vocab_offset (`int`, *optional*, defaults to 262144):
+        Offset between the tokenizer vocab index for the token ids embedded by `Gemma3nMultimodalEmbedder` and the
+        0-indexed `Gemma3nMultimodalEmbedder.embedding` table.
 
     Example:
     ```python
@@ -463,7 +392,7 @@ class Gemma3nVisionConfig(PreTrainedConfig):
         vocab_size: int = 128,
         vocab_offset: int = 262_144,
         rms_norm_eps: float = 1e-06,
-        model_args: Optional[dict] = None,
+        model_args: dict | None = None,
         **kwargs,
     ):
         self.architecture = architecture
@@ -481,6 +410,9 @@ class Gemma3nVisionConfig(PreTrainedConfig):
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any], **kwargs):
+        # Create a copy to avoid mutating the original dict
+        config_dict = config_dict.copy()
+
         label_names = config_dict.get("label_names")
         is_custom_model = "num_labels" in kwargs or "id2label" in kwargs
 
@@ -528,44 +460,21 @@ class Gemma3nVisionConfig(PreTrainedConfig):
         return output
 
 
+@auto_docstring(checkpoint="google/gemma-3n-E4B")
 class Gemma3nConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Gemma3nForConditionalGeneration`]. It is used to
-    instantiate a Gemma3nForConditionalGeneration according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    Gemma3n-E4B.
-
-    e.g. [google/gemma-3n-E4B](https://huggingface.co/google/gemma-3n-E4B)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`Union[Gemma3nTextConfig, dict]`, *optional*):
-            The config object of the text backbone.
-        vision_config (`Union[AutoConfig, dict]`,  *optional*):
-            Custom vision config or dict.
-        audio_config (`Union[AutoConfig, dict]`,  *optional*):
-            Custom audio config or dict.
-        audio_soft_tokens_per_image (`int`, *optional*, defaults to 188):
-            The number of soft tokens per audio clip.
-        vision_soft_tokens_per_image (`int`, *optional*, defaults to 256):
-            The number of soft tokens per image.
-        boi_token_id (`int`, *optional*, defaults to 255999):
-            The begin-of-image token index to wrap the image prompt.
-        eoi_token_id (`int`, *optional*, defaults to 262144):
-            The end-of-image token index to wrap the image prompt.
-        image_token_id (`int`, *optional*, defaults to 262145):
-            The image token index to encode the image prompt.
-        boa_token_id (`int`, *optional*, defaults to 256000):
-            The begin-of-audio token index to wrap the audio prompt.
-        eoa_token_id (`int`, *optional*, defaults to 262272):
-            The end-of-audio token index to wrap the audio prompt.
-        audio_token_id (`int`, *optional*, defaults to 262273):
-            The audio token index to encode the audio prompt.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
+    audio_soft_tokens_per_image (`int`, *optional*, defaults to 188):
+        The number of soft tokens per audio clip.
+    vision_soft_tokens_per_image (`int`, *optional*, defaults to 256):
+        The number of soft tokens per image.
+    boi_token_id (`int`, *optional*, defaults to 255999):
+        The begin-of-image token index to wrap the image prompt.
+    eoi_token_id (`int`, *optional*, defaults to 262144):
+        The end-of-image token index to wrap the image prompt.
+    boa_token_id (`int`, *optional*, defaults to 256000):
+        The begin-of-audio token index to wrap the audio prompt.
+    eoa_token_id (`int`, *optional*, defaults to 262272):
+        The end-of-audio token index to wrap the audio prompt.
 
     Example:
 
@@ -600,22 +509,21 @@ class Gemma3nConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        text_config: Optional[Union[Gemma3nTextConfig, dict[str, Any]]] = None,
-        vision_config: Optional[Union[Gemma3nVisionConfig, dict[str, Any]]] = None,
-        audio_config: Optional[Union[Gemma3nAudioConfig, dict[str, Any]]] = None,
-        audio_soft_tokens_per_image: int = 188,
-        vision_soft_tokens_per_image: int = 256,
-        boi_token_id: int = 255_999,
-        eoi_token_id: int = 262_144,
-        image_token_id: int = 262_145,
-        boa_token_id: int = 256_000,
-        eoa_token_id: int = 262_272,
-        audio_token_id: int = 262_273,
-        initializer_range: float = 0.02,
+        text_config: Gemma3nTextConfig | dict[str, Any] | None = None,
+        vision_config: Gemma3nVisionConfig | dict[str, Any] | None = None,
+        audio_config: Gemma3nAudioConfig | dict[str, Any] | None = None,
+        audio_soft_tokens_per_image: int | None = 188,
+        vision_soft_tokens_per_image: int | None = 256,
+        boi_token_id: int | None = 255_999,
+        eoi_token_id: int | None = 262_144,
+        image_token_id: int | None = 262_145,
+        boa_token_id: int | None = 256_000,
+        eoa_token_id: int | None = 262_272,
+        audio_token_id: int | None = 262_273,
+        initializer_range: float | None = 0.02,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if isinstance(text_config, dict):
             text_config = Gemma3nTextConfig(**text_config)
         elif text_config is None:
@@ -647,6 +555,8 @@ class Gemma3nConfig(PreTrainedConfig):
         self.eoa_token_id = eoa_token_id
         self.audio_token_id = audio_token_id
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["Gemma3nAudioConfig", "Gemma3nConfig", "Gemma3nTextConfig", "Gemma3nVisionConfig"]

@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,72 +11,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-# Run all tests: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py
-# Run specific config: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py -k "2Proc"
-# Run multiple configs: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py -k "2Proc or 4Proc"
-# Run spefic test: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py::TestTensorParallel2Proc::test_model_dense_forward_train
-# Run tests with a specific prefix: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py::TestTensorParallel2Proc -k "forward"
-import os
-import tempfile
+import math
 import warnings
+from types import SimpleNamespace
 
-from safetensors import safe_open
+import torch
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
-from transformers.integrations.tensor_parallel import get_packed_weights, get_tensor_shard, repack_weights
-from transformers.testing_utils import (
-    TestCasePlus,
-    backend_device_count,
-    get_torch_dist_unique_port,
-    require_huggingface_hub_greater_or_equal,
-    require_torch_multi_accelerator,
-    torch_device,
+from transformers import AutoModelForCausalLM
+from transformers.integrations.tensor_parallel import (
+    ColwiseParallel,
+    EmbeddingParallel,
+    GroupedGemmParallel,
+    PackedColwiseParallel,
+    PackedRowwiseParallel,
+    RowwiseParallel,
+    get_packed_weights,
+    repack_weights,
 )
+from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
 
-if is_torch_available():
-    import torch
-    import torch.distributed as dist
-    import torch.multiprocessing as mp
-
-
-def global_wrapper(rank, func, tp, port, func_args, func_kwargs):
-    def setup_dist_env(rank, world_size, port):
-        os.environ["WORLD_SIZE"] = str(world_size)
-        os.environ["RANK"] = str(rank)
-        os.environ["LOCAL_RANK"] = str(rank)
-        os.environ["MASTER_ADDR"] = "localhost"
-        os.environ["MASTER_PORT"] = str(port)
-
-    world_size = tp
-    setup_dist_env(rank, world_size, port)
-
-    if torch.cuda.is_available():
-        torch.cuda.set_device(rank)
-        dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
-    else:
-        dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
-
-    func(rank, *func_args, **func_kwargs)
-
-    dist.barrier()
-    dist.destroy_process_group()
-
-
-def init_distributed(tp: int):
-    def _init_distributed(func):
-        def wrapper(*args, **kwargs):
-            world_size = tp
-            port = get_torch_dist_unique_port()
-            spawn_args = (func, tp, port, args, kwargs)
-            mp.spawn(global_wrapper, args=spawn_args, nprocs=world_size)
-
-        return wrapper
-
-    return _init_distributed
-
-
+@is_tensor_parallel_test
 class TestTensorParallelUtils(TestCasePlus):
     def test_packed_unpacked_conversion(self):
         WORLD_SIZE = 2
@@ -106,10 +61,11 @@ class TestTensorParallelUtils(TestCasePlus):
         assert torch.allclose(unpacked_weights, original_packed_weights)
 
 
+@is_tensor_parallel_test
 class TestTensorParallelProperties(TestCasePlus):
     def test_tp_plan_property_setter_getter(self):
         """Test that tp_plan property can be set and retrieved correctly."""
-        model_id = "JackFram/llama-68m"
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
         # Test setting empty plan
@@ -127,16 +83,16 @@ class TestTensorParallelProperties(TestCasePlus):
         self.assertEqual(model.tp_plan, expected_plan)
 
         # Test overriding existing entry
-        model.tp_plan.update({"model.layers.*.self_attn.q_proj": "colwise_rep"})
+        model.tp_plan.update({"model.layers.*.self_attn.q_proj": "rowwise"})
         expected_plan = {
-            "model.layers.*.self_attn.q_proj": "colwise_rep",
+            "model.layers.*.self_attn.q_proj": "rowwise",
             "model.layers.*.self_attn.k_proj": "colwise",
         }
         self.assertEqual(model.tp_plan, expected_plan)
 
     def test_tp_plan_validation_invalid_style(self):
         """Test that invalid parallel styles are rejected."""
-        model_id = "JackFram/llama-68m"
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
         # Test invalid parallel style
@@ -149,7 +105,7 @@ class TestTensorParallelProperties(TestCasePlus):
     def test_tp_plan_validation_nonexistent_layer_warning(self):
         """Test that warnings are issued for non-existent layer patterns."""
 
-        model_id = "JackFram/llama-68m"
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
         # Test warning for non-existent layer pattern
@@ -164,14 +120,14 @@ class TestTensorParallelProperties(TestCasePlus):
 
     def test_tp_plan_valid_layer_patterns(self):
         """Test that valid layer patterns are accepted without warnings."""
-        model_id = "JackFram/llama-68m"
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
         # Test valid layer patterns that should match the model structure
         valid_plans = [
             {"model.layers.*.self_attn.q_proj": "colwise"},
             {"model.layers.*.self_attn.k_proj": "rowwise"},
-            {"model.layers.*.mlp.gate_proj": "colwise_rep"},
+            {"model.layers.*.mlp.gate_proj": "colwise"},
         ]
 
         for plan in valid_plans:
@@ -199,7 +155,7 @@ class TestTensorParallelProperties(TestCasePlus):
 
     def test_tp_plan_none_handling(self):
         """Test that None values are handled correctly."""
-        model_id = "JackFram/llama-68m"
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
         # Test setting None
@@ -211,268 +167,254 @@ class TestTensorParallelProperties(TestCasePlus):
         self.assertEqual(model.tp_plan, {"model.layers.*.self_attn.q_proj": "colwise"})
 
 
-# ====== TEST FUNCTIONS ======
-def _test_model_dense_forward_impl(rank, mode):
-    """Implementation for comparing TP and non-TP model outputs."""
-    model_id = "JackFram/llama-68m"
+@is_tensor_parallel_test
+class TestTensorParallelLayer(TestCasePlus):
+    class MockDeviceMesh:
+        def __init__(self, world_size, rank):
+            self.world_size = world_size
+            self.rank = rank
+            self.shape = (world_size,)
 
-    # Ensure same random seed for reproducibility
-    torch.manual_seed(0)
+        def size(self):
+            return self.world_size
 
-    # Load tokenizer and prepare inputs - same for both models
-    tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
-    prompt = "Can I help"
-    inputs = tokenizer(prompt, return_tensors="pt")
+        def get_local_rank(self):
+            return self.rank
 
-    # Load TP model first to determine device
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
-    dist.barrier()
-    if mode == "eval":
-        model_tp.eval()
-    else:
-        model_tp.train()
+    def test_colwise_get_expected_sharded_shape(self):
+        world_size = 3
+        size = 10  # not divisible by world_size to test edge case
+        empty_param_2d = torch.empty(size, 32)
+        empty_param_1d = torch.empty((size,))
+        step = math.ceil(size / world_size)
 
-    # Load non-TP model and move to same device as TP model
-    device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
-    model = model.to(device)
+        for rank in range(world_size):
+            for empty_param in [empty_param_2d, empty_param_1d]:
+                device_mesh = self.MockDeviceMesh(world_size=world_size, rank=rank)
+                layer = ColwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty_param)
 
-    if mode == "eval":
-        model.eval()
-    else:
-        model.train()
+                begin = rank * step
+                end = min(begin + step, size)
+                ground_truth = (end - begin,) + empty_param.shape[1:]
+                expected_shape = layer.get_expected_sharded_shape(empty_param.shape)
+                self.assertEqual(
+                    expected_shape, ground_truth, f"Rank {rank} expected shape {ground_truth} but got {expected_shape}"
+                )
 
-    # Prepare inputs on the same device
-    input_ids = inputs.input_ids.to(device)
+    def test_rowwise_get_expected_sharded_shape(self):
+        world_size = 3
+        size = 10  # not divisible by world_size to test edge case
+        empty_param_2d = torch.empty(32, size)
+        empty_param_1d = torch.empty((size,))
+        step = math.ceil(size / world_size)
 
-    # Run forward pass on both models
-    with torch.no_grad():
-        # Non-TP model output
-        outputs = model(input_ids)
-        logits = outputs.logits
+        for rank in range(world_size):
+            device_mesh = self.MockDeviceMesh(world_size=world_size, rank=rank)
 
-        # TP model output
-        outputs_tp = model_tp(input_ids)
-        logits_tp = outputs_tp.logits
-
-    # Compare outputs - they should match
-    assert torch.allclose(logits, logits_tp, atol=1e-5, rtol=1e-5), (
-        f"TP and non-TP model outputs differ. Max diff: {(logits - logits_tp).abs().max().item()} | Min diff: {(logits - logits_tp).abs().min().item()}"
-    )
-
-    dist.barrier()
-
-
-def _test_model_dense_backward_pass_impl(rank):
-    """Implementation for comparing TP and non-TP model backward passes."""
-    model_id = "JackFram/llama-68m"
-
-    torch.manual_seed(0)
-
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32, tp_plan="auto")
-    dist.barrier()
-    model_tp.train()
-
-    device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32)
-    model = model.to(device)
-    model.train()
-
-    batch_size, seq_length = 2, 10
-    torch.manual_seed(42)  # Different seed for inputs to ensure they're deterministic
-    input_ids = torch.randint(0, model.config.vocab_size, (batch_size, seq_length), device=device)
-    labels = torch.randint(0, model.config.vocab_size, (batch_size, seq_length), device=device)
-
-    outputs = model(input_ids, labels=labels)
-    loss = outputs.loss
-    loss.backward()
-
-    outputs_tp = model_tp(input_ids, labels=labels)
-    loss_tp = outputs_tp.loss
-    loss_tp.backward()
-
-    assert torch.allclose(loss, loss_tp, atol=1e-5, rtol=1e-5), (
-        f"TP and non-TP model losses differ. Non-TP loss: {loss.item()}, TP loss: {loss_tp.item()}, Diff: {(loss - loss_tp).abs().item()}"
-    )
-
-    # Compare gradients for matching parameters
-    # Note: TP model may have sharded parameters (DTensors), so we slice the reference gradient to match
-    for (name, param), (name_tp, param_tp) in zip(model.named_parameters(), model_tp.named_parameters()):
-        if param.grad is not None and param_tp.grad is not None:
-            grad = param.grad
-            grad_tp = param_tp.grad
-
-            if isinstance(param_tp.data, dist.tensor.DTensor):
-                placement = param_tp.data.placements[0]
-                if hasattr(placement, "dim") and placement.dim is not None:
-                    grad_shard = get_tensor_shard(grad, grad, param_tp.data.device_mesh, rank, placement.dim)
-                else:
-                    grad_shard = grad
-            else:
-                grad_shard = grad
-
-            grad_tp_local = grad_tp.to_local() if isinstance(grad_tp, dist.tensor.DTensor) else grad_tp
-
-            assert torch.allclose(grad_shard.cpu(), grad_tp_local.cpu(), atol=1e-5, rtol=1e-5), (
-                f"Gradients differ for parameter {name}. Max diff: {(grad_shard.cpu() - grad_tp_local.cpu()).abs().max().item()} | Min diff: {(grad_shard.cpu() - grad_tp_local.cpu()).abs().min().item()}"
+            # 2D: shards on dim -1 (input features)
+            layer = RowwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty_param_2d)
+            begin = rank * step
+            end = min(begin + step, size)
+            ground_truth = empty_param_2d.shape[:-1] + (end - begin,)
+            expected_shape = layer.get_expected_sharded_shape(empty_param_2d.shape)
+            self.assertEqual(
+                expected_shape, ground_truth, f"Rank {rank} expected shape {ground_truth} but got {expected_shape}"
             )
 
-    dist.barrier()
+            # 1D bias: NOT sharded
+            layer = RowwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty_param_1d)
+            self.assertEqual(layer.get_expected_sharded_shape(empty_param_1d.shape), empty_param_1d.shape)
 
+    def test_embedding_get_expected_sharded_shape(self):
+        world_size = 3
+        size = 10  # not divisible by world_size to test edge case; same size on both dims so step applies to both
+        empty_param = torch.empty(size, size)
+        step = math.ceil(size / world_size)
 
-def _test_model_dense_forward_compile_impl(rank, mode):
-    """Implementation for comparing TP and non-TP model outputs with torch.compile."""
-    model_id = "JackFram/llama-68m"
+        for rank in range(world_size):
+            device_mesh = self.MockDeviceMesh(world_size=world_size, rank=rank)
+            begin = rank * step
+            end = min(begin + step, size)
 
-    torch.manual_seed(0)
+            # embedding_dim_sharding=0: shards dim 0 (vocab)
+            layer = EmbeddingParallel(
+                device_mesh=device_mesh, rank=rank, empty_param=empty_param, embedding_dim_sharding=0
+            )
+            ground_truth = (end - begin,) + empty_param.shape[1:]
+            expected_shape = layer.get_expected_sharded_shape(empty_param.shape)
+            self.assertEqual(
+                expected_shape, ground_truth, f"Rank {rank} expected shape {ground_truth} but got {expected_shape}"
+            )
 
-    tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
-    prompt = "Can I help"
-    inputs = tokenizer(prompt, return_tensors="pt")
+            # embedding_dim_sharding=1: shards dim 1 (embedding dim)
+            layer = EmbeddingParallel(
+                device_mesh=device_mesh, rank=rank, empty_param=empty_param, embedding_dim_sharding=1
+            )
+            ground_truth = empty_param.shape[:1] + (end - begin,) + empty_param.shape[2:]
+            expected_shape = layer.get_expected_sharded_shape(empty_param.shape)
+            self.assertEqual(
+                expected_shape, ground_truth, f"Rank {rank} expected shape {ground_truth} but got {expected_shape}"
+            )
 
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
-    dist.barrier()
-    if mode == "eval":
-        model_tp.eval()
-    else:
-        model_tp.train()
+    def test_grouped_gemm_get_expected_sharded_shape(self):
+        world_size = 3
+        size = 9  # must be divisible by world_size (GroupedGemm requires it)
+        empty_param = torch.empty(size, 16, 32)
+        step = math.ceil(size / world_size)
 
-    device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
-    model = model.to(device)
+        for rank in range(world_size):
+            device_mesh = self.MockDeviceMesh(world_size=world_size, rank=rank)
+            layer = GroupedGemmParallel(device_mesh=device_mesh, rank=rank, empty_param=empty_param)
+            begin = rank * step
+            end = min(begin + step, size)
+            ground_truth = (end - begin,) + empty_param.shape[1:]
+            expected_shape = layer.get_expected_sharded_shape(empty_param.shape)
+            self.assertEqual(
+                expected_shape, ground_truth, f"Rank {rank} expected shape {ground_truth} but got {expected_shape}"
+            )
 
-    if mode == "eval":
-        model.eval()
-    else:
-        model.train()
+    def test_colwise_update_module_attributes(self):
+        device_mesh = self.MockDeviceMesh(world_size=4, rank=0)
 
-    # Compile both models
-    model.forward = torch.compile(model.forward)
-    model_tp.forward = torch.compile(model_tp.forward)
+        # gather_output=False (default): out_features is updated
+        module = torch.nn.Linear(32, 16)
+        layer = ColwiseParallel(device_mesh=device_mesh, rank=0, empty_param=torch.empty(16, 32))
+        layer.update_module_attributes(module)
+        self.assertEqual(module.out_features, 4)
 
-    input_ids = inputs.input_ids.to(device)
+        # gather_output=True: out_features is NOT updated
+        module = torch.nn.Linear(32, 16)
+        layer = ColwiseParallel(device_mesh=device_mesh, rank=0, empty_param=torch.empty(16, 32), gather_output=True)
+        layer.update_module_attributes(module)
+        self.assertEqual(module.out_features, 16)
 
-    with torch.no_grad():
-        outputs = model(input_ids)
-        logits = outputs.logits
+    def test_rowwise_update_module_attributes(self):
+        device_mesh = self.MockDeviceMesh(world_size=4, rank=0)
 
-        outputs_tp = model_tp(input_ids)
-        logits_tp = outputs_tp.logits
+        module = torch.nn.Linear(32, 16)
+        layer = RowwiseParallel(device_mesh=device_mesh, rank=0, empty_param=torch.empty(16, 32))
+        layer.update_module_attributes(module)
+        self.assertEqual(module.in_features, 8)
 
-    assert torch.allclose(logits, logits_tp, atol=1e-5, rtol=1e-5), (
-        f"TP and non-TP model outputs differ. Max diff: {(logits - logits_tp).abs().max().item()} | Min diff: {(logits - logits_tp).abs().min().item()}"
-    )
+    def test_embedding_update_module_attributes(self):
+        device_mesh = self.MockDeviceMesh(world_size=4, rank=0)
 
-    dist.barrier()
+        # embedding_dim_sharding=0: num_embeddings is updated
+        module = torch.nn.Embedding(32, 16)
+        layer = EmbeddingParallel(
+            device_mesh=device_mesh, rank=0, empty_param=torch.empty(32, 16), embedding_dim_sharding=0
+        )
+        layer.update_module_attributes(module)
+        self.assertEqual(module.num_embeddings, 8)
+        self.assertEqual(module.embedding_dim, 16)
 
+        # embedding_dim_sharding=1: embedding_dim is updated
+        module = torch.nn.Embedding(32, 16)
+        layer = EmbeddingParallel(
+            device_mesh=device_mesh, rank=0, empty_param=torch.empty(32, 16), embedding_dim_sharding=1
+        )
+        layer.update_module_attributes(module)
+        self.assertEqual(module.num_embeddings, 32)
+        self.assertEqual(module.embedding_dim, 4)
 
-def _test_model_dense_save_impl(rank, tmp_dir):
-    """Implementation of test_model_save for distributed execution."""
-    model_id = "JackFram/llama-68m"
+    def test_grouped_gemm_update_module_attributes(self):
+        device_mesh = self.MockDeviceMesh(world_size=4, rank=0)
 
-    if dist.is_initialized():
-        kwargs = {"tp_plan": "auto"}
-        result_dir = f"{tmp_dir}/tp"
-    else:
-        kwargs = {}
-        result_dir = f"{tmp_dir}/nontp"
+        # There is no torch module with num_experts attribute, it is more at the Transformers level,
+        # so just use a SimpleNamespace to test that the attribute is updated correctly.
+        module = SimpleNamespace(num_experts=8)
+        layer = GroupedGemmParallel(device_mesh=device_mesh, rank=0, empty_param=torch.empty(8, 16, 32))
+        layer.update_module_attributes(module)
+        self.assertEqual(module.num_experts, 2)
 
-    model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
-    model.save_pretrained(result_dir)
+    def test_update_module_attributes_missing_attribute(self):
+        device_mesh = self.MockDeviceMesh(world_size=4, rank=0)
+        module = SimpleNamespace(random_attr=123)
+        for cls in [ColwiseParallel, RowwiseParallel, GroupedGemmParallel]:
+            layer = cls(device_mesh=device_mesh, rank=0, empty_param=torch.empty(16, 32))
+            layer.update_module_attributes(module)
 
+        self.assertEqual(
+            module.__dict__,
+            {"random_attr": 123},
+            "update_module_attributes should not modify attributes that don't exist",
+        )
 
-class TestTensorParallelBase(TestCasePlus):
-    """Base class for tensor parallel tests. Subclasses must set nproc_per_node."""
+    def test_shard_tensor_shape_consistency(self):
+        """
+        Test that shard_tensor returns tensors of the expected shape for different parallel styles and ranks.
+        """
+        WORLD_SIZE = 4
+        cases = [
+            (ColwiseParallel, (16, 32), {}),
+            (ColwiseParallel, (16, 32), {"gather_output": True}),
+            (ColwiseParallel, (16,), {}),
+            (RowwiseParallel, (16, 32), {}),
+            (RowwiseParallel, (32,), {}),
+            (EmbeddingParallel, (32, 16), {"embedding_dim_sharding": 0}),
+            (EmbeddingParallel, (32, 16), {"embedding_dim_sharding": 1}),
+        ]
+        for cls, shape, kwargs in cases:
+            for rank in range(WORLD_SIZE):
+                device_mesh = self.MockDeviceMesh(world_size=WORLD_SIZE, rank=rank)
+                layer = cls(device_mesh=device_mesh, rank=rank, empty_param=torch.empty(*shape), **kwargs)
 
-    nproc_per_node = None
+                full_tensor = torch.randn(*shape)
+                sharded = layer.shard_tensor(full_tensor)
+                expected = layer.get_expected_sharded_shape(shape)
 
-    @require_torch_multi_accelerator
-    def test_model_dense_forward_eval(self):
-        """Test that TP and non-TP models produce the same outputs in eval mode."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+                self.assertEqual(tuple(sharded.shape), expected, f"{cls.__name__} rank={rank} shape={shape}")
 
-        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_impl)("eval")
+    def test_packed_colwise_shard_tensor(self):
+        WORLD_SIZE = 2
+        # 3D empty_param
+        empty = torch.empty(2, 16, 64)
 
-    @require_torch_multi_accelerator
-    def test_model_dense_forward_train(self):
-        """Test that TP and non-TP models produce the same outputs in train mode."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+        # Packed vs unpacked path is determined by checking the following:
+        # input.dim() == get_expected_sharded_shape(empty_param).dim()
 
-        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_impl)("train")
+        # Packed
+        full_packed = torch.randn(2, 16, 64)
+        full_packed.get_dtype = lambda: "F32"
+        for rank in range(WORLD_SIZE):
+            device_mesh = self.MockDeviceMesh(world_size=WORLD_SIZE, rank=rank)
+            layer = PackedColwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty)
+            sharded = layer.shard_tensor(full_packed)
+            expected_shape = (2, 8, 64)  # last dim is packed size, middle dim is sharded
+            self.assertEqual(sharded.shape, expected_shape)
 
-    @require_torch_multi_accelerator
-    def test_model_dense_backward_pass(self):
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+        # Unpacked
+        full_unpacked = torch.randn(16, 64)
+        for rank in range(WORLD_SIZE):
+            device_mesh = self.MockDeviceMesh(world_size=WORLD_SIZE, rank=rank)
+            layer = PackedColwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty)
+            sharded = layer.shard_tensor(full_unpacked)
+            expected_shape = (8, 64)  # last dim is not packed, so just sharded
+            self.assertEqual(sharded.shape, expected_shape)
 
-        init_distributed(tp=self.nproc_per_node)(_test_model_dense_backward_pass_impl)()
+    def test_packed_rowwise_shard_tensor(self):
+        WORLD_SIZE = 2
+        # empty_param last dim = 64 signals the packed size (2 * 32)
+        empty = torch.empty(16, 64)
 
-    @require_torch_multi_accelerator
-    def test_model_dense_forward_compile_eval(self):
-        """Test that TP and non-TP models produce the same outputs with torch.compile in eval mode."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+        # Packed vs unpacked path is determined by checking the following:
+        # input.shape[-1] < empty_param.shape[-1]
 
-        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_compile_impl)("eval")
+        # Packed
+        full_packed = torch.randn(16, 64)
+        full_packed.get_dtype = lambda: "F32"
+        for rank in range(WORLD_SIZE):
+            device_mesh = self.MockDeviceMesh(world_size=WORLD_SIZE, rank=rank)
+            layer = PackedRowwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty)
+            sharded = layer.shard_tensor(full_packed)
+            expected_shape = (16, 32)  # last dim is packed size, sharded
+            self.assertEqual(sharded.shape, expected_shape)
 
-    @require_torch_multi_accelerator
-    def test_model_dense_forward_compile_train(self):
-        """Test that TP and non-TP models produce the same outputs with torch.compile in train mode."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_compile_impl)("train")
-
-    @require_huggingface_hub_greater_or_equal("0.31.4")
-    @require_torch_multi_accelerator
-    def test_model_dense_save(self):
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            # First run with TP (distributed)
-            init_distributed(tp=self.nproc_per_node)(_test_model_dense_save_impl)(tmp_dir)
-
-            # Then run without TP (non-distributed)
-            _test_model_dense_save_impl(0, tmp_dir)
-
-            non_tp_model_path = os.path.join(tmp_dir, "nontp")
-            tp_model_path = os.path.join(tmp_dir, "tp")
-
-            for filename in os.listdir(non_tp_model_path):
-                if not filename.endswith(".safetensors"):
-                    continue
-
-                non_tp_model = safe_open(os.path.join(non_tp_model_path, filename), device="cpu", framework="pt")
-                tp_model = safe_open(os.path.join(tp_model_path, filename), device="cpu", framework="pt")
-                for non_tp_key in non_tp_model.keys():
-                    non_tp_tensor = non_tp_model.get_tensor(non_tp_key)
-                    tp_tensor = tp_model.get_tensor(non_tp_key)
-                    assert torch.allclose(non_tp_tensor, tp_tensor), f"Tensor with key: {non_tp_key} does not match"
-                    del non_tp_tensor, tp_tensor
-
-
-class TestTensorParallel2Proc(TestTensorParallelBase):
-    """Test tensor parallel with 2 processes."""
-
-    nproc_per_node = 2
-
-
-class TestTensorParallel4Proc(TestTensorParallelBase):
-    """Test tensor parallel with 4 processes."""
-
-    nproc_per_node = 4
+        # Unpacked
+        full_unpacked = torch.randn(16, 32)
+        for rank in range(WORLD_SIZE):
+            device_mesh = self.MockDeviceMesh(world_size=WORLD_SIZE, rank=rank)
+            layer = PackedRowwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty)
+            sharded = layer.shard_tensor(full_unpacked)
+            expected_shape = (16, 16)  # last dim is not packed, so just sharded
+            self.assertEqual(sharded.shape, expected_shape)

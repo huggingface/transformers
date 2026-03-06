@@ -217,6 +217,22 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         return False
 
+    def _greedy_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as openai cannot use cache at all."""
+        return super()._greedy_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _sample_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as openai cannot use cache at all."""
+        return super()._sample_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _beam_search_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as openai cannot use cache at all."""
+        return super()._beam_search_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _beam_sample_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as openai cannot use cache at all."""
+        return super()._beam_sample_generate(*args, use_cache=use_cache, **kwargs)
+
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -269,11 +285,12 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         model = OpenAIGPTModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @unittest.skip("Tied weights mapping is reversed, so this is supposed to error out")
-    def test_correct_missing_keys(self):
-        # openai defines `_tied_weights_keys = {"transformer.tokens_embed.weight": "lm_head.weight"}` instead
-        # of the usual `_tied_weights_keys = {"lm_head.weight": "transformer.tokens_embed.weight"}`, so removing
-        # the head parameters actually removes the source weight, so this test is supposed to fail
+    @unittest.skip("Openai cannot use a cache correctly and this test sets it to True explicitly")
+    def test_generate_methods_with_logits_to_keep(self):
+        pass
+
+    @unittest.skip("Openai cannot use a cache correctly and this test sets it to True explicitly")
+    def test_generate_with_and_without_position_ids(self):
         pass
 
 
@@ -307,5 +324,5 @@ class OPENAIGPTModelLanguageGenerationTest(unittest.TestCase):
             481,
         ]  # the president is a very good man. " \n " i\'m sure he is, " said the
 
-        output_ids = model.generate(input_ids, do_sample=False)
+        output_ids = model.generate(input_ids, do_sample=False, max_length=20)
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)

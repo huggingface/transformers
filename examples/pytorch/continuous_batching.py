@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,17 +14,17 @@
 import argparse
 import contextlib
 import json
+import logging
 import os
 import time
 from itertools import cycle
-from typing import Optional
 
 import datasets
 import torch
 from torch.profiler import ProfilerActivity, profile
 from tqdm import tqdm
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, CompileConfig
 from transformers.generation import GenerationConfig
 from transformers.generation.continuous_batching.requests import logger
 
@@ -45,9 +44,7 @@ def generate_without_cb(
         key = " ".join(map(str, input_ids))  # This will be used to identify the output after batched generation
         input_ids = torch.tensor([input_ids]).to("cuda")
         attention_mask = torch.ones_like(input_ids)
-        outputs = model.generate(
-            input_ids, attention_mask=attention_mask, generation_config=generation_config, use_model_defaults=False
-        )
+        outputs = model.generate(input_ids, attention_mask=attention_mask, generation_config=generation_config)
         generated_tokens = outputs[0][input_ids.shape[1] :]
         decoded_outputs[key] = tokenizer.decode(generated_tokens, skip_special_tokens=False)
     return decoded_outputs
@@ -91,8 +88,9 @@ def batch_generate(
     generation_config: GenerationConfig,
     tokenizer: AutoTokenizer,
     displayed_samples: int = 0,  # -1: no display, 0: display stats, >0: display inputs and some outputs
-    output_file: Optional[str] = None,
-    expected_outputs: Optional[list[str]] = None,
+    output_file: str | None = None,
+    expected_outputs: list[str] | None = None,
+    use_async_batching: bool | None = None,
 ) -> tuple[float, float]:
     # Actual batch generation
     if displayed_samples >= 0:
@@ -101,6 +99,7 @@ def batch_generate(
     batch_outputs = model.generate_batch(
         inputs=simple_batch_inputs,
         generation_config=generation_config,
+        use_async_batching=use_async_batching,
     )
     end_time_simple = time.time()
     if displayed_samples >= 0:
@@ -118,7 +117,7 @@ def batch_generate(
         # Try to decode the output
         try:
             output_text = tokenizer.decode(batch_outputs[request].generated_tokens, skip_special_tokens=False)
-            token_count += len(batch_outputs[request].generated_tokens[1:])
+            token_count += len(batch_outputs[request].generated_tokens)
             data[-1]["cb_outputs"] = output_text
         except Exception as e:
             print(f"Decoding failed for request {request}: {e}")
@@ -172,21 +171,29 @@ if __name__ == "__main__":
 
     # Model parameters
     parser.add_argument("--sliding-window", type=int, default=0)
-    parser.add_argument("--attn", type=str, default="kernels-community/flash-attn2", help="Attention implementation")
+    parser.add_argument("--attn", type=str, default=None, help="Attention implementation")
 
     # Performance parameters
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable
     parser.add_argument("--cuda-graph", "-cg", help="Use cuda graphs", type=str, default=None)
     parser.add_argument("--compile", action="store_true", help="Compile the model using torch.compile")
+    parser.add_argument("--use-async", action=argparse.BooleanOptionalAction, help="Use asynchronous batching")
     parser.add_argument("--do-sample", action="store_true", help="Activate sampling")
+    parser.add_argument("--num-return-sequences", type=int, default=1, help="Number of return sequences")
 
     # Benchmark parameters
     parser.add_argument("--samples", type=int, default=500, help="Number of samples to generate")
+    parser.add_argument(
+        "--input-length", type=int, default=None, help="Length of input sequences. Leave to None to mimic real eval."
+    )
+    parser.add_argument("--max-new-tokens", type=int, default=512, help="Maximum number of new tokens to generate")
+    parser.add_argument("--force-max-length", action="store_true", help="Force generation to stop at max length")
+
     parser.add_argument("--add-prefix", action="store_true", help="Add a prefix to the samples")
     parser.add_argument("--compare", action="store_true", help="Compare CB generation with classic generate")
     parser.add_argument("--profile", type=str, default=None)
     parser.add_argument("--metrics", action="store_true")
-    parser.add_argument("--force-max-length", action="store_true", help="Force generation to stop at max length")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed")
 
     # Display parameters
     parser.add_argument("--displayed", type=int, default=0, help="Number of samples to display")
@@ -194,6 +201,22 @@ if __name__ == "__main__":
     parser.add_argument("--output-file", type=str, default=None)
 
     args = parser.parse_args()
+
+    # Choose attention implementation
+    if args.attn is None:
+        if args.compile:
+            args.attn = "kernels-community/flash-attn3@fake-ops-return-probs"
+            logger.warning(
+                "No attention implementation was provided and compile is enabled. Using experimental kernel: "
+                "kernels-community/flash-attn3@fake-ops-return-probs because compile is not supported on main. Change "
+                "this when main supports it."  # TODO: cf comment
+            )
+        else:
+            args.attn = "kernels-community/flash-attn3"
+
+    # Set seed
+    if args.seed is not None:
+        torch.manual_seed(args.seed)
 
     # Create model
     model_id = "google/gemma-2-2b-it" if args.sliding_window > 0 else "meta-llama/Llama-3.1-8B-Instruct"
@@ -221,9 +244,6 @@ if __name__ == "__main__":
         "no": False, "n": False, "false": False, "f": False, "0": False,
     }[cuda_graph_arg]  # fmt: skip
 
-    if args.compile:
-        model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")
-
     # Prepare tokenizer and dataset
     tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
@@ -240,6 +260,13 @@ if __name__ == "__main__":
     else:
         possible_prefixes = [None]
 
+    tokenizer_kwargs = {"add_generation_prompt": True}
+    if args.input_length is not None:
+        tokenizer_kwargs["max_length"] = args.input_length
+        tokenizer_kwargs["truncation"] = True
+        tokenizer_kwargs["padding"] = True
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+
     batched_inputs = []
     for item, prefix in zip(dataset, cycle(possible_prefixes)):
         messages = []
@@ -250,21 +277,40 @@ if __name__ == "__main__":
             else:
                 question = prefix + "\n\n" + question
         messages.append({"role": "user", "content": question})
-        inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True)
-        batched_inputs.append(inputs["input_ids"])
+        inputs = tokenizer.apply_chat_template(messages, **tokenizer_kwargs)
+        inputs = inputs if isinstance(inputs, list) else inputs["input_ids"]
+        batched_inputs.append(inputs)
+
+    # If num_return_sequences > 1, automatically enable do_sample with a warning
+    do_sample = args.do_sample
+    if args.num_return_sequences != 1 and not args.do_sample:
+        logger.warning(
+            f"num_return_sequences={args.num_return_sequences} > 1, automatically enabling do_sample=True. "
+            "Set --do-sample explicitly to suppress this warning."
+        )
+        do_sample = True
 
     # Prepare generation config
     generation_cfg = GenerationConfig(
-        max_new_tokens=512,
+        max_new_tokens=args.max_new_tokens,
         use_cuda_graph=use_cuda_graph,
         eos_token_id=tokenizer.pad_token_id if args.force_max_length else tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
-        do_sample=args.do_sample,
+        do_sample=do_sample,
         temperature=0.8,
         top_p=0.9,
         num_blocks=args.num_blocks,
         max_batch_tokens=args.max_batch_tokens,
+        num_return_sequences=args.num_return_sequences,
     )
+
+    # Add a compile config if requested
+    if args.compile:
+        generation_cfg.compile_config = CompileConfig(
+            fullgraph=True,
+            mode="max-autotune-no-cudagraphs",
+            dynamic=True,  # FIXME: if we warmup all graphs, this is not needed anymore
+        )
 
     # If we need to compare, we need to generate the reference outputs
     if args.compare:
@@ -278,18 +324,18 @@ if __name__ == "__main__":
     if args.output_file is None:
         os.makedirs("runs/cb", exist_ok=True)
         attn = args.attn.replace("|", "_").replace("/", "_")
-        args.output_file = (
-            f"runs/cb/{args.num_blocks}_{args.max_batch_tokens}_{attn}_{args.matmul_precision}_{args.samples}.json"
-        )
+        args.output_file = f"runs/cb/{attn}_{args.samples}_{args.cuda_graph}.json"
 
-    # Run warmup batch generation # TODO: understand why warmup incurs a large overhead during cache creation
-    batch_generate(
-        model,
-        batched_inputs[: min(5, args.samples)],
-        generation_cfg,
-        tokenizer,
-        displayed_samples=-1,
-    )
+    # Run warmup batch generation if log level is above DEBUG # TODO: understand why warmup incurs a large overhead during cache creation
+    if logger.level > logging.DEBUG:
+        batch_generate(
+            model,
+            batched_inputs[: min(5, args.samples)],
+            generation_cfg,
+            tokenizer,
+            displayed_samples=-1,
+            use_async_batching=args.use_async,
+        )
 
     if args.profile is not None:
         cm = profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True)
@@ -305,6 +351,7 @@ if __name__ == "__main__":
             displayed_samples=args.displayed,
             output_file=args.output_file,
             expected_outputs=expected_outputs,
+            use_async_batching=args.use_async,
         )
     if args.profile is not None:
         filename = args.profile if args.profile.endswith(".json") else args.profile + ".json"
@@ -313,3 +360,4 @@ if __name__ == "__main__":
 # Example usage:
 # python examples/pytorch/continuous_batching.py --attn sdpa --add-prefix --samples 10 --compare
 # python examples/pytorch/continuous_batching.py --attn flash_attention_2 -mp none --add-prefix --samples 500
+# python examples/pytorch/continuous_batching.py -mp none -cg yes --samples 10 --max-new-tokens 32 --profile profile_wip.json

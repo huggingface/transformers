@@ -97,3 +97,5 @@ You can specify the following operators: `==`, `>`, `>=`, `<`, `<=`, `!=`.
 [[autodoc]] utils.import_utils.define_import_structure
 
 [[autodoc]] utils.import_utils.requires
+
+[[autodoc]] utils.import_utils.requires_backends

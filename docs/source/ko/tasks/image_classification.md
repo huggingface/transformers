@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 이 가이드에서는 다음을 설명합니다:
 
-1. [Food-101](https://huggingface.co/datasets/food101) 데이터 세트에서 [ViT](model_doc/vit)를 미세 조정하여 이미지에서 식품 항목을 분류합니다.
+1. [Food-101](https://huggingface.co/datasets/ethz/food101) 데이터 세트에서 [ViT](model_doc/vit)를 미세 조정하여 이미지에서 식품 항목을 분류합니다.
 2. 추론을 위해 미세 조정 모델을 사용합니다.
 
 <Tip>
@@ -57,7 +57,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 ```py
 >>> from datasets import load_dataset
 
->>> food = load_dataset("food101", split="train[:5000]")
+>>> food = load_dataset("ethz/food101", split="train[:5000]")
 ```
 
 데이터 세트의 `train`을 [`~datasets.Dataset.train_test_split`] 메소드를 사용하여 훈련 및 테스트 세트로 분할하세요:
@@ -252,7 +252,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 추론을 수행하고자 하는 이미지를 가져와봅시다:
 
 ```py
->>> ds = load_dataset("food101", split="validation[:10]")
+>>> ds = load_dataset("ethz/food101", split="validation[:10]")
 >>> image = ds["image"][0]
 ```
 

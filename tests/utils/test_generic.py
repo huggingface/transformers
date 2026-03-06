@@ -142,15 +142,27 @@ class GenericTester(unittest.TestCase):
     def test_model_output_subclass(self):
         # testing with “dict-like init” case
         out = CausalLMOutputWithPast({"logits": torch.ones(2, 3, 4)})
-        self.assertTrue(out["logits"] is not None)
-        self.assertTrue(out.loss is None)
-        self.assertTrue(len(out.to_tuple()) == 1)
+        self.assertNotEqual(out["logits"], None)
+        self.assertEqual(out.loss, None)
+        self.assertEqual(len(out.to_tuple()), 1)
 
         # testing with dataclass init case
         out = CausalLMOutputWithPast(logits=torch.ones(2, 3, 4))
-        self.assertTrue(out["logits"] is not None)
-        self.assertTrue(out.loss is None)
-        self.assertTrue(len(out.to_tuple()) == 1)
+        self.assertNotEqual(out["logits"], None)
+        self.assertEqual(out.loss, None)
+        self.assertEqual(len(out.to_tuple()), 1)
+
+        # testing with updating a previously-None key after init with attribute assignment
+        out = CausalLMOutputWithPast(logits=torch.ones(2, 3, 4))
+        out.loss = torch.tensor(0.5)
+        self.assertEqual(out.loss, torch.tensor(0.5))
+        self.assertEqual(len(out.to_tuple()), 2)
+
+        # testing with updating a previously-None key after init with dictionary assignment
+        out = CausalLMOutputWithPast(logits=torch.ones(2, 3, 4))
+        out["loss"] = torch.tensor(0.5)
+        self.assertEqual(out.loss, torch.tensor(0.5))
+        self.assertEqual(len(out.to_tuple()), 2)
 
 
 class ValidationDecoratorTester(unittest.TestCase):

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,8 @@
 # limitations under the License.
 import copy
 import math
-import warnings
 import zlib
 from collections.abc import Callable, Iterator
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -385,32 +382,32 @@ class WhisperGenerationMixin(GenerationMixin):
 
     def generate(
         self,
-        input_features: Optional[torch.Tensor] = None,
-        generation_config: Optional[GenerationConfig] = None,
-        logits_processor: Optional[LogitsProcessorList] = None,
-        stopping_criteria: Optional[StoppingCriteriaList] = None,
-        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], list[int]]] = None,
+        input_features: torch.Tensor | None = None,
+        generation_config: GenerationConfig | None = None,
+        logits_processor: LogitsProcessorList | None = None,
+        stopping_criteria: StoppingCriteriaList | None = None,
+        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], list[int]] | None = None,
         synced_gpus: bool = False,
-        return_timestamps: Optional[bool] = None,
-        task: Optional[str] = None,
-        language: Optional[Union[str, list[str]]] = None,
-        is_multilingual: Optional[bool] = None,
-        prompt_ids: Optional[torch.Tensor] = None,
-        prompt_condition_type: Optional[str] = None,  # first-segment, all-segments
-        condition_on_prev_tokens: Optional[bool] = None,
-        temperature: Optional[Union[float, tuple[float, ...]]] = None,
-        compression_ratio_threshold: Optional[float] = None,
-        logprob_threshold: Optional[float] = None,
-        no_speech_threshold: Optional[float] = None,
-        num_segment_frames: Optional[int] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        return_timestamps: bool | None = None,
+        task: str | None = None,
+        language: str | list[str] | None = None,
+        is_multilingual: bool | None = None,
+        prompt_ids: torch.Tensor | None = None,
+        prompt_condition_type: str | None = None,  # first-segment, all-segments
+        condition_on_prev_tokens: bool | None = None,
+        temperature: float | tuple[float, ...] | None = None,
+        compression_ratio_threshold: float | None = None,
+        logprob_threshold: float | None = None,
+        no_speech_threshold: float | None = None,
+        num_segment_frames: int | None = None,
+        attention_mask: torch.Tensor | None = None,
         time_precision: float = 0.02,
         time_precision_features: float = 0.01,
-        return_token_timestamps: Optional[bool] = None,
+        return_token_timestamps: bool | None = None,
         return_segments: bool = False,
-        return_dict_in_generate: Optional[bool] = None,
-        force_unique_generate_call: Optional[bool] = None,
-        monitor_progress: Optional[Callable[[torch.Tensor], None]] = None,
+        return_dict_in_generate: bool | None = None,
+        force_unique_generate_call: bool | None = None,
+        monitor_progress: Callable[[torch.Tensor], None] | None = None,
         **kwargs,
     ):
         """
@@ -649,14 +646,6 @@ class WhisperGenerationMixin(GenerationMixin):
         ```
 
         """
-        # 0. deprecate old inputs
-        if "inputs" in kwargs:
-            input_features = kwargs.pop("inputs")
-            warnings.warn(
-                "The input name `inputs` is deprecated. Please make sure to use `input_features` instead.",
-                FutureWarning,
-            )
-
         # 1. prepare generation config
         generation_config, kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
@@ -1620,9 +1609,9 @@ class WhisperGenerationMixin(GenerationMixin):
 
     def detect_language(
         self,
-        input_features: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[Union[torch.FloatTensor, BaseModelOutput]] = None,
-        generation_config: Optional[GenerationConfig] = None,
+        input_features: torch.FloatTensor | None = None,
+        encoder_outputs: torch.FloatTensor | BaseModelOutput | None = None,
+        generation_config: GenerationConfig | None = None,
         num_segment_frames: int = 3000,
     ) -> torch.Tensor:
         """
@@ -1702,18 +1691,7 @@ class WhisperGenerationMixin(GenerationMixin):
                     "Model generation config has no `alignment_heads`, token-level timestamps not available. "
                     "See https://gist.github.com/hollance/42e32852f24243b748ae6bc1f985b13a on how to add this property to the generation config."
                 )
-            if "num_frames" in kwargs:
-                generation_config.num_frames = kwargs.pop("num_frames")
-                if isinstance(generation_config.num_frames, torch.Tensor):
-                    generation_config.num_frames = generation_config.num_frames.cpu()
-                else:
-                    generation_config.num_frames = torch.tensor(generation_config.num_frames)
-
-                logger.warning_once(
-                    "`num_frames` is deprecated and will be removed in Transformers v5. Use `attention_mask` instead, as it can be used to infer the number of frames. "
-                    "You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True"
-                )
-            elif attention_mask is not None:
+            if attention_mask is not None:
                 generation_config.num_frames = attention_mask.sum(-1).cpu()
             else:
                 logger.warning_once(

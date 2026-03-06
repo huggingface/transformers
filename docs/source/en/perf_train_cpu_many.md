@@ -19,37 +19,11 @@ CPUs are commonly available and can be a cost-effective training option when GPU
 
 This guide demonstrates how to perform distributed training with multiple CPUs using a [DistributedDataParallel (DDP)](./perf_train_gpu_many#distributeddataparallel) strategy on bare metal with [`Trainer`] and a Kubernetes cluster. All examples shown in this guide depend on the [Intel oneAPI HPC Toolkit](https://www.intel.com/content/www/us/en/developer/tools/oneapi/hpc-toolkit.html).
 
-There are two toolkits you'll need from Intel oneAPI.
-
-1. [oneCCL](https://www.intel.com/content/www/us/en/developer/tools/oneapi/oneccl.html) includes efficient implementations of collectives commonly used in deep learning such as all-gather, all-reduce, and reduce-scatter. To install from a prebuilt wheel, make sure you always use the latest release. Refer to the table [here](https://github.com/intel/torch-ccl#install-prebuilt-wheel) to check if a version of oneCCL is supported for a Python and PyTorch version.
-
-```bash
-# installs oneCCL for PyTorch 2.4.0
-pip install oneccl_bind_pt==2.4.0 -f https://developer.intel.com/ipex-whl-stable-cpu
-```
-
-> [!TIP]
-> Refer to the oneCCL [installation](https://github.com/intel/torch-ccl#installation) for more details.
-
-1. [MPI](https://www.intel.com/content/www/us/en/developer/tools/oneapi/mpi-library.html) is a message-passing interface for communications between hardware and networks. The oneCCL toolkit is installed along with MPI, but you need to source the environment as shown below before using it.
-
-```bash
-oneccl_bindings_for_pytorch_path=$(python -c "from oneccl_bindings_for_pytorch import cwd; print(cwd)")
-source $oneccl_bindings_for_pytorch_path/env/setvars.sh
-```
-
-Lastly, install the [Intex Extension for PyTorch (IPEX)](https://intel.github.io/intel-extension-for-pytorch/index.html) which enables additional performance optimizations for Intel hardware such as weight sharing and better thread runtime control.
-
-```bash
-pip install intel_extension_for_pytorch==<version_name> -f https://developer.intel.com/ipex-whl-stable-cpu
-```
-
-> [!TIP]
-> Refer to the IPEX [installation](https://intel.github.io/intel-extension-for-pytorch/index.html#installation) for more details.
+The only toolkit you'll need from Intel oneAPI is [MPI](https://www.intel.com/content/www/us/en/developer/tools/oneapi/mpi-library.html), a message-passing interface for communications between hardware and networks.
 
 ## Trainer
 
-[`Trainer`] supports distributed training with CPUs with the oneCCL backend. Add the `--ddp_backend ccl` parameter in the command arguments to enable it.
+[`Trainer`] supports distributed training with CPUs.
 
 <hfoptions id="distrib-cpu">
 <hfoption id="single node">
@@ -57,10 +31,9 @@ pip install intel_extension_for_pytorch==<version_name> -f https://developer.int
 The example below demonstrates the [run_qa.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) script. It enables training with two processes on one Xeon CPU, with one process running per socket.
 
 > [!TIP]
-> Tune the variable `OMP_NUM_THREADS/CCL_WORKER_COUNT` for optimal performance.
+> Tune the variable `OMP_NUM_THREADS` for optimal performance.
 
 ```bash
-export CCL_WORKER_COUNT=1
 export MASTER_ADDR=127.0.0.1
 mpirun -n 2 -genv OMP_NUM_THREADS=23 \
 python3 run_qa.py \
@@ -73,9 +46,7 @@ python3 run_qa.py \
  --num_train_epochs 2  \
  --max_seq_length 384 \
  --doc_stride 128  \
- --output_dir /tmp/debug_squad/ \
- --no_cuda \
- --ddp_backend ccl
+ --output_dir /tmp/debug_squad/
 ```
 
 </hfoption>
@@ -94,10 +65,9 @@ xxx.xxx.xxx.xxx #node1 ip
 Run the script below on `node0` to enable DDP on `node0` and `node1` and train with bf16 auto mixed precision.
 
 > [!TIP]
-> Tune the variable `OMP_NUM_THREADS/CCL_WORKER_COUNT` for optimal performance.
+> Tune the variable `OMP_NUM_THREADS` for optimal performance.
 
 ```bash
-export CCL_WORKER_COUNT=1
 export MASTER_ADDR=xxx.xxx.xxx.xxx #node0 ip
 mpirun -f hostfile -n 4 -ppn 2 \
  -genv OMP_NUM_THREADS=23 \
@@ -112,8 +82,7 @@ python3 run_qa.py \
  --max_seq_length 384 \
  --doc_stride 128  \
  --output_dir /tmp/debug_squad/ \
- --no_cuda \
- --ddp_backend ccl \
+ --use_cpu \
  --bf16
 ```
 
@@ -127,7 +96,7 @@ Distributed training with CPUs can also be deployed to a Kubernetes cluster with
 1. Ensure you have access to a Kubernetes cluster with [Kubeflow](https://www.kubeflow.org/docs/started/installing-kubeflow/) installed.
 1. Install and configure [kubectl](https://kubernetes.io/docs/tasks/tools) to interact with the cluster.
 1. Set up a [PersistentVolumeClaim (PVC)](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) to store datasets and model files. There are multiple options to choose from, including a [StorageClass](https://kubernetes.io/docs/concepts/storage/storage-classes/) or a cloud storage bucket.
-1. Set up a Docker container for the training script and all required dependencies such as PyTorch, Transformers, IPEX, oneCCL, and OpenSSH to facilitate communicattion between containers.
+1. Set up a Docker container for the training script and all required dependencies such as PyTorch, Transformers, and OpenSSH to facilitate communication between containers.
 
 The example Dockerfile below uses a base image that supports distributed training with CPUs, and extracts Transformers to the `/workspace` directory to include the training scripts in the image. The image needs to be built and copied to the clusters nodes or pushed to a container registry prior to deployment.
 
@@ -185,7 +154,6 @@ spec:
                 - >-
                   cd /workspace/transformers;
                   pip install -r /workspace/transformers/examples/pytorch/question-answering/requirements.txt;
-                  source /usr/local/lib/python3.10/dist-packages/oneccl_bindings_for_pytorch/env/setvars.sh;
                   torchrun /workspace/transformers/examples/pytorch/question-answering/run_qa.py \
                     --model_name_or_path distilbert/distilbert-base-uncased \
                     --dataset_name squad \
@@ -197,20 +165,16 @@ spec:
                     --max_seq_length 384 \
                     --doc_stride 128 \
                     --output_dir /tmp/pvc-mount/output_$(date +%Y%m%d_%H%M%S) \
-                    --no_cuda \
-                    --ddp_backend ccl \
                     --bf16;
               env:
               - name: LD_PRELOAD
                 value: "/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4.5.9:/usr/local/lib/libiomp5.so"
-              - name: TRANSFORMERS_CACHE
-                value: "/tmp/pvc-mount/transformers_cache"
+              - name: HF_HUB_CACHE
+                value: "/tmp/pvc-mount/hub_cache"
               - name: HF_DATASETS_CACHE
                 value: "/tmp/pvc-mount/hf_datasets_cache"
               - name: LOGLEVEL
                 value: "INFO"
-              - name: CCL_WORKER_COUNT
-                value: "1"
               - name: OMP_NUM_THREADS  # Can be tuned for optimal performance
                 value: "240"
               resources:

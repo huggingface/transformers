@@ -80,7 +80,7 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/pef
 # For bettertransformer
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
 # For kernels
-RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/kernels@main#egg=kernels
+RUN python3 -m pip install --no-cache-dir kernels
 
 # For video model testing
 RUN python3 -m pip install --no-cache-dir av
@@ -110,6 +110,9 @@ RUN python3 -m pip install --no-cache-dir einops
 
 # For Some tests with `@require_liger_kernel`
 RUN python3 -m pip install --no-cache-dir liger-kernel
+
+# For `VibeVoice` (added in PR #40546)
+RUN python3 -m pip install --no-cache-dir diffusers
 
 # `kernels` may give different outputs (within 1e-5 range) even with the same model (weights) and the same inputs
 RUN python3 -m pip uninstall -y kernels

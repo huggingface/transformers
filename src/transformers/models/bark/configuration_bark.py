@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Suno AI Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,55 +13,32 @@
 # limitations under the License.
 """BARK model configuration"""
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
-from ...utils import add_start_docstrings, logging
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-BARK_SUBMODELCONFIG_START_DOCSTRING = """
-    This is the configuration class to store the configuration of a [`{model}`]. It is used to instantiate the model
-    according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Bark [suno/bark](https://huggingface.co/suno/bark)
-    architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        block_size (`int`, *optional*, defaults to 1024):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        input_vocab_size (`int`, *optional*, defaults to 10_048):
-            Vocabulary size of a Bark sub-model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`{model}`]. Defaults to 10_048 but should be carefully thought with
-            regards to the chosen sub-model.
-        output_vocab_size (`int`, *optional*, defaults to 10_048):
-            Output vocabulary size of a Bark sub-model. Defines the number of different tokens that can be represented
-            by the: `output_ids` when passing forward a [`{model}`]. Defaults to 10_048 but should be carefully thought
-            with regards to the chosen sub-model.
-        num_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the given sub-model.
-        num_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer architecture.
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the architecture.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        bias (`bool`, *optional*, defaults to `True`):
-            Whether or not to use bias in the linear layers and layer norm layers.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
-"""
-
-
+@auto_docstring(checkpoint="suno/bark")
 class BarkSubModelConfig(PreTrainedConfig):
+    r"""
+    block_size (`int`, *optional*, defaults to 1024):
+        The maximum sequence length that this model might ever be used with. Typically set this to something large
+        just in case (e.g., 512 or 1024 or 2048).
+    input_vocab_size (`int`, *optional*, defaults to 10_048):
+        Vocabulary size of a Bark sub-model. Defines the number of different tokens that can be represented by the
+        `inputs_ids` passed when calling [`{model}`]. Defaults to 10_048 but should be carefully thought with
+        regards to the chosen sub-model.
+    output_vocab_size (`int`, *optional*, defaults to 10_048):
+        Output vocabulary size of a Bark sub-model. Defines the number of different tokens that can be represented
+        by the: `output_ids` when passing forward a [`{model}`]. Defaults to 10_048 but should be carefully thought
+        with regards to the chosen sub-model.
+    bias (`bool`, *optional*, defaults to `True`):
+        Whether or not to use bias in the linear layers and layer norm layers.
+    """
+
     keys_to_ignore_at_inference = ["past_key_values"]
 
     attribute_map = {
@@ -100,9 +76,9 @@ class BarkSubModelConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-@add_start_docstrings(
-    BARK_SUBMODELCONFIG_START_DOCSTRING.format(config="BarkSemanticConfig", model="BarkSemanticModel"),
-    """
+@auto_docstring(checkpoint="suno/bark")
+class BarkSemanticConfig(BarkSubModelConfig):
+    r"""
     Example:
 
     ```python
@@ -116,16 +92,15 @@ class BarkSubModelConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```""",
-)
-class BarkSemanticConfig(BarkSubModelConfig):
+    ```"""
+
     model_type = "semantic"
     base_config_key = "semantic_config"
 
 
-@add_start_docstrings(
-    BARK_SUBMODELCONFIG_START_DOCSTRING.format(config="BarkCoarseConfig", model="BarkCoarseModel"),
-    """
+@auto_docstring(checkpoint="suno/bark")
+class BarkCoarseConfig(BarkSubModelConfig):
+    r"""
     Example:
 
     ```python
@@ -139,21 +114,21 @@ class BarkSemanticConfig(BarkSubModelConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```""",
-)
-class BarkCoarseConfig(BarkSubModelConfig):
+    ```"""
+
     model_type = "coarse_acoustics"
     base_config_key = "coarse_acoustics_config"
 
 
-@add_start_docstrings(
-    BARK_SUBMODELCONFIG_START_DOCSTRING.format(config="BarkFineConfig", model="BarkFineModel"),
-    """
-        n_codes_total (`int`, *optional*, defaults to 8):
-            The total number of audio codebooks predicted. Used in the fine acoustics sub-model.
-        n_codes_given (`int`, *optional*, defaults to 1):
-            The number of audio codebooks predicted in the coarse acoustics sub-model. Used in the acoustics
-            sub-models.
+@auto_docstring(checkpoint="suno/bark")
+class BarkFineConfig(BarkSubModelConfig):
+    r"""
+    n_codes_total (`int`, *optional*, defaults to 8):
+        The total number of audio codebooks predicted. Used in the fine acoustics sub-model.
+    n_codes_given (`int`, *optional*, defaults to 1):
+        The number of audio codebooks predicted in the coarse acoustics sub-model. Used in the acoustics
+        sub-models.
+
     Example:
 
     ```python
@@ -167,9 +142,8 @@ class BarkCoarseConfig(BarkSubModelConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```""",
-)
-class BarkFineConfig(BarkSubModelConfig):
+    ```"""
+
     model_type = "fine_acoustics"
     base_config_key = "fine_acoustics_config"
 
@@ -177,21 +151,13 @@ class BarkFineConfig(BarkSubModelConfig):
         self.n_codes_total = n_codes_total
         self.n_codes_given = n_codes_given
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="suno/bark")
 class BarkConfig(PreTrainedConfig):
-    """
-    This is the configuration class to store the configuration of a [`BarkModel`]. It is used to instantiate a Bark
-    model according to the specified sub-models configurations, defining the model architecture.
-
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the Bark
-    [suno/bark](https://huggingface.co/suno/bark) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
+    r"""
     semantic_config ([`BarkSemanticConfig`], *optional*):
         Configuration of the underlying semantic sub-model.
     coarse_acoustics_config ([`BarkCoarseConfig`], *optional*):
@@ -243,10 +209,10 @@ class BarkConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        semantic_config: Optional[dict] = None,
-        coarse_acoustics_config: Optional[dict] = None,
-        fine_acoustics_config: Optional[dict] = None,
-        codec_config: Optional[dict] = None,
+        semantic_config: dict | None = None,
+        coarse_acoustics_config: dict | None = None,
+        fine_acoustics_config: dict | None = None,
+        codec_config: dict | None = None,
         initializer_range=0.02,
         **kwargs,
     ):

@@ -99,6 +99,12 @@ class TextGenerationPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.check_model_type(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
+        # Decoder-only models require left-padding for correct batched generation.
+        # Only override when there is no feature_extractor, to avoid padding_side conflicts
+        # (e.g., WhisperForCausalLM has a feature_extractor that pads on the right).
+        if self.tokenizer is not None and self.tokenizer.padding_side == "right":
+            self.tokenizer.padding_side = "left"
+
         if "prefix" not in self._preprocess_params:
             # This is very specific. The logic is quite complex and needs to be done
             # as a "default".
@@ -110,8 +116,6 @@ class TextGenerationPipeline(Pipeline):
             if prefix is None and self.model.__class__.__name__ in [
                 "XLNetLMHeadModel",
                 "TransfoXLLMHeadModel",
-                "TFXLNetLMHeadModel",
-                "TFTransfoXLLMHeadModel",
             ]:
                 # For XLNet and TransformerXL we add an article to the prompt to give more state to the model.
                 prefix = self.XL_PREFIX
@@ -488,7 +492,7 @@ class TextGenerationPipeline(Pipeline):
                             ]
                         else:
                             # When we're not starting from a prefill, the output is a new assistant message
-                            if self.tokenizer.response_schema:
+                            if getattr(self.tokenizer, "response_schema", False):
                                 assistant_message = self.tokenizer.parse_response(all_text)
                             else:
                                 # If there's no schema, then we have to assume it's all content

@@ -15,7 +15,7 @@ import inspect
 import os
 from collections.abc import Callable
 from functools import partial
-from typing import Optional, TypedDict
+from typing import TypedDict
 
 import torch
 import torch.nn.functional as F
@@ -74,7 +74,9 @@ _hf_api_to_flash_mapping = {
 }
 
 
-def _lazy_imports(implementation: Optional[str], attention_wrapper: Optional[Callable] = None):
+def _lazy_imports(
+    implementation: str | None, attention_wrapper: Callable | None = None, allow_all_kernels: bool = False
+):
     """
     Lazy loads the respective flash attention implementations.
 
@@ -115,7 +117,9 @@ def _lazy_imports(implementation: Optional[str], attention_wrapper: Optional[Cal
 
             # We want to explicitly register the name with `paged|` if found
             kernel_implementation = f"paged|{implementation}" if is_paged else implementation
-            kernel = load_and_register_attn_kernel(kernel_implementation, attention_wrapper)
+            kernel = load_and_register_attn_kernel(
+                kernel_implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
+            )
 
             flash_attn_func = getattr(kernel, "flash_attn_func", None)
             flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
@@ -127,7 +131,7 @@ def _lazy_imports(implementation: Optional[str], attention_wrapper: Optional[Cal
             if flash_attn_func is None:
                 logger.warning(
                     f"The loaded flash attention implementation at `{implementation}` only supports varlen, i.e. "
-                    "it can only be used with continous batching and does not support the full functionality for "
+                    "it can only be used with continuous batching and does not support the full functionality for "
                     "the base transformers generation methods."
                 )
 
@@ -155,7 +159,9 @@ def _lazy_define_process_function(flash_function):
     return partial(_process_flash_attention_kwargs, supports_mapping=supports_mapping)
 
 
-def lazy_import_flash_attention(implementation: Optional[str], attention_wrapper: Optional[Callable] = None):
+def lazy_import_flash_attention(
+    implementation: str | None, attention_wrapper: Callable | None = None, allow_all_kernels: bool = False
+):
     """
     Lazily import flash attention and return the respective functions + flags.
 
@@ -170,20 +176,22 @@ def lazy_import_flash_attention(implementation: Optional[str], attention_wrapper
     if implementation is not None and _loaded_implementation != implementation:
         _loaded_implementation = implementation
 
-        _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn = _lazy_imports(implementation, attention_wrapper)
+        _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn = _lazy_imports(
+            implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
+        )
         _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn)
 
     return (_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn), _process_flash_kwargs_fn
 
 
-def lazy_import_paged_flash_attention(implementation: Optional[str]):
+def lazy_import_paged_flash_attention(implementation: str | None, allow_all_kernels: bool = False):
     """
     Same as `lazy_import_flash_attention` but explicitly wrapping it with the paged implementation.
     """
     from .integrations.flash_paged import paged_attention_forward
 
     (_, flash_attn_varlen_func, _, _), _ = lazy_import_flash_attention(
-        implementation, attention_wrapper=paged_attention_forward
+        implementation, attention_wrapper=paged_attention_forward, allow_all_kernels=allow_all_kernels
     )
     return flash_attn_varlen_func
 
@@ -375,7 +383,7 @@ def prepare_fa_kwargs_from_position_ids(position_ids):
     """
     tensor_kwargs = {"dtype": torch.int32, "device": position_ids.device}
 
-    position_ids = position_ids.view(-1)
+    position_ids = position_ids.reshape(-1)
     indices_q = (position_ids == 0).nonzero().view(-1)
 
     cu_seq_lens_q = torch.cat(
@@ -453,7 +461,7 @@ def fa_peft_integration_check(
     q: torch.Tensor,
     k: torch.Tensor,
     v: torch.Tensor,
-    target_dtype: Optional[torch.dtype] = None,
+    target_dtype: torch.dtype | None = None,
 ):
     """
     PEFT usually casts the layer norms in float32 for training stability reasons
@@ -482,10 +490,10 @@ class FlashAttentionKwargs(TypedDict, total=False):
             Maximum sequence length for key state.
     """
 
-    cu_seq_lens_q: Optional[torch.LongTensor]
-    cu_seq_lens_k: Optional[torch.LongTensor]
-    max_length_q: Optional[int]
-    max_length_k: Optional[int]
+    cu_seq_lens_q: torch.LongTensor | None
+    cu_seq_lens_k: torch.LongTensor | None
+    max_length_q: int | None
+    max_length_k: int | None
 
 
 def _process_flash_attention_kwargs(
@@ -493,15 +501,15 @@ def _process_flash_attention_kwargs(
     key_length: int,
     is_causal: bool,
     dropout: float = 0.0,
-    softmax_scale: Optional[float] = None,
-    sliding_window: Optional[int] = None,
+    softmax_scale: float | None = None,
+    sliding_window: int | None = None,
     use_top_left_mask: bool = False,
-    softcap: Optional[float] = None,
-    deterministic: Optional[bool] = None,
-    s_aux: Optional[torch.Tensor] = None,
-    max_seqlen_q: Optional[int | torch.IntTensor] = None,
-    max_seqlen_k: Optional[int | torch.IntTensor] = None,
-    supports_mapping: Optional[dict[str, bool]] = None,
+    softcap: float | None = None,
+    deterministic: bool | None = None,
+    s_aux: torch.Tensor | None = None,
+    max_seqlen_q: int | torch.IntTensor | None = None,
+    max_seqlen_k: int | torch.IntTensor | None = None,
+    supports_mapping: dict[str, bool] | None = None,
     **kwargs,
 ):
     """
@@ -551,8 +559,7 @@ def _process_flash_attention_kwargs(
         # The flash attention API sets inclusive boundaries, i.e. (4, 0) would take 4 tokens to the left
         # and the current token for a total size of 5. However, we usually define our window sizes by
         # their total window size (when causal). Encoder models as of now seldom use SWA and when they
-        # do, they have a custom workaround (e.g. ModernBERT) which would align with this symmetric logic, i.e.
-        # for a total of `2*sliding_window + 1`.
+        # do, they must align with this symmetric logic, i.e. for a total of `2*sliding_window + 1`.
         flash_kwargs["window_size"] = (sliding_window - 1, sliding_window - 1)
 
     if supports_mapping["deterministic"]:
@@ -591,22 +598,22 @@ def _flash_attention_forward(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
     value_states: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     query_length: int,
     is_causal: bool,
     dropout: float = 0.0,
-    position_ids: Optional[torch.Tensor] = None,
-    softmax_scale: Optional[float] = None,
-    sliding_window: Optional[int] = None,
+    position_ids: torch.Tensor | None = None,
+    softmax_scale: float | None = None,
+    sliding_window: int | None = None,
     use_top_left_mask: bool = False,
-    softcap: Optional[float] = None,
-    deterministic: Optional[bool] = None,
-    cu_seq_lens_q: Optional[torch.LongTensor] = None,
-    cu_seq_lens_k: Optional[torch.LongTensor] = None,
-    max_length_q: Optional[int] = None,
-    max_length_k: Optional[int] = None,
-    target_dtype: Optional[torch.dtype] = None,
-    attn_implementation: Optional[str] = None,
+    softcap: float | None = None,
+    deterministic: bool | None = None,
+    cu_seq_lens_q: torch.LongTensor | None = None,
+    cu_seq_lens_k: torch.LongTensor | None = None,
+    max_length_q: int | None = None,
+    max_length_k: int | None = None,
+    target_dtype: torch.dtype | None = None,
+    attn_implementation: str | None = None,
     **kwargs,
 ):
     """

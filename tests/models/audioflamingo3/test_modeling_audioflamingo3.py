@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 NVIDIA CORPORATION and the HuggingFace Inc. team. All rights
 # reserved.
 #
@@ -157,6 +156,7 @@ class AudioFlamingo3ForConditionalGenerationModelTest(ModelTesterMixin, Generati
     """
 
     all_model_classes = (AudioFlamingo3ForConditionalGeneration,) if is_torch_available() else ()
+    # TODO: @eustlb, this is incorrect
     pipeline_model_mapping = (
         {
             "text-to-speech": AudioFlamingo3ForConditionalGeneration,

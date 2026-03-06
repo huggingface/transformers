@@ -21,7 +21,7 @@ from ..models.auto.auto_factory import _get_model_class
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.modeling_auto import MODEL_FOR_PRETRAINING_MAPPING, MODEL_MAPPING
 from ..models.auto.processing_auto import PROCESSOR_MAPPING_NAMES, AutoProcessor
-from ..models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES, AutoTokenizer
+from ..models.auto.tokenization_auto import AutoTokenizer
 from .import_utils import is_torch_available
 
 
@@ -76,7 +76,7 @@ def generate_attention_matrix_from_mask(
         f"{YELLOW}{BLACK_SQUARE}{RESET}"
         if mask[0, j]
         else f"{GREEN}{BLACK_SQUARE}{RESET}"
-        if 0 == j
+        if j == 0
         else BLACK_SQUARE
         if mask[0, j]
         else WHITE_SQUARE
@@ -199,32 +199,38 @@ class AttentionMaskVisualizer:
             if "token_type_ids" in inputs:  # TODO inspect signature of update causal mask
                 kwargs["token_type_ids"] = inputs["token_type_ids"]
             tokens = processor.tokenizer.convert_ids_to_tokens(inputs["input_ids"][0])
-        elif self.config.model_type in TOKENIZER_MAPPING_NAMES:
+        else:
             tokenizer = AutoTokenizer.from_pretrained(self.repo_id)
+            if tokenizer is None:
+                raise ValueError(f"Could not load tokenizer for {self.repo_id}")
             tokens = tokenizer.tokenize(input_sentence)
             attention_mask = tokenizer(input_sentence, return_tensors="pt")["attention_mask"]
-        else:
-            raise ValueError(f"Model type {model.config.model_type} does not support attention visualization")
+            if attention_mask is None:
+                raise ValueError(f"Model type {self.config.model_type} does not support attention visualization")
 
         model.config._attn_implementation = "eager"
         model.train()
 
         batch_size, seq_length = attention_mask.shape
-        input_embeds = torch.zeros((batch_size, seq_length, model.config.hidden_size), dtype=self.model.dtype)
+        inputs_embeds = torch.zeros((batch_size, seq_length, model.config.hidden_size), dtype=self.model.dtype)
         cache_position = torch.arange(seq_length)
 
         causal_mask = create_causal_mask(
             config=model.config,
-            input_embeds=input_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=None,
         )
 
-        if causal_mask is not None:
-            attention_mask = ~causal_mask.bool()
-        else:
+        if causal_mask is None:
+            # attention_mask must be a tensor here
             attention_mask = attention_mask.unsqueeze(1).unsqueeze(1).expand(batch_size, 1, seq_length, seq_length)
+        elif isinstance(causal_mask, torch.Tensor):
+            attention_mask = ~causal_mask.to(dtype=torch.bool)
+        else:
+            attention_mask = ~causal_mask
+
         top_bottom_border = "##" * (
             len(f"Attention visualization for {self.config.model_type} | {self.mapped_cls}") + 4
         )  # Box width adjusted to text length

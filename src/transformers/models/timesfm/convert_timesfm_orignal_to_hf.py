@@ -33,7 +33,7 @@ def get_nested_attr(obj, key):
     return obj
 
 
-def write_model(model_path, safe_serialization=True, huggingface_repo_id="google/timesfm-2.0-500m-pytorch"):
+def write_model(model_path, huggingface_repo_id="google/timesfm-2.0-500m-pytorch"):
     os.makedirs(model_path, exist_ok=True)
     tmp_model_path = os.path.join(model_path, "tmp")
     os.makedirs(tmp_model_path, exist_ok=True)
@@ -143,7 +143,7 @@ def write_model(model_path, safe_serialization=True, huggingface_repo_id="google
             except AttributeError:
                 print(f"Skipping {old_key} (not found in original model).")
 
-    timesfm_model.save_pretrained(model_path, safe_serialization=safe_serialization)
+    timesfm_model.save_pretrained(model_path)
     shutil.rmtree(tmp_model_path)
 
 
@@ -249,9 +249,6 @@ def main():
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
-        "--safe_serialization", type=bool, default=True, help="Whether or not to save using `safetensors`."
-    )
-    parser.add_argument(
         "--huggingface_repo_id",
         type=str,
         default="google/timesfm-2.0-500m-pytorch",
@@ -260,14 +257,11 @@ def main():
     args = parser.parse_args()
 
     # if the saved model file exists, skip the conversion
-    if os.path.exists(
-        os.path.join(args.output_dir, "model.safetensors" if args.safe_serialization else "pytorch_model.bin")
-    ):
+    if os.path.exists(os.path.join(args.output_dir, "model.safetensors")):
         print(f"Model already exists in {args.output_dir}, skipping conversion.")
     else:
         write_model(
             model_path=args.output_dir,
-            safe_serialization=args.safe_serialization,
             huggingface_repo_id=args.huggingface_repo_id,
         )
     check_outputs(args.output_dir, args.huggingface_repo_id)

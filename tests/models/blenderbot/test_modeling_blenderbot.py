@@ -215,10 +215,7 @@ class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     pipeline_model_mapping = (
         {
             "feature-extraction": BlenderbotModel,
-            "summarization": BlenderbotForConditionalGeneration,
             "text-generation": BlenderbotForCausalLM,
-            "text2text-generation": BlenderbotForConditionalGeneration,
-            "translation": BlenderbotForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -319,7 +316,7 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(**model_inputs, **FASTER_GEN_KWARGS)[0]
         reply = self.tokenizer.decode(generated_ids, **TOK_DECODE_KW)
 
-        assert "I think it's because we are so worried about what people think of us." == reply.strip()
+        assert reply.strip() == "I think it's because we are so worried about what people think of us."
         del model
 
 

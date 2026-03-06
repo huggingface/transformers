@@ -26,6 +26,7 @@ import re
 import shutil
 import sys
 import tempfile
+import warnings
 from dataclasses import fields
 from enum import Enum
 from pathlib import Path
@@ -33,8 +34,6 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 import packaging.version
-
-from transformers.utils.import_utils import _is_package_available
 
 
 if os.getenv("WANDB_MODE") == "offline":
@@ -57,7 +56,6 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
-    import torch.distributed as dist
 
 # comet_ml requires to be imported before any ML frameworks
 _MIN_COMET_VERSION = "3.43.2"
@@ -301,7 +299,6 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
             other options are also available. See the Ray documentation (https://docs.ray.io/en/latest/tune/api_docs/analysis.html#ray.tune.ExperimentAnalysis.get_best_trial)
             for more options
     """
-    import ray
     import ray.tune
 
     def _objective(trial: dict, local_trainer):
@@ -930,14 +927,15 @@ class TrackioCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that logs metrics to Trackio.
 
-    It records training metrics, model (and PEFT) configuration, and GPU memory usage.
-    If `nvidia-ml-py` is installed, GPU power consumption is also tracked.
+    It records training metrics, model (including PEFT) configuration.
 
     **Requires**:
     ```bash
     pip install trackio
     ```
     """
+
+    SPACE_URL = "https://huggingface.co/spaces/{space_id}"
 
     def __init__(self):
         has_trackio = is_trackio_available()
@@ -957,26 +955,7 @@ class TrackioCallback(TrainerCallback):
         [`TrainingArguments`]. Please refer to the docstring of for more details.
         """
         if state.is_world_process_zero:
-            if os.getenv("TRACKIO_PROJECT"):
-                logger.warning(
-                    "The `TRACKIO_PROJECT` environment variable is deprecated and will be removed in a future "
-                    "version. Use TrainingArguments.project instead."
-                )
-                project = os.getenv("TRACKIO_PROJECT")
-            else:
-                project = args.project
-
-            if os.getenv("TRACKIO_SPACE_ID"):
-                logger.warning(
-                    "The `TRACKIO_SPACE_ID` environment variable is deprecated and will be removed in a future "
-                    "version. Use TrainingArguments.trackio_space_id instead."
-                )
-                space_id = os.getenv("TRACKIO_SPACE_ID")
-            else:
-                space_id = args.trackio_space_id
-
             combined_dict = {**args.to_dict()}
-
             if hasattr(model, "config") and model.config is not None:
                 model_config = model.config if isinstance(model.config, dict) else model.config.to_dict()
                 combined_dict = {**model_config, **combined_dict}
@@ -985,9 +964,9 @@ class TrackioCallback(TrainerCallback):
                 combined_dict = {"peft_config": peft_config, **combined_dict}
 
             self._trackio.init(
-                project=project,
+                project=args.project,
                 name=args.run_name,
-                space_id=space_id,
+                space_id=args.trackio_space_id,
                 resume="allow",
                 private=args.hub_private_repo,
             )
@@ -1019,31 +998,12 @@ class TrackioCallback(TrainerCallback):
             "total_flos",
         ]
 
-        if is_torch_available() and torch.cuda.is_available():
-            device_idx = torch.cuda.current_device()
-            total_memory = torch.cuda.get_device_properties(device_idx).total_memory
-            memory_allocated = torch.cuda.memory_allocated(device_idx)
-
-            gpu_memory_logs = {
-                f"gpu/{device_idx}/allocated_memory": memory_allocated / (1024**3),  # GB
-                f"gpu/{device_idx}/memory_usage": memory_allocated / total_memory,  # ratio
-            }
-            if _is_package_available("pynvml"):
-                power = torch.cuda.power_draw(device_idx)
-                gpu_memory_logs[f"gpu/{device_idx}/power"] = power / 1000  # Watts
-            if dist.is_available() and dist.is_initialized():
-                gathered_logs = [None] * dist.get_world_size()
-                dist.all_gather_object(gathered_logs, gpu_memory_logs)
-                gpu_memory_logs = {k: v for d in gathered_logs for k, v in d.items()}
-        else:
-            gpu_memory_logs = {}
-
         if not self._initialized:
             self.setup(args, state, model)
         if state.is_world_process_zero:
             non_scalar_logs = {k: v for k, v in logs.items() if k not in single_value_scalars}
             non_scalar_logs = rewrite_logs(non_scalar_logs)
-            self._trackio.log({**non_scalar_logs, **gpu_memory_logs, "train/global_step": state.global_step})
+            self._trackio.log({**non_scalar_logs, "train/global_step": state.global_step})
 
     def on_save(self, args, state, control, **kwargs):
         return
@@ -1056,6 +1016,39 @@ class TrackioCallback(TrainerCallback):
         if state.is_world_process_zero:
             metrics = rewrite_logs(metrics)
             self._trackio.log(metrics)
+
+    def on_push_begin(self, args, state, control, model, **kwargs):
+        if not state.is_world_process_zero or self._trackio is None:
+            return
+        if (current_project := self._trackio.context_vars.current_project.get()) is None:
+            return
+        trackio_version = packaging.version.parse(self._trackio.__version__)
+        if trackio_version < packaging.version.parse("0.13.0"):
+            warnings.warn(
+                "The version of `trackio` that is installed is <=0.13.0, so "
+                "the local Trackio project will not be pushed to Hugging Face. Run "
+                "`pip install --upgrade trackio` to fix this."
+            )
+            return
+
+        space_id = self._trackio.context_vars.current_space_id.get()
+        if space_id is None:
+            space_id = self._trackio.sync(current_project, force=True)
+        space_url = self.SPACE_URL.format(space_id=space_id)
+
+        badge_markdown = (
+            f'<a href="{space_url}" target="_blank"><img src="https://raw.githubusercontent.com/gradio-app/trackio/refs/heads/main/trackio/assets/badge.png" alt="Visualize in Trackio"'
+            ' title="Visualize in Trackio" style="height: 40px;"/></a>'
+        )
+        if badge_markdown not in modelcard.AUTOGENERATED_TRAINER_COMMENT:
+            modelcard.AUTOGENERATED_TRAINER_COMMENT += f"\n{badge_markdown}"
+
+        trackio_tags = ["trackio", f"trackio:{space_url}"]
+        if getattr(model, "model_tags", None) is not None:
+            if "trackio" not in model.model_tags:
+                model.model_tags.extend(trackio_tags)
+        else:
+            model.model_tags = trackio_tags
 
 
 class CometCallback(TrainerCallback):
@@ -1455,6 +1448,10 @@ class NeptuneMissingConfiguration(Exception):
 class NeptuneCallback(TrainerCallback):
     """TrainerCallback that sends the logs to [Neptune](https://app.neptune.ai).
 
+    > [!WARNING]
+    > Neptune integration is deprecated and will be removed in a future version of Transformers. We recommend using
+    > other supported experiment tracking integrations.
+
     Args:
         api_token (`str`, *optional*): Neptune API token obtained upon registration.
             You can leave this argument out if you have saved your token to the `NEPTUNE_API_TOKEN` environment
@@ -1500,6 +1497,11 @@ class NeptuneCallback(TrainerCallback):
         log_checkpoints: str | None = None,
         **neptune_run_kwargs,
     ):
+        warnings.warn(
+            "The NeptuneCallback is deprecated and will be removed in a future version of Transformers. We recommend "
+            "using other supported experiment tracking integrations.",
+            FutureWarning,
+        )
         if not is_neptune_available():
             raise ValueError(
                 "NeptuneCallback requires the Neptune client library to be installed. "
@@ -2234,6 +2236,12 @@ class SwanLabCallback(TrainerCallback):
         - **SWANLAB_API_HOST** (`str`, *optional*, defaults to `None`):
             API address for the SwanLab cloud environment for private version (its free)
 
+        - **SWANLAB_RUN_ID** (`str`, *optional*, defaults to `None`):
+            Experiment ID to resume a previous run. Use with `SWANLAB_RESUME` to continue an existing experiment.
+
+        - **SWANLAB_RESUME** (`str`, *optional*, defaults to `None`):
+            Resume mode (`"must"`, `"allow"`, `"never"`). Defaults to `"allow"` when `resume_from_checkpoint` is used.
+
         """
         self._initialized = True
 
@@ -2256,6 +2264,16 @@ class SwanLabCallback(TrainerCallback):
             elif trial_name is not None:
                 init_args["experiment_name"] = trial_name
             init_args["project"] = os.getenv("SWANLAB_PROJECT", None)
+
+            run_id = os.getenv("SWANLAB_RUN_ID", None)
+            if run_id is not None:
+                init_args["id"] = run_id
+
+            resume = os.getenv("SWANLAB_RESUME", None)
+            if resume is not None:
+                init_args["resume"] = resume
+            elif args.resume_from_checkpoint:
+                init_args["resume"] = "allow"
 
             if self._swanlab.get_run() is None:
                 self._swanlab.init(
@@ -2358,9 +2376,9 @@ def get_reporting_integration_callbacks(report_to):
         return []
 
     if isinstance(report_to, str):
-        if "none" == report_to:
+        if report_to == "none":
             return []
-        elif "all" == report_to:
+        elif report_to == "all":
             report_to = get_available_reporting_integrations()
         else:
             report_to = [report_to]

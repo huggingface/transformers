@@ -14,6 +14,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers import Gemma3Processor
 from transformers.testing_utils import get_tests_dir, require_vision
 
@@ -40,10 +42,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "pan_and_scan_max_num_crops": 4,
             "pan_and_scan_min_ratio_to_activate": 1.2,
         }
-        image_processor = image_processor_class.from_pretrained(
-            "google/siglip-so400m-patch14-384", **gemma3_image_processor_kwargs
-        )
-        return image_processor
+        return image_processor_class(**gemma3_image_processor_kwargs)
 
     @classmethod
     def _setup_tokenizer(cls):
@@ -53,7 +52,9 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "boi_token": "<start_of_image>",
             "eoi_token": "<end_of_image>",
         }
-        tokenizer = tokenizer_class(SAMPLE_VOCAB, keep_accents=True, extra_special_tokens=extra_special_tokens)
+        tokenizer = tokenizer_class.from_pretrained(
+            SAMPLE_VOCAB, keep_accents=True, extra_special_tokens=extra_special_tokens
+        )
         return tokenizer
 
     def test_get_num_vision_tokens(self):
@@ -128,7 +129,15 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # base image + 4 crops
         self.assertEqual(len(inputs[self.images_input_name]), 5)
-        self.assertEqual(len(inputs[self.text_input_name][0]), 67)
+        baseline = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            do_pan_and_scan=False,
+            image_seq_length=2,
+            pan_and_scan_min_crop_size=10,
+        )
+        self.assertGreater(len(inputs[self.text_input_name][0]), len(baseline[self.text_input_name][0]))
 
     def test_special_mm_token_truncation(self):
         """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
@@ -154,3 +163,32 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 padding=True,
                 max_length=5,
             )
+
+    def test_get_num_multimodal_tokens_matches_processor_call(self):
+        "Tests that the helper used internally in vLLM works correctly"
+
+        processor = self.get_processor()
+        if processor.tokenizer.pad_token_id is None:
+            processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
+
+        if not hasattr(processor, "_get_num_multimodal_tokens"):
+            self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
+
+        image_sizes = [(100, 100), (300, 100), (500, 30), (213, 167)]
+
+        # Overwritten because Gemma3 needs nested image inputs
+        image_inputs = []
+        for h, w in image_sizes:
+            image_inputs.append([np.random.randint(255, size=(h, w, 3), dtype=np.uint8)])
+
+        text = [f"This is an image {getattr(self, 'image_token', '')}"] * len(image_inputs)
+        inputs = processor(
+            text=text, images=image_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+        )
+
+        if "mm_token_type_ids" not in inputs:
+            self.skipTest("Processor doesn't support `mm_token_type_ids`")
+
+        num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
+        self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])

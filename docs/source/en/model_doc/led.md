@@ -152,9 +152,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ## LEDTokenizer
 
 [[autodoc]] LEDTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## LEDTokenizerFast
@@ -181,11 +179,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ## LEDForConditionalGeneration
 
 [[autodoc]] LEDForConditionalGeneration
-    - forward
-
-## LEDForSequenceClassification
-
-[[autodoc]] LEDForSequenceClassification
     - forward
 
 ## LEDForQuestionAnswering

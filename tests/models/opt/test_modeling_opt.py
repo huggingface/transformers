@@ -206,7 +206,6 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     pipeline_model_mapping = (
         {
             "feature-extraction": OPTModel,
-            "question-answering": OPTForQuestionAnswering,
             "text-classification": OPTForSequenceClassification,
             "text-generation": OPTForCausalLM,
             "zero-shot": OPTForSequenceClassification,
@@ -331,6 +330,12 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_model_parallelism(self):
         super().test_model_parallelism()
+
+    @unittest.skip(reason="Position ids follow custom logic")
+    def attention_mask_padding_matches_padding_free_with_position_ids(
+        self, attn_implementation: str, fa_kwargs: bool = False
+    ):
+        pass
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
@@ -474,22 +479,22 @@ class OPTGenerationTest(unittest.TestCase):
         outputs = model.generate(
             input_ids=input_ids,
             attention_mask=inputs["attention_mask"].to(torch_device),
+            max_new_tokens=10,
         )
 
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
-        output_non_padded = model.generate(input_ids=inputs_non_padded)
+        output_non_padded = model.generate(input_ids=inputs_non_padded, max_new_tokens=10)
 
-        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
-        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
+        output_padded = model.generate(input_ids=inputs_padded, max_new_tokens=10)
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
 
         expected_output_sentence = [
-            "Hello, my dog is a little bit of a dork.\nI'm a little bit",
-            "Today, I was in the middle of a conversation with a friend about the",
+            "Hello, my dog is a little bit of a dork.\nI'm a",
+            "Today, I was in the middle of a conversation with a friend",
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertListEqual(batch_out_sentence, [non_padded_sentence, padded_sentence])
@@ -540,42 +545,3 @@ class OPTGenerationTest(unittest.TestCase):
             self.assertFalse(
                 torch.isnan(outputs.logits[0]).any().item()
             )  # the first logits could contain NaNs if it fails
-
-    # TODO joao, manuel: remove this in v4.62.0
-    @slow
-    def test_contrastive_search_opt(self):
-        article = (
-            "A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I am the "
-            "Statue of Liberty.\nHuman: Where do you live?\nStatue: New York City.\nHuman: How long have you lived "
-            "there?"
-        )
-
-        opt_tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-1.3b")
-        opt_model = OPTForCausalLM.from_pretrained("facebook/opt-1.3b").to(torch_device)
-        input_ids = opt_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-
-        outputs = opt_model.generate(
-            input_ids,
-            penalty_alpha=0.6,
-            top_k=5,
-            max_length=256,
-            trust_remote_code=True,
-            custom_generate="transformers-community/contrastive-search",
-        )
-        generated_text = opt_tokenizer.batch_decode(outputs, skip_special_tokens=True)
-
-        self.assertListEqual(
-            generated_text,
-            [
-                "A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I "
-                "am the Statue of Liberty.\nHuman: Where do you live?\nStatue: New York City.\nHuman: How long have "
-                "you lived there?\nStatue: A hundred years.\nHuman: And you’re from what country?\nStatue: The United "
-                "States of America.\nHuman: Why did you come to America?\nStatue: I came to escape the tyranny of my "
-                "country.\nHuman: What tyranny?\nStatue: They didn’t let me speak my mind.\nHuman: What was your "
-                "country?\nStatue: It was a country of immigrants.\nHuman: Who were the immigrants?\nStatue: They "
-                "were from all over the world.\nHuman: What language did they speak?\nStatue: French, Spanish, "
-                "Italian, German, English—you name it.\nHuman: And where did they come from?\nStatue: They came from "
-                "every country in the world.\nHuman: And you were born in what country?\nStatue: I was born in "
-                "France.\nHuman: And your parents were French?\nStatue"
-            ],
-        )
