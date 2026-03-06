@@ -73,9 +73,7 @@ _hf_api_to_flash_mapping = {
     "sliding_window": "window_size",
 }
 # alternative names within the different flash attention APIs, e.g. for attention sinks
-_flash_api_alternative_names = {
-    "s_aux": "learnable_sink"
-}
+_flash_api_alternative_names = {"s_aux": "learnable_sink"}
 
 
 def _lazy_imports(

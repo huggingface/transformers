@@ -112,6 +112,7 @@ class FlashAttentionParityTest(unittest.TestCase):
         logprobs = {}
         outputs = defaultdict(list)
         with torch.no_grad():
+
             def generate(model, version, outputs, logits, logprobs):
                 model.set_attn_implementation(f"flash_attention_{version}")
                 output = model.generate(
