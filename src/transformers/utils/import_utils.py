@@ -943,11 +943,10 @@ def is_flash_attn_3_available() -> bool:
 
 @lru_cache
 def is_flash_attn_4_available() -> bool:
-    if not (is_torch_cuda_available() and _is_package_available("flash_attn")):
+    # Check first under base flash then cute
+    if not (is_torch_cuda_available() and _is_package_available("flash_attn")[0]):
         return False
-
-    # FA4 is distributed to just "flash_attn" but its mapping is properly mapped to cute
-    return "flash-attn-cute" in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+    return _is_package_available("flash_attn.cute")[0]
 
 
 @lru_cache

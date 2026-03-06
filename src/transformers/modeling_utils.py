@@ -1616,10 +1616,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if not is_flash_attn_4_available():
             preface = "FlashAttention4 has been toggled on, but it cannot be used due to the following error:"
 
-            if (
-                importlib.util.find_spec("flash_attn") is None
-                or "flash-attn-cute" not in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
-            ):
+            if importlib.util.find_spec("flash_attn") is None or importlib.util.find_spec("flash_attn.cute") is None:
                 raise ImportError(f"{preface} the package flash_attn (under cute) seems to be not installed.")
 
             if torch.cuda.is_available():
