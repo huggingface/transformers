@@ -722,7 +722,6 @@ class IsaacProcessor(ProcessorMixin):
         self.image_pad_token_id = int(image_pad_token_id)
         self.pad_token_id = self.text_pad_token_id
 
-        self.current_processor = self.image_processor
         self.vision_token = vision_token
         self.max_sequence_length = max_sequence_length
 
