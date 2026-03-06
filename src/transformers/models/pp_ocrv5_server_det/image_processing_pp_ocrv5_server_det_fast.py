@@ -5,7 +5,7 @@
 #                          modular_pp_ocrv5_server_det.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import math
-from typing import Optional, Union
+from typing import Optional
 
 import numpy as np
 import torch
@@ -363,7 +363,7 @@ def process(
     unclip_ratio: float,
     min_size: int,
     max_candidates: int,
-) -> tuple[Union[list[np.ndarray], np.ndarray], list[float]]:
+) -> tuple[list[np.ndarray] | np.ndarray, list[float]]:
     """
     Main post-processing function to convert model predictions into text boxes.
 
@@ -448,7 +448,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         self,
         preds,
         threshold: float = 0.3,
-        target_sizes: Optional[Union[list[tuple[int, int]], torch.Tensor]] = None,
+        target_sizes: list[tuple[int, int]] | torch.Tensor | None = None,
         box_thresh: float = 0.6,
         max_candidates: int = 1000,
         min_size: int = 3,

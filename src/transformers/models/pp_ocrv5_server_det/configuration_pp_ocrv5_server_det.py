@@ -4,8 +4,9 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_pp_ocrv5_server_det.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-
+from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
+from ..auto import AutoConfig
 
 
 class PPOCRV5ServerDetConfig(PreTrainedConfig):
@@ -21,38 +22,8 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
     Args:
         interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
             The interpolation mode used for upsampling or downsampling feature maps in the neck network.
-        stem_channels (`list[int]`, *optional*, defaults to `[3, 32, 48]`):
-            The number of output channels for the stem layers in the backbone network.
-        stage_in_channels (`list[int]`, *optional*, defaults to `[48, 128, 512, 1024]`):
-            Input channel dimensions for each stage in the backbone network.
-        stage_mid_channels (`list[int]`, *optional*, defaults to `[48, 96, 192, 384]`):
-            Intermediate channel dimensions for each stage in the backbone network, used in bottleneck blocks.
-        stage_out_channels (`list[int]`, *optional*, defaults to `[128, 512, 1024, 2048]`):
-            Output channel dimensions for each stage in the backbone network.
-        stage_num_blocks (`list[int]`, *optional*, defaults to `[1, 1, 3, 1]`):
-            Number of blocks in each stage of the backbone network.
-        stage_downsample (`list[bool]`, *optional*, defaults to `[False, True, True, True]`):
-            Whether to apply downsampling (strided convolution/pooling) at the start of each backbone stage.
-        stage_light_block (`list[bool]`, *optional*, defaults to `[False, False, True, True]`):
-            Whether to use lightweight blocks (instead of standard blocks) in each backbone stage to reduce computation.
-        stage_kernel_size (`list[int]`, *optional*, defaults to `[3, 3, 5, 5]`):
-            Kernel size of convolutional layers in each backbone stage for feature extraction.
-        stage_num_of_layers (`list[int]`, *optional*, defaults to `[6, 6, 6, 6]`):
-            Number of sub-layers within each block of the backbone stages (fixed to 6 for PP-OCRv5).
-        use_learnable_affine_block (`bool`, *optional*, defaults to `False`):
-            Whether to use Large Adaptive Blocks (LAB) in the backbone architecture.
-        use_last_conv (`bool`, *optional*, defaults to `True`):
-            Whether to include the last convolutional layer in the backbone feature extractor.
-        class_expand (`int`, *optional*, defaults to 2048):
-            The expansion factor for the classification layer channels.
-        dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for the classification or bottleneck layers to prevent overfitting.
-        class_num (`int`, *optional*, defaults to 1000):
-            The number of classes for the pre-training task (typically ImageNet-1k).
-        out_indices (`list[int]`, *optional*, defaults to `[0, 1, 2, 3]`):
-            The indices of the backbone layers from which to extract feature maps for the neck.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of input channels (3 for RGB images, 1 for grayscale).
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
+            The configuration of the backbone model.
         neck_out_channels (`int`, *optional*, defaults to 256):
             The number of output channels from the neck network, responsible for feature fusion and refinement.
         reduce_factor (`int`, *optional*, defaults to 2):
@@ -82,27 +53,13 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
     ```
     """
 
+    sub_configs = {"backbone_config": AutoConfig}
     model_type = "pp_ocrv5_server_det"
 
     def __init__(
         self,
         interpolate_mode: str = "nearest",
-        stem_channels: list[int] = [3, 32, 48],
-        stage_in_channels: list[int] = [48, 128, 512, 1024],
-        stage_mid_channels: list[int] = [48, 96, 192, 384],
-        stage_out_channels: list[int] = [128, 512, 1024, 2048],
-        stage_num_blocks: list[int] = [1, 1, 3, 1],
-        stage_downsample: list[bool] = [False, True, True, True],
-        stage_light_block: list[bool] = [False, False, True, True],
-        stage_kernel_size: list[int] = [3, 3, 5, 5],
-        stage_numb_of_layers: list[int] = [6, 6, 6, 6],
-        use_learnable_affine_block: bool = False,
-        use_last_conv: bool = True,
-        class_expand: int = 2048,
-        dropout_prob: float = 0.0,
-        class_num: int = 1000,
-        out_indices: list[int] = [0, 1, 2, 3],
-        num_channels: int = 3,
+        backbone_config=None,
         neck_out_channels: int = 256,
         reduce_factor: int = 2,
         intraclblock_config: dict | None = None,
@@ -119,23 +76,21 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         self.interpolate_mode = interpolate_mode
 
         # ---- backbone ----
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(stage_in_channels) + 1)]
-        self.stem_channels = stem_channels
-        self.stage_in_channels = stage_in_channels
-        self.stage_mid_channels = stage_mid_channels
-        self.stage_out_channels = stage_out_channels
-        self.stage_num_blocks = stage_num_blocks
-        self.stage_downsample = stage_downsample
-        self.stage_light_block = stage_light_block
-        self.stage_kernel_size = stage_kernel_size
-        self.stage_numb_of_layers = stage_numb_of_layers
-        self.use_learnable_affine_block = use_learnable_affine_block
-        self.use_last_conv = use_last_conv
-        self.class_expand = class_expand
-        self.dropout_prob = dropout_prob
-        self.class_num = class_num
-        self.out_indices = out_indices
-        self.num_channels = num_channels
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=backbone_config,
+            default_config_type="hgnet_v2",
+            default_config_kwargs={
+                "arch": "L",
+                "return_idx": [0, 1, 2, 3],
+                "freeze_stem_only": True,
+                "freeze_at": 0,
+                "freeze_norm": True,
+                "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
+                "out_features": ["stage1", "stage2", "stage3", "stage4"],
+            },
+            **kwargs,
+        )
+        self.backbone_config = backbone_config
 
         # ---- neck ----
         self.neck_out_channels = neck_out_channels

@@ -1,6 +1,6 @@
 import math
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Optional
 
 import numpy as np
 import torch
@@ -8,15 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms.v2.functional as tvF
 
-from transformers.models.hgnet_v2.modeling_hgnet_v2 import (
-    HGNetV2BasicLayer,
-    HGNetV2ConvLayer,
-    HGNetV2ConvLayerLight,
-    HGNetV2Embeddings,
-    HGNetV2LearnableAffineBlock,
-    HGNetV2Stage,
-)
-
+from ...backbone_utils import consolidate_backbone_kwargs_to_config, load_backbone
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import BaseImageProcessor
@@ -42,6 +34,7 @@ from ...utils import (
     logging,
 )
 from ...utils.generic import TensorType
+from ..auto import AutoConfig
 
 
 if is_cv2_available():
@@ -64,38 +57,8 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
     Args:
         interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
             The interpolation mode used for upsampling or downsampling feature maps in the neck network.
-        stem_channels (`list[int]`, *optional*, defaults to `[3, 32, 48]`):
-            The number of output channels for the stem layers in the backbone network.
-        stage_in_channels (`list[int]`, *optional*, defaults to `[48, 128, 512, 1024]`):
-            Input channel dimensions for each stage in the backbone network.
-        stage_mid_channels (`list[int]`, *optional*, defaults to `[48, 96, 192, 384]`):
-            Intermediate channel dimensions for each stage in the backbone network, used in bottleneck blocks.
-        stage_out_channels (`list[int]`, *optional*, defaults to `[128, 512, 1024, 2048]`):
-            Output channel dimensions for each stage in the backbone network.
-        stage_num_blocks (`list[int]`, *optional*, defaults to `[1, 1, 3, 1]`):
-            Number of blocks in each stage of the backbone network.
-        stage_downsample (`list[bool]`, *optional*, defaults to `[False, True, True, True]`):
-            Whether to apply downsampling (strided convolution/pooling) at the start of each backbone stage.
-        stage_light_block (`list[bool]`, *optional*, defaults to `[False, False, True, True]`):
-            Whether to use lightweight blocks (instead of standard blocks) in each backbone stage to reduce computation.
-        stage_kernel_size (`list[int]`, *optional*, defaults to `[3, 3, 5, 5]`):
-            Kernel size of convolutional layers in each backbone stage for feature extraction.
-        stage_num_of_layers (`list[int]`, *optional*, defaults to `[6, 6, 6, 6]`):
-            Number of sub-layers within each block of the backbone stages (fixed to 6 for PP-OCRv5).
-        use_learnable_affine_block (`bool`, *optional*, defaults to `False`):
-            Whether to use Large Adaptive Blocks (LAB) in the backbone architecture.
-        use_last_conv (`bool`, *optional*, defaults to `True`):
-            Whether to include the last convolutional layer in the backbone feature extractor.
-        class_expand (`int`, *optional*, defaults to 2048):
-            The expansion factor for the classification layer channels.
-        dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for the classification or bottleneck layers to prevent overfitting.
-        class_num (`int`, *optional*, defaults to 1000):
-            The number of classes for the pre-training task (typically ImageNet-1k).
-        out_indices (`list[int]`, *optional*, defaults to `[0, 1, 2, 3]`):
-            The indices of the backbone layers from which to extract feature maps for the neck.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of input channels (3 for RGB images, 1 for grayscale).
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
+            The configuration of the backbone model.
         neck_out_channels (`int`, *optional*, defaults to 256):
             The number of output channels from the neck network, responsible for feature fusion and refinement.
         reduce_factor (`int`, *optional*, defaults to 2):
@@ -125,27 +88,13 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
     ```
     """
 
+    sub_configs = {"backbone_config": AutoConfig}
     model_type = "pp_ocrv5_server_det"
 
     def __init__(
         self,
         interpolate_mode: str = "nearest",
-        stem_channels: list[int] = [3, 32, 48],
-        stage_in_channels: list[int] = [48, 128, 512, 1024],
-        stage_mid_channels: list[int] = [48, 96, 192, 384],
-        stage_out_channels: list[int] = [128, 512, 1024, 2048],
-        stage_num_blocks: list[int] = [1, 1, 3, 1],
-        stage_downsample: list[bool] = [False, True, True, True],
-        stage_light_block: list[bool] = [False, False, True, True],
-        stage_kernel_size: list[int] = [3, 3, 5, 5],
-        stage_numb_of_layers: list[int] = [6, 6, 6, 6],
-        use_learnable_affine_block: bool = False,
-        use_last_conv: bool = True,
-        class_expand: int = 2048,
-        dropout_prob: float = 0.0,
-        class_num: int = 1000,
-        out_indices: list[int] = [0, 1, 2, 3],
-        num_channels: int = 3,
+        backbone_config=None,
         neck_out_channels: int = 256,
         reduce_factor: int = 2,
         intraclblock_config: dict | None = None,
@@ -160,25 +109,23 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
 
         self.mode = mode
         self.interpolate_mode = interpolate_mode
-        
+
         # ---- backbone ----
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(stage_in_channels) + 1)]
-        self.stem_channels = stem_channels
-        self.stage_in_channels = stage_in_channels
-        self.stage_mid_channels = stage_mid_channels
-        self.stage_out_channels = stage_out_channels
-        self.stage_num_blocks = stage_num_blocks
-        self.stage_downsample = stage_downsample
-        self.stage_light_block = stage_light_block
-        self.stage_kernel_size = stage_kernel_size
-        self.stage_numb_of_layers = stage_numb_of_layers
-        self.use_learnable_affine_block = use_learnable_affine_block
-        self.use_last_conv = use_last_conv
-        self.class_expand = class_expand
-        self.dropout_prob = dropout_prob
-        self.class_num = class_num
-        self.out_indices = out_indices
-        self.num_channels = num_channels
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=backbone_config,
+            default_config_type="hgnet_v2",
+            default_config_kwargs={
+                "arch": "L",
+                "return_idx": [0, 1, 2, 3],
+                "freeze_stem_only": True,
+                "freeze_at": 0,
+                "freeze_norm": True,
+                "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
+                "out_features": ["stage1", "stage2", "stage3", "stage4"],
+            },
+            **kwargs,
+        )
+        self.backbone_config = backbone_config
 
         # ---- neck ----
         self.neck_out_channels = neck_out_channels
@@ -533,7 +480,7 @@ def process(
     unclip_ratio: float,
     min_size: int,
     max_candidates: int,
-) -> tuple[Union[list[np.ndarray], np.ndarray], list[float]]:
+) -> tuple[list[np.ndarray] | np.ndarray, list[float]]:
     """
     Main post-processing function to convert model predictions into text boxes.
 
@@ -580,13 +527,13 @@ class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = PILImageResampling.BICUBIC,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
-        rescale_factor: Optional[Union[int, float]] = None,
+        rescale_factor: int | float | None = None,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         limit_side_len: int = 960,
         limit_type: str = "max",
         max_side_limit: int = 4000,
@@ -615,17 +562,17 @@ class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
         limit_side_len: int = 960,
         limit_type: str = "max",
         max_side_limit: int = 4000,
-        size: Optional[dict[str, int]] = None,
-        do_resize: Optional[bool] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[Union[int, float]] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        return_tensors: Optional[Union[TensorType, str]] = None,
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        size: dict[str, int] | None = None,
+        do_resize: bool | None = None,
+        resample: PILImageResampling | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: int | float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        return_tensors: TensorType | str | None = None,
+        data_format: str | ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> BatchFeature:
         size = self.size if size is None else size
         limit_side_len = self.limit_side_len if limit_side_len is None else limit_side_len
@@ -704,7 +651,7 @@ class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
         self,
         preds,
         threshold: float = 0.3,
-        target_sizes: Optional[Union[list[tuple[int, int]], torch.Tensor]] = None,
+        target_sizes: list[tuple[int, int]] | torch.Tensor | None = None,
         box_thresh: float = 0.6,
         max_candidates: int = 1000,
         min_size: int = 3,
@@ -865,7 +812,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         self,
         preds,
         threshold: float = 0.3,
-        target_sizes: Optional[Union[list[tuple[int, int]], torch.Tensor]] = None,
+        target_sizes: list[tuple[int, int]] | torch.Tensor | None = None,
         box_thresh: float = 0.6,
         max_candidates: int = 1000,
         min_size: int = 3,
@@ -960,123 +907,14 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         resize_width = max(int(round(resize_width / 32) * 32), 32)
 
         if resize_height == height and resize_width == width:
-            return SizeDict(height=resize_height, width=resize_width), torch.tensor([height, width], dtype=torch.float32)
+            return SizeDict(height=resize_height, width=resize_width), torch.tensor(
+                [height, width], dtype=torch.float32
+            )
 
         if resize_width <= 0 or resize_height <= 0:
             return None, (None, None)
 
         return SizeDict(height=resize_height, width=resize_width), torch.tensor([height, width], dtype=torch.float32)
-
-
-class PPOCRV5ServerDetLearnableAffineBlock(HGNetV2LearnableAffineBlock):
-    pass
-
-
-class PPOCRV5ServerDetConvBNAct(HGNetV2ConvLayer):
-    pass
-
-
-class PPOCRV5ServerDetLightConvBNAct(HGNetV2ConvLayerLight):
-    pass
-
-
-class PPOCRV5ServerDetStemBlock(HGNetV2Embeddings):
-    pass
-
-
-class PPOCRV5ServerDetHGV2_Block(HGNetV2BasicLayer):
-    pass
-
-
-class PPOCRV5ServerDetHGV2_Stage(HGNetV2Stage):
-    pass
-
-
-class PPOCRV5ServerDetHGNetV2(nn.Module):
-    """
-    PPOCRV5ServerDetHGNetV2 (Paddle High-Performance GPU Network V2) backbone.
-    Extracts multi-scale hierarchical features from input images for downstream detection or classification.
-
-    Args:
-        config (`PPOCRV5ServerDetConfig`):
-            Configuration object containing model hyperparameters:
-            - **out_indices**: Indices of stages to return features from.
-            - **use_learnable_affine_block**: Global flag for Learnable Affine Block.
-            - **use_last_conv**: Whether to apply final global pooling and classification head.
-    """
-
-    def __init__(self, config: PPOCRV5ServerDetConfig):
-        super().__init__()
-        self.use_learnable_affine_block = config.use_learnable_affine_block
-        self.use_last_conv = config.use_last_conv
-        self.class_expand = config.class_expand
-        self.class_num = config.class_num
-        self.out_indices = config.out_indices
-        self.out_channels = []
-
-        # stem
-        self.stem = PPOCRV5ServerDetStemBlock(config)
-
-        # stages
-        self.stages = nn.ModuleList([])
-        for stage_index in range(len(config.stage_in_channels)):
-            resnet_stage = PPOCRV5ServerDetHGV2_Stage(config, stage_index)
-            self.stages.append(resnet_stage)
-            if stage_index in self.out_indices:
-                self.out_channels.append(config.stage_out_channels[stage_index])
-
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-
-        if self.use_last_conv:
-            self.last_conv = nn.Conv2d(
-                in_channels=config.stage_out_channels[-1],
-                out_channels=self.class_expand,
-                kernel_size=1,
-                stride=1,
-                padding=0,
-                bias=False,
-            )
-            self.act = nn.ReLU()
-            if self.use_learnable_affine_block:
-                self.lab = PPOCRV5ServerDetLearnableAffineBlock()
-            self.dropout = nn.Dropout(p=config.dropout_prob)
-
-        self.flatten = nn.Flatten(start_dim=1, end_dim=-1)
-
-    def forward(
-        self, hidden_state: torch.Tensor, output_hidden_states: bool = False
-    ) -> tuple[list[torch.Tensor], torch.Tensor, Optional[tuple[torch.Tensor, ...]]]:
-        """
-        Forward pass of PPOCRV5ServerDetHGNetV2.
-
-        Args:
-            hidden_state (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
-                Input image tensor (pixel values).
-            output_hidden_states (`bool`, *optional*, defaults to `False`):
-                Whether to return all intermediate stage outputs.
-
-        Returns:
-            `tuple(list, torch.FloatTensor, tuple)`:
-                - **out** (`list` of `torch.FloatTensor`): Selected multi-scale features for the neck (e.g., c2, c3, c4, c5).
-                - **hidden_state** (`torch.FloatTensor`): Final processed feature map from the last stage.
-                - **hidden_states** (`tuple` of `torch.FloatTensor`, *optional*): All intermediate states, returned only if `output_hidden_states` is `True`.
-        """
-        hidden_states = () if output_hidden_states else None
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-
-        hidden_state = self.stem(hidden_state)
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-        out = []
-        for i, stage in enumerate(self.stages):
-            if output_hidden_states:
-                hidden_states = hidden_states + (hidden_state,)
-            hidden_state = stage(hidden_state)
-            if i in self.out_indices:
-                out.append(hidden_state)
-
-        return out, hidden_state, hidden_states
 
 
 class PPOCRV5ServerDetDSConv(nn.Module):
@@ -1106,9 +944,9 @@ class PPOCRV5ServerDetDSConv(nn.Module):
         in_channels: int,
         out_channels: int,
         kernel_size: int,
-        padding: Union[int, str],
+        padding: int | str,
         stride: int = 1,
-        groups: Optional[int] = None,
+        groups: int | None = None,
         hidden_act: str = "relu",
         **kwargs,
     ):
@@ -1123,7 +961,7 @@ class PPOCRV5ServerDetDSConv(nn.Module):
         else:
             print(f"The activation function({self.hidden_act}) is selected incorrectly.")
             exit()
-        
+
         self.hidden_act = hidden_act
         self.conv1 = nn.Conv2d(
             in_channels=in_channels,
@@ -1262,11 +1100,9 @@ class PPOCRV5ServerDetLKPAN(nn.Module):
     Args:
         config (`PPOCRV5ServerDetConfig`):
             Configuration object containing `neck_out_channels`, `mode`, and `interpolate_mode`.
-        in_channels (`list` of `int`):
-            The channel counts of the input feature maps from the backbone stages.
     """
 
-    def __init__(self, config: Any, in_channels: list[int]):
+    def __init__(self, config):
         super().__init__()
         self.interpolate_mode = config.interpolate_mode
 
@@ -1282,6 +1118,7 @@ class PPOCRV5ServerDetLKPAN(nn.Module):
         self.pan_head_conv = nn.ModuleList()
         self.pan_lat_conv = nn.ModuleList()
 
+        in_channels = config.backbone_config.stage_out_channels
         for i in range(len(in_channels)):
             conv = nn.Conv2d(
                 in_channels=in_channels[i], out_channels=config.neck_out_channels, kernel_size=1, bias=False
@@ -1404,10 +1241,10 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
         out_channels: int,
         kernel_size: int,
         stride: int,
-        padding: Union[int, str],
+        padding: int | str,
         groups: int = 1,
         if_act: bool = True,
-        hidden_act: Optional[str] = None,
+        hidden_act: str | None = None,
     ):
         super().__init__()
         self.if_act = if_act
@@ -1496,7 +1333,7 @@ class PPOCRV5ServerDetHead(nn.Module):
 
     def forward(
         self, hidden_state: torch.Tensor, return_feature: bool = False
-    ) -> Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """
         Forward pass of the PPOCRV5ServerDetHead.
 
@@ -1654,9 +1491,9 @@ class PPOCRV5ServerDetModelOutput(ModelOutput):
             Returned if `output_hidden_states=True` is passed or `config.output_hidden_states=True`.
     """
 
-    logits: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    logits: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
 class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
@@ -1691,21 +1528,11 @@ class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
                     for m in sub_module:
                         nn.init.kaiming_uniform_(m.weight)
 
-        if isinstance(module, PPOCRV5ServerDetHGNetV2):
-            for m in module.modules():
-                if isinstance(m, nn.Conv2d):
-                    nn.init.kaiming_normal_(m.weight)
-                elif isinstance(m, nn.BatchNorm2d):
-                    nn.init.constant_(m.weight, 1.0)
-                    nn.init.constant_(m.bias, 0.0)
-                elif isinstance(m, nn.Linear):
-                    nn.init.constant_(m.bias, 0.0)
-
 
 class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
     """
     Core PPOCRV5 Server Det model.
-    Integration of PPOCRV5ServerDetHGNetV2 (Backbone), PPOCRV5ServerDetLKPAN (Neck), and PPOCRV5ServerDetPFHeadLocal (Head).
+    Integration of HGNetV2 (Backbone), PPOCRV5ServerDetLKPAN (Neck), and PPOCRV5ServerDetPFHeadLocal (Head).
     """
 
     def __init__(self, config: PPOCRV5ServerDetConfig):
@@ -1717,18 +1544,18 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
         """
         super().__init__(config)
 
-        self.backbone = PPOCRV5ServerDetHGNetV2(config)
-        self.neck = PPOCRV5ServerDetLKPAN(config, in_channels=self.backbone.out_channels)
+        self.backbone = load_backbone(config.backbone_config)
+        self.neck = PPOCRV5ServerDetLKPAN(config)
         self.head = PPOCRV5ServerDetPFHeadLocal(config)
         self.post_init()
 
     def forward(
         self,
         hidden_state: torch.FloatTensor,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.FloatTensor], PPOCRV5ServerDetModelOutput]:
+    ) -> tuple[torch.FloatTensor] | PPOCRV5ServerDetModelOutput:
         """
         Forward pass of the PPOCRV5ServerDetModel.
 
@@ -1745,19 +1572,12 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
                 A `PPOCRV5ServerDetModelOutput` (if `return_dict=True` is passed or `config.use_return_dict=True`)
                 containing the segmentation logits and optional hidden states.
         """
-        hidden_state, last_hidden_state, all_hidden_states = self.backbone(hidden_state, output_hidden_states)
+        hidden_state = self.backbone(hidden_state).feature_maps
         hidden_state = self.neck(hidden_state)
         hidden_state = self.head(hidden_state)
-        if not return_dict:
-            output = (last_hidden_state,)
-            if output_hidden_states:
-                output += (all_hidden_states,)
-            output += (hidden_state,)
-            return output
+
         return PPOCRV5ServerDetModelOutput(
             logits=hidden_state,
-            last_hidden_state=last_hidden_state,
-            hidden_states=all_hidden_states if output_hidden_states else None,
         )
 
 
@@ -1775,8 +1595,8 @@ class PPOCRV5ServerDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
             Intermediate stage features.
     """
 
-    logits: Optional[torch.FloatTensor] = None
-    shape: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor | None = None
+    shape: torch.FloatTensor | None = None
 
 
 class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
@@ -1801,11 +1621,11 @@ class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[list[dict]] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        labels: list[dict] | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.FloatTensor], PPOCRV5ServerDetForObjectDetectionOutput]:
+    ) -> tuple[torch.FloatTensor] | PPOCRV5ServerDetForObjectDetectionOutput:
         """
         Forward pass of the PPOCRV5 detection model.
 
