@@ -35,9 +35,7 @@ def load_vocab(vocab_file):
         raise ValueError("vocab_file must be a string path")
 
     if not os.path.exists(vocab_file):
-        raise FileNotFoundError(
-            f"Vocabulary file not found at path: {vocab_file}"
-        )
+        raise FileNotFoundError(f"Vocabulary file not found at path: {vocab_file}")
 
     vocab = collections.OrderedDict()
 
