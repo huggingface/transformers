@@ -504,6 +504,8 @@ def is_torch_bf16_gpu_available() -> bool:
         return torch.backends.mps.is_macos_or_newer(14, 0)
     if is_torch_musa_available():
         return torch.musa.is_bf16_supported() if hasattr(torch, "musa") else False
+    if is_torch_mlu_available():
+        return torch.mlu.is_bf16_supported()
     if is_torch_neuron_available():
         return getattr(torch, "neuron").is_bf16_supported()
     return False
