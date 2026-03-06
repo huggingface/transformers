@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="meituan-longcat/LongCat-Flash-Chat")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class LongcatFlashConfig(PreTrainedConfig):
     r"""
     ffn_hidden_size (`int`, *optional*, defaults to 12288):

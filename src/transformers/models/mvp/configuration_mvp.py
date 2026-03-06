@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="RUCAIBox/mvp")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class MvpConfig(PreTrainedConfig):
     r"""
     use_prompt (`bool`, *optional*, defaults to `False`):

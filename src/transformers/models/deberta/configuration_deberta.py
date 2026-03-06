@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/deberta-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class DebertaConfig(PreTrainedConfig):
     r"""
     max_relative_positions (`int`, *optional*, defaults to -1):

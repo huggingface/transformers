@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/xmod-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class XmodConfig(PreTrainedConfig):
     r"""
     pre_norm (`bool`, *optional*, defaults to `False`):

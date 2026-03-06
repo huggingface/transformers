@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="facebook/sam3")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Sam3VideoConfig(PreTrainedConfig):
     r"""
     detector_config (`dict` or `Sam3Config`, *optional*):

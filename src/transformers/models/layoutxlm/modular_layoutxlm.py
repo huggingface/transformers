@@ -22,7 +22,7 @@ from ..layoutlmv2.configuration_layoutlmv2 import LayoutLMv2Config
 
 @auto_docstring(checkpoint="microsoft/layoutxlm-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class LayoutXLMConfig(LayoutLMv2Config):
     r"""
     max_2d_position_embeddings (`int`, *optional*, defaults to 1024):

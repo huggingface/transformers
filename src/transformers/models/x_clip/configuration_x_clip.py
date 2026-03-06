@@ -26,7 +26,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="microsoft/xclip-base-patch32")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class XCLIPTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -65,7 +65,7 @@ class XCLIPTextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="microsoft/xclip-base-patch32")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class XCLIPVisionConfig(PreTrainedConfig):
     r"""
     num_frames (`int`, *optional*, defaults to 8):
@@ -120,7 +120,7 @@ class XCLIPVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="microsoft/xclip-base-patch32")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class XCLIPConfig(PreTrainedConfig):
     r"""
     prompt_layers (`int`, *optional*, defaults to 2):

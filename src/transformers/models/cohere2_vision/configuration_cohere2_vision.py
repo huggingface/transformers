@@ -23,7 +23,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="CohereLabs/command-a-vision-07-2025")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Cohere2VisionConfig(PreTrainedConfig):
     r"""
     downsample_factor (`int`, *optional*, defaults to 2):

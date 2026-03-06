@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/mobilenet_v1_1.0_224")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class MobileNetV1Config(PreTrainedConfig):
     r"""
     min_depth (`int`, *optional*, defaults to 8):

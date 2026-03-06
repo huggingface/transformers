@@ -29,7 +29,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Qwen3VLMoeTextConfig(PreTrainedConfig):
     r"""
     decoder_sparse_step (`int`, *optional*, defaults to 1):
@@ -119,7 +119,7 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Qwen3VLMoeVisionConfig(PreTrainedConfig):
     r"""
     num_position_embeddings (`int`, *optional*, defaults to 2304):
@@ -150,7 +150,7 @@ class Qwen3VLMoeVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Qwen3VLMoeConfig(PreTrainedConfig):
     r"""
     Example:

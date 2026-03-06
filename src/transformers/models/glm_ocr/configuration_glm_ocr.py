@@ -29,7 +29,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class GlmOcrVisionConfig(PreTrainedConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 4096):
@@ -72,7 +72,7 @@ class GlmOcrVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class GlmOcrTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -133,7 +133,7 @@ class GlmOcrTextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class GlmOcrConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 59256):

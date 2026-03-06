@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/swin-tiny-patch4-window7-224")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class MaskFormerSwinConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 7):

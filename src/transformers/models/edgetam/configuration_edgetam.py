@@ -29,7 +29,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="facebook/EdgeTAM")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class EdgeTamVisionConfig(PreTrainedConfig):
     r"""
     backbone_channel_list (`List[int]`, *optional*, defaults to `[384, 192, 96, 48]`):
@@ -91,7 +91,7 @@ class EdgeTamVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="facebook/EdgeTAM")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class EdgeTamPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -116,7 +116,7 @@ class EdgeTamPromptEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="facebook/EdgeTAM")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class EdgeTamMaskDecoderConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*, defaults to 2048):
@@ -155,7 +155,7 @@ class EdgeTamMaskDecoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="facebook/EdgeTAM")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class EdgeTamConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `EdgeTamPromptEncoderConfig`], *optional*):

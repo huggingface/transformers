@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/layoutlmv3-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class LayoutLMv3Config(PreTrainedConfig):
     r"""
     max_2d_position_embeddings (`int`, *optional*, defaults to 1024):

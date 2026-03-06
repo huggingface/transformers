@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/wav2vec2-bert-rel-pos-large")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Wav2Vec2BertConfig(PreTrainedConfig):
     r"""
     feature_projection_input_dim (`int`, *optional*, defaults to 160):

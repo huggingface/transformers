@@ -31,7 +31,7 @@ from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
 
 @auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Glm46VConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 151339):

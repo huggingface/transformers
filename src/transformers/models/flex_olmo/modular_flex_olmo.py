@@ -40,7 +40,7 @@ from ..olmoe.modeling_olmoe import (
 
 @auto_docstring(checkpoint="allenai/FlexOlmo-7x7B-1T")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class FlexOlmoConfig(PreTrainedConfig):
     r"""
     Example:

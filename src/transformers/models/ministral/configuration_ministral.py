@@ -29,7 +29,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="mistralai/Ministral-8B-Instruct-2410")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class MinistralConfig(PreTrainedConfig):
     r"""
     Example:

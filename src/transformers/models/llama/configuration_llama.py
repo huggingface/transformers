@@ -30,7 +30,7 @@ from ...utils.type_validators import interval
 
 @auto_docstring(checkpoint="meta-llama/Llama-2-7b-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class LlamaConfig(PreTrainedConfig):
     r"""
     ```python

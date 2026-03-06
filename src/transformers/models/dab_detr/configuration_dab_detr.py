@@ -25,7 +25,7 @@ from ..auto import AutoConfig
 
 @auto_docstring(checkpoint="IDEA-Research/dab_detr-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class DabDetrConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 300):

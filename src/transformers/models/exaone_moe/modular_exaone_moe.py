@@ -46,7 +46,7 @@ from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 @auto_docstring(checkpoint="LGAI-EXAONE/K-EXAONE-236B-A23B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class ExaoneMoeConfig(Exaone4Config):
     r"""
     n_group (`int`, *optional*, defaults to 1):

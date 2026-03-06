@@ -77,7 +77,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="allenai/Olmo-Hybrid-7B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class OlmoHybridConfig(LlamaConfig):
     r"""
     linear_num_key_heads (`int`, *optional*):

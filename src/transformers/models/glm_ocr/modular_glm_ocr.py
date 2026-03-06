@@ -54,7 +54,7 @@ class GlmOcrVisionMlp(Glm4VisionMlp):
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class GlmOcrVisionConfig(Glm4vVisionConfig):
     hidden_size: int = 1024
     attention_bias: bool = True
@@ -65,7 +65,7 @@ class GlmOcrVisionConfig(Glm4vVisionConfig):
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class GlmOcrTextConfig(Glm4vTextConfig):
     r"""
     Example:
@@ -94,7 +94,7 @@ class GlmOcrTextConfig(Glm4vTextConfig):
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class GlmOcrConfig(Glm4vConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 59256):

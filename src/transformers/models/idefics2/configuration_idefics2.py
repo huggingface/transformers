@@ -26,7 +26,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="HuggingFaceM4/idefics2-8b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Idefics2VisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -63,7 +63,7 @@ class Idefics2VisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="HuggingFaceM4/idefics2-8b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Idefics2PerceiverConfig(PreTrainedConfig):
     r"""
     resampler_n_latents (`int`, *optional*, defaults to 64):
@@ -100,7 +100,7 @@ class Idefics2PerceiverConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="HuggingFaceM4/idefics2-8b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Idefics2Config(PreTrainedConfig):
     r"""
     perceiver_config (`IdeficsPerceiverConfig` or `dict`, *optional*):

@@ -50,7 +50,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="blab-jhu/test-32m-dec")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class ModernBertDecoderConfig(PreTrainedConfig):
     r"""
     initializer_cutoff_factor (`float`, *optional*, defaults to 2.0):

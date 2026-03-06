@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="dandelin/vilt-b32-mlm")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class ViltConfig(PreTrainedConfig):
     r"""
     modality_type_vocab_size (`int`, *optional*, defaults to 2):

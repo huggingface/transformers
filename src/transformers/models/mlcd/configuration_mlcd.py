@@ -27,7 +27,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="DeepGlint-AI/mlcd-vit-bigG-patch14-336")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class MLCDVisionConfig(PreTrainedConfig):
     r"""
     num_key_value_groups (`int`, *optional*, defaults to 1):

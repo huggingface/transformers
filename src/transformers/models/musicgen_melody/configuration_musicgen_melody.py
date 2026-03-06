@@ -24,7 +24,7 @@ from ..auto.configuration_auto import AutoConfig
 
 @auto_docstring(checkpoint="facebook/musicgen-melody")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class MusicgenMelodyDecoderConfig(PreTrainedConfig):
     r"""
     audio_channels (`int`, *optional*, defaults to 1):
@@ -67,7 +67,7 @@ class MusicgenMelodyDecoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="facebook/musicgen-melody")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class MusicgenMelodyConfig(PreTrainedConfig):
     r"""
     text_encoder (`Union[dict, `PretrainedConfig`]`):

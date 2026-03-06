@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="mistralai/Ministral-3-8B-Base-2512")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Ministral3Config(PreTrainedConfig):
     r"""
     Example:

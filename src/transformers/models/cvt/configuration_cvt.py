@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/cvt-13")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class CvtConfig(PreTrainedConfig):
     r"""
     patch_padding (`list[int]`, *optional*, defaults to `[2, 1, 1]`):

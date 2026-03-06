@@ -19,7 +19,7 @@ import json
 import math
 import os
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar, Union
 
 from huggingface_hub import create_repo
@@ -244,6 +244,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 except AttributeError as err:
                     logger.error(f"Can't set {key} with value {value} for {self}")
                     raise err
+
+    def __init_subclass__(cls, **kwargs):
+        if is_dataclass(cls):
+            cls.__dataclass_params__.repr = False
 
     @property
     def name_or_path(self) -> str | None:

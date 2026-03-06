@@ -26,7 +26,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="HuggingFaceM4/Idefics3-8B-Llama3")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Idefics3VisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -63,7 +63,7 @@ class Idefics3VisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="HuggingFaceM4/Idefics3-8B-Llama3")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Idefics3Config(PreTrainedConfig):
     r"""
     scale_factor (`int`, *optional*, defaults to 2):

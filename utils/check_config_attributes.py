@@ -138,12 +138,12 @@ SPECIAL_CASES_TO_ALLOW = {
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
 ATTRIBUTES_TO_ALLOW = (
     # Attr in base `PreTrainedConfig`
-    'chunk_size_feed_forward',
-    'dtype',
-    'id2label',
-    'label2id',
-    'problem_type',
-    'tokenizer_class'
+    "chunk_size_feed_forward",
+    "dtype",
+    "id2label",
+    "label2id",
+    "problem_type",
+    "tokenizer_class"
     # Inits related
     "initializer_range",
     "init_std",

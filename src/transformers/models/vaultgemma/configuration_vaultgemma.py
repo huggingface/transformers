@@ -30,7 +30,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/vaultgemma-7b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class VaultGemmaConfig(PreTrainedConfig):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):

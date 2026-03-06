@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/s2t-small-librispeech-asr")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Speech2TextConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 6000):

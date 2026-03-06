@@ -43,7 +43,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="ModernVBERT/modernvbert")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class ModernVBertConfig(PreTrainedConfig):
     r"""
     pixel_shuffle_factor (`int | None`, *optional*, defaults to 4): Scale factor used by any pixel-shuffle / upsampling operations in the vision head.

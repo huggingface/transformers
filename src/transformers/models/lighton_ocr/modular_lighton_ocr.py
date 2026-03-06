@@ -44,7 +44,7 @@ from ..pixtral.image_processing_pixtral import get_resize_output_image_size
 
 @auto_docstring(checkpoint="lightonocr-hf/lightonocr-9b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class LightOnOcrConfig(PretrainedConfig):
     r"""
     Example:

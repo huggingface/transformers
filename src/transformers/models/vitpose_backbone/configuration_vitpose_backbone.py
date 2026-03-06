@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="usyd-community/vitpose-base-simple")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class VitPoseBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     part_features (`int`, *optional*):

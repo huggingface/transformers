@@ -29,7 +29,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="LGAI-EXAONE/K-EXAONE-236B-A23B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class ExaoneMoeConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):

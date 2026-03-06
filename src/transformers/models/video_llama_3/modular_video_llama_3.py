@@ -92,7 +92,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="lkhl/VideoLLaMA3-2B-Image-HF")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class VideoLlama3VisionConfig(SiglipVisionConfig):
     model_type = "video_llama_3_vision"
     base_config_key = "vision_config"
@@ -101,7 +101,7 @@ class VideoLlama3VisionConfig(SiglipVisionConfig):
 
 @auto_docstring(checkpoint="lkhl/VideoLLaMA3-2B-Image-HF")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class VideoLlama3Config(PreTrainedConfig):
     model_type = "video_llama_3"
     sub_configs = {"vision_config": VideoLlama3VisionConfig, "text_config": AutoConfig}

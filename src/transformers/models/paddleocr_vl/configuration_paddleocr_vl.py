@@ -35,7 +35,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class PaddleOCRVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -72,7 +72,7 @@ class PaddleOCRVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class PaddleOCRTextConfig(PreTrainedConfig):
     r"""
     use_bias (`bool`, *optional*, defaults to `False`):
@@ -141,7 +141,7 @@ class PaddleOCRTextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class PaddleOCRVLConfig(PreTrainedConfig):
     r"""
     Example:

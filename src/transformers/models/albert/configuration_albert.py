@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="albert/albert-xxlarge-v2")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class AlbertConfig(PreTrainedConfig):
     r"""
     inner_group_num (`int`, *optional*, defaults to 1):

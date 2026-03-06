@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="mistralai/Mistral-7B-v0.1")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class MistralConfig(PreTrainedConfig):
     r"""
     Example:

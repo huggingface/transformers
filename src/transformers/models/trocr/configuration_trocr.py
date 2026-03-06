@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/trocr-base-handwritten")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class TrOCRConfig(PreTrainedConfig):
     r"""
     use_learned_position_embeddings (`bool`, *optional*, defaults to `True`):

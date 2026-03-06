@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/beit-base-patch16-224-pt22k")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     use_mask_token (`bool`, *optional*, defaults to `False`):

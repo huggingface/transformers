@@ -49,7 +49,7 @@ _CONFIG_FOR_DOC = "MetaClip2Config"
 
 @auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class MetaClip2TextConfig(CLIPTextConfig):
     r"""
     Example:
@@ -70,7 +70,7 @@ class MetaClip2TextConfig(CLIPTextConfig):
 
 @auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class MetaClip2VisionConfig(CLIPVisionConfig):
     r"""
     Example:
@@ -91,7 +91,7 @@ class MetaClip2VisionConfig(CLIPVisionConfig):
 
 @auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class MetaClip2Config(CLIPConfig):
     r"""
     Example:

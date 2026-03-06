@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/bart-large")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class BartConfig(PreTrainedConfig):
     r"""
     Example:

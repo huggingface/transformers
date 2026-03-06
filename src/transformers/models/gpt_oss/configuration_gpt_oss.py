@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="openai/gpt-oss-20b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class GptOssConfig(PreTrainedConfig):
     model_type = "gpt_oss"
     default_theta = 150000.0

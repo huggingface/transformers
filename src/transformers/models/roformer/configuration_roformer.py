@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="junnyu/roformer_chinese_base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class RoFormerConfig(PreTrainedConfig):
     r"""
     rotary_value (`bool`, *optional*, defaults to `False`):

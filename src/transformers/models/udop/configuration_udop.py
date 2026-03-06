@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/udop-large")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class UdopConfig(PreTrainedConfig):
     r"""
     relative_attention_num_buckets (`int`, *optional*, defaults to 32):

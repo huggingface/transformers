@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/canine-s")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class CanineConfig(PreTrainedConfig):
     r"""
     downsampling_rate (`int`, *optional*, defaults to 4):

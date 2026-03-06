@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class VisionEncoderDecoderConfig(PreTrainedConfig):
     r"""
     kwargs (*optional*):

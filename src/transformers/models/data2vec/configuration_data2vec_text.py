@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/data2vec-text-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Data2VecTextConfig(PreTrainedConfig):
     r"""
     Examples:

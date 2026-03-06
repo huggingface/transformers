@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="FacebookAI/roberta-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class RobertaConfig(PreTrainedConfig):
     r"""
     Examples:

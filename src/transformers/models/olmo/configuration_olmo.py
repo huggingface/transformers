@@ -29,7 +29,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="allenai/OLMo-7B-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class OlmoConfig(PreTrainedConfig):
     r"""
     clip_qkv (`float`, *optional*):

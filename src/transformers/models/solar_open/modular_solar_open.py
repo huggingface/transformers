@@ -35,7 +35,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="upstage/Solar-Open-100B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class SolarOpenConfig(Glm4MoeConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):

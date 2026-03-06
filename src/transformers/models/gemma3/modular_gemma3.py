@@ -62,7 +62,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="google/gemma3_text-7b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
     r"""
     final_logit_softcapping (`float`, *optional*):
@@ -155,7 +155,7 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
 
 @auto_docstring(checkpoint="google/gemma3_text-7b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Gemma3Config(PreTrainedConfig):
     r"""
     mm_tokens_per_image (`int`, *optional*, defaults to 256):

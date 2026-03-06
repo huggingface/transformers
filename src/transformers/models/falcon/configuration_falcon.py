@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="tiiuae/falcon-7b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class FalconConfig(PreTrainedConfig):
     r"""
     num_ln_in_parallel_attn (`int`, *optional*):

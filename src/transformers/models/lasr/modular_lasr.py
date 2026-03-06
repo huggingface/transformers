@@ -151,7 +151,7 @@ class LasrProcessor(ParakeetProcessor):
 
 @auto_docstring(checkpoint="TODO")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class LasrEncoderConfig(ParakeetEncoderConfig):
     r"""
     convolution_bias (`bool`, *optional*, defaults to `False`):
@@ -212,7 +212,7 @@ class LasrEncoderConfig(ParakeetEncoderConfig):
 
 @auto_docstring(checkpoint="TODO")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class LasrCTCConfig(ParakeetCTCConfig):
     r"""
         ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):

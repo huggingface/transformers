@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/ijepa_vith14_1k")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class IJepaConfig(PreTrainedConfig):
     r"""
     pooler_output_size (`int`, *optional*):

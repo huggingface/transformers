@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="inceptionai/Jais-2-8B-Chat")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class JambaConfig(PreTrainedConfig):
     r"""
     expert_layer_period (`int`, *optional*, defaults to 2):

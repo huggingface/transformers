@@ -66,7 +66,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="google/t5_gemma_module-7b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class T5GemmaModuleConfig(Gemma2Config):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):
@@ -92,7 +92,7 @@ class T5GemmaModuleConfig(Gemma2Config):
 
 @auto_docstring(checkpoint="google/t5_gemma_module-7b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class T5GemmaConfig(PreTrainedConfig):
     r"""
     encoder (`Union[T5GemmaModuleConfig, dict]`, optional, *optional*):

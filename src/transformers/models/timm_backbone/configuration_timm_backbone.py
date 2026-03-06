@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class TimmBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     backbone (`str`, *optional*):

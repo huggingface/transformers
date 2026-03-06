@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="MBZUAI/swiftformer-xs")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class SwiftFormerConfig(PreTrainedConfig):
     r"""
     embed_dims (`list[int]`, *optional*, defaults to `[48, 56, 112, 220]`):

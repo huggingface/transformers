@@ -77,7 +77,7 @@ def apply_rotary_pos_emb(
 
 @auto_docstring(checkpoint="zai-org/GLM-5")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class GlmMoeDsaConfig(Glm4MoeLiteConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):

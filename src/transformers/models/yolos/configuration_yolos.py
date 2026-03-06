@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="hustvl/yolos-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class YolosConfig(PreTrainedConfig):
     r"""
     num_detection_tokens (`int`, *optional*, defaults to 100):

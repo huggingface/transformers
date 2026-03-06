@@ -38,7 +38,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="facebook/cwm")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class CwmConfig(LlamaConfig):
     model_type = "cwm"
     default_theta = 1_000_000.0

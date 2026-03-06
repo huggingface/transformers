@@ -26,7 +26,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="espnet/fastspeech2_conformer")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class FastSpeech2ConformerConfig(PreTrainedConfig):
     r"""
     encoder_num_attention_heads (`int`, *optional*, defaults to 2):
@@ -267,7 +267,7 @@ class FastSpeech2ConformerConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="espnet/fastspeech2_conformer")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class FastSpeech2ConformerHifiGanConfig(PreTrainedConfig):
     r"""
     model_in_dim (`int`, *optional*, defaults to 80):
@@ -329,7 +329,7 @@ class FastSpeech2ConformerHifiGanConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="espnet/fastspeech2_conformer")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class FastSpeech2ConformerWithHifiGanConfig(PreTrainedConfig):
     """
     model_config ([`FastSpeech2ConformerConfig | dict`], *optional*):

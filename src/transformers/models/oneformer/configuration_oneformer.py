@@ -25,7 +25,7 @@ from ..auto import AutoConfig
 
 @auto_docstring(checkpoint="shi-labs/oneformer_ade20k_swin_tiny")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class OneFormerConfig(PreTrainedConfig):
     r"""
     ignore_value (`int`, *optional*, defaults to 255):

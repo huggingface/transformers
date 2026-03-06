@@ -30,7 +30,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="THUDM/GLM-4-100B-A10B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Glm4MoeLiteConfig(PreTrainedConfig):
     r"""
     rope_interleave (`bool`, *optional*, defaults to `True`):

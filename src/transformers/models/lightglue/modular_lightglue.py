@@ -44,7 +44,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="ETH-CVG/lightglue_superpoint")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class LightGlueConfig(PreTrainedConfig):
     r"""
     keypoint_detector_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SuperPointConfig`):

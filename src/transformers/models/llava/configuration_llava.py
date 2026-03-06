@@ -24,7 +24,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="llava-hf/llava-9b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class LlavaConfig(PreTrainedConfig):
     r"""
     Example:

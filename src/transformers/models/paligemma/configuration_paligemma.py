@@ -23,7 +23,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="paligemma-hf/paligemma-2b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class PaliGemmaConfig(PreTrainedConfig):
     r"""
     Example:

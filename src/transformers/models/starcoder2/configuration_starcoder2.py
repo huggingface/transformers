@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="bigcode/starcoder2-7b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Starcoder2Config(PreTrainedConfig):
     r"""
     use_bias (`bool`, *optional*, defaults to `True`):

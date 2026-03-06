@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="EleutherAI/gpt-neox-japanese-2.7b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class GPTNeoXJapaneseConfig(PreTrainedConfig):
     r"""
     intermediate_multiple_size (`int`, *optional*, defaults to 4):

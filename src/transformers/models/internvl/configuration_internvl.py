@@ -24,7 +24,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="OpenGVLab/InternVL3-1B-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class InternVLVisionConfig(PreTrainedConfig):
     r"""
     projection_dropout (`float`, *optional*, defaults to 0.0):
@@ -88,7 +88,7 @@ class InternVLVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="OpenGVLab/InternVL3-1B-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class InternVLConfig(PreTrainedConfig):
     r"""
     downsample_ratio (`float`, *optional*, defaults to 0.5):

@@ -94,7 +94,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Ernie4_5_VLMoeVisionConfig(Qwen2VLVisionConfig):
     r"""
     temporal_merge_size (`int`, *optional*, defaults to 2):
@@ -122,7 +122,7 @@ class Ernie4_5_VLMoeVisionConfig(Qwen2VLVisionConfig):
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
     r"""
     use_bias (`bool`, *optional*, defaults to `False`):
@@ -180,7 +180,7 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 101304):

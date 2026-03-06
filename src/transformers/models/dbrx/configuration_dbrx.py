@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 @auto_docstring(
     custom_intro="This config is used to instantiate attention layers.",
     checkpoint="transformers-community/dbrx-instruct",
@@ -46,7 +46,7 @@ class DbrxAttentionConfig(PreTrainedConfig):
 
 
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 @auto_docstring(
     custom_intro="This config is used to instantiate feedforward layers.",
     checkpoint="transformers-community/dbrx-instruct",
@@ -104,7 +104,7 @@ class DbrxFFNConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="transformers-community/dbrx-instruct")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class DbrxConfig(PreTrainedConfig):
     r"""
     max_seq_len (`int`, *optional*, defaults to 2048):

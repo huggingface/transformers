@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="nvidia/nemotron-3-8b-base-4k-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class NemotronConfig(PreTrainedConfig):
     r"""
     Example:

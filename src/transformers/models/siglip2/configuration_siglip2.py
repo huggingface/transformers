@@ -31,7 +31,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Siglip2TextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -75,7 +75,7 @@ class Siglip2TextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Siglip2VisionConfig(PreTrainedConfig):
     r"""
     num_patches (`int`, *optional*, defaults to 256):
@@ -117,7 +117,7 @@ class Siglip2VisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Siglip2Config(PreTrainedConfig):
     r"""
     Example:

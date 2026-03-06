@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/pegasus-x-large")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class PegasusXConfig(PreTrainedConfig):
     r"""
     num_global_tokens (`int`, *optional*, defaults to 128):

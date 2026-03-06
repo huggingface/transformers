@@ -41,7 +41,7 @@ from ..sam2.modeling_sam2 import (
 
 @auto_docstring(checkpoint="facebook/EdgeTAM")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class EdgeTamVisionConfig(PreTrainedConfig):
     r"""
     backbone_channel_list (`List[int]`, *optional*, defaults to `[384, 192, 96, 48]`):
@@ -103,21 +103,21 @@ class EdgeTamVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="facebook/EdgeTAM")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class EdgeTamPromptEncoderConfig(Sam2PromptEncoderConfig):
     pass
 
 
 @auto_docstring(checkpoint="facebook/EdgeTAM")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class EdgeTamMaskDecoderConfig(Sam2MaskDecoderConfig):
     pass
 
 
 @auto_docstring(checkpoint="facebook/EdgeTAM")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class EdgeTamConfig(Sam2Config):
     r"""
     prompt_encoder_config (Union[`dict`, `EdgeTamPromptEncoderConfig`], *optional*):

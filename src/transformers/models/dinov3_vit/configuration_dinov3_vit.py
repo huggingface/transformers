@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/dinov3-vits16-pretrain-lvd1689m")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class DINOv3ViTConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     rope_theta (`float`, *optional*, defaults to 100.0):

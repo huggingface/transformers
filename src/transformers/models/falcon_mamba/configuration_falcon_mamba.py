@@ -29,7 +29,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="tiiuae/falcon-mamba-7b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class FalconMambaConfig(PreTrainedConfig):
     r"""
     expand (`int`, *optional*, defaults to 2):

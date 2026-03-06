@@ -23,7 +23,7 @@ from transformers.utils import auto_docstring
 
 @auto_docstring(checkpoint="ibm/patchtst")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class PatchTSTConfig(PreTrainedConfig):
     r"""
     context_length (`int`, *optional*, defaults to 32):

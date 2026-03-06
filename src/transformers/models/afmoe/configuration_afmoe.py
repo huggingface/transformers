@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 @auto_docstring(
     custom_intro="""
     AFMoE is an Adaptive Feedforward MoE (Mixture of Experts) model with token-choice routing, shared experts, and a

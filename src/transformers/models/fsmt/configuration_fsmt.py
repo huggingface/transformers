@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/wmt19-en-ru")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class FSMTConfig(PreTrainedConfig):
     r"""
     langs (`list[str]`):

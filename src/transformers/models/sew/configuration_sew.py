@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="BAAI/seggpt-vit-large")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class SEWConfig(PreTrainedConfig):
     r"""
     squeeze_factor (`int`, *optional*, defaults to 2):

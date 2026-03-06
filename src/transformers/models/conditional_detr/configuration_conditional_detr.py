@@ -25,7 +25,7 @@ from ..auto import AutoConfig
 
 @auto_docstring(checkpoint="microsoft/conditional-detr-resnet-50")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class ConditionalDetrConfig(PreTrainedConfig):
     r"""
     auxiliary_loss (`bool`, *optional*, defaults to `False`):

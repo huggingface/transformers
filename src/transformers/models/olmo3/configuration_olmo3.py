@@ -29,7 +29,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="allenai/OLMo-3-0725-1B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Olmo3Config(PreTrainedConfig):
     r"""
     Example:

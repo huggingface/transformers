@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/data2vec-vision-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Data2VecVisionConfig(PreTrainedConfig):
     r"""
     use_mask_token (`bool`, *optional*, defaults to `False`):

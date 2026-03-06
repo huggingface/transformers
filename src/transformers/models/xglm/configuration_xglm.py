@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/xglm-564M")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class XGLMConfig(PreTrainedConfig):
     r"""
     Example:

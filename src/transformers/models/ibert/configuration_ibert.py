@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="kssteven/ibert-roberta-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class IBertConfig(PreTrainedConfig):
     r"""
     type_vocab_size (`int`, *optional*, defaults to 2):

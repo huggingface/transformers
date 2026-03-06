@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/efficientnet-b7")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class EfficientNetConfig(PreTrainedConfig):
     r"""
     width_coefficient (`float`, *optional*, defaults to 2.0):

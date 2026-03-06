@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/swinv2-tiny-patch4-window8-256")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Swinv2Config(BackboneConfigMixin, PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 7):

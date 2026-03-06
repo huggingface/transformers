@@ -58,7 +58,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Qwen3_5MoeTextConfig(Qwen3NextConfig):
     r"""
     linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
@@ -122,14 +122,14 @@ class Qwen3_5MoeTextConfig(Qwen3NextConfig):
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Qwen3_5MoeVisionConfig(Qwen3_5VisionConfig):
     pass
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class Qwen3_5MoeConfig(Qwen3VLConfig):
     r"""
     Example:

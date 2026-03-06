@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/dinov3-convnext-tiny-pretrain-lvd1689m")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class DINOv3ConvNextConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     Example:

@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="deepmind/language-perceiver")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class PerceiverConfig(PreTrainedConfig):
     r"""
     num_latents (`int`, *optional*, defaults to 256):

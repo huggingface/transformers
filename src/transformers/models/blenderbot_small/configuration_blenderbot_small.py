@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/blenderbot_small-90M")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class BlenderbotSmallConfig(PreTrainedConfig):
     r"""
     Example:

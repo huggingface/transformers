@@ -51,7 +51,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="answerdotai/ModernBERT-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class ModernBertConfig(PreTrainedConfig):
     r"""
     initializer_cutoff_factor (`float`, *optional*, defaults to 2.0):

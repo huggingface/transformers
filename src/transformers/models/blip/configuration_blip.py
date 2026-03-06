@@ -26,7 +26,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="Salesforce/blip-vqa-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class BlipTextConfig(PreTrainedConfig):
     r"""
     label_smoothing (float, *optional*):
@@ -76,7 +76,7 @@ class BlipTextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="Salesforce/blip-vqa-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class BlipVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -112,7 +112,7 @@ class BlipVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="Salesforce/blip-vqa-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class BlipConfig(PreTrainedConfig):
     r"""
     label_smoothing (float, *optional*):

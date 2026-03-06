@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="huggingface/time-series-transformer-tourism-monthly")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class TimeSeriesTransformerConfig(PreTrainedConfig):
     r"""
     prediction_length (`int`):

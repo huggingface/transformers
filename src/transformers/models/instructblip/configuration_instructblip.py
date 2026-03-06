@@ -28,7 +28,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class InstructBlipVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -64,7 +64,7 @@ class InstructBlipVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class InstructBlipQFormerConfig(PreTrainedConfig):
     r"""
     cross_attention_frequency (`int`, *optional*, defaults to 2):
@@ -107,7 +107,7 @@ class InstructBlipQFormerConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
+@dataclass
 class InstructBlipConfig(PreTrainedConfig):
     r"""
     qformer_config (`dict`, *optional*):
