@@ -18,17 +18,18 @@ from ..utils import logging
 from ..utils.export_config import ExportConfigMixin, ExportFormat
 from .base import HfExporter
 from .exporter_dynamo import DynamoConfig, DynamoExporter
+from .exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from .exporter_onnx import OnnxConfig, OnnxExporter
 
 
 AUTO_EXPORTER_MAPPING = {
-    # "executorch": ExecutorchExporter,
+    "executorch": ExecutorchExporter,
     "dynamo": DynamoExporter,
     "onnx": OnnxExporter,
 }
 
 AUTO_EXPORT_CONFIG_MAPPING = {
-    # "executorch": ExecutorchConfig,
+    "executorch": ExecutorchConfig,
     "dynamo": DynamoConfig,
     "onnx": OnnxConfig,
 }

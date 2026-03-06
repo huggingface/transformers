@@ -779,12 +779,17 @@ def is_onnx_available() -> bool:
 
 @lru_cache
 def is_onnxscript_available() -> bool:
-    return _is_package_available("onnxscript")
+    return _is_package_available("onnxscript")[0]
 
 
 @lru_cache
 def is_onnxruntime_available() -> bool:
-    return _is_package_available("onnxruntime") or _is_package_available("onnxruntime-gpu")
+    return _is_package_available("onnxruntime")[0] or _is_package_available("onnxruntime-gpu")[0]
+
+
+@lru_cache
+def is_executorch_available() -> bool:
+    return _is_package_available("executorch")[0]
 
 
 @lru_cache

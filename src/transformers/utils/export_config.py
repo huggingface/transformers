@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 class ExportFormat(Enum):
-    # EXECUTORCH = "executorch"
+    EXECUTORCH = "executorch"
     DYNAMO = "dynamo"
     ONNX = "onnx"
     # TORCHSCRIPT = "torchscript"
@@ -122,3 +122,21 @@ class OnnxConfig(DynamoConfig):
     optimize: bool = True
     export_params: bool = True
     keep_initializers_as_inputs: bool = False
+
+
+@dataclass
+class ExecutorchConfig(DynamoConfig):
+    """
+    Configuration class for exporting models to ExecuTorch format.
+
+    Args:
+        dynamic_shapes (`dict[str, Any]`, *optional*):
+            Dynamic shapes for the model inputs.
+        strict (`bool`, *optional*, defaults to `False`):
+            Whether to enable strict mode during export.
+        prefer_deferred_runtime_asserts_over_guards (`bool`, *optional*, defaults to `False`):
+            Whether to prefer deferred runtime asserts over guards during export.
+    """
+
+    export_format: ExportFormat = ExportFormat.EXECUTORCH
+    dynamic: bool | None = None
