@@ -47,6 +47,8 @@ class DeepseekV32Config(DeepseekV3Config):
     r"""
     This is the configuration class to store the configuration of a [`DeepseekV32Model`]. It extends
     [`DeepseekV3Config`] with the Dynamic Sparse Attention (DSA) indexer parameters introduced in DeepSeek-V3.2.
+    It matches the published [deepseek-ai/DeepSeek-V3.2](https://huggingface.co/deepseek-ai/DeepSeek-V3.2)
+    checkpoint.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 129280):
