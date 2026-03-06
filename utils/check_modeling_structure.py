@@ -921,9 +921,7 @@ def main():
 
     show_progress = should_show_progress(args)
     status_ctx = (
-        CONSOLE.status(
-            f"[bold blue]Checking modeling structure ({len(modeling_files)} files)...[/bold blue]"
-        )
+        CONSOLE.status(f"[bold blue]Checking modeling structure ({len(modeling_files)} files)...[/bold blue]")
         if show_progress
         else nullcontext()
     )
