@@ -222,6 +222,8 @@ class TimesFm2_5MLP(CLIPMLP):
     def __init__(self, config: TimesFm2_5Config):
         super().__init__()
         self.activation_fn = ACT2FN[config.activation]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.use_bias)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.use_bias)
 
 
 class TimesFm2_5ResidualBlock(TimesFmResidualBlock):
@@ -234,6 +236,11 @@ class TimesFm2_5ResidualBlock(TimesFmResidualBlock):
         self.output_layer = nn.Linear(hidden_dims, output_dims, bias=use_bias)
         self.residual_layer = nn.Linear(input_dims, output_dims, bias=use_bias)
         self.activation = ACT2FN[config.activation]
+
+    def forward(self, x):
+        # Align activations to block parameter dtype for mixed precision stability
+        x = x.to(self.input_layer.weight.dtype)
+        return super().forward(x)
 
 
 class TimesFm2_5RMSNorm(LlamaRMSNorm):
@@ -703,12 +710,18 @@ class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
 
         loss = None
         if future_values is not None:
-            mse_loss = F.mse_loss(mean_predictions, future_values)
-            quantile_indices = [i for i in range(full_predictions.shape[-1]) if i != decode_index]
+            target_len = future_values.shape[1]
+            # Compute loss in normalized space for scale-invariant training.
+            # full_forecast is already in normalized space (before denormalization).
+            normalized_preds = full_forecast[:, :target_len]
+            normalized_targets = self.model._revin(future_values, mu_global, sigma_global, reverse=False)
+            normalized_mean_preds = normalized_preds[:, :, decode_index]
+            mse_loss = F.mse_loss(normalized_mean_preds, normalized_targets)
+            quantile_indices = [i for i in range(normalized_preds.shape[-1]) if i != decode_index]
             if quantile_indices:
-                index_tensor = torch.tensor(quantile_indices, device=full_predictions.device, dtype=torch.long)
-                quantile_tensor = torch.index_select(full_predictions, dim=-1, index=index_tensor)
-                quantile_loss = self._quantile_loss(quantile_tensor, future_values)
+                index_tensor = torch.tensor(quantile_indices, device=normalized_preds.device, dtype=torch.long)
+                quantile_tensor = torch.index_select(normalized_preds, dim=-1, index=index_tensor)
+                quantile_loss = self._quantile_loss(quantile_tensor, normalized_targets)
                 loss = mse_loss + quantile_loss
             else:
                 loss = mse_loss

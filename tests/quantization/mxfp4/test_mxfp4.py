@@ -60,6 +60,7 @@ def _patch_no_accelerator():
         stack.enter_context(patch("torch.cuda.is_available", return_value=False))
         if hasattr(torch, "xpu"):
             stack.enter_context(patch("torch.xpu.is_available", return_value=False))
+        stack.enter_context(patch("torch.accelerator.current_accelerator", return_value=None))
         yield
 
 

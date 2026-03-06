@@ -180,7 +180,7 @@ class ContinuousBatchProcessor:
                 break
             except Exception as e:
                 logger.error(f"Error processing new request: {e}", exc_info=True)
-                state: RequestState = locals().get("state")  # type:ignore
+                state: RequestState = locals().get("state")
                 if state is not None:
                     self._handle_request_error(e, state)
 
@@ -464,7 +464,7 @@ class ContinuousBatchProcessor:
         logits_2d = logits.view(batch_size * seq_len, vocab_size)
         input_ids_2d = batch_data["input_ids"].view(batch_size * seq_len)
         # Process with 2D tensors#
-        processed_logits_2d = logit_processor(input_ids_2d, logits_2d)  # type: ignore[arg-type]
+        processed_logits_2d = logit_processor(input_ids_2d, logits_2d)
         # Reshape back to 3D
         return processed_logits_2d.view(batch_size, seq_len, vocab_size)
 
@@ -559,6 +559,11 @@ class ContinuousBatchingManager:
         # transfers, and if CUDA graphs are not turned off, because that would mean we are trying to save memory
         else:
             self.use_async_batching = self.use_cuda_graph and not attn_mask_is_needed(self.model.config)
+            logger.info(
+                f"No behavior specified for use_async_batching, choosing {self.use_async_batching = } because CUDA "
+                "graphs are turned on and no attention mask is needed. If you want to save memory, you can disable "
+                "asynchronous batching but it will degrade performance (by ~25% for some workloads)."
+            )
 
         # Padding interval sizes for Q and KV (0 means use defaults)
         self.q_padding_interval_size = (
@@ -975,7 +980,7 @@ class ContinuousMixin:
 
         # Create and return the manager
         return ContinuousBatchingManager(
-            model=self,  # type: ignore
+            model=self,
             generation_config=gen_config,
             manual_eviction=manual_eviction,
             max_queue_size=max_queue_size,
