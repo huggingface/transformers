@@ -53,8 +53,11 @@ class PeAudioVideoMaskedGroupNorm(nn.GroupNorm):
         x_grouped = x.view(grouped_shape)
         padding_mask_grouped = padding_mask.reshape(grouped_shape).bool()
 
-        mean = torch.masked.mean(x_grouped, mask=padding_mask_grouped, dim=(2, 3), keepdim=True)
-        var = torch.masked.var(x_grouped, mask=padding_mask_grouped, dim=(2, 3), keepdim=True, unbiased=False)
+        # Avoid torch.masked.mean/var which decompose to sum/int_count in ONNX → Div type mismatch
+        mask_float = padding_mask_grouped.float()
+        n = mask_float.sum(dim=(2, 3), keepdim=True).clamp(min=1.0)
+        mean = (x_grouped * mask_float).sum(dim=(2, 3), keepdim=True) / n
+        var = ((x_grouped - mean).pow(2) * mask_float).sum(dim=(2, 3), keepdim=True) / n
 
         x_norm = (x_grouped - mean) / torch.sqrt(var + self.eps)
         x_norm = x_norm.view(x.shape)
