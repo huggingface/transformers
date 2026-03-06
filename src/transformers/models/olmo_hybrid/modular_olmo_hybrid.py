@@ -16,10 +16,12 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -69,9 +71,12 @@ is_fast_path_available = all(
     (ShortConvolution, chunk_gated_delta_rule, fused_recurrent_gated_delta_rule, FusedRMSNormGated)
 )
 
+
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="allenai/Olmo-Hybrid-7B")
 class OlmoHybridConfig(LlamaConfig):
     r"""

@@ -13,7 +13,10 @@
 # limitations under the License.
 """PyTorch FALCONMAMBA model."""
 
+from dataclasses import dataclass
+
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
@@ -54,6 +57,8 @@ selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_updat
 )
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="tiiuae/falcon-mamba-7b")
 class FalconMambaConfig(MambaConfig):
     r"""

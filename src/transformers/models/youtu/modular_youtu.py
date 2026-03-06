@@ -17,7 +17,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
+
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
@@ -39,6 +42,8 @@ from ..qwen3.modeling_qwen3 import Qwen3MLP
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="tencent/Youtu-LLM-2B")
 class YoutuConfig(DeepseekV3Config):
     r"""

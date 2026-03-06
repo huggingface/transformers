@@ -15,9 +15,11 @@
 """Pytorch implementation of AIMv2 Model"""
 
 import math
+from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
@@ -35,6 +37,8 @@ from ..siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, Siglip
 from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoder, SiglipOutput
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
 class Aimv2VisionConfig(SiglipVisionConfig):
     r"""
@@ -75,42 +79,28 @@ class Aimv2VisionConfig(SiglipVisionConfig):
     layer_norm_eps = AttributeError()
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
 class Aimv2TextConfig(SiglipTextConfig):
-    def __init__(
-        self,
-        vocab_size: int = 49408,
-        hidden_size: int = 768,
-        intermediate_size: int = 2048,
-        num_hidden_layers: int = 12,
-        num_attention_heads: int = 6,
-        rms_norm_eps: float = 1e-5,
-        attention_dropout: float = 0.0,
-        qkv_bias: bool = False,
-        mlp_bias: bool = False,
-        hidden_act: str = "silu",
-        eos_token_id: int = 49407,
-        max_position_embeddings: int = 77,
-        initializer_range: bool = 0.02,
-        **kwargs,
-    ):
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
-
+    vocab_size: int = 49408
+    hidden_size: int = 768
+    intermediate_size: int = 2048
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 6
+    max_position_embeddings: int = 77
+    hidden_act: str = "silu"
+    rms_norm_eps: float = 1e-5
+    qkv_bias: bool = False
+    mlp_bias: bool = False
+    initializer_range: float = 0.02
     bos_token_id = AttributeError()
     pad_token_id = AttributeError()
     layer_norm_eps = AttributeError()
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
 class Aimv2Config(SiglipConfig):
     r"""

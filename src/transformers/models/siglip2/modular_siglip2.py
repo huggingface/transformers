@@ -12,9 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from tokenizers import normalizers
 
 from transformers.models.gemma.tokenization_gemma import GemmaTokenizer
@@ -83,11 +86,15 @@ class Siglip2Tokenizer(GemmaTokenizer):
             backend.normalizer = normalizers.Sequence([normalizers.Lowercase(), backend.normalizer])
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
 class Siglip2TextConfig(SiglipTextConfig):
     pass
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
 class Siglip2VisionConfig(SiglipVisionConfig):
     r"""
@@ -116,6 +123,8 @@ class Siglip2VisionConfig(SiglipVisionConfig):
     image_size = AttributeError()
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
 class Siglip2Config(SiglipConfig):
     pass

@@ -18,9 +18,11 @@
 # limitations under the License.
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
 from transformers.utils.generic import TransformersKwargs
 
@@ -43,6 +45,8 @@ from ..olmo.modeling_olmo import (
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="allenai/Olmo2-7B-1124-hf")
 class Olmo2Config(OlmoConfig):
     r"""

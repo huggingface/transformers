@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
@@ -54,6 +56,8 @@ from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="zai-org/GLM-4.5V")
 class Glm4vMoeTextConfig(Glm4MoeConfig):
     r"""
@@ -107,6 +111,8 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         super().__post_init__(self, **kwargs)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="zai-org/GLM-4.5V")
 class Glm4vMoeConfig(Glm4vConfig):
     r"""

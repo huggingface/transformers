@@ -13,7 +13,10 @@
 # limitations under the License.
 
 
+from dataclasses import dataclass
+
 import torch
+from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache
 from ...utils import auto_docstring
@@ -21,9 +24,20 @@ from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import Gemma2Attention, Gemma2DecoderLayer, Gemma2ForCausalLM, Gemma2MLP, Gemma2RMSNorm
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="google/vaultgemma-7b")
 class VaultGemmaConfig(Gemma2Config):
     r"""
+    query_pre_attn_scalar (`float`, *optional*, defaults to 256):
+        scaling factor used on the attention scores
+    final_logit_softcapping (`float`, *optional*, defaults to 30.0):
+        scaling factor when applying tanh softcapping on the logits.
+    attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
+        scaling factor when applying tanh softcapping on the attention scores.
+    use_bidirectional_attention (`bool`, *optional*):
+        If True, the model will attend to all text tokens instead of using a causal mask.
+
     ```python
     >>> from transformers import VaultGemmaModel, VaultGemmaConfig
     >>> # Initializing a VaultGemma vaultgemma-7b style configuration

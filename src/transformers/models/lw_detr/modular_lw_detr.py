@@ -53,6 +53,8 @@ from ..vitdet.modeling_vitdet import (
 )
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
 class LwDetrViTConfig(VitDetConfig):
     r"""

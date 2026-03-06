@@ -12,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchaudio
+from huggingface_hub.dataclasses import strict
 
 from ...utils import auto_docstring
 from ...utils.import_utils import requires
@@ -23,6 +26,8 @@ from ..xcodec.configuration_xcodec import XcodecConfig
 from ..xcodec.modeling_xcodec import XcodecEuclideanCodebook, XcodecModel, XcodecPreTrainedModel
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="bosonai/higgs-audio-v2-tokenizer")
 class HiggsAudioV2TokenizerConfig(XcodecConfig):
     r"""

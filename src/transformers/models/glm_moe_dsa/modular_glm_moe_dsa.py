@@ -34,6 +34,7 @@ from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoePreTrainedModel,
     Glm4MoeRMSNorm,
 )
+from ..glm4_moe_lite.configuration_glm4_moe_lite import Glm4MoeLiteConfig
 from ..glm4_moe_lite.modeling_glm4_moe_lite import (
     Glm4MoeLiteDecoderLayer,
     eager_attention_forward,
@@ -77,7 +78,7 @@ def apply_rotary_pos_emb(
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
 @auto_docstring(checkpoint="zai-org/GLM-5")
-class GlmMoeDsaConfig(PreTrainedConfig):
+class GlmMoeDsaConfig(Glm4MoeLiteConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
         Number of groups for routed experts.
@@ -105,6 +106,22 @@ class GlmMoeDsaConfig(PreTrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_b_proj": "colwise",
+        "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
+        "layers.*.self_attn.kv_b_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
 
     hidden_size: int = 6144
     intermediate_size: int = 12288

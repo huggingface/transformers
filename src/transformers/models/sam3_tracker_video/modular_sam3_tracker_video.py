@@ -54,6 +54,8 @@ from ..sam2_video.modeling_sam2_video import (
 from ..sam2_video.processing_sam2_video import Sam2VideoProcessor
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="facebook/sam3")
 class Sam3TrackerVideoPromptEncoderConfig(Sam2VideoPromptEncoderConfig):
     r"""
@@ -71,11 +73,12 @@ class Sam3TrackerVideoPromptEncoderConfig(Sam2VideoPromptEncoderConfig):
     patch_size: int | list[int] | tuple[int, int] = 14
 
 
-@auto_docstring(checkpoint="facebook/sam3")
 class Sam3TrackerVideoProcessor(Sam2VideoProcessor):
     pass
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="facebook/sam3")
 class Sam3TrackerVideoMaskDecoderConfig(Sam2VideoMaskDecoderConfig):
     pass

@@ -64,6 +64,8 @@ from ..siglip.modeling_siglip import (
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="microsoft/Phi-4-multimodal-instruct")
 class Phi4MultimodalVisionConfig(SiglipVisionConfig):
     r"""

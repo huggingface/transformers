@@ -97,6 +97,8 @@ def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):
     return output
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="rhymes-ai/Aria")
 class AriaTextConfig(LlamaConfig):
     r"""

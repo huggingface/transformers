@@ -13,7 +13,10 @@
 # limitations under the License.
 """PyTorch Qwen3.5Moe model."""
 
+from dataclasses import dataclass
+
 import torch
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...modeling_layers import GradientCheckpointingLayer
@@ -53,6 +56,8 @@ from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
 class Qwen3_5MoeTextConfig(Qwen3NextConfig):
     r"""
@@ -115,11 +120,15 @@ class Qwen3_5MoeTextConfig(Qwen3NextConfig):
         del self.mlp_only_layers
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
 class Qwen3_5MoeVisionConfig(Qwen3_5VisionConfig):
     pass
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
 class Qwen3_5MoeConfig(Qwen3VLConfig):
     r"""

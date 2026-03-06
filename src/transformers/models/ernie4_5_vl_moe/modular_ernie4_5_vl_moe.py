@@ -92,6 +92,8 @@ from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, 
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
 class Ernie4_5_VLMoeVisionConfig(Qwen2VLVisionConfig):
     r"""
@@ -118,6 +120,8 @@ class Ernie4_5_VLMoeVisionConfig(Qwen2VLVisionConfig):
     temporal_patch_size = AttributeError()
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
 class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
     r"""

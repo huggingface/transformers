@@ -13,9 +13,11 @@
 # limitations under the License.
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -38,6 +40,8 @@ from ..olmo2.modeling_olmo2 import (
 )
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="allenai/OLMo-3-0725-1B")
 class Olmo3Config(Olmo2Config):
     r"""

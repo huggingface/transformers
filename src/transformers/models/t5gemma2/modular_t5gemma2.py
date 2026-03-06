@@ -74,6 +74,8 @@ from ..t5gemma.modeling_t5gemma import (
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="google/t5gemma2_text-7b")
 class T5Gemma2TextConfig(Gemma3TextConfig):
     r"""
@@ -99,6 +101,8 @@ class T5Gemma2TextConfig(Gemma3TextConfig):
         PreTrainedConfig.__post_init__(**kwargs)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="google/t5gemma2_text-7b")
 class T5Gemma2EncoderConfig(Gemma3Config):
     model_type = "t5gemma2_encoder"
@@ -109,6 +113,8 @@ class T5Gemma2EncoderConfig(Gemma3Config):
     }
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="google/t5gemma2_text-7b")
 class T5Gemma2DecoderConfig(Gemma3TextConfig):
     r"""

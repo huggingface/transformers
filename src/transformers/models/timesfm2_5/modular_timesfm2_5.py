@@ -19,6 +19,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ...activations import ACT2FN
 from ...masking_utils import create_causal_mask
@@ -50,6 +51,8 @@ from ..timesfm.modeling_timesfm import (
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="google/timesfm-2.5-200m-transformers")
 class TimesFm2_5Config(TimesFmConfig):
     r"""

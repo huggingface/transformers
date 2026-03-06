@@ -13,6 +13,9 @@
 # limitations under the License.
 """PyTorch SolarOpen model."""
 
+from dataclasses import dataclass
+
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...utils import auto_docstring, logging
@@ -30,6 +33,8 @@ from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="upstage/Solar-Open-100B")
 class SolarOpenConfig(Glm4MoeConfig):
     r"""

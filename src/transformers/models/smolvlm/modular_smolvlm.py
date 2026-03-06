@@ -13,7 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
+
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
@@ -37,6 +40,8 @@ from ..idefics3.modeling_idefics3 import (
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="HuggingFaceTB/SmolVLM2-2.2B-Instruct")
 class SmolVLMVisionConfig(Idefics3VisionConfig):
     r"""
@@ -67,6 +72,8 @@ class SmolVLMVisionTransformer(Idefics3VisionTransformer):
     pass
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="HuggingFaceTB/SmolVLM2-2.2B-Instruct")
 class SmolVLMConfig(Idefics3Config):
     r"""

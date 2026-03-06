@@ -90,6 +90,8 @@ from ..siglip.modeling_siglip import (
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="lkhl/VideoLLaMA3-2B-Image-HF")
 class VideoLlama3VisionConfig(SiglipVisionConfig):
     model_type = "video_llama_3_vision"

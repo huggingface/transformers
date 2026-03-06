@@ -30,7 +30,7 @@ from ..depth_anything.modeling_depth_anything import (
 
 
 class PromptDepthAnythingConfig(DepthAnythingConfig):
-    model_type = "prompt_depth_anything"
+    pass
 
 
 class PromptDepthAnythingLayer(nn.Module):

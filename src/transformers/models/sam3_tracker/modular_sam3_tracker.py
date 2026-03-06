@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
+
 import torch
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
@@ -41,6 +44,8 @@ from ..sam2.modeling_sam2 import (
 from ..sam2.processing_sam2 import Sam2Processor
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
 class Sam3TrackerPromptEncoderConfig(Sam2PromptEncoderConfig):
     r"""
@@ -58,16 +63,19 @@ class Sam3TrackerPromptEncoderConfig(Sam2PromptEncoderConfig):
     patch_size: int | list[int] | tuple[int, int] = 14
 
 
-@auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
 class Sam3TrackerProcessor(Sam2Processor):
     pass
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
 class Sam3TrackerMaskDecoderConfig(Sam2MaskDecoderConfig):
     pass
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
 class Sam3TrackerConfig(Sam2Config):
     r"""

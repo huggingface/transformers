@@ -80,6 +80,8 @@ logger = logging.get_logger(__name__)
 # General docstring
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
 class JanusVisionConfig(SiglipVisionConfig):
     r"""
@@ -106,6 +108,8 @@ class JanusVisionConfig(SiglipVisionConfig):
     intermediate_size = AttributeError()
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
 class JanusVQVAEConfig(ChameleonVQVAEConfig):
     r"""

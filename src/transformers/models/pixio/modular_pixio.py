@@ -13,7 +13,10 @@
 # limitations under the License.
 """PyTorch Pixio model."""
 
+from dataclasses import dataclass
+
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...modeling_layers import GradientCheckpointingLayer
@@ -30,6 +33,8 @@ from ..dinov2.modeling_dinov2 import (
 from ..vit.modeling_vit import ViTAttention, ViTPatchEmbeddings, ViTPreTrainedModel
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="facebook/pixio-huge")
 class PixioConfig(Dinov2Config):
     r"""

@@ -13,10 +13,12 @@
 # limitations under the License.
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -50,6 +52,8 @@ class GlmOcrVisionMlp(Glm4VisionMlp):
         self.intermediate_size = config.intermediate_size
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
 class GlmOcrVisionConfig(Glm4vVisionConfig):
     hidden_size: int = 1024
@@ -59,6 +63,8 @@ class GlmOcrVisionConfig(Glm4vVisionConfig):
     intermediate_size: int = 4096
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
 class GlmOcrTextConfig(Glm4vTextConfig):
     r"""
@@ -86,6 +92,8 @@ class GlmOcrTextConfig(Glm4vTextConfig):
     max_position_embeddings: int = 131072
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
 class GlmOcrConfig(Glm4vConfig):
     r"""

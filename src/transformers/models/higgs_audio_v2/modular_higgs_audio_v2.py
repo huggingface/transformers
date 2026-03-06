@@ -13,8 +13,11 @@
 # limitations under the License.
 
 
+from dataclasses import dataclass
+
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
@@ -38,6 +41,8 @@ from .generation_higgs_audio_v2 import HiggsAudioV2GenerationMixin
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="bosonai/higgs-audio-v2-generation-3B-base")
 class HiggsAudioV2Config(LlamaConfig):
     r"""

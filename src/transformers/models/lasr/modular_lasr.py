@@ -14,8 +14,10 @@
 
 import itertools
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
+from huggingface_hub.dataclasses import strict
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 from torch import nn
@@ -147,6 +149,8 @@ class LasrProcessor(ParakeetProcessor):
     pass
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="TODO")
 class LasrEncoderConfig(ParakeetEncoderConfig):
     r"""
@@ -206,6 +210,8 @@ class LasrEncoderConfig(ParakeetEncoderConfig):
     scale_input = AttributeError()
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="TODO")
 class LasrCTCConfig(ParakeetCTCConfig):
     r"""

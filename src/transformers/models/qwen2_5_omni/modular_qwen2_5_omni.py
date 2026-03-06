@@ -66,6 +66,8 @@ from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLRotaryEmbedding
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 class Qwen2_5OmniVisionEncoderConfig(Qwen2_5_VLVisionConfig):
     r"""
@@ -96,6 +98,8 @@ class Qwen2_5OmniVisionEncoderConfig(Qwen2_5_VLVisionConfig):
     tokens_per_second = AttributeError()
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 class Qwen2_5OmniAudioEncoderConfig(Qwen2AudioEncoderConfig):
     r"""

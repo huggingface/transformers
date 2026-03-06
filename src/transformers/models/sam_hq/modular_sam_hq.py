@@ -15,6 +15,7 @@
 from dataclasses import dataclass
 
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...processing_utils import Unpack
@@ -40,16 +41,22 @@ from ..sam.modeling_sam import (
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="Uminosachi/sam-hq")
 class SamHQPromptEncoderConfig(SamPromptEncoderConfig):
     pass
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="Uminosachi/sam-hq")
 class SamHQVisionConfig(SamVisionConfig):
     pass
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="Uminosachi/sam-hq")
 class SamHQMaskDecoderConfig(SamMaskDecoderConfig):
     r"""
@@ -70,6 +77,8 @@ class SamHQMaskDecoderConfig(SamMaskDecoderConfig):
     vit_dim: int = 768
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="Uminosachi/sam-hq")
 class SamHQConfig(SamConfig):
     r"""

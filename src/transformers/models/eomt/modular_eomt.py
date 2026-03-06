@@ -18,6 +18,7 @@ from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import Tensor, nn
 
 from ... import initialization as init
@@ -48,6 +49,8 @@ from ..vit.configuration_vit import ViTConfig
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="tue-mps/coco_panoptic_eomt_large_640")
 class EomtConfig(ViTConfig):
     r"""

@@ -61,6 +61,7 @@ class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
 
     n_window: int = 100
     output_dim: int = 3584
+
     n_window_infer: int = 400
     conv_chunksize: int = 500
     downsample_hidden_size: int = 480
@@ -278,6 +279,7 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+
     vocab_size: int = 2048
     hidden_size: int = 1024
     intermediate_size: int = 3072

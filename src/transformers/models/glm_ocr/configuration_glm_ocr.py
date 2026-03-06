@@ -54,7 +54,6 @@ class GlmOcrVisionConfig(PreTrainedConfig):
     base_config_key = "vision_config"
 
     depth: int = 24
-
     hidden_size: int = 1024
     hidden_act: str = "silu"
     attention_bias: bool = True

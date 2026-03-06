@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
+from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
@@ -35,6 +36,8 @@ from ..idefics3.processing_idefics3 import Idefics3Processor, Idefics3ProcessorK
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="ModernVBERT/colmodernvbert-merged")
 class ColModernVBertConfig(ColQwen2Config):
     r"""

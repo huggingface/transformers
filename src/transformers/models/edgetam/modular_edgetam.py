@@ -101,16 +101,22 @@ class EdgeTamVisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="facebook/EdgeTAM")
 class EdgeTamPromptEncoderConfig(Sam2PromptEncoderConfig):
     pass
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="facebook/EdgeTAM")
 class EdgeTamMaskDecoderConfig(Sam2MaskDecoderConfig):
     pass
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="facebook/EdgeTAM")
 class EdgeTamConfig(Sam2Config):
     r"""

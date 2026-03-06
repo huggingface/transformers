@@ -13,7 +13,10 @@
 # limitations under the License.
 
 
+from dataclasses import dataclass
+
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...activations import ACT2FN
@@ -35,6 +38,8 @@ from ..llava.modeling_llava import (
 )
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="KamilaMila/FastVLM-7B")
 class FastVlmConfig(LlavaConfig):
     r"""

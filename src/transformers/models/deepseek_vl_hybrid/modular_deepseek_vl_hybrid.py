@@ -18,6 +18,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 import torchvision.transforms.v2.functional as tvF
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache
@@ -83,6 +84,8 @@ DEEPSEEK_VL_COMMON_CUSTOM_ARGS = r"""
 """
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="deepseek-community/deepseek-vl-7b-chat")
 class DeepseekVLHybridConfig(DeepseekVLConfig):
     r"""

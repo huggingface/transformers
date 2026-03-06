@@ -140,6 +140,8 @@ class Qwen3OmniMoeAudioEncoderConfig(Qwen2_5OmniAudioEncoderConfig):
     downsample_hidden_size: int = 480
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
 class Qwen3OmniMoeVisionEncoderConfig(Qwen3VLMoeVisionConfig):
     pass
@@ -226,6 +228,8 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
 class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
     r"""

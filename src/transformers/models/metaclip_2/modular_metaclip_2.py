@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
+
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
@@ -44,6 +47,8 @@ _CHECKPOINT_FOR_DOC = "facebook/metaclip-2-worldwide-huge-quickgelu"
 _CONFIG_FOR_DOC = "MetaClip2Config"
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
 class MetaClip2TextConfig(CLIPTextConfig):
     r"""
@@ -63,6 +68,8 @@ class MetaClip2TextConfig(CLIPTextConfig):
     ```"""
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
 class MetaClip2VisionConfig(CLIPVisionConfig):
     r"""
@@ -82,6 +89,8 @@ class MetaClip2VisionConfig(CLIPVisionConfig):
     ```"""
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
 class MetaClip2Config(CLIPConfig):
     r"""

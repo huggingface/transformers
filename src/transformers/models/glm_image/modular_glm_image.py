@@ -80,6 +80,8 @@ class GlmImageVQVAEConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="zai-org/GLM-Image")
 class GlmImageVisionConfig(Glm4vVisionConfig):
     model_type = "glm_image_vision"
@@ -100,6 +102,8 @@ class GlmImageVisionConfig(Glm4vVisionConfig):
     temporal_patch_size = AttributeError()
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="zai-org/GLM-Image")
 class GlmImageTextConfig(Glm4vTextConfig):
     r"""

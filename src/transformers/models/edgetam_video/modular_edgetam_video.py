@@ -58,11 +58,15 @@ from ..sam2_video.modeling_sam2_video import (
 )
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="facebook/EdgeTAM")
 class EdgeTamVideoPromptEncoderConfig(Sam2VideoPromptEncoderConfig):
     pass
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="facebook/EdgeTAM")
 class EdgeTamVideoMaskDecoderConfig(Sam2VideoMaskDecoderConfig):
     pass

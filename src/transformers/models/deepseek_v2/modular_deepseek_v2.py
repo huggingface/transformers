@@ -13,9 +13,11 @@
 # limitations under the License.
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
@@ -42,6 +44,8 @@ from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V2-Lite")
 class DeepseekV2Config(LlamaConfig):
     r"""

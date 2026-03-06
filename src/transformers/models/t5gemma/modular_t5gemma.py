@@ -64,6 +64,8 @@ from ..gemma2.modeling_gemma2 import (
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="google/t5_gemma_module-7b")
 class T5GemmaModuleConfig(Gemma2Config):
     r"""

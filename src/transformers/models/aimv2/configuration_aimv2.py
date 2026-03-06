@@ -96,7 +96,6 @@ class Aimv2TextConfig(PreTrainedConfig):
 
     model_type = "aimv2_text_model"
     base_config_key = "text_config"
-
     vocab_size: int = 49408
     hidden_size: int = 768
     intermediate_size: int = 2048

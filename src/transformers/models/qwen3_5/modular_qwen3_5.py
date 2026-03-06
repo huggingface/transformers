@@ -13,10 +13,12 @@
 # limitations under the License.
 """PyTorch Qwen3.5 model."""
 
+from dataclasses import dataclass
 from typing import Optional
 
 import torch
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
@@ -55,6 +57,8 @@ from ..qwen3_vl.modeling_qwen3_vl import (
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
 class Qwen3_5TextConfig(Qwen3NextConfig):
     r"""
@@ -119,11 +123,15 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
         del self.mlp_only_layers
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
 class Qwen3_5VisionConfig(Qwen3VLVisionConfig):
     deepstack_visual_indexes = AttributeError()
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
 class Qwen3_5Config(Qwen3VLConfig):
     r"""

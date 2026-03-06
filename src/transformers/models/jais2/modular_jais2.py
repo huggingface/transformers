@@ -13,7 +13,10 @@
 # limitations under the License.
 
 
+from dataclasses import dataclass
+
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
 from ...utils import auto_docstring, can_return_tuple
 from ..llama.configuration_llama import LlamaConfig
@@ -26,6 +29,8 @@ from ..llama.modeling_llama import (
 from ..nemotron.modeling_nemotron import NemotronMLP
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="inceptionai/Jais-2-8B-Chat")
 class Jais2Config(LlamaConfig):
     base_model_tp_plan = {

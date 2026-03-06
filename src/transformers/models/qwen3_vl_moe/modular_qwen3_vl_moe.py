@@ -13,9 +13,12 @@
 # limitations under the License.
 """PyTorch Qwen3-VL-MOE model."""
 
+from dataclasses import dataclass
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
@@ -52,6 +55,8 @@ from ..qwen3_vl.modeling_qwen3_vl import (
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
 class Qwen3VLMoeTextConfig(Qwen3MoeConfig):
     r"""
@@ -120,11 +125,15 @@ class Qwen3VLMoeTextConfig(Qwen3MoeConfig):
         self.sliding_window = None
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
 class Qwen3VLMoeVisionConfig(Qwen3VLVisionConfig):
     pass
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
 class Qwen3VLMoeConfig(Qwen3VLConfig):
     r"""
