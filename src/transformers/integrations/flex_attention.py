@@ -102,7 +102,7 @@ def compile_friendly_flex_attention(
     )
 
 
-Offset = Union[torch.Tensor, int]
+Offset = torch.Tensor | int
 
 
 # TODO: deprecate / rename to make_flex_block_mask for clarity as it's not only causal anymore

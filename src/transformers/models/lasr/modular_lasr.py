@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team and Google LLC. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,10 +14,9 @@
 
 import itertools
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
-from tokenizers import Tokenizer
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 from torch import nn
 
@@ -28,7 +26,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
 from ..parakeet.configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig
 from ..parakeet.modeling_parakeet import (
@@ -47,22 +46,42 @@ class LasrTokenizer(T5Tokenizer, TokenizersBackend):
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
+        _spm_precompiled_charsmap=None,
         extra_ids=100,
         additional_special_tokens=None,
         vocab=None,
         vocab_file=None,
         **kwargs,
     ):
-        super().__init__(
-            eos_token=eos_token,
-            unk_token=unk_token,
-            pad_token=pad_token,
-            extra_ids=extra_ids,
-            additional_special_tokens=additional_special_tokens,
-            vocab=vocab,
-            vocab_file=vocab_file,
-            **kwargs,
-        )
+        self._extra_ids = extra_ids
+
+        # Handle extra_ids and additional_special_tokens
+        if additional_special_tokens is not None:
+            extra_tokens = [x for x in additional_special_tokens if "<extra_id_" in str(x)]
+            if len(extra_tokens) < 1:
+                additional_special_tokens += [f"<extra_id_{i}>" for i in range(extra_ids)]
+            elif extra_ids > 0 and extra_ids != len(extra_tokens):
+                raise ValueError(
+                    f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are"
+                    " provided to LasrTokenizer. In this case the additional_special_tokens must include the extra_ids"
+                    " tokens"
+                )
+        else:
+            extra_tokens = [f"<extra_id_{i}>" for i in range(extra_ids)]
+            additional_special_tokens = extra_tokens
+
+        # LASR vocab structure: <pad>=0, </s>=1, <unk>=2, then regular vocab, then extra_ids in reverse
+        if vocab is not None:
+            self._vocab_scores = vocab
+        else:
+            self._vocab_scores = [
+                (str(pad_token), 0.0),
+                (str(eos_token), 0.0),
+                (str(unk_token), 0.0),
+                ("▁", -2.0),  # Space token
+            ]
+            for i in range(extra_ids - 1, -1, -1):
+                self._vocab_scores.append((f"<extra_id_{i}>", 0.0))
         self._tokenizer = Tokenizer(
             Unigram(
                 self._vocab_scores,
@@ -71,11 +90,39 @@ class LasrTokenizer(T5Tokenizer, TokenizersBackend):
             )
         )
 
+        if _spm_precompiled_charsmap is not None:
+            self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
+
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.WhitespaceSplit(),
+                pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True),
+            ]
+        )
+        self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
+
+        TokenizersBackend.__init__(
+            eos_token=eos_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            extra_ids=extra_ids,
+            additional_special_tokens=additional_special_tokens,
+            **kwargs,
+        )
+
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=["$A", "</s>"],
+            pair=["$A", "</s>", "$B", "</s>"],
+            special_tokens=[
+                ("</s>", self.eos_token_id),
+            ],
+        )
+
     def _decode(
         self,
-        token_ids: Union[int, list[int]],
+        token_ids: int | list[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         group_tokens: bool = True,
         **kwargs,
     ) -> str:
@@ -278,7 +325,7 @@ class LasrCTCConfig(ParakeetCTCConfig):
         vocab_size=512,
         ctc_loss_reduction="mean",
         ctc_zero_infinity=True,
-        encoder_config: Union[dict, LasrEncoderConfig] = None,
+        encoder_config: dict | LasrEncoderConfig = None,
         pad_token_id=0,
         **kwargs,
     ):
@@ -335,8 +382,8 @@ class LasrEncoderAttention(LlamaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -349,9 +396,9 @@ class LasrEncoderAttention(LlamaAttention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -392,8 +439,8 @@ class LasrEncoderBlock(ParakeetEncoderBlock):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -471,12 +518,13 @@ class LasrEncoder(LasrPreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    @check_model_inputs()
+    @merge_with_config_defaults
+    @capture_outputs
     @can_return_tuple
     def forward(
         self,
         input_features: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
@@ -514,7 +562,7 @@ class LasrEncoder(LasrPreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
         )
 

@@ -17,10 +17,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
@@ -105,7 +105,7 @@ def convert_to_grayscale(
     """
     if is_grayscale(image):
         return image
-    return F.rgb_to_grayscale(image, num_output_channels=3)
+    return tvF.rgb_to_grayscale(image, num_output_channels=3)
 
 
 @auto_docstring
@@ -132,19 +132,20 @@ class LightGlueImageProcessorFast(BaseImageProcessorFast):
         **kwargs,
     ) -> ImageInput:
         # we need to handle image pairs validation and flattening
+        images = self.fetch_images(images)
         return flatten_pair_images(images)
 
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        size: Union[dict[str, int], SizeDict],
+        size: dict[str, int] | SizeDict,
         rescale_factor: float,
         do_rescale: bool,
         do_resize: bool,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_grayscale: bool,
         disable_grouping: bool,
-        return_tensors: Union[str, TensorType],
+        return_tensors: str | TensorType,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -180,7 +181,7 @@ class LightGlueImageProcessorFast(BaseImageProcessorFast):
     def post_process_keypoint_matching(
         self,
         outputs: "LightGlueKeypointMatchingOutput",
-        target_sizes: Union[TensorType, list[tuple]],
+        target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
     ) -> list[dict[str, torch.Tensor]]:
         """

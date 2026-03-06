@@ -5,7 +5,10 @@ import logging
 from functools import lru_cache
 from typing import Any
 
+import torch
+
 from transformers.generation.configuration_utils import CompileConfig
+from transformers.utils import is_torch_accelerator_available
 from transformers.utils.import_utils import is_flash_attn_2_available, is_kernels_available
 
 
@@ -37,13 +40,15 @@ def is_fa2_or_kernel_available() -> bool:
     try:
         from kernels import get_kernel
 
-        get_kernel("kernels-community/flash-attn")
+        # TODO: Pass the 'version' kwarg to specify the binary version once kernels >= 0.12.0 is supported.
+        get_kernel("kernels-community/flash-attn2")
     except Exception as _:
         logger.warning(
             "flash_attention_2 is not available. kernels is installed, but the flash_attn kernel is not available."
             "Benchmarking flash_attention_2 will not be possible."
         )
         return False
+    return True
 
 
 class BenchmarkConfig:
@@ -87,7 +92,7 @@ class BenchmarkConfig:
         self.kernelize = kernelize
         # Constant parameters
         self.dtype = "torch.bfloat16"
-        self.device = "cuda"
+        self.device = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
 
         self.check_validity(skip_validity_check)
         self.name = name if name is not None else self.infer_name()

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team and the Swiss AI Initiative. All rights reserved.
 #
 # This code is based on HuggingFace's LLaMA implementation in this library.
@@ -22,7 +21,6 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -42,6 +40,13 @@ class ApertusModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = ApertusModel
 
+    def __init__(self, parent):
+        super().__init__(parent=parent)
+        # NOTE(3outeille): must be 0.0 for TP backward tests. In train mode, non-zero dropout causes
+        # different RNG states between the non-TP and TP model forward passes (they run sequentially),
+        # leading to different dropout masks and mismatched losses.
+        self.attention_probs_dropout_prob = 0.0
+
 
 @require_torch
 class ApertusModelTest(CausalLMModelTest, unittest.TestCase):
@@ -56,7 +61,6 @@ class ApertusModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
-@require_read_token
 @slow
 class ApertusIntegrationTest(unittest.TestCase):
     pass

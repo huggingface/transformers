@@ -325,12 +325,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
     - __call__
     - all
 
-### ImageToImagePipeline [[transformers.ImageToImagePipeline]]
-
-[[autodoc]] ImageToImagePipeline
-    - __call__
-    - all
-
 ### ObjectDetectionPipeline [[transformers.ObjectDetectionPipeline]]
 
 [[autodoc]] ObjectDetectionPipeline
@@ -365,18 +359,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
     - __call__
     - all
 
-### QuestionAnsweringPipeline [[transformers.QuestionAnsweringPipeline]]
-
-[[autodoc]] QuestionAnsweringPipeline
-    - __call__
-    - all
-
-### SummarizationPipeline [[transformers.SummarizationPipeline]]
-
-[[autodoc]] SummarizationPipeline
-    - __call__
-    - all
-
 ### TableQuestionAnsweringPipeline [[transformers.TableQuestionAnsweringPipeline]]
 
 [[autodoc]] TableQuestionAnsweringPipeline
@@ -394,21 +376,9 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
     - __call__
     - all
 
-### Text2TextGenerationPipeline [[transformers.Text2TextGenerationPipeline]]
-
-[[autodoc]] Text2TextGenerationPipeline
-    - __call__
-    - all
-
 ### TokenClassificationPipeline [[transformers.TokenClassificationPipeline]]
 
 [[autodoc]] TokenClassificationPipeline
-    - __call__
-    - all
-
-### TranslationPipeline [[transformers.TranslationPipeline]]
-
-[[autodoc]] TranslationPipeline
     - __call__
     - all
 
@@ -440,12 +410,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
     - __call__
     - all
 
-### ImageToTextPipeline [[transformers.ImageToTextPipeline]]
-
-[[autodoc]] ImageToTextPipeline
-    - __call__
-    - all
-
 ### ImageTextToTextPipeline [[transformers.ImageTextToTextPipeline]]
 
 [[autodoc]] ImageTextToTextPipeline
@@ -455,12 +419,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 ### MaskGenerationPipeline [[transformers.MaskGenerationPipeline]]
 
 [[autodoc]] MaskGenerationPipeline
-    - __call__
-    - all
-
-### VisualQuestionAnsweringPipeline [[transformers.VisualQuestionAnsweringPipeline]]
-
-[[autodoc]] VisualQuestionAnsweringPipeline
     - __call__
     - all
 

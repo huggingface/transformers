@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Westlake Representational Learning Lab (Fajie Yuan Lab) team and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Evolla model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -80,10 +77,16 @@ class SaProtConfig(PreTrainedConfig):
         position_embedding_type="rotary",
         emb_layer_norm_before=False,
         token_dropout=True,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, mask_token_id=mask_token_id, **kwargs)
+        super().__init__(**kwargs)
 
+        self.pad_token_id = pad_token_id
+        self.mask_token_id = mask_token_id
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -172,6 +175,11 @@ class EvollaConfig(PreTrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether or not to tie the input and output word embeddings.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
+        add_cross_attention (`bool`, *optional*, defaults to `False`):
+            Whether cross-attention layers should be added to the model.
 
     Example:
 
@@ -194,37 +202,41 @@ class EvollaConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        protein_encoder_config: Optional[dict] = None,
-        vocab_size: Optional[int] = 128256,  # llama vocab size
-        hidden_size: Optional[int] = 4096,  # llama hidden size
-        intermediate_size: Optional[int] = 14336,  # llama intermediate size
-        num_hidden_layers: Optional[int] = 32,  # llama num layers
-        num_attention_heads: Optional[int] = 32,  # llama num heads
-        num_key_value_heads: Optional[int] = 8,  # llama num key-value heads
-        hidden_act: Optional[str] = "silu",  # llama activation function
-        max_position_embeddings: Optional[int] = 8192,  # llama rope max length
-        rms_norm_eps: Optional[int] = 1e-05,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        mlp_bias: Optional[bool] = False,
-        aligner_ffn_mult: Optional[int] = 4,
-        aligner_enable_bias: Optional[bool] = True,
-        aligner_attention_probs_dropout_prob: Optional[float] = 0.1,
-        aligner_num_add_layers: Optional[int] = 8,
-        resampler_depth: Optional[int] = 6,
-        resampler_dim_head: Optional[int] = 64,
-        resampler_heads: Optional[int] = 8,
-        resampler_num_latents: Optional[int] = 64,
-        resampler_ff_mult: Optional[int] = 4,
-        initializer_range: Optional[float] = 0.02,
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = 128000,
-        eos_token_id: Optional[int] = 128009,
-        use_cache: Optional[bool] = False,
-        tie_word_embeddings: Optional[bool] = False,
+        protein_encoder_config: dict | None = None,
+        vocab_size: int | None = 128256,  # llama vocab size
+        hidden_size: int | None = 4096,  # llama hidden size
+        intermediate_size: int | None = 14336,  # llama intermediate size
+        num_hidden_layers: int | None = 32,  # llama num layers
+        num_attention_heads: int | None = 32,  # llama num heads
+        num_key_value_heads: int | None = 8,  # llama num key-value heads
+        hidden_act: str | None = "silu",  # llama activation function
+        max_position_embeddings: int | None = 8192,  # llama rope max length
+        rms_norm_eps: int | None = 1e-05,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        mlp_bias: bool | None = False,
+        aligner_ffn_mult: int | None = 4,
+        aligner_enable_bias: bool | None = True,
+        aligner_attention_probs_dropout_prob: float | None = 0.1,
+        aligner_num_add_layers: int | None = 8,
+        resampler_depth: int | None = 6,
+        resampler_dim_head: int | None = 64,
+        resampler_heads: int | None = 8,
+        resampler_num_latents: int | None = 64,
+        resampler_ff_mult: int | None = 4,
+        initializer_range: float | None = 0.02,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 128000,
+        eos_token_id: int | None = 128009,
+        use_cache: bool | None = False,
+        tie_word_embeddings: bool | None = False,
+        is_decoder: bool | None = False,
+        add_cross_attention: bool | None = False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -258,13 +270,11 @@ class EvollaConfig(PreTrainedConfig):
             logger.info("`protein_encoder_config` is `None`. Initializing the `SaProtConfig` with default values.")
         self.protein_encoder_config = SaProtConfig(**protein_encoder_config)
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["EvollaConfig"]

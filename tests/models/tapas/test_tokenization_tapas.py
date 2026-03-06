@@ -728,7 +728,9 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
 
         for parameter_name, parameter in signature.parameters.items():
-            if parameter.default != inspect.Parameter.empty:
+            if parameter.default != inspect.Parameter.empty and parameter_name not in [
+                "additional_special_tokens",  # V5: deprecated, converted to extra_special_tokens
+            ]:
                 self.assertIn(parameter_name, tokenizer.init_kwargs)
 
     def test_special_tokens_mask_input_pairs(self):

@@ -281,6 +281,7 @@ alt="drawing" width="600"/>
 ## GotOcr2Processor
 
 [[autodoc]] GotOcr2Processor
+    - __call__
 
 ## GotOcr2Model
 
@@ -290,3 +291,4 @@ alt="drawing" width="600"/>
 
 [[autodoc]] GotOcr2ForConditionalGeneration
     - forward
+    - get_image_features

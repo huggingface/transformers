@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -168,6 +167,9 @@ class InternVLConfig(PreTrainedConfig):
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
+
 
     ```python
     >>> from transformers import InternVLForConditionalGeneration, InternVLConfig
@@ -195,6 +197,7 @@ class InternVLConfig(PreTrainedConfig):
         projector_hidden_act="gelu",
         vision_feature_layer=-1,
         vision_feature_select_strategy="default",
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.image_token_id = image_token_id
@@ -218,6 +221,7 @@ class InternVLConfig(PreTrainedConfig):
             text_config = CONFIG_MAPPING["qwen2"]()
 
         self.text_config = text_config
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 

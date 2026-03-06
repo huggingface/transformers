@@ -289,7 +289,6 @@ class MarkupLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     pipeline_model_mapping = (
         {
             "feature-extraction": MarkupLMModel,
-            "question-answering": MarkupLMForQuestionAnswering,
             "text-classification": MarkupLMForSequenceClassification,
             "token-classification": MarkupLMForTokenClassification,
             "zero-shot": MarkupLMForSequenceClassification,
@@ -368,7 +367,7 @@ class MarkupLMModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_forward_pass_no_head(self):
-        model = MarkupLMModel.from_pretrained("microsoft/markuplm-base").to(torch_device)
+        model = MarkupLMModel.from_pretrained("microsoft/markuplm-base", dtype=torch.float32).to(torch_device)
 
         processor = self.default_processor
 
