@@ -27,7 +27,7 @@ from ..llama import LlamaConfig
 from ..llama.modeling_llama import LlamaAttention, LlamaModel, LlamaPreTrainedModel, LlamaRMSNorm
 
 
-@auto_docstring("EuroBERT/EuroBERT-210m")
+@auto_docstring(checkpoint="EuroBERT/EuroBERT-210m")
 class EuroBertConfig(LlamaConfig):
     r"""
     mask_token_id (`int`, *optional*, defaults to 128002):
