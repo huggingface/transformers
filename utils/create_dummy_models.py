@@ -145,6 +145,25 @@ config_class_to_model_tester_map = {
     "FastSpeech2ConformerWithHifiGanConfig": "FastSpeech2ConformerWithHifiGanTester",
 }
 
+
+no_model_tester_at_all = {
+    "EdgeTamVideoConfig",
+    "Llama4Config",
+    "Llama4TextConfig",
+    "Sam2Video",
+    "Sam3TrackerVideo",
+    "Sam3VideoConfig",
+    "ShieldGemma2Config",
+}
+
+
+configs_requiring_too_exotic_dependency = {
+    # require `detectron2`. It has no `get_config` method: we can implement it but this model is not maintained anymore.
+    "LayoutLMv2Config",
+}
+
+
+
 def get_processor_types_from_config_class(config_class, allowed_mappings=None):
     """Return a tuple of processors for `config_class`.
 
@@ -475,6 +494,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     try:
         print("Importing", model_type_to_module_name(model_type))
         module_name = model_type_to_module_name(model_type)
+        # breakpoint()
         if not modeling_name.startswith(module_name):
             raise ValueError(f"{modeling_name} doesn't start with {module_name}!")
         test_file = os.path.join("tests", "models", module_name, f"test_modeling_{modeling_name}.py")
@@ -1663,6 +1683,9 @@ def create_tiny_models(
         config_classes = [CONFIG_MAPPING[model_type] for model_type in model_types]
 
     # config_classes = [x for x in config_classes if x.__name__ in ["JanusConfig", "Emu3Config", "ClvpConfig", "BarkConfig", "FastSpeech2ConformerWithHifiGanConfig", "FastSpeech2ConformerConfig", "Pop2PianoConfig"]]
+    # TODO: we should add information to the reports instead of skip them
+    config_classes = [x for x in config_classes if x.__name__ not in no_model_tester_at_all]
+    config_classes = [x for x in config_classes if x.__name__ not in configs_requiring_too_exotic_dependency]
 
     # A map from config classes to tuples of processors (tokenizer, feature extractor, processor) classes
     processor_type_map = {c: get_processor_types_from_config_class(c) for c in config_classes}
@@ -1830,13 +1853,28 @@ if __name__ == "__main__":
 
 
 
-# EdgeTamVideoConfig: no model tester!
+
+
+# no model tester
+#
+# EdgeTamVideoConfig
+# Llama4Config
+# Llama4TextConfig
+# Sam2Video
+# Sam3TrackerVideo
+# Sam3VideoConfig
+# ShieldGemma2Config
+
+# TODO!!!
+# has model tester, but there is no model tester gives the exact config class for some model classes
+
+
 # PeAudioVideoConfig : Only deal with PeAudioVideoEncoderConfig and PeAudioVideoEncoder, no model tester
 # Qwen3OmniMoeConfig: Only deal with Qwen3OmniMoeThinkerConfig and Qwen3OmniMoeThinkerForConditionalGeneration
 # Qwen2_5OmniConfig: Only deal with Qwen2_5OmniThinkerConfig and Qwen2_5OmniThinkerForConditionalGenerationTester
 
 
-
+# LayoutLMv2Config: needs detectron2 and there is no `get_config`
 
 
 # Qwen3_5Config: Deal with both `Qwen3_5TextConfig` and `Qwen3_5Config` but only get the first
