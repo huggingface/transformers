@@ -272,7 +272,8 @@ def get_config_class_from_processor_class(processor_class):
     """
 
     processor_prefix = processor_class.__name__
-    for postfix in ["TokenizerFast", "Tokenizer", "ImageProcessor", "FeatureExtractor", "Processor"]:
+    # The order is important: e.g. `TokenizerFast` must before `Tokenizer` etc.
+    for postfix in ["TokenizerFast", "Tokenizer", "ImageProcessorFast", "ImageProcessor", "FeatureExtractor", "Processor"]:
         processor_prefix = processor_prefix.replace(postfix, "")
 
     # `Wav2Vec2CTCTokenizer` -> `Wav2Vec2Config`
@@ -280,6 +281,7 @@ def get_config_class_from_processor_class(processor_class):
         processor_prefix = "Wav2Vec2"
 
     # Find the new configuration class
+    # breakpoint()
     new_config_name = f"{processor_prefix}Config"
     new_config_class = getattr(transformers_module, new_config_name)
 
