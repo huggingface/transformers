@@ -1032,6 +1032,8 @@
         title: PE Audio
       - local: model_doc/pop2piano
         title: Pop2Piano
+      - local: model_doc/qwen3_tts
+        title: Qwen3-TTS
       - local: model_doc/seamless_m4t
         title: Seamless-M4T
       - local: model_doc/seamless_m4t_v2
