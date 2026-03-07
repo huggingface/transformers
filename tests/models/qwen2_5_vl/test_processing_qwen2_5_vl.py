@@ -57,6 +57,55 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue("num_image_patches" in output)
         self.assertEqual(len(output["num_image_patches"]), 3)
 
+    def test_apply_chat_template_ragged_batched_mm_token_type_ids(self):
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        single_messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "Hi"}],
+                },
+            ]
+        ]
+        single_out = processor.apply_chat_template(
+            single_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+        )
+        self.assertEqual(len(single_out["input_ids"]), 1)
+        self.assertEqual(len(single_out["mm_token_type_ids"]), 1)
+        self.assertEqual(len(single_out["mm_token_type_ids"][0]), len(single_out["input_ids"][0]))
+
+        ragged_batch_messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "Hi"}],
+                },
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "Explain this image in detail. " * 30}],
+                },
+            ],
+        ]
+        ragged_out = processor.apply_chat_template(
+            ragged_batch_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+        )
+        self.assertEqual(len(ragged_out["input_ids"]), 2)
+        self.assertEqual(len(ragged_out["mm_token_type_ids"]), 2)
+        self.assertNotEqual(len(ragged_out["input_ids"][0]), len(ragged_out["input_ids"][1]))
+        self.assertEqual(len(ragged_out["mm_token_type_ids"][0]), len(ragged_out["input_ids"][0]))
+        self.assertEqual(len(ragged_out["mm_token_type_ids"][1]), len(ragged_out["input_ids"][1]))
+
     @require_torch
     @require_av
     def _test_apply_chat_template(
