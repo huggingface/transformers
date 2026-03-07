@@ -1756,6 +1756,8 @@ def create_tiny_models(
         if len(models) > 0:
             to_create[c] = {"processor": processors, "pytorch": models}
 
+    exit(-1)
+
     results = {}
     if num_workers <= 1:
         for c, models_to_create in list(to_create.items()):
