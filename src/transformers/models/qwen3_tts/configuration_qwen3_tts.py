@@ -13,10 +13,11 @@
 # limitations under the License.
 """Qwen3-TTS configuration classes."""
 
-from ..mimi.configuration_mimi import MimiConfig
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
+from ..mimi.configuration_mimi import MimiConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -174,7 +175,9 @@ class Qwen3TTSTalkerCodePredictorConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_parameters = rope_parameters if rope_parameters is not None else {"rope_type": "default", "rope_theta": 500000.0}
+        self.rope_parameters = (
+            rope_parameters if rope_parameters is not None else {"rope_type": "default", "rope_theta": 500000.0}
+        )
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
 
@@ -314,7 +317,9 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_parameters = rope_parameters if rope_parameters is not None else {"rope_type": "default", "rope_theta": 500000.0}
+        self.rope_parameters = (
+            rope_parameters if rope_parameters is not None else {"rope_type": "default", "rope_theta": 500000.0}
+        )
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
 
@@ -492,7 +497,9 @@ class Qwen3TTSTokenizerV2Code2WavConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.sliding_window = sliding_window
         self.max_position_embeddings = max_position_embeddings
-        self.rope_parameters = rope_parameters if rope_parameters is not None else {"rope_type": "default", "rope_theta": 10000.0}
+        self.rope_parameters = (
+            rope_parameters if rope_parameters is not None else {"rope_type": "default", "rope_theta": 10000.0}
+        )
         self.layer_scale_initial_scale = layer_scale_initial_scale
         self.codebook_dim = codebook_dim
         self.num_quantizers = num_quantizers
@@ -501,9 +508,7 @@ class Qwen3TTSTokenizerV2Code2WavConfig(PreTrainedConfig):
         self.decoder_dim = decoder_dim
         self.upsample_rates = list(upsample_rates) if upsample_rates is not None else [5, 4, 2, 2]
         self.upsampling_ratios = list(upsampling_ratios) if upsampling_ratios is not None else [8, 6]
-        self.layer_types = [
-            "sliding_attention" for _ in range(self.num_hidden_layers)
-        ]
+        self.layer_types = ["sliding_attention" for _ in range(self.num_hidden_layers)]
 
 
 class Qwen3TTSTokenizerV2Config(PreTrainedConfig):
@@ -555,9 +560,7 @@ class Qwen3TTSTokenizerV2Config(PreTrainedConfig):
 
         self.encoder_config = MimiConfig(**encoder_config) if isinstance(encoder_config, dict) else encoder_config
         self.decoder_config = (
-            Qwen3TTSTokenizerV2Code2WavConfig(**decoder_config)
-            if isinstance(decoder_config, dict)
-            else decoder_config
+            Qwen3TTSTokenizerV2Code2WavConfig(**decoder_config) if isinstance(decoder_config, dict) else decoder_config
         )
 
         self.encoder_valid_num_quantizers = encoder_valid_num_quantizers
@@ -714,7 +717,9 @@ class Qwen3TTSTokenizerV1DecoderBigVGANConfig(PreTrainedConfig):
             resblock_dilation_sizes if resblock_dilation_sizes is not None else [[1, 3, 5], [1, 3, 5], [1, 3, 5]]
         )
         self.upsample_rates = upsample_rates if upsample_rates is not None else [5, 3, 2, 2, 2, 2]
-        self.upsample_kernel_sizes = upsample_kernel_sizes if upsample_kernel_sizes is not None else [11, 7, 4, 4, 4, 4]
+        self.upsample_kernel_sizes = (
+            upsample_kernel_sizes if upsample_kernel_sizes is not None else [11, 7, 4, 4, 4, 4]
+        )
 
 
 class Qwen3TTSTokenizerV1DecoderConfig(PreTrainedConfig):
@@ -882,14 +887,10 @@ class Qwen3TTSTokenizerV1Config(PreTrainedConfig):
             logger.info("decoder_config is None. Initializing V1 decoder with default values.")
 
         self.encoder_config = (
-            Qwen3TTSTokenizerV1EncoderConfig(**encoder_config)
-            if isinstance(encoder_config, dict)
-            else encoder_config
+            Qwen3TTSTokenizerV1EncoderConfig(**encoder_config) if isinstance(encoder_config, dict) else encoder_config
         )
         self.decoder_config = (
-            Qwen3TTSTokenizerV1DecoderConfig(**decoder_config)
-            if isinstance(decoder_config, dict)
-            else decoder_config
+            Qwen3TTSTokenizerV1DecoderConfig(**decoder_config) if isinstance(decoder_config, dict) else decoder_config
         )
 
         self.input_sample_rate = input_sample_rate
