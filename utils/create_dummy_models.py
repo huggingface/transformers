@@ -532,11 +532,22 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
             for _tester_classes in models_to_model_testers.values():
                 tester_classes.extend(_tester_classes)
         if len(tester_classes) > 0:
+            # breakpoint()
             # sort with the length of the class names first, then the alphabetical order
             # This is to avoid `T5EncoderOnlyModelTest` is used instead of `T5ModelTest`, which has
             # `is_encoder_decoder=False` and causes some pipeline tests failing (also failures in `Optimum` CI).
             # TODO: More fine grained control of the desired tester class.
             model_tester_class = min(tester_classes, key=lambda x: (len(x.__name__), x.__name__))
+
+            # TODO: SpeechT5ForSpeechToText needs a particular tester to get the working config
+            # TODO: this is hacky however, as all model classes share the same config class but having different tester
+            # TODO: make this more flexible and roubst
+            if config_class.__name__ == "SpeechT5Config":
+                for x in tester_classes:
+                    if x.__name__ == "SpeechT5ForSpeechToTextTester":
+                        model_tester_class = x
+                        break
+
     except ModuleNotFoundError:
         error = f"Tiny config not created for {model_type} - cannot find the testing module from the model name."
         raise ValueError(error)
@@ -571,6 +582,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
             if isinstance(v, dict):
                 model_tester_kwargs_new[k] = {k1: v1 for k1, v1 in v.items() if k1 != "vocab_size"}
 
+        # breakpoint()
         model_tester = model_tester_class(parent=None, **model_tester_kwargs_new)
 
     # breakpoint()
@@ -632,6 +644,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
 
             ### new_model_tester = new_model_tester_class(parent=None, **model_tester_kwargs)
 
+            # breakpoint()
             model_tester = new_model_tester
 
             if hasattr(model_tester, "get_pipeline_config"):
@@ -1313,6 +1326,11 @@ def get_config_overrides(config_class, processors):
             vocab_size=tokenizer.tgt_vocab_size, bos_token_id=config_overrides["eos_token_id"]
         )
 
+    # Marian failed to convert the tokenzier, and has `'vocab_size': 58101` and `'pad_token_id': 58100`.
+    # which gives `Padding_idx must be within num_embeddings`
+    if config_class.__name__ == "MarianConfig":
+        config_overrides["decoder_vocab_size"] = config_overrides["vocab_size"]
+
     return config_overrides
 
 
@@ -1444,6 +1462,7 @@ def build(config_class, models_to_create, output_dir):
 
     try:
         config_overrides = get_config_overrides(config_class, processors)
+        # breakpoint()
     except Exception as e:
         error = f"Failure occurs while calling `get_config_overrides`: {e}"
         trace = traceback.format_exc()
@@ -1503,6 +1522,7 @@ def build(config_class, models_to_create, output_dir):
                 del result["pytorch"][pytorch_arch.__name__]
                 continue
 
+            # breakpoint()
             model = build_model(pytorch_arch, used_tiny_config, output_dir=output_dir)
         except Exception as e:
 
@@ -1711,8 +1731,8 @@ def create_tiny_models(
     config_classes = [x for x in config_classes if x.__name__ not in no_model_tester_at_all]
     config_classes = [x for x in config_classes if x.__name__ not in configs_requiring_too_exotic_dependency]
     config_classes = [x for x in config_classes if x.__name__ not in deprecated_models]
-    mamba = {"BambaConfig", "FalconMambaConfig", "GraniteMoeHybridConfig", "JambaConfig", "MambaConfig", "Mamba2Config", ""}
-    config_classes = [x for x in config_classes if x.__name__ in mamba]
+    # mamba = {"BambaConfig", "FalconMambaConfig", "GraniteMoeHybridConfig", "JambaConfig", "MambaConfig", "Mamba2Config", ""}
+    # config_classes = [x for x in config_classes if x.__name__ in mamba]
 
     # A map from config classes to tuples of processors (tokenizer, feature extractor, processor) classes
     processor_type_map = {c: get_processor_types_from_config_class(c) for c in config_classes}
