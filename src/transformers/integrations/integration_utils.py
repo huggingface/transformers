@@ -2365,8 +2365,35 @@ class SwanLabCallback(TrainerCallback):
 class KubeflowCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that reports training progress to [Kubeflow Trainer](https://github.com/kubeflow/trainer).
-    Can be disabled by setting environment variable `DISABLE_KUBEFLOW_INTEGRATION = TRUE`.
+
+    This callback is automatically registered when training inside a Kubeflow TrainJob with the
+    `TrainJobRuntimeStatus` feature gate enabled. The Kubeflow controller injects the required
+    environment variables into the training pod.
+
+    **Environment Variables (injected by controller):**
+    - `KUBEFLOW_TRAINER_STATUS_URL`: HTTPS endpoint for status updates
+    - `KUBEFLOW_TRAINER_STATUS_CA_CERT`: Path to CA certificate for TLS verification
+    - `KUBEFLOW_TRAINER_STATUS_TOKEN`: Path to service account token for authentication
+
+    **Reported Information:**
+    - Progress percentage (0-100%)
+    - Estimated time remaining (seconds)
+    - Training metrics (loss, learning_rate, etc.)
+
+    **Features:**
+    - Automatic throttling (max 1 update per 5 seconds) to avoid overwhelming the controller
+    - Token caching (5 minutes) to minimize file I/O
+    - Only rank 0 reports progress in distributed training
+    - Silent failures - network issues won't interrupt training
+
+    Can be disabled by setting environment variable `DISABLE_KUBEFLOW_INTEGRATION=TRUE`.
     """
+
+    _MIN_UPDATE_INTERVAL = 5.0
+    _TOKEN_CACHE_DURATION = 300.0  # 5 minutes, aligned with SDK
+    _ENV_STATUS_URL = "KUBEFLOW_TRAINER_STATUS_URL"
+    _ENV_CA_CERT = "KUBEFLOW_TRAINER_STATUS_CA_CERT"
+    _ENV_TOKEN_PATH = "KUBEFLOW_TRAINER_STATUS_TOKEN"
 
     def __init__(self):
         if not is_kubeflow_available():
@@ -2376,18 +2403,78 @@ class KubeflowCallback(TrainerCallback):
             )
 
         self._initialized = False
-        self._update_status = None
         self._metrics = {}
         self._start_time = None
+        self._last_update_time = 0.0
+        self._cached_token = None
+        self._token_read_time = 0.0
+
+    def _get_token(self):
+        """Get cached service account token."""
+        import os
+        import time
+
+        now = time.monotonic()
+        if self._cached_token and (now - self._token_read_time) < self._TOKEN_CACHE_DURATION:
+            return self._cached_token
+
+        token_path = os.environ.get(self._ENV_TOKEN_PATH)
+        if not token_path or not os.path.exists(token_path):
+            return None
 
         try:
-            from kubeflow.trainer.progress import update_runtime_status
+            with open(token_path) as f:
+                self._cached_token = f.read().strip()
+                self._token_read_time = now
+                return self._cached_token
+        except OSError:
+            return None
 
-            self._update_status = update_runtime_status
-        except ImportError:
-            raise RuntimeError(
-                "KubeflowCallback requires kubeflow-sdk to be installed. Run `pip install kubeflow-sdk`."
-            )
+    def _update_status(self, progress_percent=None, estimated_time_remaining=None, metrics=None, force=False):
+        """Send progress update to Kubeflow Trainer controller."""
+        import json
+        import os
+        import ssl
+        import time
+        import urllib.request
+        from datetime import datetime, timezone
+
+        try:
+            url = os.environ.get(self._ENV_STATUS_URL)
+            if not url:
+                return False
+
+            now = time.monotonic()
+            if not force and (now - self._last_update_time) < self._MIN_UPDATE_INTERVAL:
+                return False
+            self._last_update_time = now
+
+            token = self._get_token()
+            if not token:
+                return False
+
+            trainer_status = {"lastUpdatedTime": datetime.now(timezone.utc).isoformat()}
+
+            if progress_percent is not None:
+                trainer_status["progressPercentage"] = max(0, min(100, progress_percent))
+
+            if estimated_time_remaining is not None:
+                trainer_status["estimatedRemainingSeconds"] = max(0, int(estimated_time_remaining))
+
+            if metrics:
+                trainer_status["metrics"] = [{"name": str(k), "value": str(v)} for k, v in metrics.items()]
+
+            data = json.dumps({"trainerStatus": trainer_status}).encode("utf-8")
+            headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+            ca_file = os.environ.get(self._ENV_CA_CERT)
+            ssl_context = ssl.create_default_context(cafile=ca_file) if ca_file else None
+
+            req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=5, context=ssl_context) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
 
     def on_train_begin(self, args, state, control, **kwargs):
         if not state.is_world_process_zero:

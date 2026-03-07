@@ -803,22 +803,21 @@ class KubeflowCallbackTest(unittest.TestCase):
     """Tests for KubeflowCallback functionality."""
 
     def _create_callback(self, fake_update_status):
-        """Create a KubeflowCallback with mocked SDK."""
+        """Create a KubeflowCallback with mocked _update_status method."""
         with patch.dict(os.environ, {"KUBEFLOW_TRAINER_STATUS_URL": "https://test-url"}, clear=False):
             with patch("transformers.integrations.integration_utils.is_kubeflow_available", return_value=True):
-                with patch.dict(
-                    "sys.modules",
-                    {"kubeflow": Mock(), "kubeflow.trainer": Mock(), "kubeflow.trainer.progress": Mock()},
+                with patch(
+                    "transformers.integrations.integration_utils.KubeflowCallback.__init__",
+                    lambda self: None,
                 ):
-                    with patch(
-                        "transformers.integrations.integration_utils.KubeflowCallback.__init__",
-                        lambda self: None,
-                    ):
-                        callback = KubeflowCallback()
-                        callback._initialized = False
-                        callback._update_status = fake_update_status
-                        callback._metrics = {}
-                        callback._start_time = None
+                    callback = KubeflowCallback()
+                    callback._initialized = False
+                    callback._update_status = fake_update_status
+                    callback._metrics = {}
+                    callback._start_time = None
+                    callback._last_update_time = 0.0
+                    callback._cached_token = None
+                    callback._token_read_time = 0.0
         return callback
 
     @staticmethod
@@ -946,6 +945,81 @@ class KubeflowCallbackTest(unittest.TestCase):
 
         call_kwargs = fake_update_status.call_args.kwargs
         self.assertEqual(call_kwargs["progress_percent"], 99)
+
+    def test_update_status_throttling(self):
+        """_update_status should throttle requests unless force=True."""
+        with patch.dict(os.environ, {"KUBEFLOW_TRAINER_STATUS_URL": "https://test-url"}, clear=False):
+            with patch("transformers.integrations.integration_utils.is_kubeflow_available", return_value=True):
+                with patch(
+                    "transformers.integrations.integration_utils.KubeflowCallback.__init__",
+                    lambda self: None,
+                ):
+                    callback = KubeflowCallback()
+                    callback._initialized = True
+                    callback._metrics = {}
+                    callback._start_time = 0
+                    callback._last_update_time = 0.0
+                    callback._cached_token = "test-token"
+                    callback._token_read_time = 0.0
+
+                    with patch("urllib.request.urlopen") as mock_urlopen:
+                        mock_response = Mock()
+                        mock_response.status = 200
+                        mock_response.__enter__ = Mock(return_value=mock_response)
+                        mock_response.__exit__ = Mock(return_value=False)
+                        mock_urlopen.return_value = mock_response
+
+                        # First call should succeed
+                        result1 = callback._update_status(progress_percent=50, force=True)
+                        self.assertTrue(result1)
+
+                        # Second call without force should be throttled (within 5s)
+                        result2 = callback._update_status(progress_percent=60)
+                        self.assertFalse(result2)
+
+    def test_update_status_returns_false_without_url(self):
+        """_update_status should return False if KUBEFLOW_TRAINER_STATUS_URL is not set."""
+        with patch.dict(os.environ, {}, clear=True):
+            with patch("transformers.integrations.integration_utils.is_kubeflow_available", return_value=True):
+                with patch(
+                    "transformers.integrations.integration_utils.KubeflowCallback.__init__",
+                    lambda self: None,
+                ):
+                    callback = KubeflowCallback()
+                    callback._initialized = True
+                    callback._last_update_time = 0.0
+                    callback._cached_token = "test-token"
+                    callback._token_read_time = 0.0
+
+                    result = callback._update_status(progress_percent=50, force=True)
+                    self.assertFalse(result)
+
+    def test_get_token_caches_token(self):
+        """_get_token should cache the token for TOKEN_CACHE_DURATION."""
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".token") as f:
+            f.write("test-service-account-token")
+            token_path = f.name
+
+        try:
+            with patch.dict(os.environ, {"KUBEFLOW_TRAINER_STATUS_TOKEN": token_path}, clear=False):
+                with patch("transformers.integrations.integration_utils.is_kubeflow_available", return_value=True):
+                    with patch(
+                        "transformers.integrations.integration_utils.KubeflowCallback.__init__",
+                        lambda self: None,
+                    ):
+                        callback = KubeflowCallback()
+                        callback._cached_token = None
+                        callback._token_read_time = 0.0
+
+                        token = callback._get_token()
+                        self.assertEqual(token, "test-service-account-token")
+                        self.assertEqual(callback._cached_token, "test-service-account-token")
+        finally:
+            import os as os_module
+
+            os_module.unlink(token_path)
 
 
 class TrainerControlTest(unittest.TestCase):
