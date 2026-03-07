@@ -20,75 +20,20 @@
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="HuggingFaceTB/SmolLM3-3B")
 class SmolLM3Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SmolLM3Model`]. It is used to instantiate a
-    SmolLM3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the SmolLM3 3B.
-    e.g. [HuggingFaceTB/SmolLM3-3B](https://huggingface.co/HuggingFaceTB/SmolLM3-3B)
+    no_rope_layers (`List[int]`, *optional*):
+        List with at least the same length as the number of layers in the model.
+        A `1` at an index position indicates that the corresponding layer will use RoPE,
+        while a `0` indicates that it's a NoPE layer.
+    no_rope_layer_interval (`int`, *optional*, defaults to 4):
+        If `no_rope_layers` is `None`, it will be created using a NoPE layer every
+        `no_rope_layer_interval` layers.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 128256):
-            Vocabulary size of the SmolLM3 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`SmolLM3Model`]
-        hidden_size (`int`, *optional*, defaults to 2048):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 11008):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 36):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 4):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `16`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*, defaults to 128004):
-            The id of the padding token.
-        bos_token_id (`int`, *optional*, defaults to 128000):
-            The id of the beginning of sentence token.
-        eos_token_id (`int`, *optional*, defaults to 128001):
-            The id of the end of sentence token.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        use_sliding_window (`bool`, *optional*, defaults to `False`):
-            Whether to use sliding window attention.
-        sliding_window (`int`, *optional*):
-            Sliding window attention (SWA) window size. If not specified, will default to `None`.
-        no_rope_layers (`List[int]`, *optional*):
-            List with at least the same length as the number of layers in the model.
-            A `1` at an index position indicates that the corresponding layer will use RoPE,
-            while a `0` indicates that it's a NoPE layer.
-        no_rope_layer_interval (`int`, *optional*, defaults to 4):
-            If `no_rope_layers` is `None`, it will be created using a NoPE layer every
-            `no_rope_layer_interval` layers.
-        layer_types (`list`, *optional*):
-            Attention pattern for each layer. Automatically computed based on sliding window and NoPE settings.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
 
     ```python
     >>> from transformers import SmolLM3Model, SmolLM3Config

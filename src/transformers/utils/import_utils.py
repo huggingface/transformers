@@ -465,6 +465,26 @@ def is_torch_hpu_available() -> bool:
 
 
 @lru_cache
+def is_torch_neuron_available(check_device: bool = False) -> bool:
+    import torch
+
+    if importlib.util.find_spec("torch_neuronx") is None:
+        return False
+
+    if check_device:
+        try:
+            import torch_neuronx  # noqa: F401
+
+            # Will raise a RuntimeError if no Neuron is found, or AttributeError if torch.neuron is not available
+            _ = getattr(torch, "neuron").device_count()
+            return getattr(torch, "neuron").is_available()
+        except (AttributeError, RuntimeError):
+            return False
+
+    return hasattr(torch, "neuron") and torch.neuron.is_available()
+
+
+@lru_cache
 def is_torch_bf16_gpu_available() -> bool:
     if not is_torch_available():
         return False
@@ -484,6 +504,10 @@ def is_torch_bf16_gpu_available() -> bool:
         return torch.backends.mps.is_macos_or_newer(14, 0)
     if is_torch_musa_available():
         return torch.musa.is_bf16_supported() if hasattr(torch, "musa") else False
+    if is_torch_mlu_available():
+        return torch.mlu.is_bf16_supported() if hasattr(torch, "mlu") else False
+    if is_torch_neuron_available():
+        return getattr(torch, "neuron").is_bf16_supported()
     return False
 
 
@@ -971,6 +995,11 @@ def is_faiss_available() -> bool:
 
 
 @lru_cache
+def is_fouroversix_available() -> bool:
+    return _is_package_available("fouroversix")
+
+
+@lru_cache
 def is_scipy_available() -> bool:
     return _is_package_available("scipy")[0]
 
@@ -1436,6 +1465,8 @@ def torch_compilable_check(cond: Any, msg: str | Callable[[], str], error_type: 
     if callable(cond):
         cond = cond()
 
+    # These checks are also compiler hints for TorchDynamo telling
+    # it that the condition is expected to be True during compilation
     if isinstance(cond, torch.Tensor):
         torch._check_tensor_all_with(error_type, cond, msg_callable)
     else:
