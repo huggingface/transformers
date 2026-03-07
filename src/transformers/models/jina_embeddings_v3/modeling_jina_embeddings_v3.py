@@ -235,8 +235,8 @@ class JinaEmbeddingsV3Attention(nn.Module):
         self.is_causal = False
 
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
-        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim)
-        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size)
 
     def forward(
