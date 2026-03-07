@@ -1075,7 +1075,7 @@ def fill_result_with_error(result, error, trace, models_to_create):
     #   otherwise, we could not build with these obtained processors, as we get the error
     #   `error = f"No processor is returned by `convert_processors` for {config_class.__name__}."`
     if len(result["processor"]) == 0:
-
+        # TODO: this dosen't make any sense???
         result["processor"] = {p.__class__.__name__: p.__class__.__name__ for p in result["processor"].values()}
 
 
@@ -1378,6 +1378,9 @@ def build(config_class, models_to_create, output_dir):
         error = f"No processor class could be found in {config_class.__name__}."
         fill_result_with_error(result, error, None, models_to_create)
         logger.error(result["error"][0])
+        processor_names = [p.__name__ if not isinstance(p, str) else p for p in result["processor"]]
+        result["processor"] = {p:p for p in processor_names}
+
         return result
 
     traces = []
@@ -1417,6 +1420,8 @@ def build(config_class, models_to_create, output_dir):
             error = f"No processor could be built for {config_class.__name__}."
             fill_result_with_error(result, error, None, models_to_create)
             logger.error(result["error"][0])
+            processor_names = [p.__name__ if not isinstance(p, str) else p for p in result["processor"]]
+            result["processor"] = {p: p for p in processor_names}
             return result
 
     # breakpoint()
@@ -1429,6 +1434,8 @@ def build(config_class, models_to_create, output_dir):
         trace = traceback.format_exc()
         fill_result_with_error(result, error, trace, models_to_create)
         logger.error(result["error"][0])
+        processor_names = [p.__name__ if not isinstance(p, str) else p for p in result["processor"]]
+        result["processor"] = {p: p for p in processor_names}
         return result
 
     # Convert the processors (reduce vocabulary size, smaller image size, etc.)
@@ -1458,6 +1465,8 @@ def build(config_class, models_to_create, output_dir):
             error = f"No processor is returned by `convert_processors` for {config_class.__name__}."
             fill_result_with_error(result, error, None, models_to_create)
             logger.error(result["error"][0])
+            processor_names = [p.__name__ if not isinstance(p, str) else p for p in result["processor"]]
+            result["processor"] = {p: p for p in processor_names}
             return result
 
     try:
@@ -1468,6 +1477,8 @@ def build(config_class, models_to_create, output_dir):
         trace = traceback.format_exc()
         fill_result_with_error(result, error, trace, models_to_create)
         logger.error(result["error"][0])
+        processor_names = [p.__name__ if not isinstance(p, str) else p for p in result["processor"]]
+        result["processor"] = {p: p for p in processor_names}
         return result
 
     # Just for us to see this easily in the report
