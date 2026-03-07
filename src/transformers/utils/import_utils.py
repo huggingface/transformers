@@ -503,9 +503,9 @@ def is_torch_bf16_gpu_available() -> bool:
         # Note: Emulated in software by Metal using fp32 for hardware without native support (like M1/M2)
         return torch.backends.mps.is_macos_or_newer(14, 0)
     if is_torch_musa_available():
-        return torch.musa.is_bf16_supported() if hasattr(torch, "musa") else False
+        return getattr(torch, "musa").is_bf16_supported()
     if is_torch_mlu_available():
-        return torch.mlu.is_bf16_supported() if hasattr(torch, "mlu") else False
+        return getattr(torch, "mlu").is_bf16_supported()
     if is_torch_neuron_available():
         return getattr(torch, "neuron").is_bf16_supported()
     return False
@@ -573,7 +573,7 @@ def is_torch_tf32_available() -> bool:
                 return True
         return False
     torch_version = getattr(torch, "version")
-    if not torch.cuda.is_available() or getattr(torch_version, "cuda", None) is None:
+    if not torch.cuda.is_available() or torch_version.cuda is None:
         return False
     if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
         return False
@@ -1396,7 +1396,7 @@ def is_jax_jitting(x):
     try:
         import jax
 
-        return hasattr(jax, "core") and isinstance(x.jax(), jax.core.Tracer)
+        return isinstance(x.jax(), getattr(jax, "core").Tracer)
     except Exception:
         return False
 
