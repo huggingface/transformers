@@ -212,7 +212,7 @@ def is_cuda_platform() -> bool:
     if is_torch_available():
         import torch
 
-        return torch.version.cuda is not None
+        return getattr(torch, "version").cuda is not None
     return False
 
 
@@ -221,7 +221,7 @@ def is_rocm_platform() -> bool:
     if is_torch_available():
         import torch
 
-        return torch.version.hip is not None
+        return getattr(torch, "version").hip is not None
     return False
 
 
@@ -572,7 +572,8 @@ def is_torch_tf32_available() -> bool:
             if f"{device_info.major}{device_info.minor}" >= "22":
                 return True
         return False
-    if not torch.cuda.is_available() or torch.version.cuda is None:
+    torch_version = getattr(torch, "version")
+    if not torch.cuda.is_available() or getattr(torch_version, "cuda", None) is None:
         return False
     if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
         return False
@@ -920,9 +921,10 @@ def is_flash_attn_2_available() -> bool:
     import torch
 
     try:
-        if torch.version.cuda:
+        torch_version = getattr(torch, "version")
+        if torch_version.cuda:
             return version.parse(flash_attn_version) >= version.parse("2.1.0")
-        elif torch.version.hip:
+        elif torch_version.hip:
             # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
             return version.parse(flash_attn_version) >= version.parse("2.0.4")
         elif is_torch_mlu_available():
@@ -1339,7 +1341,7 @@ def is_torchdynamo_compiling() -> bool:
     try:
         import torch
 
-        return torch.compiler.is_compiling()
+        return getattr(torch, "compiler").is_compiling()
     except Exception:
         return False
 
@@ -1348,7 +1350,7 @@ def is_torchdynamo_exporting() -> bool:
     try:
         import torch
 
-        return torch.compiler.is_exporting()
+        return getattr(torch, "compiler").is_exporting()
     except Exception:
         return False
 
@@ -1366,7 +1368,7 @@ def is_fake_tensor(x) -> bool:
     try:
         import torch
 
-        return isinstance(x, torch._subclasses.FakeTensor)
+        return isinstance(x, getattr(torch, "_subclasses").FakeTensor)
     except Exception:
         return False
 
