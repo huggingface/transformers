@@ -132,35 +132,31 @@ class VideoPrismTextConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the VideoPrism text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`VideoPrismModel`].
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        max_position_embeddings (`int`, *optional*, defaults to 64):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        pad_token_id (`int`, *optional*, defaults to 1):
-            The id of the padding token in the vocabulary.
-        bos_token_id (`int`, *optional*, defaults to 49406):
-            The id of the beginning-of-sequence token in the vocabulary.
-        eos_token_id (`int`, *optional*, defaults to 49407):
-            The id of the end-of-sequence token in the vocabulary.
-        projection_size (`int`, *optional*, defaults to `hidden_size`):
-            The size of the projection head.
+            hidden_size (`int`, *optional*, defaults to 768):
+                Dimensionality of the encoder layers and the pooler layer.
+            intermediate_size (`int`, *optional*, defaults to 3072):
+                Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+            num_attention_heads (`int`, *optional*, defaults to 12):
+                Number of attention heads for each attention layer in the Transformer encoder.
+            num_hidden_layers (`int`, *optional*, defaults to 12):
+                Number of hidden layers in the Transformer encoder.
+            vocab_size (`int`, *optional*, defaults to 32000):
+                Vocabulary size of the VideoPrism text model. Defines the number of different tokens that can be represented by
+                the `inputs_ids` passed when calling [`VideoPrismModel`].
+            apply_l2_norm (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+            hidden_act (`str` or `function`, *optional*, defaults to `"relu"`):
+                The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+                `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
+            attention_probs_dropout_prob (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
+            qkv_bias (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+            hidden_dropout_prob (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
+            layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+                The epsilon used by the layer normalization layers.
+            initializer_range (`<fill_type>`, *optional*, defaults to 0.02): <fill_docstring>
+            attn_logit_softcapping (`<fill_type>`, *optional*, defaults to 50.0): <fill_docstring>
+            max_position_embeddings (`int`, *optional*, defaults to 64):
+                The maximum sequence length that this model might ever be used with. Typically set this to something large
+                just in case (e.g., 512 or 1024 or 2048).
 
     Example:
 
@@ -180,7 +176,24 @@ class VideoPrismTextConfig(PreTrainedConfig):
     model_type = "videoprism_text_model"
     base_config_key = "text_config"
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        hidden_size=768,
+        intermediate_size=3072,
+        num_attention_heads=12,
+        num_hidden_layers=12,
+        vocab_size=32000,
+        apply_l2_norm=True,
+        hidden_act="relu",
+        attention_probs_dropout_prob=0.0,
+        qkv_bias=True,
+        hidden_dropout_prob=0.0,
+        layer_norm_eps=1e-06,
+        initializer_range=0.02,
+        attn_logit_softcapping=50.0,
+        max_position_embeddings=64,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
 
         self.vocab_size = vocab_size
@@ -190,11 +203,13 @@ class VideoPrismTextConfig(PreTrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.max_position_embeddings = max_position_embeddings
         self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = "relu"
-        self.attention_dropout = attention_dropout
-        self.apply_l2_norm = True
-        self.qkv_bias = True
-        self.attn_logit_softcapping = 50.0
+        self.hidden_act = hidden_act
+        self.apply_l2_norm = apply_l2_norm
+        self.qkv_bias = qkv_bias
+        self.attn_logit_softcapping = attn_logit_softcapping
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.initializer_range = initializer_range
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
 
 
 class VideoPrismConfig(PreTrainedConfig):

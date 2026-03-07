@@ -6,6 +6,7 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -18,13 +19,13 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_int
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_int
 from .configuration_videoprism import VideoPrismConfig, VideoPrismTextConfig, VideoPrismVisionConfig
 
 
 @dataclass
 class BaseModelOutputWithSpatialAndTemporalStates(ModelOutput):
-    """
+    r"""
     Base class for model outputs that include spatial and temporal states.
 
     Args:
@@ -47,9 +48,35 @@ class BaseModelOutputWithSpatialAndTemporalStates(ModelOutput):
 
 
 @dataclass
-class VideoPrismClipOutput(ModelOutput):
+class VideoPrismVideoOutput(ModelOutput):
+    r"""
+    Base class for VideoPrismVideo model outputs.
+
+    Args:
+        video_last_hidden_state (`torch.FloatTensor`):
+            The last hidden_state after attention pooling, typically of shape
+            (batch_size, num_patches * num_frames, hidden_size).
+
+        auxiliary_output (`torch.FloatTensor`, *optional*):
+            The last hidden_state of the auxiliary encoder, typically of shape
+            (batch_size * num_patches, num_frames, hidden_size).
+
+        attention_pooling_output (`torch.FloatTensor`, *optional*):
+            The output tuple of VideoPrismMultiheadAttentionPoolingHead containing the pooled tensor
+            and the attention probabilities, typically of shape
+            (batch_size * num_frames, num_patches, hidden_size).
     """
-    Base class for VideoPrismClip model outputs.
+
+    # todo: place the correct output shapes.
+    video_last_hidden_state: torch.FloatTensor
+    auxiliary_output: torch.FloatTensor | None = None
+    attention_pooling_output: torch.FloatTensor | None = None
+
+
+@dataclass
+@auto_docstring
+class VideoPrismClipOutput(ModelOutput):
+    r"""
     logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
         The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
         similarity scores.
@@ -60,7 +87,7 @@ class VideoPrismClipOutput(ModelOutput):
         The image embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismVideoModel`].
     text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
         The text embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismTextModel`].
-    vision_model_output (`VideoPrismVideoOutput`):
+    video_model_output (`VideoPrismVideoOutput`):
         The output of the [`VideoPrismVideoModel`].
     text_model_output (`BaseModelOutputWithPooling`):
         The output of the [`VideoPrismTextModel`].
@@ -68,24 +95,19 @@ class VideoPrismClipOutput(ModelOutput):
         Contrastive loss for image-text similarity.
     """
 
-    logits_per_video: torch.FloatTensor
-    logits_per_text: torch.FloatTensor
-    video_embeds: torch.FloatTensor
-    text_embeds: torch.FloatTensor
-    vision_model_output: BaseModelOutputWithSpatialAndTemporalStates
-    text_model_output: BaseModelOutput
+    logits_per_video: torch.FloatTensor | None = None
+    logits_per_text: torch.FloatTensor | None = None
+    video_embeds: torch.FloatTensor | None = None
+    text_embeds: torch.FloatTensor | None = None
+    video_model_output: VideoPrismVideoOutput = None
+    text_model_output: BaseModelOutput = None
     loss: torch.FloatTensor | None = None
 
-
-@dataclass
-class VideoPrismVideoOutput(ModelOutput):
-    """
-    Base class for VideoPrismVideo model outputs.
-    """
-
-    video_last_hidden_state: torch.FloatTensor
-    auxiliary_output: torch.FloatTensor | None = None
-    attention_pooling_output: torch.FloatTensor | None = None
+    def to_tuple(self) -> tuple[Any]:
+        return tuple(
+            self[k] if k not in ["text_model_output", "video_model_output"] else getattr(self, k).to_tuple()
+            for k in self.keys()
+        )
 
 
 class VideoPrismTubeletEmbeddings(nn.Module):
@@ -103,9 +125,7 @@ class VideoPrismTubeletEmbeddings(nn.Module):
         super().__init__()
         self.num_frames = config.num_frames
         self.image_size = (
-            config.image_size
-            if isinstance(self.config.image_size, tuple)
-            else (self.config.image_size, self.config.image_size)
+            config.image_size if isinstance(config.image_size, tuple) else (config.image_size, config.image_size)
         )
         self.patch_size = config.tubelet_size
         self.embed_dim = config.hidden_size
@@ -281,7 +301,6 @@ def eager_attention_forward(
     scaling: float,
     dropout: float = 0.0,
     softcap: float | None = None,
-    **kwargs: Unpack[TransformersKwargs],
 ):
     # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
@@ -430,8 +449,8 @@ class VideoPrismLayer(GradientCheckpointingLayer):
         self.attention = VideoPrismAttention(config)
         self.intermediate = VideoPrismIntermediate(config)
         self.output = VideoPrismOutput(config)
-        self.layernorm_before = VideoPrismLayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps)
-        self.layernorm_after = VideoPrismLayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps)
+        self.layernorm_before = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm_after = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -506,7 +525,7 @@ class VideoPrismTextEncoder(nn.Module):
     def __init__(self, config: VideoPrismTextConfig):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_text_layers)])
+        self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -550,7 +569,35 @@ class VideoPrismPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             init.zeros_(module.bias)
             init.ones_(module.weight)
-        # todo nn.Embedding + nn.Parameter + buffer (softplus + pos_embeds), also decide if super() could help here
+
+        elif isinstance(module, VideoPrismTextModel):
+            dim = self.config.hidden_size
+            inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / (dim - 2)))
+            sinusoid_inp = torch.einsum(
+                "i , j -> i j", torch.arange(self.config.max_position_embeddings, dtype=torch.int64).float(), inv_freq
+            ).float()
+            pos_embed = torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
+            init.copy_(module.position_embeddings, pos_embed)
+
+        elif isinstance(module, VideoPrismMultiheadAttentionPoolingHead):
+            dim = int(self.config.intermediate_size / self.config.num_attention_heads)
+            r_softplus_0 = 1.442695041
+            scale = torch.tensor(r_softplus_0 / (dim**0.5))
+            init.copy_(module.scale, scale)
+
+        elif isinstance(module, VideoPrismSpatialEmbeddings):
+            init.lecun_normal_(module.position_embeddings)
+
+        elif isinstance(module, VideoPrismTemporalEmbeddings):
+            init.lecun_normal_(module.position_embeddings)
+
+        elif isinstance(module, VideoPrismMultiheadAttentionPoolingHead):
+            init.zeros_(module.per_dim_scale)
+            init.lecun_normal_(module.pooling_attention_query)
+
+        elif isinstance(module, VideoPrismTextModel):
+            init.normal_(module.cls_emb, std=1 / torch.sqrt(self.config.hidden_size))
+            init.normal_(module.position_embeddings, std=1 / torch.sqrt(self.config.hidden_size))
 
 
 @auto_docstring(
@@ -572,8 +619,11 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
         self.temporal_encoder = VideoPrismTemporalEncoder(self.config)
         self.post_init()
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> nn.Module:
         return self.spatial_embeddings.patch_embeddings
+
+    def set_input_embeddings(self, value: nn.Module):
+        self.spatial_embeddings.patch_embeddings = value
 
     @auto_docstring
     def forward(
@@ -583,11 +633,10 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithSpatialAndTemporalStates:
         r"""
-        Args:
-            pixel_values_videos (`torch.FloatTensor`):
-                Pixel values of the video frames of shape (batch_size, num_frames, num_channels, height, width).
-            interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-                Whether to interpolate positional encodings to match input size.
+        pixel_values_videos (`torch.FloatTensor`):
+            Pixel values of the video frames of shape (batch_size, num_frames, num_channels, height, width).
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+            Whether to interpolate positional encodings to match input size.
 
         Example:
 
@@ -727,9 +776,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         self.layernorm = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.normalize = config.apply_l2_norm
         self.register_buffer(
-            "position_embeddings",
-            self.create_sinusoidal_positions(config.max_position_embeddings, config.hidden_size),
-            persistent=False,
+            "position_embeddings", self.create_sinusoidal_positions(config.max_position_embeddings, config.hidden_size)
         )
         self.post_init()
 
@@ -738,17 +785,27 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.int64).float(), inv_freq).float()
         return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
 
+    def get_input_embeddings(self) -> nn.Module:
+        return self.token_embeddings
+
+    def set_input_embeddings(self, value: nn.Module):
+        self.token_embeddings = value
+
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         batch_size, seq_length = input_ids.shape
-        hidden_states = self.token_embeddings(input_ids)
-        hidden_states = hidden_states * (self.config.hidden_size**0.5)
+        if inputs_embeds is None:
+            inputs_embeds = self.token_embeddings(input_ids)
 
+        hidden_states = inputs_embeds * (self.config.hidden_size**0.5)
+        seq_len = hidden_states.shape[1]
         cls_padding = torch.ones(batch_size, 1)
         input_ids = torch.cat((input_ids, cls_padding), dim=1)
         attention_mask = torch.cat((attention_mask, cls_padding), dim=1) if attention_mask is not None else None
@@ -756,13 +813,13 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         if attention_mask is not None:
             attention_mask = create_causal_mask(
                 config=self.config,
-                input_embeds=hidden_states,
+                inputs_embeds=hidden_states,
                 attention_mask=attention_mask,
                 cache_position=torch.arange(hidden_states.shape[1] + 1, device=hidden_states.device),
                 past_key_values=None,
             )
-        # todo error should be raised if the number of pos embeds is not same as that of the hidden_states
-        features = hidden_states + self.position_embeddings
+
+        features = hidden_states + self.position_embeddings[:seq_len]
         cls_emb = self.cls_emb * (self.config.hidden_size**0.5)
         cls_emb = cls_emb.expand(features.shape[0], -1, -1)
         features = torch.cat((features, cls_emb), dim=1)
@@ -790,15 +847,19 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__(config)
         self.config = config
-        self.backbone = VideoPrismVisionModel(self.config)
+        self.backbone = VideoPrismVisionModel._from_config(self.config)
         self.auxiliary_encoder = VideoPrismAuxiliaryEncoder(self.config)
         self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(self.config)
         self.normalize = self.config.apply_l2_norm
         self.post_init()
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> nn.Module:
         return self.backbone.spatial_embeddings.patch_embeddings
 
+    def set_input_embeddings(self, value: nn.Module):
+        self.backbone.spatial_embeddings.patch_embeddings = value
+
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -831,11 +892,14 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
 )
 class VideoPrismClipModel(VideoPrismPreTrainedModel):
     def __init__(self, config: VideoPrismConfig):
+        if not isinstance(config, VideoPrismConfig):
+            raise TypeError(f"`config` is expected to be of type `VideoPrismConfig` but is of type {type(config)}.")
         super().__init__(config)
-        self.video_model = VideoPrismVideoModel(config.vision_config)
-        self.text_model = VideoPrismTextModel(config.text_config)
+        self.video_model = VideoPrismVideoModel._from_config(config.vision_config)
+        self.text_model = VideoPrismTextModel._from_config(config.text_config)
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -844,8 +908,16 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         interpolate_pos_encoding: bool | None = False,
         temperature: float | None = None,
+        return_loss: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> VideoPrismClipOutput:
+        r"""
+        temperature (`float`, *optional*):
+            A temperature scalar to scale the similarity scores. If not provided, no scaling is applied.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the contrastive loss.
+        """
+
         video_model_outputs = self.video_model(
             pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
         )
@@ -855,14 +927,13 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         text_embeddings = text_model_outputs.last_hidden_state
         video_emb_dim = video_embeddings[0].shape[-1]
         text_emb_dim = text_embeddings[0].shape[-1]
-        assert emb_dim == text_embeddings[0].shape[-1]
         if video_emb_dim != text_emb_dim:
             raise ValueError(
                 f"Dimension of video ({video_emb_dim}) and text ({text_emb_dim}) embeddings must match for similarity computation."
             )
 
-        video_embeds = video_embeddings.reshape(-1, emb_dim)
-        text_embeds = text_embeddings.reshape(-1, emb_dim)
+        video_embeds = video_embeddings.reshape(-1, video_emb_dim)
+        text_embeds = text_embeddings.reshape(-1, text_emb_dim)
         similarity_matrix = torch.matmul(video_embeds, text_embeds.T)
 
         if temperature is not None:
@@ -873,16 +944,28 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         logits_per_video = logits_per_video / torch.sum(logits_per_video, dim=0, keepdims=True)
         logits_per_text = logits_per_text / torch.sum(logits_per_text, dim=0, keepdims=True)
 
-        # todo compute loss + pass the whole hidden states of both video and text
+        # adopted from siglip
+        loss = None
+        if return_loss:
+            # Adapted from https://github.com/google-research/big_vision/blob/01edb81a4716f93a48be43b3a4af14e29cdb3a7f/big_vision/trainers/proj/image_text/siglip.py#L287
+            eye = torch.eye(logits_per_text.size(0), device=logits_per_text.device)
+            m1_diag1 = -torch.ones_like(logits_per_text) + 2 * eye
+            loglik = torch.nn.functional.logsigmoid(m1_diag1 * logits_per_text)
+            nll = -torch.sum(loglik, dim=-1)
+            loss = nll.mean()
 
         return VideoPrismClipOutput(
             logits_per_video=logits_per_video,
             logits_per_text=logits_per_text,
             video_embeds=video_embeds,
             text_embeds=text_embeds,
+            video_model_output=video_model_outputs,
+            text_model_output=text_model_outputs,
+            loss=loss,
         )
 
 
+@can_return_tuple
 @auto_docstring(
     custom_intro="""
     VideoPrism Model transformer with a video classification head on top (a linear layer on top of the attention pooler).
@@ -892,16 +975,24 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
     config: VideoPrismVisionConfig
 
     def __init__(self, config: VideoPrismVisionConfig):
+        if not isinstance(config, VideoPrismVisionConfig):
+            raise TypeError(
+                f"`config` is expected to be of type `VideoPrismVisionConfig` but is of type {type(config)}."
+            )
         super().__init__(config)
         self.config = config
-        self.encoder = VideoPrismVisionModel(self.config)
+        self.encoder = VideoPrismVisionModel._from_config(self.config)
         self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(self.config)
         self.classifier = nn.Linear(self.config.hidden_size, self.config.num_labels)
         self.post_init()
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> nn.Module:
         return self.encoder.spatial_embeddings.patch_embeddings
 
+    def set_input_embeddings(self, value: nn.Module):
+        self.encoder.spatial_embeddings.patch_embeddings = value
+
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,

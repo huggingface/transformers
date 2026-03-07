@@ -21,7 +21,7 @@ from transformers.models.videoprism.modeling_videoprism import VideoPrismClipMod
 torch.set_printoptions(precision=10)
 
 # backbone refers to VideoPrismVisionModel, lvt (original name) refers to VideoPrismClipModel
-COOMMON_CONFIG_PARAMS = {
+COMMON_CONFIG_PARAMS = {
     "backbone_base": {
         "hidden_size": 768,
         "intermediate_size": 3072,
@@ -273,10 +273,10 @@ def convert_params(flax_state_dict, model_name):
     # Convert flax parameters to HF-Pytorch format
     new_state_dict = {}
     if "lvt" in model_name:
-        vision_config = COOMMON_CONFIG_PARAMS[model_name]["vision_config"]
+        vision_config = COMMON_CONFIG_PARAMS[model_name]["vision_config"]
         hidden_size = vision_config["hidden_size"]
     else:
-        config = COOMMON_CONFIG_PARAMS[model_name]
+        config = COMMON_CONFIG_PARAMS[model_name]
         hidden_size = config["hidden_size"]
 
     for key in flax_state_dict:
@@ -314,12 +314,21 @@ def convert_params(flax_state_dict, model_name):
                     new_param = transform_remaining_params(key, param, hidden_size)
                     new_state_dict[new_key] = torch.tensor(new_param).contiguous()
 
-    # Last step is to add the buffer named "scale"
+    # Last step is to add the buffer named "scale" and "positional_embedding"
     if "lvt" in model_name:
+        # scale
         dim = int(vision_config["intermediate_size"] / vision_config["num_attention_heads"])
         r_softplus_0 = 1.442695041
         scale = torch.tensor(r_softplus_0 / (dim**0.5))
         new_state_dict["video_model.contrastive_vision_pooler.scale"] = scale
+
+        # positional_embedding
+        text_config = COMMON_CONFIG_PARAMS[model_name]["text_config"]
+        num_pos, dim = 64, text_config["hidden_size"]  # Hardcoded num_pos
+        inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / (dim - 2)))
+        sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.int64).float(), inv_freq).float()
+        positional_embedding = torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
+        new_state_dict["text_model.position_embeddings"] = positional_embedding
 
     return new_state_dict
 
@@ -395,10 +404,10 @@ def convert_videoprism_checkpoint(
     checkpoint = ORIGINAL_CHECKPOINTS[model_name]
 
     if "lvt" in model_name:
-        vision_config = VideoPrismVisionConfig(**COOMMON_CONFIG_PARAMS[model_name]["vision_config"])
-        text_config = VideoPrismTextConfig(**COOMMON_CONFIG_PARAMS[model_name]["text_config"])
+        vision_config = VideoPrismVisionConfig(**COMMON_CONFIG_PARAMS[model_name]["vision_config"])
+        text_config = VideoPrismTextConfig(**COMMON_CONFIG_PARAMS[model_name]["text_config"])
     else:
-        vision_config = VideoPrismVisionConfig(**COOMMON_CONFIG_PARAMS[model_name])
+        vision_config = VideoPrismVisionConfig(**COMMON_CONFIG_PARAMS[model_name])
 
     checkpoint_name = checkpoint["new_checkpoint_name"]
     checkpoint_path = os.path.join(pytorch_dump_folder_path, f"{checkpoint_name}.safetensors")
@@ -471,6 +480,13 @@ def convert_videoprism_checkpoint(
 
 
 def main():
+    """
+    Typical workflow
+    Select a model, convert=True (saves locally), load_model=True, from_pretrained=False (loads local checkpoint)
+    -> load_video=True -> inference=True (compares to expected outputs).
+    If outputs match perfectly, upload=True (uploads to Hugging Face hub).
+    If the checkpoint from hub needs to be teseted set convert=False, from_pretrained=True.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model_name",
@@ -487,7 +503,7 @@ def main():
     )
     parser.add_argument(
         "--convert",
-        default=True,
+        default=False,
         type=bool,
         help="Whether to convert the original Flax checkpoint to Hugging Face format.",
     )
@@ -499,9 +515,9 @@ def main():
     )
     parser.add_argument(
         "--from_pretrained",
-        default=False,
+        default=True,
         type=bool,
-        help="Whether to load the model weights from the Hugging Face hub. Loads local checkpoint (not in cache dir) if False.",
+        help="Whether to load the model weights from the Hugging Face hub if load_model=True. Loads local checkpoint (not in cache dir) if False.",
     )
     parser.add_argument(
         "--from_tokenizer",
@@ -523,7 +539,7 @@ def main():
     )
     parser.add_argument(
         "--upload",
-        default=True,
+        default=False,
         type=bool,
         help="Whether to upload the converted model to the Hugging Face hub.",
     )
