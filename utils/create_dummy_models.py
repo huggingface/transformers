@@ -1749,6 +1749,8 @@ def create_tiny_models(
     # A map from config classes to tuples of processors (tokenizer, feature extractor, processor) classes
     processor_type_map = {c: get_processor_types_from_config_class(c) for c in config_classes}
 
+    from transformers import *
+
     to_create = {}
     for c in config_classes:
         processors = processor_type_map[c]
