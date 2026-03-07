@@ -301,7 +301,7 @@ class JinaEmbeddingsV3Layer(GradientCheckpointingLayer):
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_dropout = nn.Dropout(config.hidden_dropout_prob)
         self.post_mlp_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.post_mlp_dropout = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_mlp_dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
         self,

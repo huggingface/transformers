@@ -279,7 +279,7 @@ class JinaEmbeddingsV3Layer(LlamaDecoderLayer):
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_dropout = nn.Dropout(config.hidden_dropout_prob)
         self.post_mlp_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.post_mlp_dropout = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_mlp_dropout = nn.Dropout(config.hidden_dropout_prob)
 
         del self.input_layernorm
         del self.post_attention_layernorm
