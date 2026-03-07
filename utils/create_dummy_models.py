@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from transformers import *
+
 import argparse
 import collections.abc
 import copy
@@ -1749,7 +1751,7 @@ def create_tiny_models(
     # A map from config classes to tuples of processors (tokenizer, feature extractor, processor) classes
     processor_type_map = {c: get_processor_types_from_config_class(c) for c in config_classes}
 
-    from transformers import *
+
 
     to_create = {}
     for c in config_classes:
