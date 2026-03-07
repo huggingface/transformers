@@ -1058,7 +1058,9 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         symbols_per_step = torch.zeros(batch_size, dtype=torch.long, device=device)
         last_label_time = torch.full((batch_size,), -1, dtype=torch.long, device=device)
         max_output_len = sequence_length * self.config.max_symbols_per_step
-        all_tokens_tensor = torch.full((batch_size, max_output_len), self.config.pad_token_id, dtype=torch.long, device=device)
+        all_tokens_tensor = torch.full(
+            (batch_size, max_output_len), self.config.pad_token_id, dtype=torch.long, device=device
+        )
         token_counts = torch.zeros(batch_size, dtype=torch.long, device=device)
         if return_timestamps:
             all_frame_indices = torch.zeros((batch_size, max_output_len), dtype=torch.long, device=device)
@@ -1101,8 +1103,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 projected_encoder_frames = projected_encoder_output[batch_indices, safe_time_indices].unsqueeze(1)
 
                 token_logits, duration_logits = self.joint(
-                    decoder_output,
-                    projected_encoder_output=projected_encoder_frames
+                    decoder_output, projected_encoder_output=projected_encoder_frames
                 )
                 token_logits = token_logits.squeeze(1).to(device)
                 duration_logits = duration_logits.squeeze(1).to(device)

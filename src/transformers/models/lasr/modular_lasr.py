@@ -160,9 +160,9 @@ class LasrProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class LasrProcessor(ParakeetProcessor):
-
     def decode(self, *args, **kwargs):
-        raise NotImplementedError("Not needed")
+        """Forward arguments to [`~PreTrainedTokenizer.decode`]."""
+        self.tokenizer.decode(*args, **kwargs)
 
     def _refine_timestamps_tdt(self, *args, **kwargs):
         raise NotImplementedError("Not needed")

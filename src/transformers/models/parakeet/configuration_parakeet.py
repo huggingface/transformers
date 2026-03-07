@@ -182,38 +182,24 @@ class ParakeetCTCConfig(PreTrainedConfig):
         return cls(encoder_config=encoder_config.to_dict(), **kwargs)
 
 
+@auto_docstring(checkpoint="bezzam/parakeet-tdt-0.6b-v3-hf")
 class ParakeetTDTConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ParakeetForTDT`]. It is used to instantiate a
-    Parakeet TDT model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Parakeet TDT
-    [nvidia/parakeet-tdt-0.6b-v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 8193):
-            Vocabulary size of the model.
-        decoder_hidden_size (`int`, *optional*, defaults to 640):
-            Hidden size of the LSTM prediction network and joint network.
-        num_decoder_layers (`int`, *optional*, defaults to 1):
-            Number of LSTM layers in the prediction network.
-        num_duration_bins (`int`, *optional*, defaults to 5):
-            Number of duration bins for predicting token durations.
-        durations (`list[int]`, *optional*, defaults to `[0, 1, 2, 3, 4]`):
-            Token duration values that can be predicted. Each value represents how many frames a token or blank
-            emission spans.
-        hidden_act (`str`, *optional*, defaults to `"relu"`):
-            The activation function in the joint network.
-        max_symbols_per_step (`int`, *optional*, defaults to 10):
-            Maximum number of symbols to emit per encoder time step during greedy decoding.
-        encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
-            The config object or dictionary of the encoder.
-        pad_token_id (`int`, *optional*, defaults to 2):
-            Padding token id.
-        blank_token_id (`int`, *optional*, defaults to 8192):
-            Blank token id. Different from `pad_token_id` for TDT.
+    decoder_hidden_size (`int`, *optional*, defaults to 640):
+        Hidden size of the LSTM prediction network and joint network.
+    num_decoder_layers (`int`, *optional*, defaults to 1):
+        Number of LSTM layers in the prediction network.
+    num_duration_bins (`int`, *optional*, defaults to 5):
+        Number of duration bins for predicting token durations.
+    durations (`list[int]`, *optional*, defaults to `[0, 1, 2, 3, 4]`):
+        Token duration values that can be predicted. Each value represents how many frames a token or blank
+        emission spans.
+    max_symbols_per_step (`int`, *optional*, defaults to 10):
+        Maximum number of symbols to emit per encoder time step during greedy decoding.
+    encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
+        The config object or dictionary of the encoder.
+    blank_token_id (`int`, *optional*, defaults to 8192):
+        Blank token id. Different from `pad_token_id` for TDT.
 
     Example:
         ```python
