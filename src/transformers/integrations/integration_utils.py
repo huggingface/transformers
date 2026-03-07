@@ -2371,16 +2371,19 @@ class KubeflowCallback(TrainerCallback):
     environment variables into the training pod.
 
     **Environment Variables (injected by controller):**
+
     - `KUBEFLOW_TRAINER_STATUS_URL`: HTTPS endpoint for status updates
     - `KUBEFLOW_TRAINER_STATUS_CA_CERT`: Path to CA certificate for TLS verification
     - `KUBEFLOW_TRAINER_STATUS_TOKEN`: Path to service account token for authentication
 
     **Reported Information:**
+
     - Progress percentage (0-100%)
     - Estimated time remaining (seconds)
     - Training metrics (loss, learning_rate, etc.)
 
     **Features:**
+
     - Automatic throttling (max 1 update per 5 seconds) to avoid overwhelming the controller
     - Token caching (5 minutes) to minimize file I/O
     - Only rank 0 reports progress in distributed training
