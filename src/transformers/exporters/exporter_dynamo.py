@@ -19,12 +19,7 @@ from ..utils import logging
 from ..utils.export_config import DynamoConfig
 from ..utils.import_utils import is_torch_available, is_torch_greater_or_equal
 from .base import HfExporter
-from .utils import (
-    get_auto_dynamic_shapes,
-    prepare_for_export,
-    register_cache_subclasses_as_pytree_nodes,
-    register_custom_model_cache_as_pytree_nodes,
-)
+from .utils import get_auto_dynamic_shapes, prepare_for_export, register_pytrees_for_model
 
 
 if is_torch_available():
@@ -109,8 +104,7 @@ class DynamoExporter(HfExporter):
         if self.export_config.dynamic and dynamic_shapes is None:
             dynamic_shapes = get_auto_dynamic_shapes(inputs)
 
-        register_cache_subclasses_as_pytree_nodes()
-        register_custom_model_cache_as_pytree_nodes(model)
+        register_pytrees_for_model(model)
 
         exported_program: ExportedProgram = torch.export.export(
             model,

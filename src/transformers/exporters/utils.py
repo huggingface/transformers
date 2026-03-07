@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+import importlib
 import inspect
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, Any
 
 from ..cache_utils import Cache
 from ..generation.utils import ALL_CACHE_NAMES
@@ -33,14 +34,112 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 
-class _SerializedObject(NamedTuple):
-    class_type: type
-    state: Any
+def _path_to_class(path: str) -> type:
+    module_name, qualname = path.split(":", 1)
+    obj = importlib.import_module(module_name)
+    for part in qualname.split("."):
+        obj = getattr(obj, part)
+    return obj
 
 
-class _FlattenedContext(NamedTuple):
-    template: Any
-    tensor_paths: list[Any]
+def _flatten_to_context(obj: Any, tensors: list) -> Any:
+    """Single-pass: recursively build a JSON-native context while collecting tensors into `tensors`."""
+    # --- Pure Python / JSON-native (exact type check — subclasses fall through to stateful objects) ---
+    if obj is None or type(obj) in (bool, int, float, str):
+        return obj
+    if type(obj) is list:
+        return [_flatten_to_context(i, tensors) for i in obj]
+    if type(obj) is dict:
+        return {k: _flatten_to_context(v, tensors) for k, v in obj.items()}
+
+    # --- Torch objects ---
+    if isinstance(obj, torch.Tensor):
+        idx = len(tensors)
+        tensors.append(obj)
+        return {"_t": "tensor", "i": idx}
+    if isinstance(obj, torch.Size):
+        return {"_t": "size", "v": list(obj)}
+    if isinstance(obj, torch.device):
+        return {"_t": "device", "s": str(obj)}
+    if isinstance(obj, torch.dtype):
+        return {"_t": "dtype", "n": str(obj).removeprefix("torch.")}
+    if isinstance(obj, torch.layout):
+        return {"_t": "layout", "n": str(obj).removeprefix("torch.")}
+
+    # --- Python types ---
+    if isinstance(obj, type):
+        return {"_t": "type", "p": _class_to_path(obj)}
+
+    # --- Generic Python objects (by structural category) ---
+    cls = type(obj)
+    if isinstance(obj, dict):  # dict subclasses (OrderedDict, etc.)
+        return {
+            "_t": "map",
+            "p": _class_to_path(cls),
+            "v": {k: _flatten_to_context(v, tensors) for k, v in obj.items()},
+        }
+    if isinstance(obj, (tuple, list, set, frozenset)):  # sequences/sets incl. NamedTuple
+        return {
+            "_t": "seq",
+            "p": _class_to_path(cls),
+            "v": [_flatten_to_context(i, tensors) for i in obj],
+        }
+    if hasattr(obj, "__dict__"):
+        return {
+            "_t": "obj",
+            "p": _class_to_path(cls),
+            "s": {k: _flatten_to_context(v, tensors) for k, v in vars(obj).items()},
+        }
+
+    raise TypeError(f"Cannot flatten {type(obj).__name__} for pytree context")
+
+
+def _unflatten_from_context(ctx: Any, tensors: list) -> Any:
+    """Reconstruct an object from its JSON-native context, substituting tensor index markers."""
+    # --- Pure Python / JSON-native ---
+    if ctx is None or type(ctx) in (bool, int, float, str):
+        return ctx
+    if type(ctx) is list:
+        return [_unflatten_from_context(i, tensors) for i in ctx]
+    if type(ctx) is dict and "_t" not in ctx:
+        return {k: _unflatten_from_context(v, tensors) for k, v in ctx.items()}
+
+    # --- Torch objects ---
+    t = ctx["_t"]
+    if t == "tensor":
+        return tensors[ctx["i"]]
+    if t == "layout":
+        return getattr(torch, ctx["n"])
+    if t == "dtype":
+        return getattr(torch, ctx["n"])
+    if t == "device":
+        return torch.device(ctx["s"])
+    if t == "size":
+        return torch.Size(ctx["v"])
+
+    # --- Python types ---
+    if t == "type":
+        return _path_to_class(ctx["p"])
+
+    # --- Generic Python objects ---
+    if t == "map":
+        cls = _path_to_class(ctx["p"])
+        return cls({k: _unflatten_from_context(v, tensors) for k, v in ctx["v"].items()})
+    if t == "seq":
+        cls = _path_to_class(ctx["p"])
+        items = [_unflatten_from_context(i, tensors) for i in ctx["v"]]
+        try:
+            return cls(items)  # tuple, list subclass, set, frozenset, etc.
+        except TypeError:
+            return cls(*items)  # NamedTuple (requires positional args)
+    if t == "obj":
+        cls = _path_to_class(ctx["p"])
+        state = {k: _unflatten_from_context(v, tensors) for k, v in ctx["s"].items()}
+        instance = cls.__new__(cls)
+        instance.__dict__.update(state)
+        return instance
+
+    raise TypeError(f"Unknown tag {t!r} in pytree context")
 
 
 def _iter_subclasses(cls: type):
@@ -53,107 +152,33 @@ def _class_to_path(cls: type) -> str:
     return f"{cls.__module__}:{cls.__qualname__}"
 
 
-class PytreeRegistry:
-    _registered_classes: set[type] = set()
+def _pytree_flatten(obj: Any) -> tuple[list, Any]:
+    tensors: list = []
+    context = _flatten_to_context(obj, tensors)
+    return tensors, context
 
-    @classmethod
-    def is_leaf_type(cls, obj: Any) -> bool:
-        return (
-            isinstance(
-                obj,
-                (int, float, bool, str, type, torch.Tensor, torch.Size, torch.dtype, torch.device, torch.layout),
-            )
-            or obj is None
+
+def _pytree_flatten_with_keys(obj: Any):
+    leaves, context = _pytree_flatten(obj)
+    return [(torch.utils._pytree.SequenceKey(i), leaf) for i, leaf in enumerate(leaves)], context
+
+
+def _pytree_unflatten(values, context: Any) -> Any:
+    return _unflatten_from_context(context, list(values))
+
+
+def register_for_export(object_cls: type):
+    try:
+        torch.utils._pytree.register_pytree_node(
+            object_cls,
+            _pytree_flatten,
+            _pytree_unflatten,
+            serialized_type_name=_class_to_path(object_cls),
+            flatten_with_keys_fn=_pytree_flatten_with_keys,
         )
-
-    @classmethod
-    def serialize(cls, obj: Any) -> Any:
-        if cls.is_leaf_type(obj):
-            return obj
-        elif isinstance(obj, (list, tuple, set)):
-            return type(obj)(cls.serialize(item) for item in obj)
-        elif isinstance(obj, dict):
-            return {key: cls.serialize(value) for key, value in obj.items()}
-        elif hasattr(obj, "__dict__"):
-            state = getattr(obj, "__dict__", None)
-            return _SerializedObject(class_type=type(obj), state=cls.serialize(dict(state)))
-        else:
-            raise TypeError(f"Object of type '{type(obj)}' is not serializable.")
-
-    @classmethod
-    def deserialize(cls, obj: Any) -> Any:
-        if cls.is_leaf_type(obj):
-            return obj
-        elif isinstance(obj, _SerializedObject):
-            state = cls.deserialize(obj.state)
-            instance = obj.class_type.__new__(obj.class_type)
-            instance.__dict__.update(state)
-            return instance
-        elif isinstance(obj, (list, tuple, set)):
-            return type(obj)(cls.deserialize(item) for item in obj)
-        elif isinstance(obj, dict):
-            return {key: cls.deserialize(value) for key, value in obj.items()}
-
-        raise TypeError(f"Malformed serialized object encountered: {type(obj)}")
-
-    @classmethod
-    def flatten(cls, obj: Any):
-        serialized = cls.serialize(obj)
-        keypath_leaves, _ = torch.utils._pytree.tree_flatten_with_path(serialized)
-        tensor_paths = [path for path, leaf in keypath_leaves if isinstance(leaf, torch.Tensor)]
-        values = [leaf for _, leaf in keypath_leaves if isinstance(leaf, torch.Tensor)]
-        template = torch.utils._pytree.tree_map_only(torch.Tensor, lambda _: None, serialized)
-        return values, _FlattenedContext(template=template, tensor_paths=tensor_paths)
-
-    @classmethod
-    def flatten_with_keys(cls, obj: Any):
-        values, context = cls.flatten(obj)
-        key_entries = [(torch.utils._pytree.SequenceKey(index), value) for index, value in enumerate(values)]
-        return key_entries, context
-
-    @classmethod
-    def unflatten(cls, values, context):
-        tensor_values_by_path = dict(zip(context.tensor_paths, values, strict=True))
-        deserialized = torch.utils._pytree.tree_map_with_path(
-            lambda path, leaf: tensor_values_by_path.get(path, leaf), context.template
-        )
-        return cls.deserialize(deserialized)
-
-    @classmethod
-    def register_class(cls, object_cls: type):
-        if object_cls in cls._registered_classes:
-            return
-
-        try:
-            torch.utils._pytree.register_pytree_node(
-                object_cls,
-                cls.flatten,
-                cls.unflatten,
-                serialized_type_name=_class_to_path(object_cls),
-                flatten_with_keys_fn=cls.flatten_with_keys,
-            )
-            cls._registered_classes.add(object_cls)
-        except ValueError as e:
-            if "already registered as pytree node" in str(e):
-                cls._registered_classes.add(object_cls)
-            else:
-                raise
-
-
-def register_cache_subclasses_as_pytree_nodes():
-    for cache_type in _iter_subclasses(Cache):
-        PytreeRegistry.register_class(cache_type)
-
-
-def register_custom_model_cache_as_pytree_nodes(model: "PreTrainedModel"):
-    for _, obj in inspect.getmembers(inspect.getmodule(model)):
-        if (
-            inspect.isclass(obj)
-            and obj.__module__ == model.__class__.__module__
-            and obj.__name__.endswith("Cache")
-            and not issubclass(obj, Cache)
-        ):
-            PytreeRegistry.register_class(obj)
+    except ValueError as e:
+        if "already registered as pytree node" not in str(e):
+            raise
 
 
 def _iter_leaf_tensors(obj: Any, prefix: str = ""):
@@ -172,48 +197,32 @@ def _iter_leaf_tensors(obj: Any, prefix: str = ""):
 
 
 def get_leaf_tensors(obj: Any) -> dict[str, torch.Tensor]:
-    """
-    Recursively retrieves all leaf tensors from a potentialy nested structure.
-    Args:
-        obj (`Any`):
-            The object from which to retrieve leaf tensors.
-    Returns:
-        `dict[str, torch.Tensor]`: A dictionary mapping names to leaf tensors.
-    """
+    """Recursively retrieves all leaf tensors from a potentially nested structure."""
     return dict(_iter_leaf_tensors(obj))
 
 
-def get_inputs_outputs_names(inputs: dict[str, Any], outputs: dict[str, Any]) -> tuple[list[str], list[str]]:
-    """
-    Utility function to get the names of input and output tensors, adding prefixes to avoid name collisions.
-    Args:
-        inputs (`dict[str, Any]`):
-            A dictionary of model inputs.
-        outputs (`dict[str, Any]`):
-            A dictionary of model outputs.
-    Returns:
-        `tuple[list[str], list[str]]`: A tuple containing two lists: input names and output names.
-    """
-    inputs_names = list(get_leaf_tensors(inputs).keys())
-    outputs_names = list(get_leaf_tensors(outputs).keys())
-    for name in set(inputs_names).intersection(set(outputs_names)):
-        inputs_names[inputs_names.index(name)] = f"input.{name}"
-        outputs_names[outputs_names.index(name)] = f"output.{name}"
-    return inputs_names, outputs_names
+def register_pytrees_for_model(model: "PreTrainedModel"):
+    """Register all relevant cache types as pytree nodes for torch.export."""
+    # All transformers Cache subclasses
+    for cache_type in _iter_subclasses(Cache):
+        register_for_export(cache_type)
+    # Model-specific cache classes not inheriting from Cache (e.g. custom per-model caches)
+    for _, obj in inspect.getmembers(inspect.getmodule(model)):
+        if (
+            inspect.isclass(obj)
+            and obj.__module__ == model.__class__.__module__
+            and obj.__name__.endswith("Cache")
+            and not issubclass(obj, Cache)
+        ):
+            register_for_export(obj)
 
 
-def prepare_for_export(
+def prepare_model_for_export(
     model: "PreTrainedModel",
-    inputs: dict[str, torch.Tensor | Cache],
-) -> tuple["PreTrainedModel", dict[str, torch.Tensor | Cache], dict[str, Any] | None]:
-    # filter out None inputs
-    inputs = {k: v for k, v in inputs.items() if v is not None}
-
-    for input_name in ("labels", "future_values"):
-        if input_name in inputs:
-            logger.info(f"Found an input '{input_name}' which is not supported for export. Popping it from inputs.")
-            inputs.pop(input_name)
-
+    inputs: dict[str, Any],
+) -> tuple["PreTrainedModel", dict[str, Any]]:
+    """Configure the model for export (no inference). Moves output flags from inputs to model.config,
+    sets optimal attention/experts implementations, and patches non-exportable module behaviours."""
     # handle output flags passed in inputs
     for output_flag in ("use_cache", "output_attentions", "output_hidden_states", "return_dict", "return_loss"):
         if output_flag in inputs:
@@ -250,18 +259,31 @@ def prepare_for_export(
         if hasattr(module, "_update_linear_attn_mask"):
             module._update_linear_attn_mask = lambda attention_mask, *args, **kwargs: attention_mask
 
+    # Cast floating-point inputs to match the model's dtype and device
+    try:
+        model_param = next(iter(model.parameters()))
+        inputs = _cast_inputs(inputs, model_param.device, model_param.dtype)
+    except StopIteration:
+        pass  # model has no parameters (e.g. pure embedding model)
+
+    return model, inputs
+
+
+def inject_cache_into_inputs(
+    model: "PreTrainedModel",
+    inputs: dict[str, Any],
+) -> tuple[dict[str, Any], Any]:
+    """Run one prefill forward pass and inject the resulting KV cache back into inputs.
+
+    Mirrors what the generation loop does between prefill and the first decode step: the
+    attention mask is widened to cover all cached positions via
+    ``_update_model_kwargs_for_generation``.  Keys that are tied to the *prefill* sequence
+    length (``cache_position``, ``position_ids``, ``token_type_ids``) are temporarily removed
+    during that call so they are not incorrectly extended, then restored.
+    """
     with torch.no_grad():
         outputs = model(**copy.deepcopy(inputs))
 
-    # Inject the prefill KV cache into inputs and widen the attention mask to cover all cached
-    # positions, mirroring what the generation loop does between prefill and first decode step.
-    # We delegate to _update_model_kwargs_for_generation so any upstream changes stay in sync,
-    # but we must tell it how many tokens were just cached (num_new_tokens = prefill length) so
-    # it widens the attention mask by the right amount.
-    #
-    # One subtlety: unlike in the generation loop, here we keep input_ids at the full prefill
-    # length rather than slicing it to 1 token, so position_ids / cache_position / token_type_ids
-    # must NOT be extended. We temporarily remove them, call the method, then restore them.
     is_encoder_decoder = getattr(model.config, "is_encoder_decoder", False)
     cache_in_inputs = next((inputs[n] for n in ALL_CACHE_NAMES if inputs.get(n) is not None), None)
     cache_in_outputs = next((outputs[n] for n in ALL_CACHE_NAMES if outputs.get(n) is not None), None)
@@ -299,6 +321,32 @@ def prepare_for_export(
                 | saved
             )
 
+    return inputs, outputs
+
+
+def _cast_inputs(obj: Any, device: "torch.device", dtype: "torch.dtype") -> Any:
+    """Recursively move tensors to `device`, casting floating-point tensors to `dtype`."""
+    if isinstance(obj, torch.Tensor):
+        return obj.to(device=device, dtype=dtype) if obj.is_floating_point() else obj.to(device=device)
+    if isinstance(obj, dict):
+        return {k: _cast_inputs(v, device, dtype) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        cast = [_cast_inputs(v, device, dtype) for v in obj]
+        return type(obj)(cast)
+    return obj
+
+
+def prepare_for_export(
+    model: "PreTrainedModel",
+    inputs: dict[str, torch.Tensor | Cache],
+) -> tuple["PreTrainedModel", dict[str, torch.Tensor | Cache], dict[str, Any] | None]:
+    inputs = {k: v for k, v in inputs.items() if v is not None}
+    for input_name in ("labels", "future_values"):
+        if input_name in inputs:
+            logger.info(f"Found an input '{input_name}' which is not supported for export. Popping it from inputs.")
+            inputs.pop(input_name)
+    model, inputs = prepare_model_for_export(model, inputs)
+    inputs, outputs = inject_cache_into_inputs(model, inputs)
     return model, inputs, outputs
 
 
@@ -327,12 +375,7 @@ def get_auto_dynamic_shapes(inputs: dict[str, Any]) -> dict[str, Any]:
     """
     dynamic_shapes = {}
     for name, input in inputs.items():
-        if isinstance(input, Cache):
-            dynamic_shapes[name] = [
-                [_auto_dynamic_shape(layer.keys) for layer in input.layers],
-                [_auto_dynamic_shape(layer.values) for layer in input.layers],
-            ]
-        elif isinstance(input, torch.Tensor):
+        if isinstance(input, torch.Tensor):
             dynamic_shapes[name] = _auto_dynamic_shape(input)
         elif isinstance(input, (int, float, bool, str)):
             dynamic_shapes[name] = None
@@ -341,9 +384,8 @@ def get_auto_dynamic_shapes(inputs: dict[str, Any]) -> dict[str, Any]:
         elif isinstance(input, (list, tuple, set)):
             dynamic_shapes[name] = type(input)(get_auto_dynamic_shapes(dict(enumerate(input))).values())
         elif hasattr(input, "__dict__"):
-            dynamic_shapes[name] = get_auto_dynamic_shapes(
-                {k: v for k, v in vars(input).items() if not k.startswith("_")}
-            )
+            leaves, _ = _pytree_flatten(input)
+            dynamic_shapes[name] = [_auto_dynamic_shape(t) for t in leaves]
         else:
             raise ValueError(
                 f"Input '{name}' is of unsupported type '{type(input)}'. "

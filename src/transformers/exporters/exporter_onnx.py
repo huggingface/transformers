@@ -20,7 +20,7 @@ from ..utils import logging
 from ..utils.export_config import OnnxConfig
 from ..utils.import_utils import is_torch_available
 from .exporter_dynamo import DynamoExporter
-from .utils import get_inputs_outputs_names, prepare_for_export
+from .utils import get_leaf_tensors, prepare_for_export
 
 
 if is_torch_available():
@@ -32,6 +32,15 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 logger = logging.get_logger(__file__)
+
+
+def _get_inputs_outputs_names(inputs: dict[str, Any], outputs: dict[str, Any]) -> tuple[list[str], list[str]]:
+    inputs_names = list(get_leaf_tensors(inputs).keys())
+    outputs_names = list(get_leaf_tensors(outputs).keys())
+    for name in set(inputs_names).intersection(set(outputs_names)):
+        inputs_names[inputs_names.index(name)] = f"input.{name}"
+        outputs_names[outputs_names.index(name)] = f"output.{name}"
+    return inputs_names, outputs_names
 
 
 ONNX_UNSUPPORTED_MODEL_TYPES: set[str] = {
@@ -115,7 +124,7 @@ class OnnxExporter(DynamoExporter):
         # we use a copy to avoid side effects
         inputs = copy.deepcopy(sample_inputs)
         model, inputs, outputs = prepare_for_export(model, inputs)
-        inputs_names, outputs_names = get_inputs_outputs_names(inputs, outputs)
+        inputs_names, outputs_names = _get_inputs_outputs_names(inputs, outputs)
 
         with patch_torch_for_onnx_export():
             exported_program: ExportedProgram = super().export(model, inputs)
@@ -155,9 +164,11 @@ def patch_torch_for_onnx_export():
     #  - torch.view / torch.reshape: adds contiguous() for non-contiguous tensors to avoid ONNX export errors
     #  - torch.Tensor.view / torch.Tensor.reshape: adds contiguous() for non-contiguous tensors to avoid ONNX export errors
     #  - torch.nn.functional.scaled_dot_product_attention: supports 5D blocked attention and disables GQA when q_num_heads == kv_num_heads to avoid ONNX export errors
+    #  - torch.randperm: replaced with argsort(rand(n)) using only ONNX-supported ops
     # These patches are only active during export and are reverted afterwards.
     original_view = torch.Tensor.view
     original_torch_where = torch.where
+    original_randperm = torch.randperm
     original_reshape = torch.Tensor.reshape
     original_tensor_where = torch.Tensor.where
     original_torch_unsqueeze = torch.unsqueeze
@@ -218,23 +229,29 @@ def patch_torch_for_onnx_export():
 
         return original_scaled_dot_product_attention(query, key, *args, enable_gqa=enable_gqa, **kwargs)
 
-    def _view(self, *shape):
+    def _view(self, *args, **kwargs):
         # aten.view.default fails on non-contiguous tensors (e.g. after transpose/permute).
         # For ONNX export, storage aliasing is irrelevant; add contiguous() before view.
         if not self.is_contiguous():
             self = self.contiguous()
-        return original_view(self, *shape)
+        return original_view(self, *args, **kwargs)
 
-    def _reshape(self, *shape):
+    def _reshape(self, *args, **kwargs):
         # During FX tracing (FakeTensor), reshape does not automatically fall back to
         # contiguous().view() for non-contiguous tensors. Add contiguous() explicitly.
         if not self.is_contiguous():
             self = self.contiguous()
-        return original_reshape(self, *shape)
+        return original_reshape(self, *args, **kwargs)
+
+    def _randperm(n, *, dtype=torch.int64, layout=torch.strided, device=None, pin_memory=False, generator=None):
+        # aten.randperm has no ONNX translation. Replace with argsort(rand(n)) which uses
+        # only ONNX-supported ops (RandomUniform + TopK/Sort).
+        return torch.argsort(torch.rand(n, device=device)).to(dtype)
 
     torch.view = _view
     torch.reshape = _reshape
     torch.Tensor.view = _view
+    torch.randperm = _randperm
     torch.where = _torch_where
     torch.Tensor.reshape = _reshape
     torch.Tensor.where = _tensor_where
@@ -248,6 +265,7 @@ def patch_torch_for_onnx_export():
     finally:
         torch.view = original_view
         torch.reshape = original_reshape
+        torch.randperm = original_randperm
         torch.Tensor.view = original_view
         torch.where = original_torch_where
         torch.Tensor.reshape = original_reshape

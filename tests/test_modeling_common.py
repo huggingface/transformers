@@ -4252,7 +4252,6 @@ class ModelTesterMixin:
                 self.skipTest(reason="Model architecture uses get_rope_index which is not torch exportable")
 
         backend = "cuda" if torch_device == "cuda" else "xnnpack"
-        dtype = torch.bfloat16 if torch_device == "cuda" else torch.float32
         exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend=backend))
 
         for model_class in self.all_model_classes:
@@ -4266,7 +4265,7 @@ class ModelTesterMixin:
                     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
                 set_config_for_less_flaky_test(config)
                 inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                model = model_class(config).eval().to(torch_device).to(dtype)
+                model = model_class(config).eval().to(torch_device)
                 set_model_for_less_flaky_test(model)
                 exporter.export(model, inputs_dict)
 

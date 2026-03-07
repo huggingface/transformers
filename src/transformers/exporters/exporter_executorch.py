@@ -52,13 +52,21 @@ class ExecutorchExporter(DynamoExporter):
         if self.export_config.backend == "xnnpack":
             from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
 
+            model = model.to(device="cpu")
             partitioner = [XnnpackPartitioner()]
         elif self.export_config.backend == "cuda":
             from executorch.backends.cuda.cuda_backend import CudaBackend
             from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
 
+            model = model.to(device="cuda")
             model_name = model.__class__.__name__
             partitioner = [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(model_name)])]
+            if (
+                next(model.parameters()).dtype != torch.bfloat16
+                and model._can_set_attn_implementation()
+                and model._supports_sdpa
+            ):
+                model = model.to(dtype=torch.bfloat16)
         else:
             raise ValueError(f"Unsupported backend {self.export_config.backend} for ExecuTorch export")
 
@@ -76,16 +84,21 @@ def patch_torch_for_executorch_export():
     # ExecuTorch export patcher context
     # This context manager monkey-patches PyTorch ops that are unsupported or buggy in ExecuTorch backends.
     # The following ops are patched with fallback implementations:
-    #   - torch.split / torch.Tensor.split: replaced with slicing-based fallback
+    #   - torch.split / torch.Tensor.split: replaced with narrow-based fallback
+    #   - torch.chunk / torch.Tensor.chunk: replaced with narrow-based fallback
     #   - torch.topk / torch.Tensor.topk: replaced with argsort-based fallback
     #   - torch.detach / torch.Tensor.detach: replaced with no-op fallback
+    #   - torch.nn.functional.avg_pool2d: decomposed as depthwise conv2d with uniform weights
     # These patches are only active during export and are reverted afterwards.
     original_torch_split = torch.split
     original_tensor_split = torch.Tensor.split
+    original_torch_chunk = torch.chunk
+    original_tensor_chunk = torch.Tensor.chunk
     original_torch_topk = torch.topk
     original_tensor_topk = torch.Tensor.topk
     original_torch_detach = torch.detach
     original_tensor_detach = torch.Tensor.detach
+    original_avg_pool2d = torch.nn.functional.avg_pool2d
 
     def _split(input, split_size_or_sections, dim=0):
         if isinstance(split_size_or_sections, int):
@@ -102,6 +115,11 @@ def patch_torch_for_executorch_export():
                 start += size
             return tuple(splits)
 
+    def _chunk(input, chunks, dim=0):
+        total = input.size(dim)
+        chunk_size = (total + chunks - 1) // chunks
+        return _split(input, chunk_size, dim)
+
     def _topk(input, k, dim=None, largest=True, sorted=True):
         if dim is None:
             dim = -1
@@ -114,30 +132,45 @@ def patch_torch_for_executorch_export():
         topk_values = torch.gather(values, dim, topk_indices)
         return topk_values, topk_indices
 
-    torch.split = _split
-    torch.Tensor.split = _split
-    torch.topk = _topk
-    torch.Tensor.topk = _topk
-
     def _detach(input):
         return input
 
-    torch.detach = _detach
-    torch.Tensor.detach = _detach
+    def _avg_pool2d(input, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True, divisor_override=None):
+        # aten::avg_pool2d has no CUDA ExecuTorch kernel. Decompose as a depthwise conv2d
+        # with uniform weights (1 / kernel_area), which IS supported by the CUDA backend.
+        if isinstance(kernel_size, int):
+            kernel_size = (kernel_size, kernel_size)
+        if stride is None:
+            stride = kernel_size
+        elif isinstance(stride, int):
+            stride = (stride, stride)
+        if isinstance(padding, int):
+            padding = (padding, padding)
+        kh, kw = kernel_size
+        channels = input.shape[1]
+        divisor = divisor_override if divisor_override is not None else kh * kw
+        weight = input.new_ones(channels, 1, kh, kw) / divisor
+        return torch.nn.functional.conv2d(input, weight, bias=None, stride=stride, padding=padding, groups=channels)
 
     torch.split = _split
     torch.Tensor.split = _split
+    torch.chunk = _chunk
+    torch.Tensor.chunk = _chunk
     torch.topk = _topk
     torch.Tensor.topk = _topk
     torch.detach = _detach
     torch.Tensor.detach = _detach
+    torch.nn.functional.avg_pool2d = _avg_pool2d
 
     try:
         yield
     finally:
         torch.split = original_torch_split
         torch.Tensor.split = original_tensor_split
+        torch.chunk = original_torch_chunk
+        torch.Tensor.chunk = original_tensor_chunk
         torch.topk = original_torch_topk
         torch.Tensor.topk = original_tensor_topk
         torch.detach = original_torch_detach
         torch.Tensor.detach = original_tensor_detach
+        torch.nn.functional.avg_pool2d = original_avg_pool2d
