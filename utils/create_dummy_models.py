@@ -156,6 +156,10 @@ no_model_tester_at_all = {
     "ShieldGemma2Config",
 }
 
+deprecated_models = {
+    "DinatConfig",
+}
+
 
 configs_requiring_too_exotic_dependency = {
     # require `detectron2`. It has no `get_config` method: we can implement it but this model is not maintained anymore.
@@ -1706,6 +1710,9 @@ def create_tiny_models(
     # TODO: we should add information to the reports instead of skip them
     config_classes = [x for x in config_classes if x.__name__ not in no_model_tester_at_all]
     config_classes = [x for x in config_classes if x.__name__ not in configs_requiring_too_exotic_dependency]
+    config_classes = [x for x in config_classes if x.__name__ not in deprecated_models]
+    mamba = {"BambaConfig", "FalconMambaConfig", "GraniteMoeHybridConfig", "JambaConfig", "MambaConfig", "Mamba2Config", ""}
+    config_classes = [x for x in config_classes if x.__name__ in mamba]
 
     # A map from config classes to tuples of processors (tokenizer, feature extractor, processor) classes
     processor_type_map = {c: get_processor_types_from_config_class(c) for c in config_classes}

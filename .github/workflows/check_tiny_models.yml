@@ -41,7 +41,7 @@ jobs:
           # For `Pop2PianoConfig`
           python -m pip install essentia==2.1b6.dev1034
           # For `mamba` type models to avoid the error `self._specs = frozenset(specifiers) #TypeError: 'int' object is not iterable`
-          python -m pip install kernels>=0.12.2
+          python -m pip install -U "kernels>=0.12.2"
 
       - name: Create all tiny models (locally)
         run: |
