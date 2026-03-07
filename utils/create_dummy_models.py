@@ -1767,7 +1767,7 @@ def create_tiny_models(
         all_build_args = []
         for c, models_to_create in list(to_create.items()):
             all_build_args.append((c, models_to_create, os.path.join(output_path, c.model_type)))
-        with multiprocessing.Pool() as pool:
+        with multiprocessing.Pool(processes=num_workers) as pool:
             results = pool.starmap(build, all_build_args)
             results = {build_args[0].__name__: result for build_args, result in zip(all_build_args, results)}
 
