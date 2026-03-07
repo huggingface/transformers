@@ -4,6 +4,21 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_jina_embeddings_v3.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2026 The Kyutai and HuggingFace Inc. teams. All rights reserved.
+#
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from collections.abc import Callable
 from typing import Optional
 
@@ -33,6 +48,8 @@ from .configuration_jina_embeddings_v3 import JinaEmbeddingsV3Config
 
 
 class JinaEmbeddingsV3Embeddings(nn.Module):
+    """Construct the embeddings from word, position and token_type embeddings."""
+
     def __init__(self, config: JinaEmbeddingsV3Config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
@@ -40,6 +57,7 @@ class JinaEmbeddingsV3Embeddings(nn.Module):
 
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
@@ -54,12 +72,12 @@ class JinaEmbeddingsV3Embeddings(nn.Module):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
     ) -> torch.Tensor:
-        if input_ids is not None:
-            input_shape = input_ids.shape
-            device = input_ids.device
-        else:
-            input_shape = inputs_embeds.size()[:-1]
-            device = inputs_embeds.device
+        embeddings = inputs_embeds
+        if inputs_embeds is None:
+            embeddings = self.word_embeddings(input_ids)
+
+        input_shape = embeddings.shape[:-1]
+        device = embeddings.device
 
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
@@ -68,11 +86,6 @@ class JinaEmbeddingsV3Embeddings(nn.Module):
                 token_type_ids = buffered_token_type_ids
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
-
-        if inputs_embeds is None:
-            embeddings = self.word_embeddings(input_ids)
-        else:
-            embeddings = inputs_embeds
 
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
@@ -210,23 +223,21 @@ def eager_attention_forward(
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
-class JinaEmbeddingsV3SelfAttention(nn.Module):
+class JinaEmbeddingsV3Attention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
     def __init__(self, config: JinaEmbeddingsV3Config):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0:
-            raise ValueError(
-                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention heads ({config.num_attention_heads})"
-            )
         self.config = config
-
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.scaling = self.attention_head_size**-0.5
-
-        self.Wqkv = nn.Linear(config.hidden_size, 3 * self.attention_head_size * config.num_attention_heads)
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_probs_dropout_prob
         self.is_causal = False
+
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size)
 
     def forward(
         self,
@@ -235,15 +246,12 @@ class JinaEmbeddingsV3SelfAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
-        batch_size, seq_len = hidden_states.shape[:-1]
-        hidden_shape = (batch_size, seq_len, 3, self.num_attention_heads, self.attention_head_size)
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        qkv = self.Wqkv(hidden_states).view(hidden_shape)
-        query_states, key_states, value_states = qkv.unbind(dim=-3)
-
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -258,86 +266,42 @@ class JinaEmbeddingsV3SelfAttention(nn.Module):
             key_states,
             value_states,
             attention_mask,
-            dropout=0.0 if not self.training else self.dropout.p,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
         )
-        attn_output = attn_output.reshape(batch_size, seq_len, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
 
-class JinaEmbeddingsV3SelfOutput(nn.Module):
+class JinaEmbeddingsV3MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
-
-
-class JinaEmbeddingsV3Attention(nn.Module):
-    def __init__(self, config: JinaEmbeddingsV3Config):
-        super().__init__()
-        self.attention_class = JinaEmbeddingsV3SelfAttention(config)
-        self.output = JinaEmbeddingsV3SelfOutput(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
-        attention_output, attn_weights = self.attention_class(
-            hidden_states,
-            attention_mask=attention_mask,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        attention_output = self.output(attention_output, hidden_states)
-        return attention_output, attn_weights
-
-
-class JinaEmbeddingsV3Intermediate(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        return hidden_states
-
-
-class JinaEmbeddingsV3Output(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
         return hidden_states
 
 
 class JinaEmbeddingsV3Layer(GradientCheckpointingLayer):
     def __init__(self, config: JinaEmbeddingsV3Config):
         super().__init__()
-        self.attention = JinaEmbeddingsV3Attention(config)
-        self.intermediate = JinaEmbeddingsV3Intermediate(config)
-        self.output = JinaEmbeddingsV3Output(config)
+        self.hidden_size = config.hidden_size
+        self.self_attn = JinaEmbeddingsV3Attention(config=config)
+
+        self.mlp = JinaEmbeddingsV3MLP(config)
+
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.post_mlp_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_mlp_dropout = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -346,46 +310,21 @@ class JinaEmbeddingsV3Layer(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
-        attention_output, _ = self.attention(
-            hidden_states,
-            attention_mask,
-            position_embeddings,
+        attention_output, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
 
-        layer_output = self.feed_forward_chunk(attention_output)
-        return layer_output
+        hidden_states = hidden_states + self.post_attention_dropout(attention_output)
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        residual = hidden_states
 
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
-        return layer_output
-
-
-class JinaEmbeddingsV3Encoder(nn.Module):
-    def __init__(self, config: JinaEmbeddingsV3Config):
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([JinaEmbeddingsV3Layer(config) for _ in range(config.num_hidden_layers)])
-
-    def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        attention_mask: torch.Tensor | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        for layer_module in self.layer:
-            hidden_states = layer_module(
-                hidden_states,
-                attention_mask,
-                position_embeddings,
-                **kwargs,
-            )
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=hidden_states,
-        )
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + self.post_mlp_dropout(hidden_states)
+        hidden_states = self.post_mlp_layernorm(hidden_states)
+        return hidden_states
 
 
 class JinaEmbeddingsV3Pooler(nn.Module):
@@ -442,10 +381,10 @@ class JinaEmbeddingsV3Model(JinaEmbeddingsV3PreTrainedModel):
         self.gradient_checkpointing = False
 
         self.embeddings = JinaEmbeddingsV3Embeddings(config)
-        self.encoder = JinaEmbeddingsV3Encoder(config)
 
         self.pooler = JinaEmbeddingsV3Pooler(config) if add_pooling_layer else None
         self.rotary_emb = JinaEmbeddingsV3RotaryEmbedding(config)
+        self.layers = nn.ModuleList([JinaEmbeddingsV3Layer(config) for _ in range(config.num_hidden_layers)])
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -471,24 +410,14 @@ class JinaEmbeddingsV3Model(JinaEmbeddingsV3PreTrainedModel):
         if (input_ids is not None) and (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         elif input_ids is not None:
-            input_shape = input_ids.size()
+            batch_size, seq_length = input_ids.shape
             device = input_ids.device
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-            device = inputs_embeds.device
         else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        batch_size, seq_length = input_shape[0], input_shape[1]
-
-        if attention_mask is None:
-            if input_ids is not None:
-                attention_mask = (input_ids != self.config.pad_token_id).long()
-            else:
-                # Cannot infer padding from embeddings alone, defaulting to all ones
-                attention_mask = torch.ones(input_shape, device=device, dtype=torch.long)
+            batch_size, seq_length = inputs_embeds.shape[:-1]
+            device = inputs_embeds.device
 
         if position_ids is None:
+            # Default RoPE positions assume right padding; left padding requires explicit corrected position_ids for RoPE.
             position_ids = torch.arange(seq_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
 
@@ -498,6 +427,7 @@ class JinaEmbeddingsV3Model(JinaEmbeddingsV3PreTrainedModel):
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
+        hidden_states = embedding_output
 
         position_embeddings = self.rotary_emb(embedding_output, position_ids)
 
@@ -507,13 +437,15 @@ class JinaEmbeddingsV3Model(JinaEmbeddingsV3PreTrainedModel):
             attention_mask=attention_mask,
         )
 
-        encoder_outputs = self.encoder(
-            embedding_output,
-            attention_mask=attention_mask,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        sequence_output = encoder_outputs.last_hidden_state
+        for encoder_layer in self.layers[: self.config.num_hidden_layers]:
+            hidden_states = encoder_layer(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
+
+        sequence_output = hidden_states
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         return BaseModelOutputWithPooling(
@@ -544,6 +476,7 @@ class JinaEmbeddingsV3LMHead(nn.Module):
         return x
 
 
+@auto_docstring
 class JinaEmbeddingsV3ForMaskedLM(JinaEmbeddingsV3PreTrainedModel):
     _tied_weights_keys = {
         "lm_head.decoder.weight": "roberta.embeddings.word_embeddings.weight",
@@ -551,7 +484,7 @@ class JinaEmbeddingsV3ForMaskedLM(JinaEmbeddingsV3PreTrainedModel):
     }
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__(config=config)
 
         self.lm_head = JinaEmbeddingsV3LMHead(config)
         self.roberta = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
@@ -559,14 +492,11 @@ class JinaEmbeddingsV3ForMaskedLM(JinaEmbeddingsV3PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self) -> nn.Linear:
+    def get_output_embeddings(self):
         return self.lm_head.decoder
 
-    def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
+    def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
-
-    def get_input_embeddings(self) -> nn.Embedding:
-        return self.roberta.embeddings.word_embeddings
 
     @can_return_tuple
     @auto_docstring

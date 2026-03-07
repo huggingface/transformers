@@ -4,10 +4,28 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_jina_embeddings_v3.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2026 The Kyutai and HuggingFace Inc. teams. All rights reserved.
+#
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...modeling_utils import PreTrainedConfig
+from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="FacebookAI/xlm-mlm-en-2048")
 class JinaEmbeddingsV3Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`JinaEmbeddingsV3Model`]. It
@@ -78,6 +96,7 @@ class JinaEmbeddingsV3Config(PreTrainedConfig):
     ```"""
 
     model_type = "jina_embeddings_v3"
+    default_theta = 20000.0
 
     def __init__(
         self,
@@ -101,27 +120,24 @@ class JinaEmbeddingsV3Config(PreTrainedConfig):
         tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
-        if rope_parameters is None:
-            rope_parameters = {"rope_theta": 20000.0}
-
+        self.rope_parameters = rope_parameters
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
+        self.intermediate_size = intermediate_size
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.rope_parameters = rope_parameters
         self.classifier_dropout = classifier_dropout
-        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 
