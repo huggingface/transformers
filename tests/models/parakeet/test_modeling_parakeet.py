@@ -22,7 +22,7 @@ from transformers import is_datasets_available, is_torch_available
 from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_datasets_available():
@@ -210,6 +210,34 @@ class ParakeetEncoderModelTester:
         }
         return config, inputs_dict
 
+    def check_ctc_loss(self, config, input_values, *args):
+        model = ParakeetForCTC(config=config)
+        model.to(torch_device)
+
+        # make sure that dropout is disabled
+        model.eval()
+
+        input_values = input_values[:3]
+        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.long)
+
+        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
+        labels = ids_tensor((input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size)
+
+        # pad input
+        for i in range(len(input_lengths)):
+            input_values[i, input_lengths[i] :] = 0.0
+            attention_mask[i, input_lengths[i] :] = 0
+
+        model.config.ctc_loss_reduction = "sum"
+        sum_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+
+        model.config.ctc_loss_reduction = "mean"
+        mean_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+
+        self.parent.assertTrue(isinstance(sum_loss, float))
+        self.parent.assertTrue(isinstance(mean_loss, float))
+
 
 @require_torch
 class ParakeetEncoderModelTest(ModelTesterMixin, unittest.TestCase):
@@ -282,6 +310,10 @@ class ParakeetForCTCModelTester:
             "attention_mask": attention_mask,
         }
         return config, inputs_dict
+
+    def test_ctc_loss_inference(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.encoder_model_tester.check_ctc_loss(*config_and_inputs)
 
 
 @require_torch

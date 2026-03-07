@@ -259,7 +259,7 @@ model.train()
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
 speech_samples = [el['array'] for el in ds["audio"][:NUM_SAMPLES]]
-text_samples = [el for el in ds["text"][:NUM_SAMPLES]]
+text_samples = ds["text"][:NUM_SAMPLES]
 
 # passing `text` to the processor will prepare inputs' `labels` key
 inputs = processor(audio=speech_samples, text=text_samples, sampling_rate=processor.feature_extractor.sampling_rate)
@@ -287,7 +287,7 @@ model.train()
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
 speech_samples = [el['array'] for el in ds["audio"][:NUM_SAMPLES]]
-text_samples = [el for el in ds["text"][:NUM_SAMPLES]]
+text_samples = ds["text"][:NUM_SAMPLES]
 
 # passing `text` to the processor will prepare inputs' `labels` key
 inputs = processor(audio=speech_samples, text=text_samples, sampling_rate=processor.feature_extractor.sampling_rate)
