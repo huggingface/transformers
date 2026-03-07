@@ -1745,13 +1745,17 @@ def create_tiny_models(
     config_classes = [x for x in config_classes if x.__name__ not in configs_requiring_too_exotic_dependency]
     config_classes = [x for x in config_classes if x.__name__ not in deprecated_models]
     # mamba = {"BambaConfig", "FalconMambaConfig", "GraniteMoeHybridConfig", "JambaConfig", "MambaConfig", "Mamba2Config", ""}
-    # config_classes = [x for x in config_classes if x.__name__ in mamba]
-    # config_classes = config_classes[:4]
+    config_classes = [x for x in config_classes if x.__name__ in mamba]
+
+    for x in config_classes:
+        if x.__name__ == "Pop2PianoConfig":
+            break
+
+    config_classes = config_classes[:1]
+    config_classes += [x]
 
     # A map from config classes to tuples of processors (tokenizer, feature extractor, processor) classes
     processor_type_map = {c: get_processor_types_from_config_class(c) for c in config_classes}
-
-
 
     to_create = {}
     for c in config_classes:
@@ -1759,8 +1763,6 @@ def create_tiny_models(
         models = get_architectures_from_config_class(c, pytorch_arch_mappings, models_to_skip)
         if len(models) > 0:
             to_create[c] = {"processor": processors, "pytorch": models}
-
-    exit(-1)
 
     results = {}
     if num_workers <= 1:
@@ -1776,6 +1778,8 @@ def create_tiny_models(
         with multiprocessing.Pool(processes=num_workers) as pool:
             results = pool.starmap(build, all_build_args)
             results = {build_args[0].__name__: result for build_args, result in zip(all_build_args, results)}
+
+    print(results)
 
     if upload:
         if organization is None:
