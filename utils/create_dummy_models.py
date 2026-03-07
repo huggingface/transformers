@@ -1745,7 +1745,7 @@ def create_tiny_models(
     config_classes = [x for x in config_classes if x.__name__ not in configs_requiring_too_exotic_dependency]
     config_classes = [x for x in config_classes if x.__name__ not in deprecated_models]
     # mamba = {"BambaConfig", "FalconMambaConfig", "GraniteMoeHybridConfig", "JambaConfig", "MambaConfig", "Mamba2Config", ""}
-    config_classes = [x for x in config_classes if x.__name__ in mamba]
+    # config_classes = [x for x in config_classes if x.__name__ in mamba]
 
     for x in config_classes:
         if x.__name__ == "Pop2PianoConfig":
