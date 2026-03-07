@@ -1744,7 +1744,7 @@ def create_tiny_models(
     config_classes = [x for x in config_classes if x.__name__ not in deprecated_models]
     # mamba = {"BambaConfig", "FalconMambaConfig", "GraniteMoeHybridConfig", "JambaConfig", "MambaConfig", "Mamba2Config", ""}
     # config_classes = [x for x in config_classes if x.__name__ in mamba]
-    config_classes = config_classes[:4]
+    # config_classes = config_classes[:4]
 
     # A map from config classes to tuples of processors (tokenizer, feature extractor, processor) classes
     processor_type_map = {c: get_processor_types_from_config_class(c) for c in config_classes}
