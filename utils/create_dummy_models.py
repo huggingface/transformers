@@ -150,8 +150,8 @@ no_model_tester_at_all = {
     "EdgeTamVideoConfig",
     "Llama4Config",
     "Llama4TextConfig",
-    "Sam2Video",
-    "Sam3TrackerVideo",
+    "Sam2VideoConfig",
+    "Sam3TrackerVideoConfig",
     "Sam3VideoConfig",
     "ShieldGemma2Config",
 }
@@ -326,6 +326,7 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
         if config_class.__name__ in ['GlmImageTextConfig', 'GlmImageVisionConfig', 'GlmImageVQVAEConfig']:
             sub_folder = "processor"
 
+        # breakpoint()
         processor = processor_class.from_pretrained(checkpoint, revision=revision, subfolder=sub_folder)
     except Exception as e:
         logger.error(f"{e.__class__.__name__}: {e}")
@@ -336,6 +337,12 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
     # `https://huggingface.co/asapp/sew-tiny-100k` has no tokenizer file, but we can get
     # `tokenizer_class: Wav2Vec2CTCTokenizer` from the config file. (The new processor class won't be able to load from
     # `checkpoint`, but it helps this recursive method to find a way to build a processor).
+    # try:
+    #     issubclass(processor_class, (PreTrainedTokenizerBase, AutoTokenizer))
+    # except:
+    #     breakpoint()
+
+
     if (
         processor is None
         and checkpoint is not None
@@ -364,8 +371,12 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
                 tokenizer_class = config.tokenizer_class
                 new_processor_class = None
                 if tokenizer_class is not None:
-                    new_processor_class = getattr(transformers_module, tokenizer_class)
-                    if new_processor_class != processor_class:
+                    # breakpoint()
+
+                    # Some hub configs have the wrong values!!! (e.g. it is `CPMAntTokenizer` but should be `CpmAntTokenizer`)
+                    new_processor_class = getattr(transformers_module, tokenizer_class, None)
+
+                    if new_processor_class is not None and new_processor_class != processor_class:
                         processor = build_processor(config_class, new_processor_class)
                 # If `tokenizer_class` is not specified in `config`, let's use `config` to get the process class via auto
                 # mappings, but only allow the tokenizer mapping being used. This is to make `Wav2Vec2Conformer` build
@@ -373,6 +384,7 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
                     new_processor_classes = get_processor_types_from_config_class(
                         config.__class__, allowed_mappings=["tokenizer"]
                     )
+                    # breakpoint()
                     # Used to avoid infinite recursion between a pair of fast/slow tokenizer types
                     names = [
                         x.__name__.replace("Fast", "") for x in [processor_class, new_processor_class] if x is not None
@@ -383,6 +395,7 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
                     if len(new_processor_classes) > 0:
                         new_processor_class = new_processor_classes[0]
                         # Let's use fast tokenizer if there is any
+                        # TODO: this is likely be very misleading!!!
                         for x in new_processor_classes:
                             if x.__name__.endswith("Fast"):
                                 new_processor_class = x
@@ -438,13 +451,18 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
             logger.error(f"{e.__class__.__name__}: {e}")
 
     # validation
+    # breakpoint()
+    # TODO: We might get `TokenizersBackend` in a recursive call (using `AutoTokenizer` class) and might fail if we don't add the condition
+    # `isinstance(processor, TokenizersBackend)`!! (e.g. Yoso!)
     if processor is not None:
-        if not (isinstance(processor, processor_class) or processor_class.__name__.startswith("Auto")):
+        from transformers import TokenizersBackend
+        if not (isinstance(processor, processor_class) or isinstance(processor, TokenizersBackend) or processor_class.__name__.startswith("Auto")):
             raise ValueError(
                 f"`processor` (which is of type {processor.__class__.__name__}) should be an instance of"
                 f" {processor_class.__name__} or an Auto class!"
             )
 
+    # breakpoint()
     return processor
 
 
