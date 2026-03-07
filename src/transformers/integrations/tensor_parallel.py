@@ -680,6 +680,18 @@ class TensorParallelLayer:
         # Default: no sharding, return full shape
         return tuple(full_shape)
 
+    def update_module_attributes(self, module: nn.Module):
+        """
+        Update module attributes (e.g. in_features, out_features) to reflect sharded dimensions.
+
+        Args:
+            module: The module to update
+
+        Returns:
+            None, update the module in-place
+        """
+        pass
+
 
 class ColwiseParallel(TensorParallelLayer):
     """
@@ -723,6 +735,12 @@ class ColwiseParallel(TensorParallelLayer):
         end = min(start + shard_size, shape[dim])
         shape[dim] = end - start
         return tuple(shape)
+
+    def update_module_attributes(self, module: nn.Module):
+        # If we gather the output, the output dimension of the module is not sharded, so no need to update out_features.
+        # Otherwise, we need to update out_features to reflect the sharded dimension.
+        if not self.gather_output and hasattr(module, "out_features"):
+            module.out_features = self.get_expected_sharded_shape((module.out_features,))[0]
 
 
 class ReplicatedWithGradAllReduce(TensorParallelLayer):
@@ -863,6 +881,13 @@ class RowwiseParallel(TensorParallelLayer):
         shape[dim] = end - start
         return tuple(shape)
 
+    def update_module_attributes(self, module: nn.Module):
+        if hasattr(module, "in_features"):
+            # To fall in the 2D case in get_expected_sharded_shape,
+            # otherwise it will be treated as 1D and not sharded
+            shape = (1, module.in_features)
+            module.in_features = self.get_expected_sharded_shape(shape)[1]
+
 
 class PackedColwiseParallel(ColwiseParallel):
     """Packed column-wise parallel for fused weights like gate_up_proj."""
@@ -986,6 +1011,12 @@ class EmbeddingParallel(TensorParallelLayer):
         shape[dim] = end - start
         return tuple(shape)
 
+    def update_module_attributes(self, module: nn.Module):
+        if hasattr(module, "num_embeddings") and self.embedding_dim_sharding == 0:
+            module.num_embeddings = self.get_expected_sharded_shape((module.num_embeddings,))[0]
+        if hasattr(module, "embedding_dim") and self.embedding_dim_sharding == 1:
+            module.embedding_dim = self.get_expected_sharded_shape((module.embedding_dim,))[0]
+
 
 class SequenceParallel(TensorParallelLayer):
     """
@@ -1053,6 +1084,10 @@ class GroupedGemmParallel(TensorParallelLayer):
         local_num_experts = shape[0] // world_size
         shape[0] = local_num_experts
         return tuple(shape)
+
+    def update_module_attributes(self, module: nn.Module):
+        if hasattr(module, "num_experts"):
+            module.num_experts = self.get_expected_sharded_shape((module.num_experts,))[0]
 
 
 class RouterParallel(TensorParallelLayer):
@@ -1429,6 +1464,7 @@ def shard_and_distribute_module(
     if not isinstance(param, torch.nn.Parameter):
         param = torch.nn.Parameter(param, requires_grad=empty_param.is_floating_point())
     setattr(module_to_tp, param_type, param)
+    tp_layer.update_module_attributes(module_to_tp)
     return param
 
 

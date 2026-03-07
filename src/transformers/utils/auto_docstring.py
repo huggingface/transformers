@@ -52,6 +52,7 @@ PLACEHOLDER_TO_AUTO_MODULE = {
     "feature_extractor_class": ("feature_extraction_auto", "FEATURE_EXTRACTOR_MAPPING_NAMES"),
     "processor_class": ("processing_auto", "PROCESSOR_MAPPING_NAMES"),
     "config_class": ("configuration_auto", "CONFIG_MAPPING_NAMES"),
+    "model_class": ("modeling_auto", "MODEL_MAPPING_NAMES"),
 }
 
 UNROLL_KWARGS_METHODS = {
@@ -557,6 +558,1231 @@ class ProcessorArgs:
     """,
         "shape": None,
     }
+
+
+class ConfigArgs:
+    vocab_size = {
+        "description": """
+    Vocabulary size of the model. Defines the number of different tokens that can be represented by the `input_ids`.
+    """,
+    }
+
+    hidden_size = {
+        "description": """
+    Dimension of the hidden representations.
+    """,
+    }
+
+    intermediate_size = {
+        "description": """
+    Dimension of the MLP representations.
+    """,
+    }
+
+    head_dim = {
+        "description": """
+    The attention head dimension. If None, it will default to hidden_size // num_attention_heads
+    """
+    }
+
+    num_hidden_layers = {
+        "description": """
+    Number of hidden layers in the Transformer decoder.
+    """,
+    }
+
+    num_attention_heads = {
+        "description": """
+    Number of attention heads for each attention layer in the Transformer decoder.
+    """,
+    }
+
+    num_key_value_heads = {
+        "description": """
+    This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+    `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+    `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+    converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+    by meanpooling all the original heads within that group. For more details, check out [this
+    paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
+    `num_attention_heads`.
+    """,
+    }
+    hidden_act = {
+        "description": """
+    The non-linear activation function (function or string) in the decoder. For example, `"gelu"`,
+    `"relu"`, `"silu"`, etc.
+    """,
+    }
+
+    max_position_embeddings = {
+        "description": """
+    The maximum sequence length that this model might ever be used with.
+    """,
+    }
+
+    initializer_range = {
+        "description": """
+    The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+    """,
+    }
+
+    rms_norm_eps = {
+        "description": """
+    The epsilon used by the rms normalization layers.
+    """,
+    }
+
+    use_cache = {
+        "description": """
+    Whether or not the model should return the last key/values attentions (not used by all models). Only
+    relevant if `config.is_decoder=True` or when the model is a decoder-only generative model.
+    """,
+    }
+
+    rope_parameters = {
+        "description": """
+    Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+    a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+    with longer `max_position_embeddings`.
+    """,
+    }
+
+    attention_bias = {
+        "description": """
+    Whether to use a bias in the query, key, value and output projection layers during self-attention.
+    """,
+    }
+
+    mlp_bias = {
+        "description": """
+    Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
+    """,
+    }
+
+    attention_dropout = {
+        "description": """
+    The dropout ratio for the attention probabilities.
+    """,
+    }
+
+    pretraining_tp = {
+        "description": """
+    Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
+    document](https://huggingface.co/docs/transformers/main/perf_train_gpu_many#tensor-parallelism) to
+    understand more about it. This value is necessary to ensure exact reproducibility of the pretraining
+    results. Please refer to [this issue](https://github.com/pytorch/pytorch/issues/76232).
+    """,
+    }
+
+    pad_token_id = {
+        "description": """
+    Token id used for padding in the vocabulary.
+    """,
+    }
+
+    eos_token_id = {
+        "description": """
+    Token id used for end-of-stream in the vocabulary.
+    """,
+    }
+
+    bos_token_id = {
+        "description": """
+    Token id used for beginning-of-stream in the vocabulary.
+    """,
+    }
+
+    sep_token_id = {
+        "description": """
+    Token id used for separator in the vocabulary.
+    """,
+    }
+
+    cls_token_id = {
+        "description": """
+    Token id used for CLS in the vocabulary.
+    """,
+    }
+
+    tie_word_embeddings = {
+        "description": """
+    Whether to tie weight embeddings according to model's `tied_weights_keys` mapping.
+    """,
+    }
+
+    d_model = {
+        "description": """
+    Size of the encoder layers and the pooler layer.
+    """,
+    }
+
+    d_kv = {
+        "description": """
+    Size of the key, query, value projections per attention head. The `inner_dim` of the projection layer will
+    be defined as `num_heads * d_kv`.
+    """,
+    }
+
+    num_decoder_layers = {
+        "description": """
+    Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
+    """,
+    }
+
+    num_encoder_layers = {
+        "description": """
+    Number of hidden layers in the Transformer encoder. Will use the same value as `num_layers` if not set.
+    """,
+    }
+
+    dropout_rate = {
+        "description": """
+    The ratio for all dropout layers.
+    """,
+    }
+
+    classifier_dropout = {
+        "description": """
+    The dropout ratio for classifier.
+    """,
+    }
+
+    layer_norm_eps = {
+        "description": """
+    The epsilon used by the layer normalization layers.
+    """,
+    }
+
+    initializer_factor = {
+        "description": """
+    A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
+    testing).
+    """,
+    }
+
+    encoder_attention_heads = {
+        "description": """
+    Number of attention heads for each attention layer in the Transformer encoder.
+    """,
+    }
+
+    decoder_attention_heads = {
+        "description": """
+    Number of attention heads for each attention layer in the Transformer decoder.
+    """,
+    }
+
+    decoder_ffn_dim = {
+        "description": """
+    Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+    """,
+    }
+
+    encoder_ffn_dim = {
+        "description": """
+    Dimensionality of the "intermediate" (often named feed-forward) layer in encoder.
+    """,
+    }
+
+    activation_dropout = {
+        "description": """
+    The dropout ratio for activations inside the fully connected layer.
+    """,
+    }
+
+    encoder_layerdrop = {
+        "description": """
+    The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
+    for more details.
+    """,
+    }
+
+    decoder_layerdrop = {
+        "description": """
+    The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
+    for more details.
+    """,
+    }
+
+    scale_embedding = {
+        "description": """
+    Whether to scale embeddings by dividing by sqrt(d_model).
+    """,
+    }
+
+    forced_eos_token_id = {
+        "description": """
+    The id of the token to force as the last generated token when `max_length` is reached. Usually set to
+    `eos_token_id`.
+    """,
+    }
+
+    moe_intermediate_size = {
+        "description": """
+    Intermediate size of the routed expert MLPs.
+    """,
+    }
+
+    num_experts = {
+        "description": """
+    Number of routed experts in MoE layers.
+
+    """,
+    }
+
+    num_experts_per_tok = {
+        "description": """
+    Number of experts to route each token to. This is the top-k value for the token-choice routing.
+    """,
+    }
+
+    num_shared_experts = {
+        "description": """
+    Number of shared experts that are always activated for all tokens.
+    """,
+    }
+
+    layer_types = {
+        "description": """
+    A list that explicitly maps each layer index with its layer type. If not provided, it will be automatically
+    generated based on config values.
+    """,
+    }
+
+    norm_topk_prob = {
+        "description": """
+    Whether to normalize the weights of the routed experts.
+
+    """,
+    }
+
+    topk_group = {
+        "description": """
+    Number of selected groups for each token (for each token, ensuring the selected experts is only within `topk_group` groups).
+    """,
+    }
+
+    qk_rope_head_dim = {
+        "description": """
+    Dimension of the query/key heads that use rotary position embeddings.
+    """,
+    }
+
+    v_head_dim = {
+        "description": """
+    Dimension of the value heads.
+    """,
+    }
+
+    qk_nope_head_dim = {
+        "description": """
+    Dimension of the query/key heads that don't use rotary position embeddings.
+    """,
+    }
+
+    kv_lora_rank = {
+        "description": """
+    Rank of the LoRA matrices for key and value projections.
+    """,
+    }
+
+    q_lora_rank = {
+        "description": """
+    Rank of the LoRA matrices for query projections.
+    """,
+    }
+
+    routed_scaling_factor = {
+        "description": """
+    Scaling factor or routed experts.
+    """,
+    }
+
+    n_routed_experts = {
+        "description": """
+    Number of routed experts.
+    """,
+    }
+
+    n_shared_experts = {
+        "description": """
+    Number of shared experts.
+    """,
+    }
+
+    vision_config = {
+        "description": """
+    The config object or dictionary of the vision backbone.
+    """,
+    }
+
+    text_config = {
+        "description": """
+    The config object or dictionary of the text backbone.
+    """,
+    }
+
+    projector_hidden_act = {
+        "description": """
+    The activation function used by the multimodal projector.
+    """,
+    }
+
+    vision_feature_select_strategy = {
+        "description": """
+    The feature selection strategy used to select the vision feature from the vision backbone.
+    """,
+    }
+
+    vision_feature_layer = {
+        "description": """
+    The index of the layer to select the vision feature. If multiple indices are provided,
+    the vision feature of the corresponding indices will be concatenated to form the
+    vision features.
+    """,
+    }
+
+    multimodal_projector_bias = {
+        "description": """
+    Whether to use bias in the multimodal projector.
+    """,
+    }
+
+    image_token_id = {
+        "description": """
+    The image token index used as a placeholder for input images.
+    """,
+    }
+
+    video_token_id = {
+        "description": """
+    The video token index used as a placeholder for input videos.
+    """,
+    }
+
+    audio_token_id = {
+        "description": """
+    The audio token index used as a placeholder for input audio.
+    """,
+    }
+
+    image_seq_length = {
+        "description": """
+    Sequence length of one image embedding.
+    """,
+    }
+
+    video_seq_length = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    add_cross_attention = {
+        "description": """
+    Whether cross-attention layers should be added to the model.
+    """,
+    }
+
+    is_decoder = {
+        "description": """
+    Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
+    """,
+    }
+
+    sliding_window = {
+        "description": """
+    Sliding window attention window size. If `None`, no sliding window is applied.
+    """,
+    }
+
+    use_sliding_window = {
+        "description": """
+    Whether to use sliding window attention.
+    """,
+    }
+
+    shared_expert_intermediate_size = {
+        "description": """
+    Intermediate size of the shared expert MLPs.
+    """,
+    }
+
+    decoder_sparse_step = {
+        "description": """
+    The frequency of adding a sparse MoE layer. The default is 1, which means all decoder layers are sparse MoE.
+    """,
+    }
+
+    output_router_logits = {
+        "description": """
+    Whether or not the router logits should be returned by the model. Enabling this will also allow the model
+    to output the auxiliary loss, including load balancing loss and router z-loss.
+    """,
+    }
+
+    router_aux_loss_coef = {
+        "description": """
+    Auxiliary load balancing loss coefficient. Used to penalize uneven expert routing in MoE models.
+    """,
+    }
+
+    out_indices = {
+        "description": """
+    Indices of the intermediate hidden states (feature maps) to return from the backbone. Each index
+    corresponds to one stage of the model.
+    """,
+    }
+
+    out_features = {
+        "description": """
+    Names of the intermediate hidden states (feature maps) to return from the backbone. One of `"stem"`,
+    `"stage1"`, `"stage2"`, etc.
+    """,
+    }
+
+    image_size = {
+        "description": """
+    The size (resolution) of each image.
+    """,
+    }
+
+    patch_size = {
+        "description": """
+    The size (resolution) of each patch.
+    """,
+    }
+
+    num_channels = {
+        "description": """
+    The number of input channels.
+    """,
+    }
+
+    num_mel_bins = {
+        "description": """
+    Number of mel features used per input frame. Should correspond to the value used in the
+    `AutoFeatureExtractor` class.
+    """,
+    }
+
+    sampling_rate = {
+        "description": """
+    The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
+    """,
+    }
+
+    hidden_dropout = {
+        "description": """
+    The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+    """,
+    }
+
+    mlp_ratio = {
+        "description": """
+    Ratio of the MLP hidden dim to the embedding dim.
+    """,
+    }
+
+    qkv_bias = {
+        "description": """
+    Whether to add a bias to the queries, keys and values.
+    """,
+    }
+
+    n_embd = {
+        "description": """
+    Dimensionality of the embeddings and hidden states.
+    """,
+    }
+
+    resid_pdrop = {
+        "description": """
+    The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+    """,
+    }
+
+    embd_pdrop = {
+        "description": """
+    The dropout ratio for the embeddings.
+    """,
+    }
+
+    clip_qkv = {
+        "description": """
+    If not `None`, cap the absolute value of the query, key, and value tensors to this value.
+    """,
+    }
+
+    type_vocab_size = {
+        "description": """
+    The vocabulary size of the `token_type_ids`.
+    """,
+    }
+
+    audio_config = {
+        "description": """
+    The config object or dictionary of the audio backbone.
+    """,
+    }
+
+    layerdrop = {
+        "description": """
+    The LayerDrop probability. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556) for
+    more details.
+    """,
+    }
+
+    expert_capacity = {
+        "description": """
+    The number of tokens that each expert can process. If `None`, `expert_capacity` will be set to
+    `(sequence_length / num_experts) * capacity_factor`.
+    """,
+    }
+
+    decoder_start_token_id = {
+        "description": """
+    If an encoder-decoder model starts decoding with a different token than `bos`, the id of that token.
+    """,
+    }
+
+    is_encoder_decoder = {
+        "description": """
+    Whether the model is used as an encoder/decoder or not.
+    """,
+    }
+
+    num_codebooks = {
+        "description": """
+    The number of parallel codebooks used by the model.
+    """,
+    }
+
+    codebook_dim = {
+        "description": """
+    Dimensionality of each codebook embedding vector.
+    """,
+    }
+
+    hidden_sizes = {
+        "description": """
+    Dimensionality (hidden size) at each stage of the model.
+    """,
+    }
+
+    depths = {
+        "description": """
+    Depth of each layer in the Transformer.
+    """,
+    }
+
+    patch_sizes = {
+        "description": """
+    Patch size at each stage of the model.
+    """,
+    }
+
+    strides = {
+        "description": """
+    Stride at each stage of the model.
+    """,
+    }
+
+    router_jitter_noise = {
+        "description": """
+    Amount of noise to add to the router logits during training for better load balancing.
+    """,
+    }
+
+    num_local_experts = {
+        "description": """
+    Number of local experts on each device. `num_experts` should be divisible by `num_local_experts`.
+    """,
+    }
+
+    qk_layernorm = {
+        "description": """
+    Whether to use query-key normalization in the attention.
+    """,
+    }
+
+    backbone_config = {
+        "description": """
+    The configuration of the backbone model.
+    """,
+    }
+
+    no_object_weight = {
+        "description": """
+    Relative classification weight of the no-object class in the object detection loss.
+    """,
+    }
+
+    class_weight = {
+        "description": """
+    Relative weight of the classification error in the Hungarian matching cost.
+    """,
+    }
+
+    mask_weight = {
+        "description": """
+    Relative weight of the focal loss in the panoptic segmentation loss.
+    """,
+    }
+
+    dice_weight = {
+        "description": """
+    Relative weight of the dice loss in the panoptic segmentation loss.
+    """,
+    }
+
+    class_cost = {
+        "description": """
+    Relative weight of the classification error in the Hungarian matching cost.
+    """,
+    }
+
+    bbox_cost = {
+        "description": """
+    Relative weight of the L1 bounding box error in the Hungarian matching cost.
+    """,
+    }
+
+    giou_cost = {
+        "description": """
+    Relative weight of the generalized IoU loss in the Hungarian matching cost.
+    """,
+    }
+
+    focal_alpha = {
+        "description": """
+    Alpha parameter in the focal loss.
+    """,
+    }
+
+    mask_loss_coefficient = {
+        "description": """
+    Relative weight of the focal loss in the panoptic segmentation loss.
+    """,
+    }
+
+    giou_loss_coefficient = {
+        "description": """
+    Relative weight of the generalized IoU loss in the panoptic segmentation loss.
+    """,
+    }
+
+    bbox_loss_coefficient = {
+        "description": """
+    Relative weight of the L1 bounding box loss in the panoptic segmentation loss.
+    """,
+    }
+
+    cls_loss_coefficient = {
+        "description": """
+    Relative weight of the classification loss in the panoptic segmentation loss.
+    """,
+    }
+
+    dice_loss_coefficient = {
+        "description": """
+    Relative weight of the dice loss in the panoptic segmentation loss.
+    """,
+    }
+
+    semantic_loss_ignore_index = {
+        "description": """
+    The index that is ignored by the loss function of the semantic segmentation model.
+    """,
+    }
+
+    projection_dim = {
+        "description": """
+    Dimensionality of text and vision projection layers.
+    """,
+    }
+
+    logit_scale_init_value = {
+        "description": """
+    The initial value of the *logit_scale* parameter.
+    """,
+    }
+
+    num_dense_layers = {
+        "description": """
+    Number of initial dense layers before MoE layers begin. Layers with index < num_dense_layers will use
+    standard dense MLPs instead of MoE.
+    """,
+    }
+
+    drop_path_rate = {
+        "description": """
+    Drop path rate for the patch fusion.
+    """,
+    }
+
+    vq_config = {
+        "description": """
+    Configuration dict of the vector quantize module.
+    """,
+    }
+
+    num_embeddings = {
+        "description": """
+    Number of codebook embeddings.
+    """,
+    }
+
+    double_latent = {
+        "description": """
+    Whether to use double z channels.
+    """,
+    }
+
+    latent_channels = {
+        "description": """
+    Number of channels for the latent space.
+    """,
+    }
+
+    qformer_config = {
+        "description": """
+    Configuration dict of the Q-Former module.
+    """,
+    }
+
+    conv_kernel_size = {
+        "description": """
+    The size of the convolutional kernel.
+    """,
+    }
+
+    output_stride = {
+        "description": """
+    The ratio between the spatial resolution of the input and output feature maps.
+    """,
+    }
+
+    depth_multiplier = {
+        "description": """
+    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    """,
+    }
+
+    use_absolute_position_embeddings = {
+        "description": """
+    Whether to use absolute position embeddings.
+    """,
+    }
+
+    use_relative_position_bias = {
+        "description": """
+    Whether to use relative position bias in the self-attention layers.
+    """,
+    }
+
+    layer_scale_init_value = {
+        "description": """
+    Scale to use in the self-attention layers. 0.1 for base, 1e-6 for large. Set 0 to disable layer scale.
+    """,
+    }
+
+    vlm_config = {
+        "description": """
+    The config object or dictionary of the vision-language backbone.
+    """,
+    }
+
+    init_xavier_std = {
+        "description": """
+    The scaling factor used for the Xavier initialization of the cross-attention weights.
+    """,
+    }
+
+    auxiliary_loss = {
+        "description": """
+    Whether auxiliary decoding losses (losses at each decoder layer) are to be used.
+    """,
+    }
+
+    encoder_config = {
+        "description": """
+    The config object or dictionary of the encoder backbone.
+    """,
+    }
+
+    decoder_config = {
+        "description": """
+    The config object or dictionary of the decoder backbone.
+    """,
+    }
+
+    embedding_multiplier = {
+        "description": """
+    Scaling factor applied to the word embeddings. Used to scale the embeddings relative to the hidden size.
+    """,
+    }
+
+    logits_scaling = {
+        "description": """
+    Scaling factor applied to the output logits before computing the probability distribution.
+    """,
+    }
+
+    residual_multiplier = {
+        "description": """
+    Scaling factor applied to the residual connections.
+    """,
+    }
+
+    attention_multiplier = {
+        "description": """
+    Scaling factor applied to the attention weights.
+    """,
+    }
+
+    classifier_activation = {
+        "description": """
+    The activation function for the classification head.
+    """,
+    }
+
+    return_dict = {
+        "description": """
+    Whether to return a `ModelOutput` (dataclass) instead of a plain tuple.
+    """,
+    }
+
+    router_z_loss_coef = {
+        "description": """
+    Coefficient for the router z-loss, which penalizes large router logits to improve training stability.
+    """,
+    }
+
+    final_logit_softcapping = {
+        "description": """
+    Soft-capping value applied to the final logits before computing the probability distribution. Logits are
+    scaled by `tanh(logit / cap) * cap`.
+    """,
+    }
+
+    cross_attention_hidden_size = {
+        "description": """
+    Hidden size of the encoder outputs projected into the cross-attention key/value space of the decoder. Used
+    when the encoder and decoder have different hidden sizes.
+    """,
+    }
+
+    input_dim = {
+        "description": """
+    Dimensionality of the input acoustic features (e.g., number of mel-filterbank channels).
+    """,
+    }
+
+    use_auxiliary_loss = {
+        "description": """
+    Whether to calculate loss using intermediate predictions from transformer decoder.
+    """,
+    }
+
+    batch_norm_eps = {
+        "description": """
+    The epsilon used by the batch normalization layers.
+    """,
+    }
+
+    max_window_layers = {
+        "description": """
+    The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
+    additional layer afterwards will use SWA (Sliding Window Attention).
+    """,
+    }
+
+    ctc_loss_reduction = {
+        "description": """
+    Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training.
+    """,
+    }
+
+    mask_feature_prob = {
+        "description": """
+    Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
+    masking procedure generates `mask_feature_prob*len(feature_axis)/mask_time_length` independent masks over
+    the axis. If reasoning from the probability of each feature vector to be chosen as the start of the vector
+    span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
+    may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment` is
+    `True`.
+    """,
+    }
+
+    eos_coefficient = {
+        "description": """
+    Relative classification weight of the 'no-object' class in the object detection loss.
+    """,
+    }
+
+    num_labels = {
+        "description": """
+    Number of labels to use in the last layer added to the model, typically for a classification task.
+    """,
+    }
+
+    depth = {
+        "description": """
+    Number of Transformer layers in the vision encoder.
+    """,
+    }
+
+    temporal_patch_size = {
+        "description": """
+    Temporal patch size used in the 3D patch embedding for video inputs.
+    """,
+    }
+
+    spatial_merge_size = {
+        "description": """
+        The size of the spatial merge window used to reduce the number of visual tokens by merging neighboring patches.
+    """,
+    }
+
+    vision_start_token_id = {
+        "description": """
+    Token ID that marks the start of a visual segment in the multimodal input sequence.
+    """,
+    }
+
+    vision_end_token_id = {
+        "description": """
+    Token ID that marks the end of a visual segment in the multimodal input sequence.
+    """,
+    }
+
+    mamba_n_heads = {
+        "description": """
+    The number of mamba heads used in the v2 implementation.
+    """,
+    }
+
+    mamba_d_head = {
+        "description": """
+    Head embedding dimension size
+    """,
+    }
+
+    mamba_n_groups = {
+        "description": """
+    The number of the mamba groups used in the v2 implementation.
+    """,
+    }
+
+    mamba_d_conv = {
+        "description": """
+    The size of the mamba convolution kernel
+    """,
+    }
+
+    mamba_expand = {
+        "description": """
+    Expanding factor (relative to hidden_size) used to determine the mamba intermediate size
+    """,
+    }
+
+    mamba_chunk_size = {
+        "description": """
+    The chunks in which to break the sequence when doing prefill/training
+    """,
+    }
+
+    mamba_conv_bias = {
+        "description": """
+    Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
+    """,
+    }
+
+    mamba_proj_bias = {
+        "description": """
+    Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the mamba mixer block
+    """,
+    }
+
+    time_step_min = {
+        "description": """
+    Minimum `time_step` used to bound `dt_proj.bias`.
+    """,
+    }
+
+    time_step_max = {
+        "description": """
+    Maximum `time_step` used to bound `dt_proj.bias`.
+    """,
+    }
+
+    time_step_limit = {
+        "description": """
+    Accepted range of time step values for clamping.
+    """,
+    }
+
+    expand_ratio = {
+        "description": """
+    Expand ratio to set the output dimensions for the expansion
+    """,
+    }
+
+    state_size = {
+        "description": """
+    Size of the SSM state (latent state dimension) in the Mamba layers.
+    """,
+    }
+
+    time_step_rank = {
+        "description": """
+    Rank of the delta (time step) projection. Can be `"auto"` to set it automatically.
+    """,
+    }
+
+    time_step_floor = {
+        "description": """
+    Minimum allowed value for the discrete time step delta after softplus activation.
+    """,
+    }
+
+    time_step_scale = {
+        "description": """
+    Scale applied to the time step delta before discretization.
+    """,
+    }
+
+    time_step_init_scheme = {
+        "description": """
+    Initialization scheme for the time step delta. Can be `"random"` or `"uniform"`.
+    """,
+    }
+
+    mamba_d_ssm = {
+        "description": """
+    Inner state size of the SSM (state-space model) in the Mamba layers of FalconH1.
+    """,
+    }
+
+    mamba_norm_before_gate = {
+        "description": """
+    Whether to apply normalization before the gating mechanism in the Mamba mixer.
+    """,
+    }
+
+    mamba_rms_norm = {
+        "description": """
+    Whether to use RMS normalization in the Mamba layers (as opposed to standard LayerNorm).
+    """,
+    }
+
+    mamba_d_state = state_size
+    mamba_num_heads = mamba_n_heads
+    mamba_head_dim = mamba_d_head
+    num_input_channels = num_channels
+    audio_channels = num_channels
+    input_channels = num_channels
+    in_channels = num_channels
+    in_chans = num_channels
+    scale_attn_weights = scale_embedding
+    attention_probs_dropout_prob = attention_dropout
+    attn_pdrop = attention_dropout
+    attn_dropout = attention_dropout
+    dropout = dropout_rate
+    resid_dropout = resid_pdrop
+    residual_dropout = resid_pdrop
+    emb_pdrop = embd_pdrop
+    embed_dropout = embd_pdrop
+    embedding_dropout = embd_pdrop
+    hidden_dropout_prob = hidden_dropout
+    hidden_dropout_rate = hidden_dropout
+    classifier_dropout_prob = classifier_dropout
+    classifier_dropout_rate = classifier_dropout
+    dropout_prob = dropout
+    dropout_p = dropout
+    decoder_attention_dropout = attention_dropout
+    decoder_dropout = dropout
+    encoder_dropout = dropout
+
+    route_scale = routed_scaling_factor
+    activation_function = hidden_act
+    hidden_dim = hidden_size
+    num_decoder_attention_heads = decoder_attention_heads
+    num_encoder_attention_heads = encoder_attention_heads
+    decoder_num_heads = decoder_attention_heads
+    decoder_num_attention_heads = decoder_attention_heads
+    encoder_num_heads = encoder_attention_heads
+    encoder_num_attention_heads = encoder_attention_heads
+    encoder_layers = num_encoder_layers
+    decoder_layers = num_decoder_layers
+    decoder_num_layers = num_decoder_layers
+    encoder_num_layers = num_encoder_layers
+    d_ff = intermediate_size
+    dim_ff = intermediate_size
+    n_inner = intermediate_size
+    decoder_intermediate_size = intermediate_size
+    num_kv_heads = num_key_value_heads
+    num_layers = num_hidden_layers
+    n_layers = num_hidden_layers
+    n_layer = num_hidden_layers
+    layers = num_layers
+    encoder_num_hidden_layers = encoder_layers
+    decoder_num_hidden_layers = decoder_layers
+    num_heads = num_attention_heads
+    n_heads = num_attention_heads
+    n_head = num_attention_heads
+    hidden_activation = hidden_act
+    activation = hidden_act
+    mlp_hidden_act = hidden_act
+    d_head = head_dim
+    d_inner = intermediate_size
+    dim_head = head_dim
+    ffn_dim = intermediate_size
+    attention_heads = num_attention_heads
+    n_positions = max_position_embeddings
+    init_std = initializer_range
+    initializer_std = initializer_range
+    projector_bias = multimodal_projector_bias
+    image_token_index = image_token_id
+    video_token_index = video_token_id
+    audio_token_index = audio_token_id
+    embedding_size = n_embd
+    embed_dim = n_embd
+    projection_hidden_act = projector_hidden_act
+    layer_norm_epsilon = layer_norm_eps
+    rms_norm = rms_norm_eps
+    norm_eps = layer_norm_eps
+    eps = layer_norm_eps
+    norm_epsilon = layer_norm_eps
+    qk_layernorms = qk_layernorm
+    use_qk_norm = qk_layernorm
+    use_qkv_bias = qkv_bias
+
+    decoder_hidden_act = hidden_act
+    decoder_hidden_dim = hidden_size
+    decoder_hidden_size = hidden_size
+    encoder_hidden_dim = hidden_size
+    encoder_hidden_size = hidden_size
+    layer_scale_initial_scale = layer_scale_init_value
+    multi_modal_projector_bias = projector_bias
+    projector_hidden_size = projection_dim
+    projection_size = projection_dim
+    kernel_size = conv_kernel_size
+    conv_kernel = conv_kernel_size
+    use_absolute_embeddings = use_absolute_position_embeddings
+    use_abs_pos = use_absolute_position_embeddings
+    use_rel_pos = use_relative_position_bias
+    aux_loss_coef = router_aux_loss_coef
+    embedding_dimension = embed_dim
+    embedding_dim = embed_dim
+    emb_dim = embed_dim
+    n_codebooks = num_codebooks
+    codebook_size = num_codebooks
+    layers_block_type = layer_types
+    sample_rate = sampling_rate
+    text_vocab_size = vocab_size
 
 
 class ModelArgs:
@@ -1169,6 +2395,15 @@ class ModelOutputArgs:
 
 
 class ClassDocstring:
+    Config = r"""
+    This is the configuration class to store the configuration of a {model_base_class}. It is used to instantiate a {model_name}
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the [{model_checkpoint}](https://huggingface.co/{model_checkpoint})
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+    """
+
     PreTrainedModel = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1598,6 +2833,9 @@ def get_checkpoint_from_config_class(config_class):
     # source code of `config_class`
     # config_source = inspect.getsource(config_class)
     config_source = config_class.__doc__
+    if not config_source:
+        return None
+
     checkpoints = _re_checkpoint.findall(config_source)
     # Each `checkpoint` is a tuple of a checkpoint name and a checkpoint link.
     # For example, `('google-bert/bert-base-uncased', 'https://huggingface.co/google-bert/bert-base-uncased')`
@@ -1677,7 +2915,6 @@ def _get_model_info(func, parent_class):
                 print(
                     f"[ERROR] Config not found for {model_name_lowercase}. You can manually add it to HARDCODED_CONFIG_FOR_MODELS in utils/auto_docstring.py"
                 )
-
     return model_name_lowercase, class_name, config_class
 
 
@@ -2783,6 +4020,11 @@ def auto_method_docstring(
     # Get model information
     model_name_lowercase, class_name, config_class = _get_model_info(func, parent_class)
     func_documentation = func.__doc__
+
+    # Temporary workaround for config classes until #41250 is merged. We usually add docs at class-lvl
+    if func_documentation is None and parent_class and parent_class.__name__.endswith("Config"):
+        func_documentation = parent_class.__doc__
+
     if custom_args is not None and func_documentation is not None:
         func_documentation = "\n" + set_min_indent(custom_args.strip("\n"), 0) + "\n" + func_documentation
     elif custom_args is not None:
@@ -2875,9 +4117,28 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             checkpoint=checkpoint,
             source_args_dict=get_args_doc_from_source(ImageProcessorArgs),
         ).__doc__
+    elif "PreTrainedConfig" in (x.__name__ for x in cls.__mro__):
+        docstring_init = auto_method_docstring(
+            cls.__init__,
+            parent_class=cls,
+            custom_args=custom_args,
+            checkpoint=checkpoint,
+            source_args_dict=get_args_doc_from_source([ConfigArgs]),
+        ).__doc__
+
     indent_level = get_indent_level(cls)
     model_name_lowercase = get_model_name(cls)
     model_name_title = " ".join([k.title() for k in model_name_lowercase.split("_")]) if model_name_lowercase else None
+    model_base_class = f"{model_name_title.title()}Model" if model_name_title is not None else None
+    if model_name_lowercase is not None:
+        try:
+            model_base_class = getattr(
+                getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["model_class"][0]),
+                PLACEHOLDER_TO_AUTO_MODULE["model_class"][1],
+            )[model_name_lowercase]
+        except KeyError:
+            pass
+
     if model_name_lowercase and model_name_lowercase not in getattr(
         getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["config_class"][0]),
         PLACEHOLDER_TO_AUTO_MODULE["config_class"][1],
@@ -2893,6 +4154,9 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         )
     if name != [] or custom_intro is not None or is_dataclass or is_processor or is_image_processor:
         name = name[0] if name else None
+        formatting_kwargs = {"model_name": model_name_title}
+        if name == "Config":
+            formatting_kwargs.update({"model_base_class": model_base_class, "model_checkpoint": checkpoint})
         if custom_intro is not None:
             pre_block = equalize_indent(custom_intro, indent_level)
             if not pre_block.endswith("\n"):
@@ -2911,7 +4175,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         elif model_name_title is None or name is None:
             pre_block = ""
         else:
-            pre_block = getattr(ClassDocstring, name).format(model_name=model_name_title)
+            pre_block = getattr(ClassDocstring, name).format(**formatting_kwargs)
         # Start building the docstring
         docstring = set_min_indent(f"{pre_block}", indent_level) if len(pre_block) else ""
         if name != "PreTrainedModel" and "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
