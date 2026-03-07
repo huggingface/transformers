@@ -22,7 +22,6 @@ from torch.nn import CrossEntropyLoss
 from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MaskedLMOutput,
@@ -33,25 +32,21 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb
+from ..clip.modeling_clip import CLIPMLP
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRotaryEmbedding, apply_rotary_pos_emb
+from ..xlm_roberta.configuration_xlm_roberta import XLMRobertaConfig
 from ..xlm_roberta.modeling_xlm_roberta import (
+    XLMRobertaEmbeddings,
+    XLMRobertaForMaskedLM,
     XLMRobertaForQuestionAnswering,
     XLMRobertaForSequenceClassification,
     XLMRobertaForTokenClassification,
-    XLMRobertaIntermediate,
     XLMRobertaLMHead,
     XLMRobertaModel,
-    XLMRobertaOutput,
     XLMRobertaPooler,
     XLMRobertaPreTrainedModel,
-    XLMRobertaSelfOutput,
-    XLMRobertaEmbeddings,
-    XLMRobertaForMaskedLM,
     eager_attention_forward,
 )
-from ..xlm_roberta.configuration_xlm_roberta import XLMRobertaConfig
-from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer
-from ..clip.modeling_clip import CLIPMLP
 
 
 logger = logging.get_logger(__name__)
@@ -329,9 +324,7 @@ class JinaEmbeddingsV3Model(XLMRobertaModel):
     def __init__(self, config: JinaEmbeddingsV3Config, add_pooling_layer=True):
         super().__init__(config)
         self.rotary_emb = JinaEmbeddingsV3RotaryEmbedding(config)
-        self.layers = nn.ModuleList(
-            [JinaEmbeddingsV3Layer(config) for _ in range(config.num_hidden_layers)]
-        )
+        self.layers = nn.ModuleList([JinaEmbeddingsV3Layer(config) for _ in range(config.num_hidden_layers)])
         del self.encoder
 
         # Initialize weights and apply final processing
