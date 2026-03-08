@@ -1744,6 +1744,11 @@ def create_tiny_models(
     config_classes = [x for x in config_classes if x.__name__ not in no_model_tester_at_all]
     config_classes = [x for x in config_classes if x.__name__ not in configs_requiring_too_exotic_dependency]
     config_classes = [x for x in config_classes if x.__name__ not in deprecated_models]
+
+    import random
+    for i in range(100):
+        random.shuffle(config_classes)
+
     # mamba = {"BambaConfig", "FalconMambaConfig", "GraniteMoeHybridConfig", "JambaConfig", "MambaConfig", "Mamba2Config", ""}
     # config_classes = [x for x in config_classes if x.__name__ in mamba]
 
