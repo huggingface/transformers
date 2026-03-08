@@ -15,62 +15,16 @@
 """ALBERT model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="albert/albert-xxlarge-v2")
 class AlbertConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`AlbertModel`]. It is used
-    to instantiate an ALBERT model according to the specified arguments, defining the model architecture. Instantiating
-    a configuration with the defaults will yield a similar configuration to that of the ALBERT
-    [albert/albert-xxlarge-v2](https://huggingface.co/albert/albert-xxlarge-v2) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 30000):
-            Vocabulary size of the ALBERT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`AlbertModel`].
-        embedding_size (`int`, *optional*, defaults to 128):
-            Dimensionality of vocabulary embeddings.
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_hidden_groups (`int`, *optional*, defaults to 1):
-            Number of groups for the hidden layers, parameters in the same group are shared.
-        num_attention_heads (`int`, *optional*, defaults to 64):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 16384):
-            The dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        inner_group_num (`int`, *optional*, defaults to 1):
-            The number of inner repetition of attention and ffn.
-        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu_new"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0):
-            The dropout ratio for the attention probabilities.
-        max_position_embeddings (`int`, *optional*, defaults to 512):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`AlbertModel`].
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        classifier_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for attached classifiers.
-        pad_token_id (`int`, *optional*, defaults to 0):
-            Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 2):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 3):
-            End of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
+    inner_group_num (`int`, *optional*, defaults to 1):
+        The number of inner repetition of attention and ffn.
+    num_hidden_groups (`int`, *optional*, defaults to 1):
+        Number of groups for the hidden layers, parameters in the same group are shared.
 
     Examples:
 

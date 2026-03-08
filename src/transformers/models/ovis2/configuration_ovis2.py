@@ -13,51 +13,19 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..qwen2.configuration_qwen2 import Qwen2Config
 
 
+@auto_docstring(checkpoint="thisisiron/Ovis2-1B-hf")
 class Ovis2VisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Ovis2VisionModel`]. It is used to instantiate a
-    Ovis2VisionModel model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of Ovis2.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 2816):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels in the input images.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the RMSNorm layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        qkv_bias (`bool`, *optional*, defaults to `False`):
-            Whether to add a learnable bias to the query, key, and value sequences at each attention head.
-        mlp_bias (`bool`, *optional*, defaults to `False`):
-            Whether to add a learnable bias to the MLP layers.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        vocab_size (`int`, *optional*, defaults to 16384):
-            Vocabulary size of the Vision Transformer.
-        hidden_stride (`int`, *optional*, defaults to 1):
-            The stride of the hidden layer in the Vision Transformer.
-        num_visual_indicator_tokens (`int`, *optional*, defaults to 5):
-            Number of visual indicator tokens.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated normal initializer for initializing all weight matrices.
-        tokenize_function (`str`, *optional*, defaults to `"softmax"`):
-            The function used to tokenize the visual indicator tokens.
+    hidden_stride (`int`, *optional*, defaults to 1):
+        The stride of the hidden layer in the Vision Transformer.
+    num_visual_indicator_tokens (`int`, *optional*, defaults to 5):
+        Number of visual indicator tokens.
+    tokenize_function (`str`, *optional*, defaults to `"softmax"`):
+        The function used to tokenize the visual indicator tokens.
     """
 
     base_config_key = "vision_config"
@@ -105,32 +73,11 @@ class Ovis2VisionConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
 
 
+@auto_docstring(checkpoint="thisisiron/Ovis2-1B-hf")
 class Ovis2Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Ovis2ForConditionalGeneration`]. It is used to instantiate a
-    Ovis2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of Ovis2.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    e.g. [thisisiron/Ovis2-1B-hf](https://huggingface.co/thisisiron/Ovis2-1B-hf)
-
-    Args:
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `Ovis2VisionConfig`):
-            The config object or dictionary of the vision backbone.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `Qwen2Config`):
-            The config object or dictionary of the text backbone.
-        image_token_id (`int`, *optional*, defaults to 151665):
-            The image token id to encode the image prompt.
-        visual_indicator_token_ids (`List[int]`, *optional*, defaults to `[151666, 151667, 151668, 151669, 151670]`):
-            The visual indicator token ids to encode the image prompt.
-        vocab_size (`int`, *optional*, defaults to 151643):
-            Vocabulary size of the text model.
-        hidden_size (`int`, *optional*, defaults to 1536):
-            Dimensionality of the encoder layers and the pooler layer.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
+    visual_indicator_token_ids (`List[int]`, *optional*, defaults to `[151666, 151667, 151668, 151669, 151670]`):
+        The visual indicator token ids to encode the image prompt.
 
     ```python
     >>> from transformers import Ovis2ForConditionalGeneration, Ovis2Config
