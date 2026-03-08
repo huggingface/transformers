@@ -894,7 +894,8 @@ def convert_processors(processors, tiny_config, output_folder, result):
             # Wav2Vec2ForCTC , ByT5Tokenizer etc. all are already small enough and have no fast version that can
             # be retrained
             if fast_tokenizer.vocab_size > TARGET_VOCAB_SIZE:
-                fast_tokenizer = convert_tokenizer(fast_tokenizer)
+                pass
+                # fast_tokenizer = convert_tokenizer(fast_tokenizer)
         except Exception:
             result["warnings"].append(
                 (
