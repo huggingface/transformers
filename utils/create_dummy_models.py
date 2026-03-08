@@ -127,8 +127,9 @@ UNCONVERTIBLE_MODEL_ARCHITECTURES = {
 
 
 config_class_to_model_tester_map = {
-    "Qwen3OmniMoeConfig": None,
-    "Qwen2_5OmniConfig": None,
+    "Qwen3OmniMoeConfig": None,  # Only has `Qwen3OmniMoeThinkerForConditionalGenerationTester` which returns `Qwen3OmniMoeThinkerConfig`
+    "Qwen2_5OmniConfig": None,  # Only has `Qwen2_5OmniThinkerForConditionalGenerationTester` which returns `Qwen2_5OmniThinkerConfig`
+    "PeAudioVideoConfig": None,  # Only has `PeAudioVideoEncoderTester` which returns `PeAudioVideoEncoderConfig`
     "Qwen3_5Config": "Qwen3_5VisionText2TextModelTester",
     "Qwen3_5MoeConfig": "Qwen3_5MoeVisionText2TextModelTester",
     "InstructBlipConfig": "InstructBlipForConditionalGenerationDecoderOnlyModelTester",
@@ -145,6 +146,8 @@ config_class_to_model_tester_map = {
     "ClvpConfig": "ClvpModelForConditionalGenerationTester",
     "BarkConfig": "BarkModelTester",
     "FastSpeech2ConformerWithHifiGanConfig": "FastSpeech2ConformerWithHifiGanTester",
+    "Gemma3nAudioConfig": "Gemma3nAudioModelTester",
+    # "Blip2QFormerConfig": "Blip2QFormerModelTester",
 }
 
 
@@ -160,6 +163,11 @@ no_model_tester_at_all = {
 
 deprecated_models = {
     "DinatConfig",
+}
+
+
+config_without_meaningful_model_class = {
+    "Gemma3nVisionConfig",  # It has `TimmWrapperModel`, which is already created under `TimmWrapperConfig` (there is no `Gemma3nVisionModel`)
 }
 
 
@@ -1745,6 +1753,7 @@ def create_tiny_models(
     config_classes = [x for x in config_classes if x.__name__ not in no_model_tester_at_all]
     config_classes = [x for x in config_classes if x.__name__ not in configs_requiring_too_exotic_dependency]
     config_classes = [x for x in config_classes if x.__name__ not in deprecated_models]
+    config_classes = [x for x in config_classes if x.__name__ not in config_without_meaningful_model_class]
 
     import random
     for i in range(100):
