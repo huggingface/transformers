@@ -1532,7 +1532,7 @@ def build(config_class, models_to_create, output_dir):
             # TODO: If we can't get the exact config, let's skip to avoid issue
             # TODO: Maybe add as an error info
             if pytorch_arch.config_class != used_tiny_config.__class__:
-                print(f"{pytorch_arch.config_class} != {used_tiny_config.__class__} Oh la la!!!")
+                print(f"Skip `{pytorch_arch.__name__}`: its config class is {pytorch_arch.config_class} != {used_tiny_config.__class__} Oh la la!!!")
                 del result["pytorch"][pytorch_arch.__name__]
                 continue
 
