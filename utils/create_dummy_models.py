@@ -909,7 +909,7 @@ def convert_processors(processors, tiny_config, output_folder, result):
             # be retrained
             if fast_tokenizer.vocab_size > TARGET_VOCAB_SIZE:
                 pass
-                # fast_tokenizer = convert_tokenizer(fast_tokenizer)
+                fast_tokenizer = convert_tokenizer(fast_tokenizer)
         except Exception:
             result["warnings"].append(
                 (
