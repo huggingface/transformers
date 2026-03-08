@@ -1755,7 +1755,7 @@ def create_tiny_models(
     config_classes = [x for x in config_classes if x.__name__ not in deprecated_models]
     config_classes = [x for x in config_classes if x.__name__ not in config_without_meaningful_model_class]
 
-    config_classes = config_classes[175:181]
+    config_classes = config_classes[181:187]
 
     # import random
     # for i in range(100):
