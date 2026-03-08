@@ -406,6 +406,11 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
                     new_processor_classes = [
                         x for x in new_processor_classes if x is not None and x.__name__.replace("Fast", "") not in names
                     ]
+                    # For recursive calls, let's avoid `Auto`!!!
+                    new_processor_classes = [
+                        x for x in new_processor_classes if not x.__name__.startswith("Auto")
+                    ]
+
                     if len(new_processor_classes) > 0:
                         new_processor_class = new_processor_classes[0]
                         # Let's use fast tokenizer if there is any
@@ -449,6 +454,7 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
             # has no tokenizer file to load `Wav2Vec2CTCTokenizer`. In this case, we try to build a processor
             # with the configuration class (for example, `Wav2Vec2Config`) corresponding to `processor_class`.
             config_class_from_processor_class = get_config_class_from_processor_class(processor_class)
+            # breakpoint()
             if config_class_from_processor_class != config_class:
                 processor = build_processor(config_class_from_processor_class, processor_class)
 
@@ -1397,6 +1403,9 @@ def build(config_class, models_to_create, output_dir):
     traces = []
     errors = []
     # breakpoint()
+
+    # processor_classes = [x for x in processor_classes if x.__name__ == "AutoTokenizer"]
+
     for processor_class in processor_classes:
         try:
             # breakpoint()
@@ -1755,7 +1764,7 @@ def create_tiny_models(
     config_classes = [x for x in config_classes if x.__name__ not in deprecated_models]
     config_classes = [x for x in config_classes if x.__name__ not in config_without_meaningful_model_class]
 
-    config_classes = config_classes[178:179]
+    # config_classes = config_classes[178:179]
 
     # import random
     # for i in range(100):
