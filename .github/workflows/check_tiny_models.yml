@@ -42,10 +42,12 @@ jobs:
           python -m pip install essentia==2.1b6.dev1034
           # For `mamba` type models to avoid the error `self._specs = frozenset(specifiers) #TypeError: 'int' object is not iterable`
           python -m pip install -U "kernels>=0.12.2" "einops"
+          # For `Pop2PianoProcessor` (otherwise multiprocess error with `Placeholder` unpickable issue)
+          python -m pip install -U "pretty_midi"
 
       - name: Create all tiny models (locally)
         run: |
-          python utils/create_dummy_models.py tiny_local_models --all --num_workers 1
+          python utils/create_dummy_models.py tiny_local_models --all --num_workers 2
 
       - name: Local tiny model reports artifacts
         if: ${{ always() }}
