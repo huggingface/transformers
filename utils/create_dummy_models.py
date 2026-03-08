@@ -1747,12 +1747,12 @@ def create_tiny_models(
     # mamba = {"BambaConfig", "FalconMambaConfig", "GraniteMoeHybridConfig", "JambaConfig", "MambaConfig", "Mamba2Config", ""}
     # config_classes = [x for x in config_classes if x.__name__ in mamba]
 
-    for x in config_classes:
-        if x.__name__ == "Pop2PianoConfig":
-            break
-
-    config_classes = config_classes[:1]
-    config_classes += [x]
+    # for x in config_classes:
+    #     if x.__name__ == "Pop2PianoConfig":
+    #         break
+    #
+    # config_classes = config_classes[:1]
+    # config_classes += [x]
 
     # A map from config classes to tuples of processors (tokenizer, feature extractor, processor) classes
     processor_type_map = {c: get_processor_types_from_config_class(c) for c in config_classes}
