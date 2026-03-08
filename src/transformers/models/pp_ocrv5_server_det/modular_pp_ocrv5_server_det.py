@@ -478,46 +478,14 @@ def boxes_from_bitmap(
     return np.array(boxes, dtype=np.int16), scores
 
 
-def process(
-    pred: np.ndarray,
-    size: np.ndarray,
-    threshold: float,
-    box_thresh: float,
-    unclip_ratio: float,
-    min_size: int,
-    max_candidates: int,
-) -> tuple[list[np.ndarray] | np.ndarray, list[float]]:
-    """
-    Main post-processing function to convert model predictions into text boxes.
-
-    Args:
-        pred (torch.Tensor): Model output of shape (1, H, W).
-        size (torch.Tensor): Original image size (height, width).
-        threshold (float): Threshold for binarizing the prediction map.
-        box_thresh (float): Score threshold for filtering boxes.
-        unclip_ratio (float): Expansion ratio for unclipping.
-        min_size (int): Minimum side length of valid boxes.
-        max_candidates (int): Maximum number of boxes to extract.
-
-    Returns:
-        tuple:
-            - boxes (list or np.ndarray): Extracted text boxes.
-            - scores (list): Corresponding confidence scores.
-    """
-    src_h, src_w = size
-    mask = pred > threshold
-    boxes, scores = boxes_from_bitmap(pred, mask, src_w, src_h, box_thresh, unclip_ratio, min_size, max_candidates)
-    return boxes, scores
-
-
 class PPOCRV5ServerDetImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     limit_side_len (`int`, *optional*, defaults to `960`):
-        todo
+        Maximum or minimum side length.
     limit_type (`str`, *optional*, defaults to `max`):
-        todo
+        Resizing strategy: "max", "min", or "resize_long".
     max_side_limit (`int`, *optional* defaults to `4000`):
-        todo
+        Maximum allowed side length.
     """
 
     limit_side_len: int
@@ -615,15 +583,11 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
 
         results = []
         for pred, size in zip(preds.logits, target_sizes):
-            box, score = process(
-                pred=pred[0, :, :].cpu().detach().numpy(),
-                size=size.cpu().detach().numpy(),
-                threshold=threshold,
-                box_thresh=box_thresh,
-                unclip_ratio=unclip_ratio,
-                min_size=min_size,
-                max_candidates=max_candidates,
-            )
+            pred = pred[0, :, :].cpu().detach().numpy()
+            size = size.cpu().detach().numpy()
+            src_h, src_w = size
+            mask = pred > threshold
+            box, score = boxes_from_bitmap(pred, mask, src_w, src_h, box_thresh, unclip_ratio, min_size, max_candidates)
 
             results.append(
                 {
@@ -1302,23 +1266,15 @@ class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    """
-)
-class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
-    """
     Core PPOCRV5 Server Det model.
     Integration of HGNetV2 (Backbone), PPOCRV5ServerDetLKPAN (Neck), and PPOCRV5ServerDetPFHeadLocal (Head).
     """
+)
+class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
 
     _can_record_outputs = {"hidden_states": PPOCRV5ServerDetLKPAN}
 
     def __init__(self, config: PPOCRV5ServerDetConfig):
-        """
-        Initialize the PPOCRV5ServerDetModel with the specified configuration.
-
-        Args:
-            config (PPOCRV5ServerDetConfig): Configuration object containing all model hyperparameters.
-        """
         super().__init__(config)
         self.backbone = load_backbone(config)
         self.neck = PPOCRV5ServerDetLKPAN(config)
@@ -1347,20 +1303,15 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
+    Output class for PPOCRV5ServerDetForObjectDetection.
     """
 )
 @dataclass
 class PPOCRV5ServerDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
     """
-    Output class for PPOCRV5ServerDetForObjectDetection.
-
     Args:
         logits (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
             The predicted text mask.
-        last_hidden_state (`torch.FloatTensor`, *optional*):
-            Last stage features from the backbone.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Intermediate stage features.
     """
 
     logits: torch.FloatTensor | None = None
@@ -1368,23 +1319,15 @@ class PPOCRV5ServerDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
 
 @auto_docstring(
     custom_intro="""
-    """
-)
-class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
-    """
     PPOCRV5 Server Det model for object (text) detection tasks. Wraps the core PPOCRV5ServerDetModel
     and returns outputs compatible with the Transformers object detection API.
     """
+)
+class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
 
     _keys_to_ignore_on_load_missing = ["num_batches_tracked"]
 
     def __init__(self, config: PPOCRV5ServerDetConfig):
-        """
-        Initialize the PPOCRV5ServerDetForObjectDetection with the specified configuration.
-
-        Args:
-            config (PPOCRV5ServerDetConfig): Configuration object containing all model hyperparameters.
-        """
         super().__init__(config)
         self.model = PPOCRV5ServerDetModel(config)
         self.head = PPOCRV5ServerDetPFHeadLocal(config)

@@ -638,23 +638,14 @@ class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    """
-)
-class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
-    """
     Core PPOCRV5 Server Det model.
     Integration of HGNetV2 (Backbone), PPOCRV5ServerDetLKPAN (Neck), and PPOCRV5ServerDetPFHeadLocal (Head).
     """
-
+)
+class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
     _can_record_outputs = {"hidden_states": PPOCRV5ServerDetLKPAN}
 
     def __init__(self, config: PPOCRV5ServerDetConfig):
-        """
-        Initialize the PPOCRV5ServerDetModel with the specified configuration.
-
-        Args:
-            config (PPOCRV5ServerDetConfig): Configuration object containing all model hyperparameters.
-        """
         super().__init__(config)
         self.backbone = load_backbone(config)
         self.neck = PPOCRV5ServerDetLKPAN(config)
@@ -683,20 +674,15 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
+    Output class for PPOCRV5ServerDetForObjectDetection.
     """
 )
 @dataclass
 class PPOCRV5ServerDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
     """
-    Output class for PPOCRV5ServerDetForObjectDetection.
-
     Args:
         logits (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
             The predicted text mask.
-        last_hidden_state (`torch.FloatTensor`, *optional*):
-            Last stage features from the backbone.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Intermediate stage features.
     """
 
     logits: torch.FloatTensor | None = None
@@ -704,23 +690,14 @@ class PPOCRV5ServerDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
 
 @auto_docstring(
     custom_intro="""
-    """
-)
-class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
-    """
     PPOCRV5 Server Det model for object (text) detection tasks. Wraps the core PPOCRV5ServerDetModel
     and returns outputs compatible with the Transformers object detection API.
     """
-
+)
+class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["num_batches_tracked"]
 
     def __init__(self, config: PPOCRV5ServerDetConfig):
-        """
-        Initialize the PPOCRV5ServerDetForObjectDetection with the specified configuration.
-
-        Args:
-            config (PPOCRV5ServerDetConfig): Configuration object containing all model hyperparameters.
-        """
         super().__init__(config)
         self.model = PPOCRV5ServerDetModel(config)
         self.head = PPOCRV5ServerDetPFHeadLocal(config)

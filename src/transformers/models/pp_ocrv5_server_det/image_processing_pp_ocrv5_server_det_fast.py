@@ -371,38 +371,6 @@ def boxes_from_bitmap(
     return np.array(boxes, dtype=np.int16), scores
 
 
-def process(
-    pred: np.ndarray,
-    size: np.ndarray,
-    threshold: float,
-    box_thresh: float,
-    unclip_ratio: float,
-    min_size: int,
-    max_candidates: int,
-) -> tuple[list[np.ndarray] | np.ndarray, list[float]]:
-    """
-    Main post-processing function to convert model predictions into text boxes.
-
-    Args:
-        pred (torch.Tensor): Model output of shape (1, H, W).
-        size (torch.Tensor): Original image size (height, width).
-        threshold (float): Threshold for binarizing the prediction map.
-        box_thresh (float): Score threshold for filtering boxes.
-        unclip_ratio (float): Expansion ratio for unclipping.
-        min_size (int): Minimum side length of valid boxes.
-        max_candidates (int): Maximum number of boxes to extract.
-
-    Returns:
-        tuple:
-            - boxes (list or np.ndarray): Extracted text boxes.
-            - scores (list): Corresponding confidence scores.
-    """
-    src_h, src_w = size
-    mask = pred > threshold
-    boxes, scores = boxes_from_bitmap(pred, mask, src_w, src_h, box_thresh, unclip_ratio, min_size, max_candidates)
-    return boxes, scores
-
-
 @auto_docstring(
     custom_intro="""
     """
@@ -493,14 +461,12 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
 
         results = []
         for pred, size in zip(preds.logits, target_sizes):
-            box, score = process(
-                pred=pred[0, :, :].cpu().detach().numpy(),
-                size=size.cpu().detach().numpy(),
-                threshold=threshold,
-                box_thresh=box_thresh,
-                unclip_ratio=unclip_ratio,
-                min_size=min_size,
-                max_candidates=max_candidates,
+            pred = pred[0, :, :].cpu().detach().numpy()
+            size = size.cpu().detach().numpy()
+            src_h, src_w = size
+            mask = pred > threshold
+            box, score = boxes_from_bitmap(
+                pred, mask, src_w, src_h, box_thresh, unclip_ratio, min_size, max_candidates
             )
 
             results.append(

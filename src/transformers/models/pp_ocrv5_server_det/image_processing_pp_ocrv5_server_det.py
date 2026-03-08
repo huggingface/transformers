@@ -24,11 +24,11 @@ from ...processing_utils import ImagesKwargs
 class PPOCRV5ServerDetImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     limit_side_len (`int`, *optional*, defaults to `960`):
-        todo
+        Maximum or minimum side length.
     limit_type (`str`, *optional*, defaults to `max`):
-        todo
+        Resizing strategy: "max", "min", or "resize_long".
     max_side_limit (`int`, *optional* defaults to `4000`):
-        todo
+        Maximum allowed side length.
     """
 
     limit_side_len: int

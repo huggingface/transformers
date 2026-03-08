@@ -80,6 +80,7 @@ for result in results:
 ## PPOCRV5ServerDetForObjectDetection
 
 [[autodoc]] PPOCRV5ServerDetForObjectDetection
+    - forward
 
 ## PPOCRV5ServerDetConfig
 
