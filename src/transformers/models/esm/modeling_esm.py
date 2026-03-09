@@ -488,7 +488,6 @@ class EsmEncoder(nn.Module):
         self.config = config
         self.layer = nn.ModuleList([EsmLayer(config) for _ in range(config.num_hidden_layers)])
         self.emb_layer_norm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.gradient_checkpointing = False
 
     @can_return_tuple
     def forward(

@@ -227,7 +227,6 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
             context_dim=config.hidden_size,
             spatial_merge_size=config.spatial_merge_size,
         )
-        self.gradient_checkpointing = False
 
         self.post_init()
 

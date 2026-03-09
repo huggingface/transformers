@@ -429,7 +429,7 @@ class CsmDepthDecoderModel(CsmPreTrainedModel):
         )
         self.norm = CsmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = CsmRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
+
         self.inputs_embeds_projector = nn.Linear(config.backbone_hidden_size, config.hidden_size, bias=False)
 
         # Initialize weights and apply final processing
@@ -685,7 +685,6 @@ class CsmBackboneModel(CsmPreTrainedModel):
         )
         self.norm = CsmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = CsmRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

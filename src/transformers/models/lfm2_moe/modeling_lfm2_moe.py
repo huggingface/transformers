@@ -705,7 +705,7 @@ class Lfm2MoeModel(Lfm2MoePreTrainedModel):
         self.layers = nn.ModuleList(
             [Lfm2MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.gradient_checkpointing = False
+
         self.pos_emb = Lfm2MoeRotaryEmbedding(config)
         self.embedding_norm = Lfm2MoeRMSNorm(config.hidden_size, eps=config.norm_eps)
 

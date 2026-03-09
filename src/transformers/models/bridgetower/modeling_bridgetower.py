@@ -992,7 +992,6 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         """
         super().__init__(config)
         self.config = config
-        self.gradient_checkpointing = False
 
         self.embeddings = BridgeTowerTextEmbeddings(config)
         self.encoder = BridgeTowerTextEncoder(config)

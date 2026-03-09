@@ -575,7 +575,6 @@ class RobertaModel(RobertaPreTrainedModel):
         """
         super().__init__(config)
         self.config = config
-        self.gradient_checkpointing = False
 
         self.embeddings = RobertaEmbeddings(config)
         self.encoder = RobertaEncoder(config)

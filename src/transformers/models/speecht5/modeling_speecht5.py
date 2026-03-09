@@ -473,7 +473,7 @@ class SpeechT5FeatureEncoder(nn.Module):
                 f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
             )
         self.conv_layers = nn.ModuleList(conv_layers)
-        self.gradient_checkpointing = False
+
         self._requires_grad = True
 
     def _freeze_parameters(self):
@@ -1247,8 +1247,6 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
             config.hidden_size // config.encoder_attention_heads, config.encoder_max_relative_position
         )
 
-        self.gradient_checkpointing = False
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1461,8 +1459,6 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         self.layerdrop = config.decoder_layerdrop
 
         self.layers = nn.ModuleList([SpeechT5DecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)])
-
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

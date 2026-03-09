@@ -440,7 +440,6 @@ class MiniMaxM2Model(MiniMaxM2PreTrainedModel):
         )
         self.norm = MiniMaxM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = MiniMaxM2RotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

@@ -753,7 +753,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         self.ln_post = nn.LayerNorm(config.d_model)
         self.avg_pooler = nn.AvgPool1d(2, stride=2)
         self.proj = nn.Linear(config.d_model, config.output_dim)
-        self.gradient_checkpointing = False
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1144,7 +1144,6 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
             context_dim=config.hidden_size,
             spatial_merge_size=config.spatial_merge_size,
         )
-        self.gradient_checkpointing = False
 
         self.post_init()
 
@@ -1602,7 +1601,6 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
         self.has_sliding_layers = "sliding_attention" in self.config.layer_types
         self.rotary_emb = Qwen2_5OmniRotaryEmbedding(config=config)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -2182,7 +2180,6 @@ class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
         self.has_sliding_layers = "sliding_attention" in self.config.layer_types
         self.rotary_emb = Qwen2_5OmniRotaryEmbedding(config=config)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

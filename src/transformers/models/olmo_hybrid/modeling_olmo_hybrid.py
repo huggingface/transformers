@@ -951,7 +951,7 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
             and config.rope_parameters.get("rope_theta") is not None
             else None
         )
-        self.gradient_checkpointing = False
+
         # Initialize weights and apply final processing
         self.post_init()
 

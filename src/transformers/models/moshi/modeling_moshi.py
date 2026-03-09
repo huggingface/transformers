@@ -845,7 +845,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
 
         self.lm_heads = MoshiFlexibleLinear(config.hidden_size, config.audio_vocab_size, config.num_codebooks)
         self._attn_implementation = config._attn_implementation
-        self.gradient_checkpointing = False
+
         self.config = config
 
         self.post_init()
@@ -1047,7 +1047,6 @@ class MoshiModel(MoshiPreTrainedModel):
             ]
         )
         self.norm = MoshiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

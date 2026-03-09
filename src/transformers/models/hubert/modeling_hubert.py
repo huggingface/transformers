@@ -192,7 +192,7 @@ class HubertFeatureEncoder(nn.Module):
                 f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
             )
         self.conv_layers = nn.ModuleList(conv_layers)
-        self.gradient_checkpointing = False
+
         self._requires_grad = True
 
     def _freeze_parameters(self):
@@ -413,7 +413,6 @@ class HubertEncoder(nn.Module):
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([HubertEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -558,7 +557,6 @@ class HubertEncoderStableLayerNorm(nn.Module):
         self.layers = nn.ModuleList(
             [HubertEncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)]
         )
-        self.gradient_checkpointing = False
 
     def forward(
         self,

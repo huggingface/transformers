@@ -618,7 +618,6 @@ class BertModel(BertPreTrainedModel):
         """
         super().__init__(config)
         self.config = config
-        self.gradient_checkpointing = False
 
         self.embeddings = BertEmbeddings(config)
         self.encoder = BertEncoder(config)

@@ -410,7 +410,7 @@ class HiggsAudioV2Model(HiggsAudioV2PreTrainedModel):
         )
         self.norm = HiggsAudioV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = HiggsAudioV2RotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
+
         self.embed_audio_tokens = HiggsAudioV2Embeddings(config)
 
         # Initialize weights and apply final processing

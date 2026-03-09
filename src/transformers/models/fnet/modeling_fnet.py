@@ -263,7 +263,6 @@ class FNetEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([FNetLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(self, hidden_states, output_hidden_states=False, return_dict=True):
         all_hidden_states = () if output_hidden_states else None

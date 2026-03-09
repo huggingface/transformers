@@ -410,7 +410,6 @@ class JanusVisionEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([JanusVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     # Ignore copy
     @auto_docstring
@@ -883,7 +882,7 @@ class JanusVQVAE(JanusPreTrainedModel):
         self.post_quant_conv = torch.nn.Conv2d(config.embed_dim, config.latent_channels, 1)
         self.eval()  # Janus's VQ model is frozen
         self.decoder = JanusVQVAEDecoder(config)
-        self.gradient_checkpointing = False
+
         self.post_init()
 
     @merge_with_config_defaults
@@ -989,7 +988,6 @@ class JanusModel(JanusPreTrainedModel):
 
         self.language_model = AutoModel.from_config(config=config.text_config)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing.
         self.post_init()
 

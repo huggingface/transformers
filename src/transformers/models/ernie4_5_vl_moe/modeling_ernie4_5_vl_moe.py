@@ -724,7 +724,6 @@ class Ernie4_5_VLMoeTextModel(Ernie4_5_VLMoePreTrainedModel):
         )
         self.norm = Ernie4_5_VLMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Ernie4_5_VLMoeTextRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -880,7 +879,6 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Ernie4_5_VLMoePreTrainedMod
         self.rotary_pos_emb = Ernie4_5_VLMoeVisionRotaryEmbedding(head_dim // 2)
 
         self.blocks = nn.ModuleList([Ernie4_5_VLMoeVisionBlock(config) for _ in range(config.depth)])
-        self.gradient_checkpointing = False
 
         self.ln = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
 

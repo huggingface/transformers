@@ -1605,7 +1605,6 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
 
         self.norm = Gemma3nRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Gemma3nRotaryEmbedding(config)
-        self.gradient_checkpointing = False
 
         self.hidden_size = config.hidden_size
         self.hidden_size_per_layer_input = config.hidden_size_per_layer_input

@@ -1582,7 +1582,6 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
         self.layers = nn.ModuleList([BigBirdPegasusEncoderLayer(config, seed=i) for i in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1855,7 +1854,6 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
         )
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

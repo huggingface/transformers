@@ -386,8 +386,6 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
             "bias", torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)), persistent=False
         )
 
-        self.gradient_checkpointing = False
-
         # Initialize weights and apply final processing
         self.post_init()
 

@@ -468,7 +468,6 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel):
         )
         self.norm = PaddleOCRRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = PaddleOCRRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -811,7 +810,7 @@ class PaddleOCRVisionEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([PaddleOCRVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
+
         embed_dim = config.hidden_size
         num_heads = config.num_attention_heads
         head_dim = embed_dim // num_heads

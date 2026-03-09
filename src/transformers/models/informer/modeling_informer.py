@@ -854,7 +854,6 @@ class InformerEncoder(InformerPreTrainedModel):
         )
         self.layers = nn.ModuleList([InformerEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
-        self.gradient_checkpointing = False
 
         if config.distil:
             self.conv_layers = nn.ModuleList(
@@ -978,7 +977,6 @@ class InformerDecoder(InformerPreTrainedModel):
         self.layers = nn.ModuleList([InformerDecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

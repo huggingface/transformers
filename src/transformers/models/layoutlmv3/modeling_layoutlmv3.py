@@ -396,7 +396,6 @@ class LayoutLMv3Encoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([LayoutLMv3Layer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
         self.has_relative_attention_bias = config.has_relative_attention_bias
         self.has_spatial_attention_bias = config.has_spatial_attention_bias

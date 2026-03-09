@@ -426,7 +426,6 @@ class ParakeetEncoderSubsamplingConv2D(nn.Module):
 class ParakeetEncoderBlock(GradientCheckpointingLayer):
     def __init__(self, config: ParakeetEncoderConfig, layer_idx: int | None = None):
         super().__init__()
-        self.gradient_checkpointing = False
 
         self.feed_forward1 = ParakeetEncoderFeedForward(config)
         self.self_attn = ParakeetEncoderAttention(config, layer_idx)
@@ -553,7 +552,6 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
     def __init__(self, config: ParakeetEncoderConfig):
         super().__init__(config)
         self.config = config
-        self.gradient_checkpointing = False
 
         self.dropout = config.dropout
         self.dropout_positions = config.dropout_positions

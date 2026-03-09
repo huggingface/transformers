@@ -1277,7 +1277,6 @@ class FalconH1Model(FalconH1PreTrainedModel):
         self.embedding_multiplier = config.embedding_multiplier
         self.lm_head_multiplier = config.lm_head_multiplier
 
-        self.gradient_checkpointing = False
         # Compute the MuP vector once and register it for all layers
         mup_vector = compute_mup_vector(config)
         for layer in self.layers:

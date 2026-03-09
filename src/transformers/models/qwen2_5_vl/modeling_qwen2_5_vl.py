@@ -368,7 +368,6 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
             context_dim=config.hidden_size,
             spatial_merge_size=config.spatial_merge_size,
         )
-        self.gradient_checkpointing = False
 
         self.post_init()
 
@@ -856,7 +855,6 @@ class Qwen2_5_VLTextModel(Qwen2_5_VLPreTrainedModel):
         self.has_sliding_layers = "sliding_attention" in self.config.layer_types
         self.rotary_emb = Qwen2_5_VLRotaryEmbedding(config=config)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

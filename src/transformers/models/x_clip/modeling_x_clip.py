@@ -554,7 +554,6 @@ class XCLIPEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([XCLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     @can_return_tuple
     def forward(
@@ -759,7 +758,6 @@ class XCLIPVisionEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([XCLIPVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(
         self,

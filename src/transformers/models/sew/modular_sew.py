@@ -152,7 +152,6 @@ class SEWEncoder(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([SEWEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.upsample = SEWUpsampling(config)
-        self.gradient_checkpointing = False
 
     def forward(
         self,

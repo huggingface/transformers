@@ -613,7 +613,6 @@ class CanineEncoder(nn.Module):
                 for _ in range(config.num_hidden_layers)
             ]
         )
-        self.gradient_checkpointing = False
 
     def forward(
         self,

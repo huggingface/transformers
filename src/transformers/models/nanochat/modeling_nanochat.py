@@ -368,7 +368,6 @@ class NanoChatModel(NanoChatPreTrainedModel):
 
         self.norm = NanoChatRMSNorm(eps=config.rms_norm_eps)
         self.rotary_emb = NanoChatRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

@@ -373,7 +373,6 @@ class Wav2Vec2BertEncoder(nn.Module):
 
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([Wav2Vec2BertEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(
         self,

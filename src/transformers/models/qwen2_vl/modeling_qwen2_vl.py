@@ -729,7 +729,6 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         self.merger = PatchMerger(
             dim=config.hidden_size, context_dim=config.embed_dim, spatial_merge_size=config.spatial_merge_size
         )
-        self.gradient_checkpointing = False
 
         self.post_init()
 
@@ -831,7 +830,6 @@ class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
         self.has_sliding_layers = "sliding_attention" in self.config.layer_types
         self.rotary_emb = Qwen2VLRotaryEmbedding(config=config)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

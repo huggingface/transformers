@@ -129,7 +129,6 @@ class Ovis2VisionTransformer(nn.Module):
         self.embeddings = Ovis2VisionEmbeddings(config)
         self.encoder = Ovis2VisionEncoder(config)
         self.rms_norm = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.gradient_checkpointing = False
 
     @can_return_tuple
     def forward(

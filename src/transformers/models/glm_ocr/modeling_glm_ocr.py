@@ -577,7 +577,6 @@ class GlmOcrVisionModel(GlmOcrPreTrainedModel):
         )
         self.post_layernorm = GlmOcrRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.gradient_checkpointing = False
         self.post_init()
 
     def rot_pos_emb(self, grid_thw):
@@ -753,7 +752,6 @@ class GlmOcrTextModel(GlmOcrPreTrainedModel):
         self.norm = GlmOcrRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = GlmOcrTextRotaryEmbedding(config=config)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

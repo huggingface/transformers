@@ -519,8 +519,6 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
 
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        self.gradient_checkpointing = False
-
     def _apply_chunk_attention(self, attention_mask, hidden_states):
         """
         Creates a chunk attention mask. It creates a mask to prevent attention across chunks, ensuring that each
@@ -1625,7 +1623,6 @@ class SeamlessM4Tv2Encoder(SeamlessM4Tv2PreTrainedModel):
 
         self.layer_norm = nn.LayerNorm(config.hidden_size)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1805,7 +1802,6 @@ class SeamlessM4Tv2Decoder(SeamlessM4Tv2PreTrainedModel):
         self.layers = nn.ModuleList(layers)
         self.layer_norm = nn.LayerNorm(config.hidden_size)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -2005,7 +2001,6 @@ class SeamlessM4Tv2TextToUnitDecoder(SeamlessM4Tv2PreTrainedModel):
         self.layers = nn.ModuleList(layers)
         self.layer_norm = nn.LayerNorm(config.hidden_size)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

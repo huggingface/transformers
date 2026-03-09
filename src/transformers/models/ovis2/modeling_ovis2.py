@@ -311,7 +311,6 @@ class Ovis2VisionEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([Ovis2VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     # Ignore copy
     @can_return_tuple
@@ -336,7 +335,6 @@ class Ovis2VisionTransformer(nn.Module):
         self.embeddings = Ovis2VisionEmbeddings(config)
         self.encoder = Ovis2VisionEncoder(config)
         self.rms_norm = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.gradient_checkpointing = False
 
     @can_return_tuple
     def forward(

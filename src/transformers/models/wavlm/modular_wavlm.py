@@ -294,7 +294,6 @@ class WavLMEncoder(nn.Module):
         self.layers = nn.ModuleList(
             [WavLMEncoderLayer(config, has_relative_position_bias=(i == 0)) for i in range(config.num_hidden_layers)]
         )
-        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -371,7 +370,6 @@ class WavLMEncoderStableLayerNorm(nn.Module):
                 for i in range(config.num_hidden_layers)
             ]
         )
-        self.gradient_checkpointing = False
 
     def forward(
         self,

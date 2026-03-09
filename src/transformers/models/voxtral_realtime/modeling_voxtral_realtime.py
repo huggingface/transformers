@@ -520,7 +520,6 @@ class VoxtralRealtimeEncoder(VoxtralRealtimePreTrainedModel):
         )
         self.norm = VoxtralRealtimeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = VoxtralRealtimeRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -758,7 +757,6 @@ class VoxtralRealtimeTextModel(VoxtralRealtimeTextPreTrainedModel):
         )
         self.norm = VoxtralRealtimeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = VoxtralRealtimeRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

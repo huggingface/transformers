@@ -367,7 +367,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
         )
         self.norm = Qwen3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Qwen3RotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
+
         self.has_sliding_layers = "sliding_attention" in self.config.layer_types
 
         # Initialize weights and apply final processing

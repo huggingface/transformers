@@ -369,7 +369,6 @@ class InstructBlipEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([InstructBlipEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     @auto_docstring
     def forward(
@@ -703,7 +702,6 @@ class InstructBlipQFormerEncoder(nn.Module):
         self.layer = nn.ModuleList(
             [InstructBlipQFormerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.gradient_checkpointing = False
 
     @can_return_tuple
     def forward(

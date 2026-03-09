@@ -228,7 +228,6 @@ class PixioEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([PixioLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(self, hidden_states: torch.Tensor, output_hidden_states: bool = False) -> BaseModelOutput:
         all_hidden_states = [hidden_states] if output_hidden_states else None

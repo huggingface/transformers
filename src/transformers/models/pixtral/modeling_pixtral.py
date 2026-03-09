@@ -354,7 +354,6 @@ class PixtralTransformer(nn.Module):
         self.layers = torch.nn.ModuleList()
         for _ in range(config.num_hidden_layers):
             self.layers.append(PixtralAttentionLayer(config))
-        self.gradient_checkpointing = False
 
     def forward(
         self,

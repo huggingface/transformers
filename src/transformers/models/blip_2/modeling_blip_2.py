@@ -461,7 +461,6 @@ class Blip2Encoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([Blip2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     @auto_docstring
     def forward(
@@ -797,7 +796,6 @@ class Blip2QFormerEncoder(nn.Module):
         self.layer = nn.ModuleList(
             [Blip2QFormerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.gradient_checkpointing = False
 
     @can_return_tuple
     def forward(

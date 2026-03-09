@@ -429,7 +429,6 @@ class GotOcr2VisionEncoder(GotOcr2PreTrainedModel):
 
         self.neck = GotOcr2VisionNeck(config)
 
-        self.gradient_checkpointing = False
         self.post_init()
 
     def get_input_embeddings(self):

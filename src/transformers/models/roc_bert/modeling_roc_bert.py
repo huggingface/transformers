@@ -645,7 +645,6 @@ class RoCBertModel(RoCBertPreTrainedModel):
         """
         super().__init__(config)
         self.config = config
-        self.gradient_checkpointing = False
 
         self.embeddings = RoCBertEmbeddings(config)
         self.encoder = RoCBertEncoder(config)

@@ -462,8 +462,6 @@ class Kosmos2_5VisionAttention(nn.Module):
         self.value = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
         self.output = nn.Linear(self.inner_dim, self.hidden_size, bias=False)
 
-        self.gradient_checkpointing = False
-
     def forward(
         self,
         hidden_states,
@@ -550,7 +548,6 @@ class Kosmos2_5VisionEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([Kosmos2_5VisionLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def _prepare_attention_mask(self, attention_mask, input_shape, inputs_embeds):
         if is_flash_attention_requested(self.config):
@@ -906,7 +903,6 @@ class Kosmos2_5TextTransformer(nn.Module):
         self.segment_emb = nn.Embedding(2, config.embed_dim)
         self.layers = nn.ModuleList([Kosmos2_5TextBlock(config, layer_idx) for layer_idx in range(config.layers)])
         self.layer_norm = nn.LayerNorm(config.embed_dim, config.layer_norm_eps)
-        self.gradient_checkpointing = False
 
     def forward(
         self,

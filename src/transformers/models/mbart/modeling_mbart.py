@@ -527,7 +527,6 @@ class MBartEncoder(MBartPreTrainedModel):
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -679,7 +678,6 @@ class MBartDecoder(MBartPreTrainedModel):
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

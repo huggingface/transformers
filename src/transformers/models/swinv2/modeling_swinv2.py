@@ -798,8 +798,6 @@ class Swinv2Encoder(nn.Module):
             layers.append(stage)
         self.layers = nn.ModuleList(layers)
 
-        self.gradient_checkpointing = False
-
     def forward(
         self,
         hidden_states: torch.Tensor,

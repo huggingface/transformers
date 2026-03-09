@@ -648,7 +648,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         self.positional_embedding = SinusoidsPositionEmbedding(self.max_source_positions, embed_dim)
         self.layers = nn.ModuleList([Qwen3OmniMoeAudioEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.ln_post = nn.LayerNorm(config.d_model)
-        self.gradient_checkpointing = False
+
         self.conv2d1 = nn.Conv2d(1, config.downsample_hidden_size, 3, 2, padding=1)
         self.conv2d2 = nn.Conv2d(config.downsample_hidden_size, config.downsample_hidden_size, 3, 2, padding=1)
         self.conv2d3 = nn.Conv2d(config.downsample_hidden_size, config.downsample_hidden_size, 3, 2, padding=1)
@@ -1080,8 +1080,6 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
         )
 
         self.deepstack_visual_indexes = config.deepstack_visual_indexes
-
-        self.gradient_checkpointing = False
 
         self.post_init()
 
@@ -1684,7 +1682,6 @@ class Qwen3OmniMoeThinkerTextModel(Qwen3OmniMoePreTrainedModel):
         )
         self.norm = Qwen3OmniMoeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Qwen3OmniMoeThinkerTextRotaryEmbedding(config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2569,7 +2566,7 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3OmniMoePreTrainedModel):
         )
         self.norm = Qwen3OmniMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Qwen3OmniMoeRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
+
         self.has_sliding_layers = "sliding_attention" in self.config.layer_types
         self.codec_embedding = nn.ModuleList(
             [nn.Embedding(config.vocab_size, config.hidden_size) for _ in range(config.num_code_groups - 1)]
@@ -2919,7 +2916,7 @@ class Qwen3OmniMoeTalkerModel(Qwen3OmniMoePreTrainedModel):
         )
         self.norm = Qwen3OmniMoeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Qwen3OmniMoeTalkerRotaryEmbedding(config)
-        self.gradient_checkpointing = False
+
         self.codec_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
 
         # Initialize weights and apply final processing
@@ -3569,7 +3566,7 @@ class Qwen3OmniMoeCode2WavTransformerModel(Qwen3OmniMoePreTrainedModel):
         )
         self.norm = Qwen3OmniMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Qwen3OmniMoeRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
+
         self.has_sliding_layers = "sliding_attention" in self.config.layer_types
         self.window_size = config.sliding_window
 

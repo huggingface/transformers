@@ -323,7 +323,6 @@ class PvtV2Encoder(nn.Module):
     def __init__(self, config: PvtV2Config):
         super().__init__()
         self.config = config
-        self.gradient_checkpointing = False
 
         # encoder layers
         self.layers = nn.ModuleList([PvtV2EncoderLayer(config, i) for i in range(config.num_encoder_blocks)])

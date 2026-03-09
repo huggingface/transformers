@@ -340,7 +340,6 @@ class VideoLlama3VisionEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([VideoLlama3VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     # Ignore copy
     @can_return_tuple

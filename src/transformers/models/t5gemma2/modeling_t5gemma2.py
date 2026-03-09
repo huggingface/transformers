@@ -787,7 +787,6 @@ class T5Gemma2TextEncoder(T5Gemma2PreTrainedModel):
             eoi_token_index=eoi_token_index,
         )
         self.norm = T5Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.gradient_checkpointing = False
 
         self.layers = nn.ModuleList(
             [T5Gemma2EncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -989,7 +988,6 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
             eoi_token_index=eoi_token_index,
         )
         self.norm = T5Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.gradient_checkpointing = False
 
         self.layers = nn.ModuleList(
             [T5Gemma2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]

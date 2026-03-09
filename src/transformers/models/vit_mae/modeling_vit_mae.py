@@ -506,7 +506,6 @@ class ViTMAEEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([ViTMAELayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(self, hidden_states: torch.Tensor) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
@@ -638,7 +637,7 @@ class ViTMAEDecoder(nn.Module):
         self.decoder_pred = nn.Linear(
             config.decoder_hidden_size, config.patch_size**2 * config.num_channels, bias=True
         )  # encoder to decoder
-        self.gradient_checkpointing = False
+
         self.config = decoder_config
         self.initialize_weights(num_patches)
 

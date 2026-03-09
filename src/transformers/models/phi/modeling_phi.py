@@ -348,7 +348,7 @@ class PhiModel(PhiPreTrainedModel):
             [PhiDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.rotary_emb = PhiRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
+
         self.embed_dropout = nn.Dropout(config.embd_pdrop)
         self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 

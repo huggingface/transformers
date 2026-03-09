@@ -1196,8 +1196,6 @@ class Qwen3_5MoeVisionModel(Qwen3_5MoePreTrainedModel):
             use_postshuffle_norm=False,
         )
 
-        self.gradient_checkpointing = False
-
         self.post_init()
 
     def rot_pos_emb(self, grid_thw: torch.Tensor) -> torch.Tensor:
@@ -1420,7 +1418,7 @@ class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
         )
         self.norm = Qwen3_5MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Qwen3_5MoeTextRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
+
         # Initialize weights and apply final processing
         self.post_init()
 

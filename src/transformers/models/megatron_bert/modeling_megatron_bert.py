@@ -349,7 +349,6 @@ class MegatronBertEncoder(nn.Module):
         # The final layer norm. We removed the 1st LN, moved LN to each hidden layer and this one
         # is simply the final LN (Transformer's BERT has it attached to each hidden layer).
         self.ln = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.gradient_checkpointing = False
 
     def forward(
         self,

@@ -208,7 +208,7 @@ class SEWFeatureEncoder(nn.Module):
                 f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
             )
         self.conv_layers = nn.ModuleList(conv_layers)
-        self.gradient_checkpointing = False
+
         self._requires_grad = True
 
     def _freeze_parameters(self):
@@ -413,7 +413,6 @@ class SEWEncoder(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([SEWEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.upsample = SEWUpsampling(config)
-        self.gradient_checkpointing = False
 
     def forward(
         self,

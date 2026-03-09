@@ -830,7 +830,6 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
         # in TABLE_TRANSFORMER, the decoder uses layernorm after the last decoder layer output
         self.layernorm = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

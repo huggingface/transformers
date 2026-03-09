@@ -363,7 +363,6 @@ class RemBertEncoder(nn.Module):
 
         self.embedding_hidden_mapping_in = nn.Linear(config.input_embedding_size, config.hidden_size)
         self.layer = nn.ModuleList([RemBertLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(
         self,

@@ -336,7 +336,6 @@ class OPTDecoder(OPTPreTrainedModel):
 
         self.layers = nn.ModuleList([OPTDecoderLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

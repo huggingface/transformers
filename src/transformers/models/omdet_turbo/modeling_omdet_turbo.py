@@ -1161,7 +1161,6 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
     def __init__(self, config: OmDetTurboConfig):
         self.config = config
         super().__init__(config)
-        self.gradient_checkpointing = False
 
         hidden_dim = config.decoder_hidden_dim
         self.num_queries = config.num_queries

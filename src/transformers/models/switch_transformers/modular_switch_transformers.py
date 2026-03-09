@@ -429,8 +429,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         self.dropout = nn.Dropout(config.dropout_rate)
         self.post_init()
 
-        self.gradient_checkpointing = False
-
     @merge_with_config_defaults
     @capture_outputs
     def forward(

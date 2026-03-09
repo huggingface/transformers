@@ -321,7 +321,7 @@ class GlmAsrEncoder(GlmAsrPreTrainedModel):
         )
         self.norm = nn.LayerNorm(config.hidden_size)
         self.rotary_emb = GlmAsrRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
+
         self.post_init()
 
     @merge_with_config_defaults

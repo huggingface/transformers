@@ -435,7 +435,6 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
 
         self.layers = nn.ModuleList([TrOCRDecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)])
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

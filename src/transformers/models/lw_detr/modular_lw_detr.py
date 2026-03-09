@@ -982,8 +982,6 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
         self.layers = nn.ModuleList([LwDetrDecoderLayer(config, i) for i in range(config.decoder_layers)])
         self.layernorm = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
-
         self.ref_point_head = LwDetrMLPPredictionHead(2 * config.d_model, config.d_model, config.d_model, num_layers=2)
 
         self.post_init()

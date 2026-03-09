@@ -454,7 +454,6 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
         )
         self.final_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.rotary_emb = ModernBertDecoderRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
 
         self.post_init()
 

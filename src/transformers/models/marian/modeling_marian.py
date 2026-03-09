@@ -489,7 +489,6 @@ class MarianEncoder(MarianPreTrainedModel):
         )
         self.layers = nn.ModuleList([MarianEncoderLayer(config) for _ in range(config.encoder_layers)])
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -626,7 +625,6 @@ class MarianDecoder(MarianPreTrainedModel):
         )
         self.layers = nn.ModuleList([MarianDecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)])
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

@@ -354,8 +354,6 @@ class LayoutLMv2Encoder(nn.Module):
             self.rel_pos_x_bias = nn.Linear(self.rel_2d_pos_bins, config.num_attention_heads, bias=False)
             self.rel_pos_y_bias = nn.Linear(self.rel_2d_pos_bins, config.num_attention_heads, bias=False)
 
-        self.gradient_checkpointing = False
-
     def _calculate_1d_position_embeddings(self, position_ids):
         rel_pos_mat = position_ids.unsqueeze(-2) - position_ids.unsqueeze(-1)
         rel_pos = relative_position_bucket(

@@ -437,7 +437,6 @@ class Kosmos2VisionEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([Kosmos2VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     @can_return_tuple
     def forward(
@@ -934,8 +933,6 @@ class Kosmos2TextTransformer(nn.Module):
 
         self.layers = nn.ModuleList([Kosmos2TextBlock(config, layer_idx=i) for i in range(config.layers)])
         self.layer_norm = nn.LayerNorm(config.embed_dim, config.layer_norm_eps)
-
-        self.gradient_checkpointing = False
 
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         # create causal mask

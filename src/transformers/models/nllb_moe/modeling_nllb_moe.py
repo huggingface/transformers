@@ -706,7 +706,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
             self.layers.append(NllbMoeEncoderLayer(config, is_sparse, layer_idx=i))
 
         self.layer_norm = nn.LayerNorm(config.d_model)
-        self.gradient_checkpointing = False
+
         self.post_init()
 
     @merge_with_config_defaults
@@ -790,7 +790,6 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
 
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

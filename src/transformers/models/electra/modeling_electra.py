@@ -569,7 +569,7 @@ class ElectraModel(ElectraPreTrainedModel):
 
         self.encoder = ElectraEncoder(config)
         self.config = config
-        self.gradient_checkpointing = False
+
         # Initialize weights and apply final processing
         self.post_init()
 

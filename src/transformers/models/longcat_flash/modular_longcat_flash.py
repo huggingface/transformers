@@ -364,7 +364,6 @@ class LongcatFlashModel(DeepseekV3Model):
         self.config.num_hidden_layers = 2 * config.num_layers
         self.norm = LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = LongcatFlashRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

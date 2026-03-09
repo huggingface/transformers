@@ -564,7 +564,6 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
         self.layers = nn.ModuleList([Speech2TextEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -699,7 +698,6 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
 
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

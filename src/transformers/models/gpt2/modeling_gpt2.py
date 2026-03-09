@@ -511,7 +511,6 @@ class GPT2Model(GPT2PreTrainedModel):
         self.h = nn.ModuleList([GPT2Block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
-        self.gradient_checkpointing = False
         self._attn_implementation = config._attn_implementation
 
         # Initialize weights and apply final processing

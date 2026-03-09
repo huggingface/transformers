@@ -692,7 +692,7 @@ class FalconModel(FalconPreTrainedModel):
 
         # Final Layer Norm
         self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
-        self.gradient_checkpointing = False
+
         self.rotary_emb = FalconRotaryEmbedding(config=config)
 
         # Initialize weights and apply final processing

@@ -1415,7 +1415,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         self.ln_post = nn.LayerNorm(config.d_model)
         self.avg_pooler = nn.AvgPool1d(2, stride=2)
         self.proj = nn.Linear(config.d_model, config.output_dim)
-        self.gradient_checkpointing = False
+
         # Initialize weights and apply final processing
         self.post_init()
 

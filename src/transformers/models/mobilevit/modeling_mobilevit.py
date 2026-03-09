@@ -508,7 +508,6 @@ class MobileViTEncoder(nn.Module):
         self.config = config
 
         self.layer = nn.ModuleList()
-        self.gradient_checkpointing = False
 
         # segmentation architectures like DeepLab and PSPNet modify the strides
         # of the classification backbones

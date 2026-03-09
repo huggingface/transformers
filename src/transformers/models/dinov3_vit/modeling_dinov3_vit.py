@@ -478,7 +478,7 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         self.rope_embeddings = DINOv3ViTRopePositionEmbedding(config)
         self.layer = nn.ModuleList([DINOv3ViTLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.gradient_checkpointing = False
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -525,7 +525,6 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
         self.rope_embeddings = DINOv3ViTRopePositionEmbedding(config)
         self.layer = nn.ModuleList([DINOv3ViTLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.gradient_checkpointing = False
 
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.post_init()

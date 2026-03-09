@@ -535,7 +535,6 @@ class DebertaEncoder(nn.Module):
             if self.max_relative_positions < 1:
                 self.max_relative_positions = config.max_position_embeddings
             self.rel_embeddings = nn.Embedding(self.max_relative_positions * 2, config.hidden_size)
-        self.gradient_checkpointing = False
 
     def get_rel_embedding(self):
         rel_embeddings = self.rel_embeddings.weight if self.relative_attention else None
