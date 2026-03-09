@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping, MutableMapping
-from typing import TYPE_CHECKING, Any, Protocol, TypeAlias
+from typing import TYPE_CHECKING, Any, ModuleType, Protocol, TypeAlias, TypeGuard
 
 
 if TYPE_CHECKING:
@@ -170,3 +170,11 @@ class WhisperGenerationConfigLike(Protocol):
     """Protocol for Whisper-specific generation config fields accessed in generation internals."""
 
     no_timestamps_token_id: int
+
+
+class _TorchWithHPU(ModuleType, Protocol):
+    hpu: Any
+
+
+def has_torch_hpu(mod: ModuleType) -> TypeGuard[_TorchWithHPU]:
+    return hasattr(mod, "hpu") and mod.hpu.is_available()

@@ -36,7 +36,7 @@ from typing import Any
 import packaging.version
 from packaging import version
 
-from . import logging
+from . import _typing, logging
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -389,7 +389,7 @@ def is_torch_hpu_available() -> bool:
         # import habana_frameworks.torch in case of lazy mode to patch torch with torch.hpu
         import habana_frameworks.torch  # noqa: F401
 
-    if not hasattr(torch, "hpu") or not torch.hpu.is_available():
+    if not _typing.has_torch_hpu(torch):
         return False
 
     # We patch torch.gather for int64 tensors to avoid a bug on Gaudi

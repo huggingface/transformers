@@ -20,13 +20,13 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from ..utils.quantization_config import BitsAndBytesConfig
 
+from .._typing import has_torch_hpu
 from ..utils import (
     ACCELERATE_MIN_VERSION,
     BITSANDBYTES_MIN_VERSION,
     is_accelerate_available,
     is_bitsandbytes_available,
     is_torch_available,
-    is_torch_hpu_available,
     is_torch_npu_available,
     is_torch_xpu_available,
     logging,
@@ -91,8 +91,8 @@ class Bnb8BitHfQuantizer(HfQuantizer):
                 device_map = {"": torch.cuda.current_device()}
             elif is_torch_npu_available():
                 device_map = {"": f"npu:{getattr(torch, 'npu').current_device()}"}
-            elif is_torch_hpu_available():
-                device_map = {"": f"hpu:{getattr(torch, 'hpu').current_device()}"}
+            elif has_torch_hpu(torch):
+                device_map = {"": f"hpu:{torch.hpu.current_device()}"}
             elif is_torch_xpu_available():
                 device_map = {"": getattr(torch, "xpu").current_device()}
             else:
