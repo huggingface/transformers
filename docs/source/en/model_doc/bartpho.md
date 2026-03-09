@@ -34,28 +34,6 @@ You can find all the original checkpoints under the [VinAI](https://huggingface.
 The example below demonstrates how to summarize text with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```python
-import torch
-from transformers import pipeline
-
-pipeline = pipeline(
-   task="summarization",
-   model="vinai/bartpho-word",
-   dtype=torch.float16,
-   device=0
-)
-
-text = """
-Quang tổng hợp hay gọi tắt là quang hợp là quá trình thu nhận và chuyển hóa năng lượng ánh sáng Mặt trời của thực vật,
-tảo và một số vi khuẩn để tạo ra hợp chất hữu cơ phục vụ bản thân cũng như làm nguồn thức ăn cho hầu hết các sinh vật
-trên Trái Đất. Quang hợp trong thực vật thường liên quan đến chất tố diệp lục màu xanh lá cây và tạo ra oxy như một sản phẩm phụ
-"""
-pipeline(text)
-```
-
-</hfoption>
 <hfoption id="AutoModel">
 
 ```python

@@ -37,28 +37,6 @@ The pretrained variants are trained with two objectives: prefix language modelin
 The example below demonstrates how to chat with the model with [`Pipeline`] or the [`AutoModel`] class, and from the command line.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```python
-import torch
-from transformers import pipeline
-
-pipe = pipeline(
-    "text2text-generation",
-    model="google/t5gemma-2b-2b-prefixlm-it",
-    dtype=torch.bfloat16,
-    device_map="auto",
-)
-
-messages = [
-    {"role": "user", "content": "Tell me an unknown interesting biology fact about the brain."},
-]
-prompt = pipe.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-
-pipe(prompt, max_new_tokens=32)
-```
-
-</hfoption>
 <hfoption id="AutoModel">
 
 ```python

@@ -32,22 +32,6 @@ You can find all the original ByT5 checkpoints under the [Google](https://huggin
 The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`] and from the command line.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```python
-import torch
-from transformers import pipeline
-
-pipeline = pipeline(
-    task="text2text-generation",
-    model="google/byt5-small",
-    dtype=torch.float16,
-    device=0
-)
-pipeline("translate English to French: The weather is nice today")
-```
-
-</hfoption>
 <hfoption id="AutoModel">
 
 ```python
