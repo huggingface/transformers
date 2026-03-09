@@ -276,14 +276,6 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
         kwargs.setdefault("seq_length", 24)  # Need seq_length >= 10 for bidirectional attention test
         super().__init__(parent, **kwargs)
 
-    def place_image_tokens(self, input_ids, config):
-        input_ids = super().place_image_tokens(input_ids, config)
-        # Gemma3 uses a padding-based attention mask, so we must ensure no random
-        # input_ids are pad tokens otherwise those positions get masked out and
-        # cause flaky failures
-        input_ids[input_ids == self.pad_token_id] = self.bos_token_id
-        return input_ids
-
     def create_attention_mask(self, input_ids):
         # Gemma3 uses padding mask for bidirectional attention on image tokens
         return input_ids.ne(self.pad_token_id).to(torch_device)

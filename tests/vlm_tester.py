@@ -170,7 +170,7 @@ class VLMModelTester:
         # Override for model-specific inputs like LlavaNext's image_sizes
         return {}
 
-    # End of overridable methods/properties
+    # End of overridable methods
 
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -178,7 +178,20 @@ class VLMModelTester:
 
         config = self.get_config()
 
-        # Place image tokens in input_ids using template method
+        special_tokens = [self.pad_token_id, self.bos_token_id, self.eos_token_id, self.image_token_id]
+        for i in range(self.vocab_size):
+            if i not in special_tokens:
+                # The smallest token ID that is not a special token
+                safe_token_id = i
+                break
+        else:
+            raise ValueError("vocab_size is too small and there is no token ID that is not a special token!")
+
+        # Avoid flaky tests, clear any special tokens in ids_tensor
+        # image_token_id is handled separately by place_image_tokens()
+        input_ids[input_ids == self.pad_token_id] = safe_token_id
+        input_ids[input_ids == self.eos_token_id] = safe_token_id
+
         input_ids = self.place_image_tokens(input_ids, config)
 
         # Create attention mask with final input_ids (after image tokens are placed)
@@ -187,10 +200,8 @@ class VLMModelTester:
         if self.use_input_mask:
             input_mask = self.create_attention_mask(input_ids)
 
-        # Build base inputs dict
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask, "pixel_values": pixel_values}
 
-        # Add model-specific additional inputs using template method
         additional_inputs = self.get_additional_inputs(config, input_ids, pixel_values)
         inputs_dict.update(additional_inputs)
 
