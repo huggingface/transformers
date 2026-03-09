@@ -48,7 +48,7 @@ def infer_device(model):
     dev_type = param.device.type
     if dev_type == "cuda":
         # Refine based on actual platform
-        if torch.version.hip is not None:
+        if getattr(torch, "version").hip is not None:
             return "rocm"
 
     return dev_type
