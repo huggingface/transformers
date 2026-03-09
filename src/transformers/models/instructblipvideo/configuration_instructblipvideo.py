@@ -21,49 +21,16 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
 class InstructBlipVideoVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`InstructBlipVideoVisionModel`]. It is used to
-    instantiate a InstructBlipVideo vision encoder according to the specified arguments, defining the model architecture.
-    Instantiating a configuration defaults will yield a similar configuration to that of the InstructBlipVideo
-    [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1408):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 6144):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 39):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"gelu"` are supported. to 1e-5): The epsilon used by the layer
-            normalization layers.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 1e-10):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries and values in the self-attention layers.
-
     Example:
 
     ```python
@@ -112,49 +79,13 @@ class InstructBlipVideoVisionConfig(PreTrainedConfig):
         self.qkv_bias = qkv_bias
 
 
+@auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
 class InstructBlipVideoQFormerConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`InstructBlipVideoQFormerModel`]. It is used to
-    instantiate a InstructBlipVideo Querying Transformer (Q-Former) model according to the specified arguments, defining the
-    model architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the InstructBlipVideo [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5)
-    architecture. Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs.
-    Read the documentation from [`PreTrainedConfig`] for more information.
-
-    Note that [`InstructBlipVideoQFormerModel`] is very similar to [`BertLMHeadModel`] with interleaved cross-attention.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the Q-Former model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling the model.
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-        max_position_embeddings (`int`, *optional*, defaults to 512):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        pad_token_id (`int`, *optional*, defaults to 0):
-            Token id used for padding sequences.
-        cross_attention_frequency (`int`, *optional*, defaults to 2):
-            The frequency of adding cross-attention to the Transformer layers.
-        encoder_hidden_size (`int`, *optional*, defaults to 1408):
-            The hidden size of the hidden states for cross-attention.
+    cross_attention_frequency (`int`, *optional*, defaults to 2):
+        The frequency of adding cross-attention to the Transformer layers.
+    encoder_hidden_size (`int`, *optional*, defaults to 1408):
+        The hidden size of the hidden states for cross-attention.
 
     Examples:
 
@@ -209,31 +140,13 @@ class InstructBlipVideoQFormerConfig(PreTrainedConfig):
         self.encoder_hidden_size = encoder_hidden_size
 
 
+@auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
 class InstructBlipVideoConfig(PreTrainedConfig):
     r"""
-    [`InstructBlipVideoConfig`] is the configuration class to store the configuration of a
-    [`InstructBlipVideoForConditionalGeneration`]. It is used to instantiate a Instructblipvideo model according to the specified
-    arguments, defining the vision model, Q-Former model and language model configs. Instantiating a configuration with
-    the defaults will yield a similar configuration to that of the Instructblipvideo
-    [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`InstructBlipVideoVisionConfig`].
-        qformer_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`InstructBlipVideoQFormerConfig`].
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize any [`PreTrainedConfig`].
-        num_query_tokens (`int`, *optional*, defaults to 32):
-            The number of query tokens passed through the Transformer.
-
-        video_token_index (`int`, *optional*):
-            Token index of special video token.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+    qformer_config (`dict`, *optional*):
+        Dictionary of configuration options used to initialize [`InstructBlipVideoQFormerConfig`].
+    num_query_tokens (`int`, *optional*, defaults to 32):
+        The number of query tokens passed through the Transformer.
 
     Example:
 

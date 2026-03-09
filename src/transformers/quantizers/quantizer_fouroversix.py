@@ -39,9 +39,12 @@ class FourOverSixHfQuantizer(HfQuantizer):
         param_name: str,
         param: "torch.Tensor",
     ) -> float:
-        if self.param_needs_quantization(model, param_name):
-            # 4-bit quantization
-            return 0.5
+        from fouroversix import QuantizedModule
+
+        module, tensor_name = get_module_from_name(model, param_name)
+
+        if QuantizedModule.is_quantized_module_type(type(module)):
+            return module.get_element_size(tensor_name)
 
         return super().param_element_size(model, param_name, param)
 
@@ -55,16 +58,7 @@ class FourOverSixHfQuantizer(HfQuantizer):
 
         module, tensor_name = get_module_from_name(model, param_name)
 
-        return (
-            QuantizedModule.is_quantized_module_type(type(module))
-            and hasattr(module, "parameters_to_quantize")
-            and tensor_name in module.parameters_to_quantize
-        )
-
-    def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
-        # need more space for buffers that are created during quantization
-        max_memory = {key: val * 0.9 for key, val in max_memory.items()}
-        return max_memory
+        return QuantizedModule.is_quantized_module_type(type(module)) and tensor_name in module.parameters_to_quantize
 
     def _process_model_before_weight_loading(
         self,
@@ -103,3 +97,25 @@ class FourOverSixHfQuantizer(HfQuantizer):
         from ..integrations.fouroversix import FourOverSixQuantize
 
         return FourOverSixQuantize(self)
+
+    def get_weight_conversions(self):
+        """
+        Return weight conversions for loading pre-quantized checkpoints of
+        other pre-quantized models (not fouroversix models). After first use,
+        the pre_quantized_model_config_type attribute is set to None to ensure
+        subsequent calls (e.g., during save_pretrained) return an empty list
+        since, by then, the model will be saved with our framework's format
+        so weight conversions are no longer needed.
+        """
+        from fouroversix import WeightConversions
+
+        # pre_quantized_model_config_type is only set if we are loading a
+        # pre-quantized model so it is not guaranteed to exist.
+        if hasattr(self.quantization_config, "pre_quantized_model_config_type"):
+            model_config_type = self.quantization_config.pre_quantized_model_config_type
+            weight_conversions = WeightConversions.get_weight_conversions(
+                model_config_type,
+            )
+            return weight_conversions
+
+        return []

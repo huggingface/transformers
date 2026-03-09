@@ -171,7 +171,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("lighton_ocr", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ("lilt", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("longformer", "RobertaTokenizer" if is_tokenizers_available() else None),
-        ("longt5", "T5Tokenizer" if is_tokenizers_available() else None),
         ("luke", "LukeTokenizer"),
         ("lxmert", "LxmertTokenizer" if is_tokenizers_available() else None),
         ("m2m_100", "M2M100Tokenizer" if is_sentencepiece_available() else None),
@@ -234,6 +233,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("olmo", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("olmo2", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("olmo3", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("olmo_hybrid", "TokenizersBackend" if is_tokenizers_available() else None),
         ("olmoe", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("omdet-turbo", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("oneformer", "CLIPTokenizer" if is_tokenizers_available() else None),
@@ -342,9 +342,11 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
 MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "arctic",
     "deepseek_vl",
+    "deepseek_vl_v2",
     "deepseek_vl_hybrid",
     "fuyu",
     "hyperclovax_vlm",
+    "internlm2",
     "janus",
     "jamba",
     "llava",
@@ -678,8 +680,8 @@ class AutoTokenizer:
             and config_model_type is not None
             and config_model_type != ""
             and TOKENIZER_MAPPING_NAMES.get(config_model_type) is not None
-            and TOKENIZER_MAPPING_NAMES.get(config_model_type).replace("Fast", "")
-            != tokenizer_config_class.replace("Fast", "")
+            and (TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast"))
+            != (tokenizer_config_class.removesuffix("Fast"))
         ):
             # new model, but we ignore it unless the model type is the same
             if TokenizersBackend is not None:
@@ -695,8 +697,8 @@ class AutoTokenizer:
         if "_commit_hash" in tokenizer_config:
             kwargs["_commit_hash"] = tokenizer_config["_commit_hash"]
 
-        if tokenizer_config_class:
-            tokenizer_config_class = tokenizer_config_class.replace("Fast", "")
+        if tokenizer_config_class and tokenizer_config_class.endswith("Fast"):
+            tokenizer_config_class = tokenizer_config_class[:-4]
 
         has_remote_code = tokenizer_auto_map is not None
         has_local_code = type(config) in TOKENIZER_MAPPING or (
@@ -706,6 +708,12 @@ class AutoTokenizer:
                 or tokenizer_class_from_name(tokenizer_config_class + "Fast") is not None
             )
         )
+
+        # V5: Skip remote tokenizer for custom models with incorrect hub tokenizer class
+        if has_remote_code and config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
+            has_remote_code = False
+            tokenizer_auto_map = None
+
         if has_remote_code:
             # V5: Always prefer fast tokenizer (index 1), fallback to slow (index 0)
             if tokenizer_auto_map[1] is not None:
@@ -741,8 +749,8 @@ class AutoTokenizer:
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif getattr(config, "tokenizer_class", None):
             _class = config.tokenizer_class
-            if "PreTrainedTokenizerFast" not in _class:
-                _class = _class.replace("Fast", "")
+            if "PreTrainedTokenizerFast" not in _class and _class.endswith("Fast"):
+                _class = _class[:-4]
             tokenizer_class = tokenizer_class_from_name(_class)
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
@@ -767,7 +775,7 @@ class AutoTokenizer:
         # Fallback: try tokenizer_class from tokenizer_config.json
         tokenizer_config_class = tokenizer_config.get("tokenizer_class", None)
         if tokenizer_config_class is not None:
-            if tokenizer_config_class != "TokenizersBackend" and "Fast" in tokenizer_config_class:
+            if tokenizer_config_class != "TokenizersBackend" and tokenizer_config_class.endswith("Fast"):
                 tokenizer_config_class = tokenizer_config_class[:-4]
             tokenizer_class = tokenizer_class_from_name(tokenizer_config_class)
             if tokenizer_class is None and not tokenizer_config_class.endswith("Fast"):

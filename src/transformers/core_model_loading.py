@@ -898,6 +898,11 @@ def set_param_for_module(
     module_path, _, param_name = target_name.rpartition(".")
     module_obj = model.get_submodule(module_path) if module_path else model
 
+    if param_name == torch.nn.modules.module._EXTRA_STATE_KEY_SUFFIX:
+        module_obj.set_extra_state(param_value)
+        loading_info.missing_keys.discard(target_name)
+        return
+
     ref = getattr(module_obj, param_name)
     if ref is None:
         loading_info.unexpected_keys.add(target_name)
@@ -921,6 +926,8 @@ def set_param_for_module(
             # super important otherwise _init_weight will re-init the param
             param_value._is_hf_initialized = True
             setattr(module_obj, param_name, param_value)
+            if distributed_operation is not None:
+                distributed_operation.update_module_attributes(module_obj)
 
 
 def offload_and_maybe_resave_param(
@@ -1128,6 +1135,9 @@ def convert_and_load_state_dict_in_model(
         renamed_key, source_pattern = rename_source_key(
             original_key, renamings, converters, prefix, meta_model_state_dict
         )
+        if renamed_key not in meta_model_state_dict and original_key in meta_model_state_dict:
+            # Key should probably not have been renamed but we might need the `prefix` to be added.`
+            renamed_key, source_pattern = rename_source_key(original_key, [], [], prefix, meta_model_state_dict)
 
         # 2. finally, collect the tensor into the proper converter
         if renamed_key in meta_model_state_dict:

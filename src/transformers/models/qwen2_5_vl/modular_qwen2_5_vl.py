@@ -36,7 +36,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoInput
@@ -60,7 +60,19 @@ from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="Qwen2-VL-7B-Instruct")
 class Qwen2_5_VLVisionConfig(PreTrainedConfig):
+    r"""
+    tokens_per_second (`int`, *optional*, defaults to 41):
+        Number of tokens to merge for each second of video.
+    fullatt_block_indexes (`int`, *optional*, defaults to `[7, 15, 23, 31]`):
+        Indices of layers with full attention
+    out_hidden_size (`int`, *optional*, defaults to 3584):
+        The output hidden size of the vision model.
+    window_size (`int`, *optional*, defaults to 11):
+        Size of windows.
+    """
+
     model_type = "qwen2_5_vl"
     base_config_key = "vision_config"
 

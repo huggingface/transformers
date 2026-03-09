@@ -69,113 +69,75 @@ if is_cv2_available():
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV3_safetensors")
 class PPDocLayoutV3Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PP-DocLayoutV3`]. It is used to instantiate a
-    PP-DocLayoutV3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the PP-DocLayoutV3
-    [PaddlePaddle/PP-DocLayoutV3_safetensors](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors) architecture.
+    initializer_bias_prior_prob (`float`, *optional*):
+        The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
+        If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
+    batch_norm_eps (`float`, *optional*, defaults to 1e-05):
+        The epsilon used by the batch normalization layers.
+    freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
+        Whether to freeze the batch normalization layers in the backbone.
+    encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
+        Multi level features input for encoder.
+    feat_strides (`list[int]`, *optional*, defaults to `[8, 16, 32]`):
+        Strides used in each feature map.
+    encode_proj_layers (`list[int]`, *optional*, defaults to `[2]`):
+        Indexes of the projected layers to be used in the encoder.
+    positional_encoding_temperature (`int`, *optional*, defaults to 10000):
+        The temperature parameter used to create the positional encodings.
+    encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+        `"relu"`, `"silu"` and `"gelu_new"` are supported.
+    eval_size (`tuple[int, int]`, *optional*):
+        Height and width used to computes the effective height and width of the position embeddings after taking
+        into account the stride.
+    normalize_before (`bool`, *optional*, defaults to `False`):
+        Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
+        feed-forward modules.
+    hidden_expansion (`float`, *optional*, defaults to 1.0):
+        Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
+    mask_feature_channels (`list[int]`, *optional*, defaults to `[64, 64]`):
+        The channels of the multi-level features for mask enhancement.
+    x4_feat_dim (`int`, *optional*, defaults to 128):
+        The dimension of the x4 feature map.
+    d_model (`int`, *optional*, defaults to 256):
+        Dimension of the layers exclude hybrid encoder.
+    num_prototypes (`int`, *optional*, defaults to 32):
+        Dimension of the layers exclude mask query head.
+    label_noise_ratio (`float`, *optional*, defaults to 0.4):
+        The fraction of denoising labels to which random noise should be added.
+    box_noise_scale (`float`, *optional*, defaults to 0.4):
+        Scale or magnitude of noise to be added to the bounding boxes.
+    mask_enhanced (`bool`, *optional*, defaults to `True`):
+        Whether to use enhanced masked attention.
+    num_queries (`int`, *optional*, defaults to 300):
+        Number of object queries.
+    decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
+        Multi level features dimension for decoder
+    decoder_ffn_dim (`int`, *optional*, defaults to 1024):
+        Dimension of the "intermediate" (often named feed-forward) layer in decoder.
+    num_feature_levels (`int`, *optional*, defaults to 3):
+        The number of input feature levels.
+    decoder_n_points (`int`, *optional*, defaults to 4):
+        The number of sampled keys in each feature level for each attention head in the decoder.
+    decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
+        The non-linear activation function (function or string) in the decoder. If string, `"gelu"`,
+        `"relu"`, `"silu"` and `"gelu_new"` are supported.
+    num_denoising (`int`, *optional*, defaults to 100):
+        The total number of denoising tasks or queries to be used for contrastive denoising.
+    learn_initial_query (`bool`, *optional*, defaults to `False`):
+        Indicates whether the initial query embeddings for the decoder should be learned during training
+    anchor_image_size (`tuple[int, int]`, *optional*):
+        Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
+    disable_custom_kernels (`bool`, *optional*, defaults to `True`):
+        Whether to disable custom kernels.
+    global_pointer_head_size (`int`, *optional*, defaults to 64):
+        The size of the global pointer head.
+    gp_dropout_value (`float`, *optional*, defaults to 0.1):
+        The dropout probability in the global pointer head.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        initializer_range (`float`, *optional*, defaults to 0.01):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_bias_prior_prob (`float`, *optional*):
-            The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
-            If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        batch_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the batch normalization layers.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied.
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
-            The configuration of the backbone model.
-        freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
-            Whether to freeze the batch normalization layers in the backbone.
-        encoder_hidden_dim (`int`, *optional*, defaults to 256):
-            Dimension of the layers in hybrid encoder.
-        encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
-            Multi level features input for encoder.
-        feat_strides (`list[int]`, *optional*, defaults to `[8, 16, 32]`):
-            Strides used in each feature map.
-        encoder_layers (`int`, *optional*, defaults to 1):
-            Total of layers to be used by the encoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 1024):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        encoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The ratio for all dropout layers.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        encode_proj_layers (`list[int]`, *optional*, defaults to `[2]`):
-            Indexes of the projected layers to be used in the encoder.
-        positional_encoding_temperature (`int`, *optional*, defaults to 10000):
-            The temperature parameter used to create the positional encodings.
-        encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        activation_function (`str`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the general layer. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        eval_size (`tuple[int, int]`, *optional*):
-            Height and width used to computes the effective height and width of the position embeddings after taking
-            into account the stride.
-        normalize_before (`bool`, *optional*, defaults to `False`):
-            Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
-            feed-forward modules.
-        hidden_expansion (`float`, *optional*, defaults to 1.0):
-            Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
-        mask_feature_channels (`list[int]`, *optional*, defaults to `[64, 64]`):
-            The channels of the multi-level features for mask enhancement.
-        x4_feat_dim (`int`, *optional*, defaults to 128):
-            The dimension of the x4 feature map.
-        d_model (`int`, *optional*, defaults to 256):
-            Dimension of the layers exclude hybrid encoder.
-        num_prototypes (`int`, *optional*, defaults to 32):
-            Dimension of the layers exclude mask query head.
-        label_noise_ratio (`float`, *optional*, defaults to 0.4):
-            The fraction of denoising labels to which random noise should be added.
-        box_noise_scale (`float`, *optional*, defaults to 0.4):
-            Scale or magnitude of noise to be added to the bounding boxes.
-        mask_enhanced (`bool`, *optional*, defaults to `True`):
-            Whether to use enhanced masked attention.
-        num_queries (`int`, *optional*, defaults to 300):
-            Number of object queries.
-        decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
-            Multi level features dimension for decoder
-        decoder_ffn_dim (`int`, *optional*, defaults to 1024):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        num_feature_levels (`int`, *optional*, defaults to 3):
-            The number of input feature levels.
-        decoder_n_points (`int`, *optional*, defaults to 4):
-            The number of sampled keys in each feature level for each attention head in the decoder.
-        decoder_layers (`int`, *optional*, defaults to 6):
-            Number of decoder layers.
-        decoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function (function or string) in the decoder. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        num_denoising (`int`, *optional*, defaults to 100):
-            The total number of denoising tasks or queries to be used for contrastive denoising.
-        learn_initial_query (`bool`, *optional*, defaults to `False`):
-            Indicates whether the initial query embeddings for the decoder should be learned during training
-        anchor_image_size (`tuple[int, int]`, *optional*):
-            Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
-        disable_custom_kernels (`bool`, *optional*, defaults to `True`):
-            Whether to disable custom kernels.
-        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
-            Whether the architecture has an encoder decoder structure.
-        global_pointer_head_size (`int`, *optional*, defaults to 64):
-            The size of the global pointer head.
-        gp_dropout_value (`float`, *optional*, defaults to 0.1):
-            The dropout probability in the global pointer head.
     Examples:
 
     ```python

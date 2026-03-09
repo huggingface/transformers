@@ -78,13 +78,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants are remarkable organisms that produce their own food using a method called photosynthesis." | transformers run --task text2text-generation --model csebuetnlp/mT5_multilingual_XLSum --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
