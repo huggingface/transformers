@@ -675,7 +675,6 @@ class VideoLlama3Model(Qwen2VLModel):
         video_grid_thw: torch.LongTensor | None = None,
         video_merge_sizes: torch.LongTensor | None = None,
         video_compression_mask: torch.BoolTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VideoLlama3ModelOutputWithPast:
         r"""
@@ -725,7 +724,6 @@ class VideoLlama3Model(Qwen2VLModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -799,7 +797,6 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
         video_grid_thw: torch.LongTensor | None = None,
         video_merge_sizes: torch.LongTensor | None = None,
         video_compression_mask: torch.BoolTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VideoLlama3CausalLMOutputWithPast:
         r"""
@@ -834,7 +831,6 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -863,7 +859,6 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         position_ids=None,
         use_cache=True,
         pixel_values: torch.Tensor | None = None,
@@ -883,7 +878,6 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             position_ids=position_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,

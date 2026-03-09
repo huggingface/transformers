@@ -632,7 +632,6 @@ class InternVLModel(InternVLPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | InternVLModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -659,7 +658,6 @@ class InternVLModel(InternVLPreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             **kwargs,
         )
 

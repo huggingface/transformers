@@ -925,7 +925,6 @@ class GlmImageModel(Glm4vModel):
         inputs_embeds: torch.Tensor | None,
         attention_mask: torch.Tensor | None,
         past_key_values: torch.Tensor | None,
-        cache_position: torch.Tensor | None,
     ) -> torch.Tensor | None:
         past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
         can_compute_mrope = input_ids is not None and image_grid_thw is not None
@@ -942,12 +941,15 @@ class GlmImageModel(Glm4vModel):
         elif self.rope_deltas is not None:
             batch_size, seq_length, _ = inputs_embeds.shape
             if self._cached_decode_position_ids is not None:
-                step = cache_position[0].item() - self._prefill_len
+                step = past_key_values_length - self._prefill_len
                 position_ids = self._cached_decode_position_ids[:, :, step : step + seq_length].permute(1, 0, 2)
             else:
-                position_ids = cache_position.view(1, 1, -1).repeat(3, batch_size, 1)
+                position_ids = (
+                    torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_key_values_length
+                )
+                position_ids = position_ids.view(1, 1, -1).repeat(3, batch_size, 1)
         else:
-            # Can't build correct 3D positions. Let the model infer it from `cache_position`
+            # Can't build correct 3D positions. Let the model infer it
             position_ids = None
         return position_ids
 
@@ -962,7 +964,6 @@ class GlmImageModel(Glm4vModel):
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.LongTensor | None = None,
         rope_deltas: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GlmImageModelOutputWithPast:
         r"""
@@ -1033,7 +1034,6 @@ class GlmImageModel(Glm4vModel):
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
             )
 
         outputs = self.language_model(
@@ -1042,7 +1042,6 @@ class GlmImageModel(Glm4vModel):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1104,7 +1103,6 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GlmImageCausalLMOutputWithPast:
@@ -1160,7 +1158,6 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1189,7 +1186,6 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         position_ids=None,
         use_cache=True,
         pixel_values=None,
@@ -1203,7 +1199,6 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             position_ids=position_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,

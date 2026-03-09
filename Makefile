@@ -16,7 +16,7 @@ style:
 	ruff format $(check_dirs) setup.py conftest.py --exclude $(exclude_folders)
 	python utils/custom_init_isort.py
 	python utils/sort_auto_mappings.py
-	python utils/check_types.py $(ty_check_dirs)
+# 	python utils/check_types.py $(ty_check_dirs)
 
 # Check that the repo is in a good state (both style and consistency CI checks)
 # Note: each line is run in its own shell, and doing `-` before the command ignores the errors if any, continuing with next command

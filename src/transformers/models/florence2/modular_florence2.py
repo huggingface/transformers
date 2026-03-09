@@ -1553,7 +1553,6 @@ class Florence2Model(LlavaModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | Florence2Seq2SeqModelOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1600,7 +1599,6 @@ class Florence2Model(LlavaModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            cache_position=cache_position,
             return_dict=True,
         )
 
@@ -1652,7 +1650,6 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Florence2Seq2SeqLMOutput:
@@ -1714,7 +1711,6 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
