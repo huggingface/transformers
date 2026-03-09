@@ -113,5 +113,3 @@ invalid-return-type = "ignore"         # Return type mismatches that would requi
 deprecated = "ignore"                  # Deprecation warnings from dependencies
 invalid-assignment = "ignore"          # Low-level assignments that are runtime-safe
 unused-ignore-comment = "ignore"       # Ignore comments that became unnecessary after adding broader per-file-ignores
-unused-type-ignore-comment = "ignore"  # type: ignore comments used for mypy compatibility
-unresolved-attribute = "ignore"        # False positives on runtime-checked optional modules (e.g., torch.neuron)
