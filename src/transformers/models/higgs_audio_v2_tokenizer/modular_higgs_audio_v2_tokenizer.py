@@ -23,45 +23,29 @@ from ..xcodec.configuration_xcodec import XcodecConfig
 from ..xcodec.modeling_xcodec import XcodecEuclideanCodebook, XcodecModel, XcodecPreTrainedModel
 
 
+@auto_docstring(checkpoint="bosonai/higgs-audio-v2-tokenizer")
 class HiggsAudioV2TokenizerConfig(XcodecConfig):
     r"""
-    This is the configuration class to store the configuration of an [`HiggsAudioV2TokenizerModel`]. It is used to instantiate a
-    HiggsAudioV2Tokenizer model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the [`Higgs Audio v2 Tokenizer`](https://huggingface.co/bosonai/higgs-audio-v2-tokenizer).
-    e.g. [bosonai/higgs-audio-v2-tokenizer](https://huggingface.co/bosonai/higgs-audio-v2-tokenizer)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-            target_bandwidths (`List[float]`, *optional*, defaults to `[0.5, 1, 1.5, 2]`):
-                The range of different bandwidths (in kbps) the model can encode audio with.
-            sample_rate (`int`, *optional*, defaults to 24000):
-                The sampling rate at which the audio waveform should be digitalized, in hertz (Hz).
-            kernel_size (`int`, *optional*, defaults to 3):
-                Kernel size for the initial semantic convolution.
-            channel_ratios (`List[float]`, *optional*, defaults to `[1, 1]`):
-                Expansion factors for the number of output channels in each semantic block.
-            strides (`List[int]`, *optional*, defaults to `[1, 1]`):
-                Strides for each semantic encoder block.
-            block_dilations (`List[int]`, *optional*, defaults to `[1, 1]`):
-                Dilation factors for the residual units in semantic blocks.
-            unit_kernel_size (`int`, *optional*, defaults to 3):
-                Kernel size inside each ResidualUnit in semantic blocks.
-            codebook_size (`int`, *optional*, defaults to 1024):
-                Number of entries in each residual quantizer's codebook.
-            codebook_dim (`int`, *optional*, defaults to 64):
-                Dimensionality of each codebook vector.
-            initializer_range (`float`, *optional*, defaults to 0.02):
-                Standard deviation of the truncated normal initializer for all weight matrices.
-            acoustic_model_config (`Union[Dict, AutoConfig]`, *optional*):
-                An instance of the configuration for the acoustic (DAC) model.
-            semantic_model_config (`Union[Dict, AutoConfig]`, *optional*):
-                An instance of the configuration object for the semantic (HuBERT) model.
-            semantic_sample_rate (`int`, *optional*, defaults to 16000):
-                The sampling rate at which the semantic model expects audio input, in hertz (Hz).
-            downsample_factor (`int`, *optional*, defaults to 320):
-                Downsampling factor for the semantic features.
+        target_bandwidths (`List[float]`, *optional*, defaults to `[0.5, 1, 1.5, 2]`):
+            The range of different bandwidths (in kbps) the model can encode audio with.
+        kernel_size (`int`, *optional*, defaults to 3):
+            Kernel size for the initial semantic convolution.
+        channel_ratios (`List[float]`, *optional*, defaults to `[1, 1]`):
+            Expansion factors for the number of output channels in each semantic block.
+        strides (`List[int]`, *optional*, defaults to `[1, 1]`):
+            Strides for each semantic encoder block.
+        block_dilations (`List[int]`, *optional*, defaults to `[1, 1]`):
+            Dilation factors for the residual units in semantic blocks.
+        unit_kernel_size (`int`, *optional*, defaults to 3):
+            Kernel size inside each ResidualUnit in semantic blocks.
+        acoustic_model_config (`Union[Dict, AutoConfig]`, *optional*):
+            An instance of the configuration for the acoustic (DAC) model.
+        semantic_model_config (`Union[Dict, AutoConfig]`, *optional*):
+            An instance of the configuration object for the semantic (HuBERT) model.
+        semantic_sample_rate (`int`, *optional*, defaults to 16000):
+            The sampling rate at which the semantic model expects audio input, in hertz (Hz).
+        downsample_factor (`int`, *optional*, defaults to 320):
+            Downsampling factor for the semantic features.
 
     Example:
 
@@ -124,6 +108,8 @@ class HiggsAudioV2TokenizerConfig(XcodecConfig):
         return int(self.hop_length / (self.sample_rate / self.semantic_sample_rate) / self.downsample_factor)
 
 
+@requires(backends=("torchaudio",))
+@auto_docstring
 class HiggsAudioV2TokenizerPreTrainedModel(XcodecPreTrainedModel):
     _no_split_modules = ["HiggsAudioV2TokenizerResidualVectorQuantization", "DacResidualUnit"]
     _keys_to_ignore_on_load_unexpected = ["semantic_model.masked_spec_embed"]
