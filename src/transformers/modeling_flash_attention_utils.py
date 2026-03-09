@@ -365,7 +365,8 @@ def prepare_fa_kwargs_from_position_ids(position_ids):
 
     Arguments:
         position_ids (`torch.Tensor`):
-            Boolean or int tensor of shape (batch_size, sequence_length), 1 means valid and 0 means not valid.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range
+            `[0, config.n_positions - 1]`. Shape: (batch_size, sequence_length).
 
     Return:
         (cu_seqlens_q, cu_seqlens_k) (`tuple[int]`):
@@ -418,7 +419,8 @@ def _prepare_from_posids(query, key, value, position_ids):
         value (`torch.Tensor`):
             Value state with padding. Shape: (batch_size, kv_seq_len, num_key_value_heads, head_dim).
         position_ids (`torch.Tensor`):
-            Boolean or int tensor of shape (batch_size, sequence_length), 1 means valid and 0 means not valid.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range
+            `[0, config.n_positions - 1]`. Shape: (batch_size, sequence_length).
 
     Return:
         query (`torch.Tensor`):
