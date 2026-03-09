@@ -522,8 +522,8 @@ class ContinuousBatchProcessor:
 @attach_tracer()
 class ContinuousBatchingManager:
     """Manager for handling continuous batching of generation requests. It provides a user interface for submitting
-    generation requests, retrieving results, and managing the background generation thread. This class should be
-    created through one of:
+    generation requests, retrieving results, and managing the background generation thread. This class should not be
+    created directly, but through one of the following entry points (all methods of the `ContinuousMixin` mixin):
     - `init_continuous_batching`
     - `continuous_batching_context_manager`
     - `generate_batch`
@@ -787,7 +787,7 @@ class ContinuousBatchingManager:
             t0 = perf_counter()
             paged_attention_cache = PagedAttentionCache(
                 self.model.config,
-                self.generation_config,
+                self.cb_config,
                 self.model.device,
                 self.model.dtype,
                 tp_size=getattr(self.model, "_tp_size", None),  # Use model's actual TP setting
@@ -796,14 +796,9 @@ class ContinuousBatchingManager:
             self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing  # update the approximation
             logger.debug(f"PagedAttentionCache created in {perf_counter() - t0} seconds")
 
-            scheduler = None
-            if hasattr(self.generation_config, "scheduler"):
-                scheduler = SCHEDULER_MAPPING.get(self.generation_config.scheduler, None)
-                if scheduler is None:
-                    logger.warning(f"Scheduler '{scheduler}' not found. Defaulting to FIFO.")
-                    scheduler = FIFOScheduler
-            else:
-                # Default to fifo
+            scheduler = SCHEDULER_MAPPING.get(self.cb_config.scheduler, None)
+            if scheduler is None:
+                logger.warning(f"Scheduler '{self.cb_config.scheduler}' not found. Defaulting to FIFO.")
                 scheduler = FIFOScheduler
 
             t1 = perf_counter()

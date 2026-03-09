@@ -1594,6 +1594,9 @@ class ContinuousBatchingConfig:
     kv_padding_interval_size: int = 0
     max_cached_graphs: int = 0
 
+    # Scheduler type used
+    scheduler: str = "fifo"
+
     # The parameters below are mostly useful in the context of serving
     max_queue_size: int = 0
 
@@ -1605,6 +1608,7 @@ class ContinuousBatchingConfig:
         allow_block_sharing: bool = True,
         use_async_batching: bool | None = None,
         max_cached_graphs: int = 0,
+        **ignored_kwargs,
     ) -> None:
         """Some arguments given to `generate_batch`, `init_continuous_batching` or `continuous_batching_context_manager`
         are now deprecated and are expected inside the continuous batching config. This method checks if any were
@@ -1635,6 +1639,11 @@ class ContinuousBatchingConfig:
                 "The following arguments were provided to a continuous batching entry point instead of being passed "
                 "through the continuous_batching_config: " + ", ".join(kwargs_to_warn)
             )
+        if ignored_kwargs:
+            logger.warning(
+                "The following arguments were provided to a continuous batching entry point but were ignored: "
+                + ", ".join(ignored_kwargs.keys())
+            )
 
     def decide_use_cuda_graphs(self, compile_config: CompileConfig | None, is_attn_mask_needed: bool) -> bool:
         """Returns whether or not to use cuda graphs for continuous batching. If the user specified this in the config
@@ -1651,15 +1660,15 @@ class ContinuousBatchingConfig:
                 logger.warning(f"use_cuda_graph is True but {torch.cuda.is_available() = }: turning off cuda graphs.")
             self.use_cuda_graph = False
 
-        # If use_cuda_graph is specified, we follow the user's choice
+        # Else if use_cuda_graph is specified, we follow the user's choice
         elif self.use_cuda_graph is not None:
-            pass
+            pass # nothing to do but catch this case and wait for the function to return later
 
-        # If the user specified a parameter related to cuda graphs, we activate cuda graphs
+        # Else if the user specified a parameter related to cuda graphs, we activate cuda graphs
         elif self.q_padding_interval_size or self.kv_padding_interval_size or self.max_cached_graphs:
             self.use_cuda_graph = True
 
-        # If a compile config was found, turn off cuda graphs if the compile config already uses them
+        # Else if a compile config was found, turn off cuda graphs if the compile config already uses them
         elif compile_config is not None:
             options = torch._inductor.list_mode_options().get(compile_config.mode, compile_config.options)
             compile_uses_cudagraphs = options.get("triton.cudagraphs", False)

@@ -18,7 +18,7 @@ from typing import Any
 import torch
 
 from ...configuration_utils import PreTrainedConfig
-from ...generation.configuration_utils import GenerationConfig
+from ...generation.configuration_utils import ContinuousBatchingConfig
 from ...utils.generic import is_flash_attention_requested
 from ...utils.metrics import attach_tracer, traced
 from .cache_manager import BlockManager, CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
@@ -119,7 +119,7 @@ class PagedAttentionCache:
     def __init__(
         self,
         config: PreTrainedConfig,
-        generation_config: GenerationConfig,
+        cb_config: ContinuousBatchingConfig,
         device: torch.device | str,
         dtype: torch.dtype = torch.float16,
         tp_size: int | None = None,
@@ -130,7 +130,7 @@ class PagedAttentionCache:
 
         Args:
             config: Model configuration
-            generation_config: Generation configuration containing cache parameters
+            cb_config: Continuous batching configuration containing cache parameters
             device: Device for the cache tensors
             dtype: Data type of the cache
             tp_size: Tensor parallelism size
@@ -148,7 +148,9 @@ class PagedAttentionCache:
         self.head_dim: int = head_dim if head_dim is not None else config.hidden_size // config.num_attention_heads
 
         # Extract cache dimensions. Default used to be 32, now it's 256 to be compatible with flash_with_kvcache.
-        self.block_size = getattr(generation_config, "block_size", 256)
+        self.block_size = cb_config.block_size
+        if self.block_size <= 0:
+            raise ValueError(f"Block size must be positive, but got {self.block_size}")
 
         # Group layers depending on the attention mix
         layer_groups, group_types = group_layers_by_attn_type(config)
@@ -192,11 +194,9 @@ class PagedAttentionCache:
             num_attention_masks=num_attention_masks,
         )
         num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
-            num_blocks=getattr(generation_config, "num_blocks", None),
-            max_batch_tokens=getattr(generation_config, "max_batch_tokens", None),
-            max_memory_percent=getattr(
-                generation_config, "max_memory", 0.8
-            ),  # FIXME: it seems we overcommit memory, was changed from 0.9 which caused OOMs in our benchmarking CI
+            num_blocks=cb_config.num_blocks,
+            max_batch_tokens=cb_config.max_batch_tokens,
+            max_memory_percent=cb_config.max_memory_percent,
             cache_dtype=self.dtype,
         )
 
@@ -211,7 +211,7 @@ class PagedAttentionCache:
 
         # If max_blocks_per_request is not set, the default value is 16 max blocks. With default block size of 256, this
         # means a max sequence length of 4096 tokens for the fast decode path.
-        max_blocks_per_request = getattr(generation_config, "max_blocks_per_request", None)
+        max_blocks_per_request = cb_config.max_blocks_per_request
         if max_blocks_per_request is None:
             max_blocks_per_request = 0
             # logger.info( TODO: uncomment when we have good defaults
