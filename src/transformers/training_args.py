@@ -418,6 +418,9 @@ class TrainingArguments:
             When performing evaluation and generating predictions, only returns the loss.
         eval_on_start (`bool`, *optional*, defaults to `False`):
             Whether to perform a evaluation step (sanity check) before the training to ensure the validation steps works correctly.
+        eval_on_end (`bool`, *optional*, defaults to `False`):
+            Whether to perform an evaluation step at the very end of training, regardless of `eval_strategy`. This is
+            the symmetric counterpart to `eval_on_start` and ensures a final evaluation is always run.
         eval_do_concat_batches (`bool`, *optional*, defaults to `True`):
             Whether to recursively concat inputs/losses/labels/predictions across batches. If `False`,
             will instead store them as lists, with each batch kept separate.
@@ -1090,6 +1093,10 @@ class TrainingArguments:
         metadata={
             "help": "Whether to run through the entire `evaluation` step at the very beginning of training as a sanity check."
         },
+    )
+    eval_on_end: bool = field(
+        default=False,
+        metadata={"help": "Whether to run through the entire `evaluation` step at the very end of training."},
     )
     eval_do_concat_batches: bool = field(
         default=True,

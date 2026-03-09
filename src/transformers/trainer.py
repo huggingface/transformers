@@ -1519,7 +1519,7 @@ class Trainer:
             if self.control.should_training_stop:
                 break
 
-        return self._finalize_training(trial, num_train_samples, start_time)
+        return self._finalize_training(trial, num_train_samples, start_time, ignore_keys_for_eval)
 
     def _init_training_state(
         self, max_steps, num_update_steps_per_epoch, num_train_epochs, resume_from_checkpoint, trial
@@ -1815,9 +1815,12 @@ class Trainer:
             learning_rate=learning_rate,
         )
 
-    def _finalize_training(self, trial, num_train_samples, start_time):
+    def _finalize_training(self, trial, num_train_samples, start_time, ignore_keys_for_eval=None):
         """Finalize training: metrics, best-model loading, cleanup. Returns TrainOutput."""
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
+
+        if self.args.eval_on_end:
+            self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
 
         # add remaining tr_loss
         self._total_loss_scalar += self._tr_loss.item()
