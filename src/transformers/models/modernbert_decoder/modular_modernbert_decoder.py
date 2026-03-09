@@ -488,7 +488,7 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
         if position_ids is None:
             batch_size = hidden_states.shape[0]
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=hidden_states.device) + past_seen_tokens
+            position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
 
         # It may already have been prepared by e.g. `generate`

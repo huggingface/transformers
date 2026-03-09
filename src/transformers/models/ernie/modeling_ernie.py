@@ -643,7 +643,7 @@ class ErnieModel(ErniePreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-        else:
+        elif input_ids is None and inputs_embeds is None:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
