@@ -16,33 +16,21 @@
 
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="")
 class TimmBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration for a timm backbone [`TimmBackbone`].
-
-    It is used to instantiate a timm backbone model according to the specified arguments, defining the model.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        backbone (`str`, *optional*):
-            The timm checkpoint to load.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        features_only (`bool`, *optional*, defaults to `True`):
-            Whether to output only the features or also the logits.
-        out_indices (`list[int]`, *optional*):
-            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the model has). Will default to the last stage if unset.
-        freeze_batch_norm_2d (`bool`, *optional*, defaults to `False`):
-            Converts all `BatchNorm2d` and `SyncBatchNorm` layers of provided module into `FrozenBatchNorm2d`.
+    backbone (`str`, *optional*):
+        The timm checkpoint to load.
+    features_only (`bool`, *optional*, defaults to `True`):
+        Whether to output only the features or also the logits.
+    freeze_batch_norm_2d (`bool`, *optional*, defaults to `False`):
+        Converts all `BatchNorm2d` and `SyncBatchNorm` layers of provided module into `FrozenBatchNorm2d`.
 
     Example:
     ```python

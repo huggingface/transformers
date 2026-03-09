@@ -14,60 +14,17 @@
 """AltCLIP model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="BAAI/AltCLIP")
 class AltCLIPTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`AltCLIPTextModel`]. It is used to instantiate a
-    AltCLIP text model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the AltCLIP
-    [BAAI/AltCLIP](https://huggingface.co/BAAI/AltCLIP) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 250002):
-            Vocabulary size of the AltCLIP model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`AltCLIPTextModel`].
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 4096):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-        max_position_embeddings (`int`, *optional*, defaults to 514):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 1):
-            The vocabulary size of the `token_type_ids` passed when calling [`AltCLIPTextModel`]
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 0.02):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        pad_token_id (`int`, *optional*, defaults to 1): The id of the *padding* token.
-        bos_token_id (`int`, *optional*, defaults to 0): The id of the *beginning-of-sequence* token.
-        eos_token_id (`Union[int, list[int]]`, *optional*, defaults to 2):
-            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
-        project_dim (`int`, *optional*, defaults to 768):
-            The dimensions of the teacher model before the mapping layer.
+    project_dim (`int`, *optional*, defaults to 768):
+        The dimensions of the teacher model before the mapping layer.
 
     Examples:
 
@@ -128,47 +85,9 @@ class AltCLIPTextConfig(PreTrainedConfig):
         self.project_dim = project_dim
 
 
+@auto_docstring(checkpoint="BAAI/AltCLIP")
 class AltCLIPVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`AltCLIPModel`]. It is used to instantiate an
-    AltCLIP model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the AltCLIP
-    [BAAI/AltCLIP](https://huggingface.co/BAAI/AltCLIP) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of text and vision projection layers.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 32):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-
     Example:
 
     ```python
@@ -221,28 +140,9 @@ class AltCLIPVisionConfig(PreTrainedConfig):
         self.hidden_act = hidden_act
 
 
+@auto_docstring(checkpoint="BAAI/AltCLIP")
 class AltCLIPConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`AltCLIPModel`]. It is used to instantiate an
-    AltCLIP model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the AltCLIP
-    [BAAI/AltCLIP](https://huggingface.co/BAAI/AltCLIP) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`AltCLIPTextConfig`].
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`AltCLIPVisionConfig`].
-        projection_dim (`int`, *optional*, defaults to 768):
-            Dimensionality of text and vision projection layers.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The initial value of the *logit_scale* parameter. Default is used as per the original CLIP implementation.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
-
     Example:
 
     ```python
