@@ -1102,6 +1102,7 @@ MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for depth estimation mapping
+        ("chmv2", "CHMv2ForDepthEstimation"),
         ("depth_anything", "DepthAnythingForDepthEstimation"),
         ("depth_pro", "DepthProForDepthEstimation"),
         ("dpt", "DPTForDepthEstimation"),
