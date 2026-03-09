@@ -43,6 +43,7 @@ from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProc
 from transformers.models.isaac.modeling_isaac import (
     IsaacVisionAttention,
     IsaacVisionConfig,
+    ModalityType,
     pixel_shuffle_padded,
 )
 from transformers.models.isaac.processing_isaac import IsaacProcessor
@@ -570,6 +571,19 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             result.last_hidden_state.shape,
             (self.model_tester.batch_size, self.model_tester.seq_length, config.hidden_size),
         )
+
+    def test_prepare_multimodal_rope_position_ids(self):
+        position_ids = torch.tensor([[[7, 0, 0], [1, 2, 3], [4, 0, 0]]], device=torch_device, dtype=torch.long)
+        modality_tensor = torch.tensor(
+            [[ModalityType.text.value, ModalityType.image.value, ModalityType.text.value]],
+            device=torch_device,
+            dtype=torch.long,
+        )
+
+        rope_position_ids = IsaacModel.prepare_multimodal_rope_position_ids(position_ids, modality_tensor)
+        expected = torch.tensor([[[7, 1, 4]], [[7, 2, 4]], [[7, 3, 4]]], device=torch_device, dtype=torch.long)
+
+        torch.testing.assert_close(rope_position_ids, expected)
 
     def test_for_conditional_generation(self):
         config, input_ids, attention_mask, labels = self.model_tester.prepare_config_and_inputs()
