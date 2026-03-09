@@ -1110,63 +1110,6 @@ class Zamba2MambaDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class Zamba2InnerMambaDecoderLayer(GradientCheckpointingLayer):
-    """Inner mamba layer used within hybrid layers - not captured for output recording."""
-
-    def __init__(self, config: Zamba2Config, layer_idx: int):
-        super().__init__()
-        self.mamba = Zamba2MambaMixer(config=config, layer_idx=layer_idx)
-        self.input_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.layer_idx = layer_idx
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        original_hidden_states: torch.Tensor | None = None,
-        layer_idx: int | None = None,
-        attention_mask: torch.Tensor | None = None,
-        causal_mask: torch.Tensor | None = None,
-        past_key_values: Zamba2HybridDynamicCache | None = None,
-        use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        transformer_hidden_states: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, sequence_length)` where padding elements are indicated by 0.
-            past_key_values (`Zamba2InnerHybridDynamicCache`, *optional*): cached past key and value projection states
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
-        """
-
-        residual = hidden_states
-
-        # `transformer_hidden_states` is the output from shared transformer + linear layer (see fig. 2 in https://huggingface.co/papers/2405.16712).
-        # `transformer_hidden_states` is then added to the input to the mamba layer below (as described in eq. (6) of https://huggingface.co/papers/2405.16712).
-        hidden_states = (
-            hidden_states + transformer_hidden_states if transformer_hidden_states is not None else hidden_states
-        )
-        hidden_states = self.input_layernorm(hidden_states)
-
-        hidden_states = self.mamba(
-            hidden_states=hidden_states,
-            cache_params=past_key_values,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-        # residual connection after mamba
-        hidden_states = residual + hidden_states
-
-        return hidden_states
-
-
 class Zamba2HybridLayer(GradientCheckpointingLayer):
     def __init__(
         self, shared_transformer: Zamba2AttentionDecoderLayer, linear: nn.Linear, mamba: Zamba2MambaDecoderLayer
@@ -1243,7 +1186,7 @@ class Zamba2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _is_stateful = True
     _can_record_outputs = {
-        "hidden_states": [Zamba2MambaDecoderLayer, Zamba2HybridLayer],
+        "hidden_states": Zamba2MambaDecoderLayer,
         "attentions": Zamba2Attention,
     }
 
@@ -1381,11 +1324,7 @@ class Zamba2Model(Zamba2PreTrainedModel):
         unique_hybrid_blocks = []
 
         for layer_id, layer_type in enumerate(self.layers_block_type):
-            if layer_type == "hybrid":
-                mamba_layer = Zamba2InnerMambaDecoderLayer(self.config, layer_idx=layer_id)
-            else:
-                mamba_layer = Zamba2MambaDecoderLayer(self.config, layer_idx=layer_id)
-
+            mamba_layer = Zamba2MambaDecoderLayer(self.config, layer_idx=layer_id)
             if layer_type == "hybrid":
                 prefix_pattern = f"layers.{layer_id}.shared_transformer"
 

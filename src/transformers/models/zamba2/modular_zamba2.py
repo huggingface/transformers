@@ -813,15 +813,6 @@ class Zamba2MambaDecoderLayer(ZambaMambaDecoderLayer):
         self.input_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
-class Zamba2InnerMambaDecoderLayer(ZambaMambaDecoderLayer):
-    """Inner mamba layer used within hybrid layers - not captured for output recording."""
-
-    def __init__(self, config: Zamba2Config, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.mamba = Zamba2MambaMixer(config=config, layer_idx=layer_idx)
-        self.input_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-
 class Zamba2HybridLayer(ZambaHybridLayer):
     def __init__(
         self, shared_transformer: Zamba2AttentionDecoderLayer, linear: nn.Linear, mamba: Zamba2MambaDecoderLayer
@@ -897,7 +888,7 @@ class Zamba2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _is_stateful = True
     _can_record_outputs = {
-        "hidden_states": [Zamba2MambaDecoderLayer, Zamba2HybridLayer],
+        "hidden_states": Zamba2MambaDecoderLayer,
         "attentions": Zamba2Attention,
     }
 
@@ -957,11 +948,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
         unique_hybrid_blocks = []
 
         for layer_id, layer_type in enumerate(self.layers_block_type):
-            if layer_type == "hybrid":
-                mamba_layer = Zamba2InnerMambaDecoderLayer(self.config, layer_idx=layer_id)
-            else:
-                mamba_layer = Zamba2MambaDecoderLayer(self.config, layer_idx=layer_id)
-
+            mamba_layer = Zamba2MambaDecoderLayer(self.config, layer_idx=layer_id)
             if layer_type == "hybrid":
                 prefix_pattern = f"layers.{layer_id}.shared_transformer"
 
