@@ -14,7 +14,7 @@
 """Whisper model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
@@ -46,121 +46,59 @@ NON_SPEECH_TOKENS_MULTI = [
 # fmt: on
 
 
+@auto_docstring(checkpoint="openai/whisper-tiny")
 class WhisperConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`WhisperModel`]. It is used to instantiate a
-    Whisper model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Whisper
-    [openai/whisper-tiny](https://huggingface.co/openai/whisper-tiny) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 51865):
-            Vocabulary size of the Whisper model. Defines the number of different tokens that can be represented by the
-            `decoder_input_ids` passed when calling [`WhisperModel`]
-        num_mel_bins (`int`, *optional*, defaults to 80):
-            Number of mel features used per input features. Should correspond to the value used in the
-            `WhisperProcessor` class.
-        encoder_layers (`int`, *optional*, defaults to 4):
-            Number of encoder layers.
-        decoder_layers (`int`, *optional*, defaults to 4):
-            Number of decoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 6):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 6):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 1536):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in encoder.
-        decoder_ffn_dim (`int`, *optional*, defaults to 1536):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
-            for more details.
-        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
-            for more details.
-        decoder_start_token_id (`int`, *optional*, defaults to 50257):
-            Corresponds to the "<|startoftranscript|>" token, which is automatically used when no `decoder_input_ids`
-            are provided to the `generate` function. It is used to guide the model`s generation process depending on
-            the task.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
-        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
-            Whether the model is used as an encoder/decoder or not.
-        activation_function (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        d_model (`int`, *optional*, defaults to 384):
-            Dimensionality of the layers.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        init_std (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        scale_embedding (`bool`, *optional*, defaults to False):
-            Scale embeddings by diving by sqrt(d_model).
-        max_source_positions (`int`, *optional*, defaults to 1500):
-            The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
-        max_target_positions (`int`, *optional*, defaults to 448):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        pad_token_id (`int`, *optional*, defaults to 50256):
-            Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 50256):
-            Begin of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 50256):
-            End of stream token id.
-        suppress_tokens (`list[int]`, *optional*):
-            A list containing the non-speech tokens that will be used by the logit processor in the `generate`
-            function. NON_SPEECH_TOKENS and NON_SPEECH_TOKENS_MULTI each correspond to the `english-only` and the
-            `multilingual` model.
-        begin_suppress_tokens (`list[int]`, *optional*, defaults to `[220,50256]`):
-            A list containing tokens that will be suppressed at the beginning of the sampling process. Initialized as
-            the token for `" "` (`blank_token_id`) and the `eos_token_id`
-        use_weighted_layer_sum (`bool`, *optional*, defaults to `False`):
-            Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
-            instance of [`WhisperForAudioClassification`].
-        classifier_proj_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the projection before token mean-pooling for classification. Only relevant when using an
-            instance of [`WhisperForAudioClassification`].
-        apply_spec_augment (`bool`, *optional*, defaults to `False`):
-            Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder. For reference see
-            [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
-            Recognition](https://huggingface.co/papers/1904.08779).
-        mask_time_prob (`float`, *optional*, defaults to 0.05):
-            Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
-            procedure generates `mask_time_prob*len(time_axis)/mask_time_length` independent masks over the axis. If
-            reasoning from the probability of each feature vector to be chosen as the start of the vector span to be
-            masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the
-            actual percentage of masked vectors. This is only relevant if `apply_spec_augment == True`.
-        mask_time_length (`int`, *optional*, defaults to 10):
-            Length of vector span along the time axis.
-        mask_time_min_masks (`int`, *optional*, defaults to 2),:
-            The minimum number of masks of length `mask_feature_length` generated along the time axis, each time step,
-            irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length <
-            mask_time_min_masks''
-        mask_feature_prob (`float`, *optional*, defaults to 0.0):
-            Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
-            masking procedure generates `mask_feature_prob*len(feature_axis)/mask_time_length` independent masks over
-            the axis. If reasoning from the probability of each feature vector to be chosen as the start of the vector
-            span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
-            may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
-            True`.
-        mask_feature_length (`int`, *optional*, defaults to 10):
-            Length of vector span along the feature axis.
-        mask_feature_min_masks (`int`, *optional*, defaults to 0),:
-            The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
-            step, irrespectively of `mask_feature_prob`. Only relevant if
-            `mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks`.
-        median_filter_width (`int`, *optional*, defaults to 7):
-            Width of the median filter used to smoothen to cross-attention outputs when computing token timestamps.
-            Should be an odd number.
+    max_source_positions (`int`, *optional*, defaults to 1500):
+        The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
+    max_target_positions (`int`, *optional*, defaults to 448):
+        The maximum sequence length that this model might ever be used with. Typically set this to something large
+        just in case (e.g., 512 or 1024 or 2048).
+    suppress_tokens (`list[int]`, *optional*):
+        A list containing the non-speech tokens that will be used by the logit processor in the `generate`
+        function. NON_SPEECH_TOKENS and NON_SPEECH_TOKENS_MULTI each correspond to the `english-only` and the
+        `multilingual` model.
+    begin_suppress_tokens (`list[int]`, *optional*, defaults to `[220,50256]`):
+        A list containing tokens that will be suppressed at the beginning of the sampling process. Initialized as
+        the token for `" "` (`blank_token_id`) and the `eos_token_id`
+    use_weighted_layer_sum (`bool`, *optional*, defaults to `False`):
+        Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
+        instance of [`WhisperForAudioClassification`].
+    classifier_proj_size (`int`, *optional*, defaults to 256):
+        Dimensionality of the projection before token mean-pooling for classification. Only relevant when using an
+        instance of [`WhisperForAudioClassification`].
+    apply_spec_augment (`bool`, *optional*, defaults to `False`):
+        Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder. For reference see
+        [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
+        Recognition](https://huggingface.co/papers/1904.08779).
+    mask_time_prob (`float`, *optional*, defaults to 0.05):
+        Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
+        procedure generates `mask_time_prob*len(time_axis)/mask_time_length` independent masks over the axis. If
+        reasoning from the probability of each feature vector to be chosen as the start of the vector span to be
+        masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the
+        actual percentage of masked vectors. This is only relevant if `apply_spec_augment == True`.
+    mask_time_length (`int`, *optional*, defaults to 10):
+        Length of vector span along the time axis.
+    mask_time_min_masks (`int`, *optional*, defaults to 2),:
+        The minimum number of masks of length `mask_feature_length` generated along the time axis, each time step,
+        irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length <
+        mask_time_min_masks''
+    mask_feature_prob (`float`, *optional*, defaults to 0.0):
+        Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
+        masking procedure generates `mask_feature_prob*len(feature_axis)/mask_time_length` independent masks over
+        the axis. If reasoning from the probability of each feature vector to be chosen as the start of the vector
+        span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
+        may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
+        True`.
+    mask_feature_length (`int`, *optional*, defaults to 10):
+        Length of vector span along the feature axis.
+    mask_feature_min_masks (`int`, *optional*, defaults to 0):
+        The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
+        step, irrespectively of `mask_feature_prob`. Only relevant if
+        `mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks`.
+    median_filter_width (`int`, *optional*, defaults to 7):
+        Width of the median filter used to smoothen to cross-attention outputs when computing token timestamps.
+        Should be an odd number.
 
     Example:
 

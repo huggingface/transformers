@@ -14,52 +14,15 @@
 """GroupViT model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="nvidia/groupvit-gcc-yfcc")
 class GroupViTTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GroupViTTextModel`]. It is used to instantiate an
-    GroupViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the GroupViT
-    [nvidia/groupvit-gcc-yfcc](https://huggingface.co/nvidia/groupvit-gcc-yfcc) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 49408):
-            Vocabulary size of the GroupViT text model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`GroupViTModel`].
-        hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 1024):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 4):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        max_position_embeddings (`int`, *optional*, defaults to 77):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-
     Example:
 
     ```python
@@ -115,47 +78,19 @@ class GroupViTTextConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
 
 
+@auto_docstring(checkpoint="nvidia/groupvit-gcc-yfcc")
 class GroupViTVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GroupViTVisionModel`]. It is used to instantiate
-    an GroupViT model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the GroupViT
-    [nvidia/groupvit-gcc-yfcc](https://huggingface.co/nvidia/groupvit-gcc-yfcc) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 384):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 1536):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        depths (`list[int]`, *optional*, defaults to [6, 3, 3]):
-            The number of layers in each encoder block.
-        num_group_tokens (`list[int]`, *optional*, defaults to [64, 8, 0]):
-            The number of group tokens for each stage.
-        num_output_groups (`list[int]`, *optional*, defaults to [64, 8, 8]):
-            The number of output groups for each stage, 0 means no group.
-        num_attention_heads (`int`, *optional*, defaults to 6):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
-            The epsilon used by the layer normalization layers.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
+    depths (`list[int]`, *optional*, defaults to [6, 3, 3]):
+        The number of layers in each encoder block.
+    num_group_tokens (`list[int]`, *optional*, defaults to [64, 8, 0]):
+        The number of group tokens for each stage.
+    num_output_groups (`list[int]`, *optional*, defaults to [64, 8, 8]):
+        The number of output groups for each stage, 0 means no group.
+    assign_eps (`float`, *optional*, defaults to `1.0`):
+        Epsilon used in layer norm
+    assign_mlp_ratio (`list[int]`, *optional*, defaults to `[0.5, 4]`):
+        Ratio used to infer hidden size of MLP layers.
 
     Example:
 
@@ -223,30 +158,11 @@ class GroupViTVisionConfig(PreTrainedConfig):
         self.assign_mlp_ratio = assign_mlp_ratio
 
 
+@auto_docstring(checkpoint="nvidia/groupvit-gcc-yfcc")
 class GroupViTConfig(PreTrainedConfig):
     r"""
-    [`GroupViTConfig`] is the configuration class to store the configuration of a [`GroupViTModel`]. It is used to
-    instantiate a GroupViT model according to the specified arguments, defining the text model and vision model
-    configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the GroupViT
-    [nvidia/groupvit-gcc-yfcc](https://huggingface.co/nvidia/groupvit-gcc-yfcc) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`GroupViTTextConfig`].
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`GroupViTVisionConfig`].
-        projection_dim (`int`, *optional*, defaults to 256):
-            Dimensionality of text and vision projection layers.
-        projection_intermediate_dim (`int`, *optional*, defaults to 4096):
-            Dimensionality of intermediate layer of text and vision projection layers.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The initial value of the *logit_scale* parameter. Default is used as per the original GroupViT
-            implementation.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+    projection_intermediate_dim (`int`, *optional*, defaults to 4096):
+        Dimensionality of intermediate layer of text and vision projection layers.
     """
 
     model_type = "groupvit"

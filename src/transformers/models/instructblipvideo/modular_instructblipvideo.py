@@ -42,39 +42,23 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
 class InstructBlipVideoVisionConfig(InstructBlipVisionConfig):
     pass
 
 
+@auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
 class InstructBlipVideoQFormerConfig(InstructBlipQFormerConfig):
     pass
 
 
+@auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
 class InstructBlipVideoConfig(PreTrainedConfig):
     r"""
-    [`InstructBlipVideoConfig`] is the configuration class to store the configuration of a
-    [`InstructBlipVideoForConditionalGeneration`]. It is used to instantiate a Instructblipvideo model according to the specified
-    arguments, defining the vision model, Q-Former model and language model configs. Instantiating a configuration with
-    the defaults will yield a similar configuration to that of the Instructblipvideo
-    [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`InstructBlipVideoVisionConfig`].
-        qformer_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`InstructBlipVideoQFormerConfig`].
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize any [`PreTrainedConfig`].
-        num_query_tokens (`int`, *optional*, defaults to 32):
-            The number of query tokens passed through the Transformer.
-
-        video_token_index (`int`, *optional*):
-            Token index of special video token.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+    qformer_config (`dict`, *optional*):
+        Dictionary of configuration options used to initialize [`InstructBlipVideoQFormerConfig`].
+    num_query_tokens (`int`, *optional*, defaults to 32):
+        The number of query tokens passed through the Transformer.
 
     Example:
 

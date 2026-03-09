@@ -22,87 +22,33 @@ from typing import Literal
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="blab-jhu/test-32m-dec")
 class ModernBertDecoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ModernBertDecoderModel`]. It is used to instantiate a ModernBert
-    decoder model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the ModernBERT-base decoder.
-    e.g. [blab-jhu/test-32m-dec](https://huggingface.co/blab-jhu/test-32m-dec)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 50368):
-            Vocabulary size of the ModernBert decoder model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`ModernBertDecoderModel`]
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 1152):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 22):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        hidden_activation (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the decoder. Will default to `"gelu"`
-            if not specified.
-        max_position_embeddings (`int`, *optional*, defaults to 8192):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_cutoff_factor (`float`, *optional*, defaults to 2.0):
-            The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
-        norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        norm_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in the normalization layers.
-        pad_token_id (`int`, *optional*, defaults to 50283):
-            Padding token id.
-        eos_token_id (`int`, *optional*, defaults to 50282):
-            End of stream token id.
-        bos_token_id (`int`, *optional*, defaults to 50281):
-            Beginning of stream token id.
-        cls_token_id (`int`, *optional*, defaults to 50281):
-            Classification token id.
-        sep_token_id (`int`, *optional*, defaults to 50282):
-            Separation token id.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        embedding_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the embeddings.
-        mlp_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in the MLP layers.
-        mlp_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the MLP layers.
-        decoder_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in the decoder layers.
-        classifier_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the classifier.
-        classifier_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in the classifier.
-        classifier_activation (`str`, *optional*, defaults to `"gelu"`):
-            The activation function for the classifier.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        local_attention (`int`, *optional*, defaults to 128):
-            The sliding window size for local attention. Only used for layers that use local attention. Note that for
-            the decoder to match ModernBERT this is actually half of the sliding window size, so 128 => 64.
-        global_attn_every_n_layers (`int`, *optional*, defaults to 3):
-            Every `global_attn_every_n_layers` layers will use global attention instead of local attention.
-        layer_types (`list[str]`, *optional*):
-            List of layer types, one for each layer. If not specified, will be automatically generated based on
-            `global_attn_every_n_layers`. Should contain "full_attention" or "sliding_attention".
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
-        rope_parameters (`dict`, *optional*):
-            Dictionary mapping attention patterns (`"full_attention"`, `"sliding_attention"`) to `RopeParameters`.
-            Each value should be a dictionary containing `rope_type` and optional scaling parameters.
+    initializer_cutoff_factor (`float`, *optional*, defaults to 2.0):
+        The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
+    norm_eps (`float`, *optional*, defaults to 1e-05):
+        The epsilon used by the rms normalization layers.
+    norm_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use bias in the normalization layers.
+    embedding_dropout (`float`, *optional*, defaults to 0.0):
+        The dropout ratio for the embeddings.
+    mlp_dropout (`float`, *optional*, defaults to 0.0):
+        The dropout ratio for the MLP layers.
+    decoder_bias (`bool`, *optional*, defaults to `True`):
+        Whether to use bias in the decoder layers.
+    classifier_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use bias in the classifier.
+    classifier_activation (`str`, *optional*, defaults to `"gelu"`):
+        The activation function for the classifier.
+    local_attention (`int`, *optional*, defaults to 128):
+        The sliding window size for local attention. Only used for layers that use local attention. Note that for
+        the decoder to match ModernBERT this is actually half of the sliding window size, so 128 => 64.
+    global_attn_every_n_layers (`int`, *optional*, defaults to 3):
+        Every `global_attn_every_n_layers` layers will use global attention instead of local attention.
 
     Examples:
 

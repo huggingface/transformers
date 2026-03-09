@@ -15,15 +15,11 @@
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="openai/gpt-oss-20b")
 class GptOssConfig(PreTrainedConfig):
-    r"""
-    This will yield a configuration to that of the BERT
-    [google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased) architecture.
-
-    """
-
     model_type = "gpt_oss"
     default_theta = 150000.0
     base_model_pp_plan = {
