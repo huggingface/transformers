@@ -400,7 +400,7 @@ def remove_tied_weights_from_state_dict(
 ) -> dict[str, torch.Tensor]:
     """
     Remove all tied weights from the given `state_dict`, making sure to keep only the main weight that `model`
-    will expect when reloading (even if we know tie weights symmetrically, it's better to keep the intended one).
+    will expect when reloading (even if we now tie weights symmetrically, it's better to keep the intended one).
     This is because `safetensors` does not allow tensor aliasing - so we're going to remove aliases before saving.
     """
     # To avoid any potential mistakes and mismatches between config and actual tied weights, here we check the pointers
@@ -2550,15 +2550,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # Both are already present -> it means the config is wrong and do not reflect the actual
                 # checkpoint -> let's raise a warning and NOT tie them
                 if source_is_there and target_is_there:
-                    logger.warning(
-                        f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
-                        f"{target_param_name}, but both are present in the checkpoints, so we will NOT tie them. "
-                        "You should update the config with `tie_word_embeddings=False` to silence this warning"
-                    )
-                    # Remove from internal attribute to correctly reflect actual tied weights
-                    self.all_tied_weights_keys.pop(target_param_name)
-                    # Skip to next iteration
-                    continue
+                    # If both are present, check if the weights are exactly similar, and only tie in this case
+                    # This check is important, as torch `.bin` checkpoints always contain both keys, referencing the same storage
+                    if not torch.equal(self.get_parameter(source_param_name), self.get_parameter(target_param_name)):
+                        logger.warning(
+                            f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
+                            f"{target_param_name}, but both are present in the checkpoints with different values, so we will NOT "
+                            "tie them. You should update the config with `tie_word_embeddings=False` to silence this warning."
+                        )
+                        # Remove from internal attribute to correctly reflect actual tied weights
+                        self.all_tied_weights_keys.pop(target_param_name)
+                        # Skip to next iteration
+                        continue
                 # We're missing the source but we have the target -> we swap them, tying the parameter that exists
                 elif not source_is_there and target_is_there:
                     target_param_name, source_param_name = source_param_name, target_param_name
@@ -4544,8 +4547,23 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         `_initialize_weights`. Indeed, since the corresponding weights are missing from the state dict, they will not be replaced and need to
         be initialized correctly (i.e. weight initialization distribution).
 
-        Params that are not missing have the `is_hf_initialized` flag.
+        Also marks non-missing params/buffers with `_is_hf_initialized` and propagates this flag to modules,
+        so that `_initialize_weights` can skip fully-initialized modules entirely.
         """
+        if is_fsdp_enabled() and not is_local_dist_rank_0():
+            # Handle FSDP edge case when using cpu ram efficient loading to ensure it is marked as initialized
+            # since it will get its weights broadcasted from rank0
+            # We actually need to do that only because we want to re-initialize non-persistent buffers with correct values.
+            # Everything else in the state_dict will be gathered from rank0, so we don't need re-initialization.
+            # We could simply early return after buffer inits if we had a way to init only the non-persistent buffers
+            for key in self.state_dict():
+                try:
+                    param_or_buffer = self.get_parameter_or_buffer(key)
+                    param_or_buffer._is_hf_initialized = True
+                except AttributeError:
+                    pass  # may happen when handling pre-quantized weights
+            self._is_hf_initialized = True
+
         # This will only initialize submodules that are not marked as initialized by the line above.
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
