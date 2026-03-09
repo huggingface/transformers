@@ -1596,7 +1596,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Can the package be seen in the import structure
             if not pkg_availability_check():
                 raise ImportError(
-                    f"{preface} the package for FlashAttention{flash_attn_version} seems to be not installed."
+                    f"{preface} the package for FlashAttention{flash_attn_version} doesn't seem to be not installed."
                 )
             else:
                 # Supported devices availability
