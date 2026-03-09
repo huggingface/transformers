@@ -630,6 +630,7 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.spatial_embeddings.patch_embeddings = value
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -977,7 +978,6 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         )
 
 
-@can_return_tuple
 @auto_docstring(
     custom_intro="""
     VideoPrism Model transformer with a video classification head on top (a linear layer on top of the attention pooler).

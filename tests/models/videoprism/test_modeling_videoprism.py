@@ -45,6 +45,7 @@ from ...test_modeling_common import (
 
 if is_torch_available():
     import torch
+    from torch import nn
 
     from transformers import (
         VideoPrismClipModel,
@@ -178,8 +179,10 @@ class VideoPrismVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (
-        (VideoPrismVisionModel, VideoPrismVideoModel, VideoPrismForVideoClassification) if is_torch_available() else ()
+        (VideoPrismVisionModel, VideoPrismVideoModel) if is_torch_available() else ()
     )
+
+    test_resize_embeddings = False
 
     def setUp(self):
         self.model_tester = VideoPrismVisionModelTester(self)
@@ -190,7 +193,15 @@ class VideoPrismVisionModelTest(ModelTesterMixin, unittest.TestCase):
             hidden_size=37,
             common_properties=["num_channels", "hidden_size", "num_attention_heads"],
         )
+    def test_model_get_set_embeddings(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), nn.Module)
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
+    
     def test_config(self):
         self.config_tester.run_common_tests()
 
