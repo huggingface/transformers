@@ -522,9 +522,6 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         chunk_idx = (row_cum - 1) // patch_size
         local_idx = (row_cum - 1) % patch_size
         block_idx = block_offset.unsqueeze(1) + chunk_idx
-
-        # Gather image features for all positions (safe at non-image positions since
-        # those values are discarded by the subsequent where).
         gathered = image_hidden_states[block_idx, local_idx, :]
         merged_embeds = torch.where(image_mask.unsqueeze(-1), gathered, inputs_embeds)
         return merged_embeds
