@@ -68,14 +68,6 @@ print(tokenizer.decode(outputs[0]))
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "The capital of France is <extra_id_0>." | transformers run --task text2text-generation --model google/switch-base-8 --device 0
-# [{'generated_text': 'Paris.'}]
-```
-
-</hfoption>
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.

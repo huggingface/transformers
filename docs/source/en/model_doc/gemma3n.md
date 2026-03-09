@@ -110,13 +110,6 @@ print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model google/gemma-3n-e2b --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 ## Notes
