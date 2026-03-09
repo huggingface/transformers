@@ -49,7 +49,6 @@ if is_torch_available():
 
     from transformers import (
         VideoPrismClipModel,
-        VideoPrismForVideoClassification,
         VideoPrismTextModel,
         VideoPrismVideoModel,
         VideoPrismVisionModel,
@@ -178,9 +177,7 @@ class VideoPrismVisionModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (VideoPrismVisionModel, VideoPrismVideoModel) if is_torch_available() else ()
-    )
+    all_model_classes = (VideoPrismVisionModel, VideoPrismVideoModel) if is_torch_available() else ()
 
     test_resize_embeddings = False
 
@@ -193,6 +190,7 @@ class VideoPrismVisionModelTest(ModelTesterMixin, unittest.TestCase):
             hidden_size=37,
             common_properties=["num_channels", "hidden_size", "num_attention_heads"],
         )
+
     def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -201,12 +199,28 @@ class VideoPrismVisionModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsInstance(model.get_input_embeddings(), nn.Module)
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
-    
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
     @unittest.skip(reason="VideoPrism does not use inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="VideoPrismVisionModel and VideoPrismVideoModel do not support standalone training")
+    def test_training(self):
+        pass
+
+    @unittest.skip(reason="VideoPrismVisionModel and VideoPrismVideoModel do not support standalone training")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="VideoPrismVisionModel and VideoPrismVideoModel do not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        pass
+
+    @unittest.skip(reason="VideoPrismVisionModel and VideoPrismVideoModel do not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
@@ -255,7 +269,7 @@ class VideoPrismTextModelTester:
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_attention_heads = num_attention_heads
-        self.num_text_layers = num_text_layers
+        self.num_hidden_layers = num_text_layers
         self.vocab_size = vocab_size
         self.apply_l2_norm = apply_l2_norm
         self.hidden_act = hidden_act
@@ -293,7 +307,7 @@ class VideoPrismTextModelTester:
             hidden_size=self.hidden_size,
             intermediate_size=self.intermediate_size,
             num_attention_heads=self.num_attention_heads,
-            num_text_layers=self.num_text_layers,
+            num_text_layers=self.num_hidden_layers,
             vocab_size=self.vocab_size,
             apply_l2_norm=self.apply_l2_norm,
             hidden_act=self.hidden_act,
@@ -358,7 +372,7 @@ class VideoPrismTextModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="VideoPrismTextModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="VideoPrismTextModel does not support standalone training")

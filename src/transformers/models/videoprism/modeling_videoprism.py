@@ -20,6 +20,8 @@ from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_int
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_videoprism import VideoPrismConfig, VideoPrismTextConfig, VideoPrismVisionConfig
 
 
@@ -565,6 +567,10 @@ class VideoPrismPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_attention_backend = True
     _supports_flex_attention = True
+    _can_record_outputs = {
+        "hidden_states": VideoPrismLayer,
+        "attentions": VideoPrismSelfAttention,
+    }
 
     def _init_weights(self, module):
         if isinstance(module, (nn.Linear, nn.Conv3d)):
@@ -773,6 +779,7 @@ def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
 )
 class VideoPrismTextModel(VideoPrismPreTrainedModel):
     config: VideoPrismTextConfig
+    main_input_name = "input_ids"
 
     def __init__(self, config: VideoPrismTextConfig):
         super().__init__(config)
@@ -799,18 +806,23 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         self.token_embeddings = value
 
     @can_return_tuple
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.Tensor,
+        input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        batch_size, seq_length = input_ids.shape
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
         if inputs_embeds is None:
             inputs_embeds = self.token_embeddings(input_ids)
 
+        batch_size, seq_length, dim = inputs_embeds.shape
         hidden_states = inputs_embeds * (self.config.hidden_size**0.5)
         seq_len = hidden_states.shape[1]
 
