@@ -135,7 +135,6 @@ class PI0Model(PI0PreTrainedModel):
             .to(inputs_embeds.device)
         )
         inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, total_image_features)
-        # inputs_embeds[input_ids == self.config.vlm_config.image_token_id] = total_image_features
 
         # FIXME: remove after https://github.com/huggingface/transformers/pull/44432 is merged!
         inputs_embeds = inputs_embeds * math.sqrt(2048)
