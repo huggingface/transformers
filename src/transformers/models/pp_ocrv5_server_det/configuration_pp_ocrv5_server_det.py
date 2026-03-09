@@ -27,7 +27,12 @@ from ..auto import AutoConfig
 
 @auto_docstring(
     custom_intro="""
-    """
+    This is the configuration class to store the configuration of a [`PPOCRV5ServerDet`]. It is used to instantiate a
+    PPOCRV5 Server text detection model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the PPOCRV5 Server Det
+    [PaddlePaddle/PP-OCRv5-server-det](https://huggingface.co/PaddlePaddle/PP-OCRv5-server-det) architecture.
+    """,
+    checkpoint="PaddlePaddle/PP-OCRv5-server-det",
 )
 class PPOCRV5ServerDetConfig(PreTrainedConfig):
     r"""

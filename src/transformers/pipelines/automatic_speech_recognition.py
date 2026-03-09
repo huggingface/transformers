@@ -134,43 +134,21 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     Arguments:
-        model ([`PreTrainedModel`]):
-            The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            [`PreTrainedModel`].
-        feature_extractor ([`SequenceFeatureExtractor`]):
-            The feature extractor that will be used by the pipeline to encode waveform for the model.
-        tokenizer ([`PreTrainedTokenizer`]):
-            The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
-            [`PreTrainedTokenizer`].
-        decoder (`pyctcdecode.BeamSearchDecoderCTC`, *optional*):
-            [PyCTCDecode's
-            BeamSearchDecoderCTC](https://github.com/kensho-technologies/pyctcdecode/blob/2fd33dc37c4111417e08d89ccd23d28e9b308d19/pyctcdecode/decoder.py#L180)
-            can be passed for language model boosted decoding. See [`Wav2Vec2ProcessorWithLM`] for more information.
-        chunk_length_s (`float`, *optional*, defaults to 0):
-            The input length for in each chunk. If `chunk_length_s = 0` then chunking is disabled (default).
-
-            <Tip>
-
-            For more information on how to effectively use `chunk_length_s`, please have a look at the [ASR chunking
-            blog post](https://huggingface.co/blog/asr-chunking).
-
-            </Tip>
-
-        stride_length_s (`float`, *optional*, defaults to `chunk_length_s / 6`):
-            The length of stride on the left and right of each chunk. Used only with `chunk_length_s > 0`. This enables
-            the model to *see* more context and infer letters better than without this context but the pipeline
-            discards the stride bits at the end to make the final reconstitution as perfect as possible.
-
-            <Tip>
-
-            For more information on how to effectively use `stride_length_s`, please have a look at the [ASR chunking
-            blog post](https://huggingface.co/blog/asr-chunking).
-
-            </Tip>
-
-        device (Union[`int`, `torch.device`], *optional*):
-            Device ordinal for CPU/GPU supports. Setting this to `None` will leverage CPU, a positive will run the
-            model on the associated CUDA device id.
+            model ([`PreTrainedModel`]):
+                The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
+                [`PreTrainedModel`].
+            feature_extractor ([`SequenceFeatureExtractor`], *optional*):
+                The feature extractor that will be used by the pipeline to encode waveform for the model.
+            tokenizer ([`PreTrainedTokenizer`], *optional*):
+                The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
+                [`PreTrainedTokenizer`].
+            decoder (`pyctcdecode.BeamSearchDecoderCTC`, *optional*):
+                [PyCTCDecode's
+                BeamSearchDecoderCTC](https://github.com/kensho-technologies/pyctcdecode/blob/2fd33dc37c4111417e08d89ccd23d28e9b308d19/pyctcdecode/decoder.py#L180)
+                can be passed for language model boosted decoding. See [`Wav2Vec2ProcessorWithLM`] for more information.
+            device (Union[`int`, `torch.device`], *optional*):
+                Device ordinal for CPU/GPU supports. Setting this to `None` will leverage CPU, a positive will run the
+                model on the associated CUDA device id.
     """
 
     _pipeline_calls_generate = True

@@ -206,7 +206,7 @@ class PPOCRV5ServerDetIntraCLBlock(nn.Module):
         return identity + hidden_state
 
 
-class PPOCRV5ServerDetLKPAN(PreTrainedModel):
+class PPOCRV5ServerDetLKPAN(nn.Module):
     """
     Large Kernel Path Aggregation Network (Neck).
     It fuses features from multiple backbone stages (C2-C5) using a combination of
@@ -218,7 +218,7 @@ class PPOCRV5ServerDetLKPAN(PreTrainedModel):
     """
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         self.interpolate_mode = config.interpolate_mode
 
         if config.mode == "lite":
@@ -284,7 +284,6 @@ class PPOCRV5ServerDetLKPAN(PreTrainedModel):
             config.intraclblock_config, config.neck_out_channels // 4, reduce_factor=config.reduce_factor
         )
 
-    @capture_outputs()
     def forward(self, hidden_state: list[torch.Tensor], **kwargs) -> torch.Tensor:
         """
         Forward pass of PPOCRV5ServerDetLKPAN.
@@ -333,7 +332,7 @@ class PPOCRV5ServerDetLKPAN(PreTrainedModel):
         p3 = F.interpolate(p3, scale_factor=2, mode=self.interpolate_mode)
 
         fuse = torch.cat([p5, p4, p3, p2], dim=1)
-        return BaseModelOutputWithNoAttention(last_hidden_state=fuse)
+        return fuse
 
 
 class PPOCRV5ServerDetConvBNLayer(nn.Module):
@@ -643,8 +642,6 @@ class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
     """
 )
 class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
-    _can_record_outputs = {"hidden_states": PPOCRV5ServerDetLKPAN}
-
     def __init__(self, config: PPOCRV5ServerDetConfig):
         super().__init__(config)
         self.backbone = load_backbone(config)
@@ -667,9 +664,9 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
 
         """
         hidden_state = self.backbone(hidden_state).feature_maps
-        outputs = self.neck(hidden_state)
+        hidden_state = self.neck(hidden_state)
 
-        return PPOCRV5ServerDetModelOutput(logits=outputs.last_hidden_state)
+        return PPOCRV5ServerDetModelOutput(logits=hidden_state)
 
 
 @auto_docstring(
