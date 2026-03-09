@@ -142,7 +142,7 @@ class SamHQVisionEncoder(SamVisionEncoder, SamHQPreTrainedModel):
     @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | SamHQVisionEncoderOutput:
+    ) -> SamHQVisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 

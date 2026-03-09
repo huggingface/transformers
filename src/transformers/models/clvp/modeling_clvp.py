@@ -1516,7 +1516,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         text_encoder_inputs_embeds: torch.FloatTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | ClvpEncoderOutput:
+    ) -> ClvpEncoderOutput:
         r"""
         text_encoder_inputs_embeds (`torch.FloatTensor`, *optional*):
             inputs_embeds for the text encoder model passed in place of `input_ids`.

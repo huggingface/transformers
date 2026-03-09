@@ -111,7 +111,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         position_ids: torch.Tensor | None = None,
         token_type_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -143,7 +143,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
     @auto_docstring
     def get_image_features(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 

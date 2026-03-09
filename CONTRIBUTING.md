@@ -193,7 +193,7 @@ The library has 400+ models with many established patterns:
 - Search for similar models (e.g., other vision-language models)
 - Reuse attention mechanisms, layer implementations, and processing patterns
 - Check models like LLaVA, Idefics2, Fuyu for vision-language patterns
-- Use provided decorators like (`auto_docstring`, `can_return_tuple`, `check_model_inputs` and `_can_record_outputs`) where relevant.
+- Use provided decorators like (`auto_docstring`, `can_return_tuple`, `capture_outputs` and `_can_record_outputs`) where relevant.
 - Don't reinvent the wheel
 
 ☐ **7. Run quality checks and read the output**

@@ -327,7 +327,7 @@ class GlmAsrEncoder(GlmAsrPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
-    def forward(self, input_features, **kwargs: Unpack[TransformersKwargs]):
+    def forward(self, input_features, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
         inputs_embeds = inputs_embeds.transpose(1, 2)
@@ -366,7 +366,7 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         audio_outputs = self.audio_tower(input_features, return_dict=True, **kwargs)
         audio_hidden_states = audio_outputs.last_hidden_state
         audio_hidden_states = audio_hidden_states.reshape(

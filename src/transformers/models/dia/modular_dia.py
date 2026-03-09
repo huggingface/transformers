@@ -257,7 +257,7 @@ class DiaEncoder(DiaPreTrainedModel):
         output_attentions: bool | None = False,
         output_hidden_states: bool | None = False,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> BaseModelOutput | tuple:
+    ) -> BaseModelOutput:
         hidden_states = self.embedding(input_ids)
 
         # RoPE
@@ -387,7 +387,7 @@ class DiaDecoder(DiaPreTrainedModel):
         output_attentions: bool | None = False,
         output_hidden_states: bool | None = False,
         **kwargs,
-    ) -> BaseModelOutputWithPastAndCrossAttentions | tuple:
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, num_codebooks)`):
             The original `decoder_input_ids` in 3D shape to facilitate more efficient computations.
@@ -494,7 +494,7 @@ class DiaModel(DiaPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         **kwargs,
-    ) -> tuple | Seq2SeqModelOutput:
+    ) -> Seq2SeqModelOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, target_sequence_length)
         or (batch_size, target_sequence_length, num_codebooks)`, *optional*):
@@ -629,7 +629,7 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
         output_hidden_states: bool | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs,
-    ) -> tuple | Seq2SeqLMOutput:
+    ) -> Seq2SeqLMOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, target_sequence_length)
         or (batch_size, target_sequence_length, num_codebooks)`, *optional*):

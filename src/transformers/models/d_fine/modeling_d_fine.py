@@ -1627,7 +1627,7 @@ class DFineModel(DFinePreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | DFineModelOutput:
+    ) -> DFineModelOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
@@ -1948,7 +1948,7 @@ class DFineForObjectDetection(DFinePreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | DFineObjectDetectionOutput:
+    ) -> DFineObjectDetectionOutput:
         r"""
         Example:
 

@@ -720,7 +720,7 @@ class XmodModel(XmodPreTrainedModel):
         use_cache: bool | None = None,
         cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | BaseModelOutputWithPoolingAndCrossAttentions:
+    ) -> BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
         lang_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of the language adapters that should be activated for each sample, respectively. Default: the index
@@ -886,7 +886,7 @@ class XmodForCausalLM(XmodPreTrainedModel, GenerationMixin):
         cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | CausalLMOutputWithCrossAttentions:
+    ) -> CausalLMOutputWithCrossAttentions:
         r"""
         lang_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of the language adapters that should be activated for each sample, respectively. Default: the index
@@ -996,7 +996,7 @@ class XmodForMaskedLM(XmodPreTrainedModel):
         encoder_attention_mask: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | MaskedLMOutput:
+    ) -> MaskedLMOutput:
         r"""
         lang_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of the language adapters that should be activated for each sample, respectively. Default: the index
@@ -1088,7 +1088,7 @@ class XmodForSequenceClassification(XmodPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
+    ) -> SequenceClassifierOutput:
         r"""
         lang_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of the language adapters that should be activated for each sample, respectively. Default: the index
@@ -1167,7 +1167,7 @@ class XmodForMultipleChoice(XmodPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | MultipleChoiceModelOutput:
+    ) -> MultipleChoiceModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -1272,7 +1272,7 @@ class XmodForTokenClassification(XmodPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | TokenClassifierOutput:
+    ) -> TokenClassifierOutput:
         r"""
         lang_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of the language adapters that should be activated for each sample, respectively. Default: the index
@@ -1358,7 +1358,7 @@ class XmodForQuestionAnswering(XmodPreTrainedModel):
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | QuestionAnsweringModelOutput:
+    ) -> QuestionAnsweringModelOutput:
         r"""
         lang_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of the language adapters that should be activated for each sample, respectively. Default: the index

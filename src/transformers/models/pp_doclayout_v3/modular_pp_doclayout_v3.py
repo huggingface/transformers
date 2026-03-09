@@ -937,7 +937,7 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
         norm=None,
         mask_feat=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> PPDocLayoutV3DecoderOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -1075,7 +1075,7 @@ class PPDocLayoutV3Model(RTDetrModel):
         encoder_outputs: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | PPDocLayoutV3ModelOutput:
+    ) -> PPDocLayoutV3ModelOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
@@ -1394,7 +1394,7 @@ class PPDocLayoutV3ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV3Pre
         encoder_outputs: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | PPDocLayoutV3ForObjectDetectionOutput:
+    ) -> PPDocLayoutV3ForObjectDetectionOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you

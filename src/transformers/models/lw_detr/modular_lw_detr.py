@@ -1015,7 +1015,7 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> LwDetrDecoderOutput:
         intermediate = ()
         intermediate_reference_points = (reference_points,)
 

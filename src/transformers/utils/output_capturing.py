@@ -19,10 +19,11 @@ This mostly describe the hooks used and the logic to make capture thread/context
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import wraps
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
 from .import_utils import is_torchdynamo_compiling, requires
 
@@ -31,6 +32,12 @@ if TYPE_CHECKING:
     from torch import nn
 
     from ..modeling_utils import PreTrainedModel
+
+
+# Used to type hint decorators that modify the signature of the decorated function
+
+P = ParamSpec("P")
+T = TypeVar("T")
 
 
 _CAN_RECORD_REGISTRY = {}
@@ -203,12 +210,17 @@ def maybe_install_capturing_hooks(model: PreTrainedModel) -> None:
         install_all_output_capturing_hooks(model)
 
 
-def capture_outputs(func=None, *, tie_last_hidden_states=True):
+# We follow the example from https://docs.python.org/3/library/typing.html#typing.ParamSpec to type-hint
+# this decorator, allowing it to add 'tuple' to the signature of the decorated function.
+def capture_outputs(func: Callable[P, T] | None = None, *, tie_last_hidden_states=True) -> Callable[P, tuple | T]:
     """
     Decorator to intercept specific layer outputs through hooks. The hooks are installed only once and lazily,
     the first time output capture is requested with the `output_xxx` kwargs/config.
     The implementation is fully context/thread safe, except when using `torch.compile`, as dynamo is unable to trace
     through `ContextVar` methods.
+
+    The wrapped method or function should not be typed like `tuple | X`, but instead just `X`, where `X` is the
+    original return type. This decorator's typing ensures that the return type is correctly represented as `tuple | X`.
 
     Args:
         tie_last_hidden_states (`bool`, *optional*, defaults to `True`):
@@ -218,9 +230,10 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
             is needed for some vision models (e.g. CLIP, SigLIP)
     """
 
-    def wrapped_fn(func):
+    def wrapped_fn(func: Callable[P, T]) -> Callable[P, tuple | T]:
         @wraps(func)
-        def wrapper(self, *args, **kwargs):
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> tuple | T:
+            self, *args = args
             # Pop it so that internal modules always return a dict even if False is requested
             return_dict = kwargs.pop("return_dict", getattr(self.config, "return_dict", True))
 

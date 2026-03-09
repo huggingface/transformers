@@ -1148,7 +1148,7 @@ class DetrModel(DetrPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | DetrModelOutput:
+    ) -> DetrModelOutput:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
             Mask to avoid performing attention on certain object queries in the decoder. Mask values selected in `[0, 1]`:
@@ -1327,7 +1327,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | DetrObjectDetectionOutput:
+    ) -> DetrObjectDetectionOutput:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
             Mask to avoid performing attention on certain object queries in the decoder. Mask values selected in `[0, 1]`:
@@ -1488,7 +1488,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | DetrSegmentationOutput:
+    ) -> DetrSegmentationOutput:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
             Mask to avoid performing attention on certain object queries in the decoder. Mask values selected in `[0, 1]`:

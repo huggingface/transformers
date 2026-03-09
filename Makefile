@@ -39,6 +39,7 @@ check-repo:
 	-python utils/check_config_docstrings.py
 	-python utils/check_config_attributes.py
 	-python utils/check_doctest_list.py
+	-python utils/check_decorator_return_types.py
 	-python utils/update_metadata.py --check-only  
 	-python utils/add_dates.py --check-only
 	-@{ \
@@ -60,6 +61,7 @@ fix-repo: style
 	-python utils/check_pipeline_typing.py --fix_and_overwrite
 	-python utils/check_doctest_list.py --fix_and_overwrite
 	-python utils/check_docstrings.py --fix_and_overwrite
+	-python utils/check_decorator_return_types.py --fix_and_overwrite
 	-python utils/add_dates.py
 
 
