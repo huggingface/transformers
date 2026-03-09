@@ -439,7 +439,7 @@ def _cached_compile_jinja_template(chat_template):
             return rv
 
         def is_active(self) -> bool:
-            return self._rendered_blocks or self._generation_indices
+            return self._rendered_blocks is not None or self._generation_indices is not None
 
         @contextmanager
         def activate_tracker(self, rendered_blocks: list[int], generation_indices: list[int]):
