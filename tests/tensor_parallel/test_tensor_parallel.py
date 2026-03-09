@@ -11,15 +11,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 import warnings
+from types import SimpleNamespace
 
 import torch
 
 from transformers import AutoModelForCausalLM
-from transformers.integrations.tensor_parallel import get_packed_weights, repack_weights
-from transformers.testing_utils import TestCasePlus
+from transformers.integrations.tensor_parallel import (
+    ColwiseParallel,
+    EmbeddingParallel,
+    GroupedGemmParallel,
+    PackedColwiseParallel,
+    PackedRowwiseParallel,
+    RowwiseParallel,
+    get_packed_weights,
+    repack_weights,
+)
+from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
 
+@is_tensor_parallel_test
 class TestTensorParallelUtils(TestCasePlus):
     def test_packed_unpacked_conversion(self):
         WORLD_SIZE = 2
@@ -49,6 +61,7 @@ class TestTensorParallelUtils(TestCasePlus):
         assert torch.allclose(unpacked_weights, original_packed_weights)
 
 
+@is_tensor_parallel_test
 class TestTensorParallelProperties(TestCasePlus):
     def test_tp_plan_property_setter_getter(self):
         """Test that tp_plan property can be set and retrieved correctly."""
@@ -152,3 +165,256 @@ class TestTensorParallelProperties(TestCasePlus):
         # Test setting a plan after None
         model.tp_plan = {"model.layers.*.self_attn.q_proj": "colwise"}
         self.assertEqual(model.tp_plan, {"model.layers.*.self_attn.q_proj": "colwise"})
+
+
+@is_tensor_parallel_test
+class TestTensorParallelLayer(TestCasePlus):
+    class MockDeviceMesh:
+        def __init__(self, world_size, rank):
+            self.world_size = world_size
+            self.rank = rank
+            self.shape = (world_size,)
+
+        def size(self):
+            return self.world_size
+
+        def get_local_rank(self):
+            return self.rank
+
+    def test_colwise_get_expected_sharded_shape(self):
+        world_size = 3
+        size = 10  # not divisible by world_size to test edge case
+        empty_param_2d = torch.empty(size, 32)
+        empty_param_1d = torch.empty((size,))
+        step = math.ceil(size / world_size)
+
+        for rank in range(world_size):
+            for empty_param in [empty_param_2d, empty_param_1d]:
+                device_mesh = self.MockDeviceMesh(world_size=world_size, rank=rank)
+                layer = ColwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty_param)
+
+                begin = rank * step
+                end = min(begin + step, size)
+                ground_truth = (end - begin,) + empty_param.shape[1:]
+                expected_shape = layer.get_expected_sharded_shape(empty_param.shape)
+                self.assertEqual(
+                    expected_shape, ground_truth, f"Rank {rank} expected shape {ground_truth} but got {expected_shape}"
+                )
+
+    def test_rowwise_get_expected_sharded_shape(self):
+        world_size = 3
+        size = 10  # not divisible by world_size to test edge case
+        empty_param_2d = torch.empty(32, size)
+        empty_param_1d = torch.empty((size,))
+        step = math.ceil(size / world_size)
+
+        for rank in range(world_size):
+            device_mesh = self.MockDeviceMesh(world_size=world_size, rank=rank)
+
+            # 2D: shards on dim -1 (input features)
+            layer = RowwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty_param_2d)
+            begin = rank * step
+            end = min(begin + step, size)
+            ground_truth = empty_param_2d.shape[:-1] + (end - begin,)
+            expected_shape = layer.get_expected_sharded_shape(empty_param_2d.shape)
+            self.assertEqual(
+                expected_shape, ground_truth, f"Rank {rank} expected shape {ground_truth} but got {expected_shape}"
+            )
+
+            # 1D bias: NOT sharded
+            layer = RowwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty_param_1d)
+            self.assertEqual(layer.get_expected_sharded_shape(empty_param_1d.shape), empty_param_1d.shape)
+
+    def test_embedding_get_expected_sharded_shape(self):
+        world_size = 3
+        size = 10  # not divisible by world_size to test edge case; same size on both dims so step applies to both
+        empty_param = torch.empty(size, size)
+        step = math.ceil(size / world_size)
+
+        for rank in range(world_size):
+            device_mesh = self.MockDeviceMesh(world_size=world_size, rank=rank)
+            begin = rank * step
+            end = min(begin + step, size)
+
+            # embedding_dim_sharding=0: shards dim 0 (vocab)
+            layer = EmbeddingParallel(
+                device_mesh=device_mesh, rank=rank, empty_param=empty_param, embedding_dim_sharding=0
+            )
+            ground_truth = (end - begin,) + empty_param.shape[1:]
+            expected_shape = layer.get_expected_sharded_shape(empty_param.shape)
+            self.assertEqual(
+                expected_shape, ground_truth, f"Rank {rank} expected shape {ground_truth} but got {expected_shape}"
+            )
+
+            # embedding_dim_sharding=1: shards dim 1 (embedding dim)
+            layer = EmbeddingParallel(
+                device_mesh=device_mesh, rank=rank, empty_param=empty_param, embedding_dim_sharding=1
+            )
+            ground_truth = empty_param.shape[:1] + (end - begin,) + empty_param.shape[2:]
+            expected_shape = layer.get_expected_sharded_shape(empty_param.shape)
+            self.assertEqual(
+                expected_shape, ground_truth, f"Rank {rank} expected shape {ground_truth} but got {expected_shape}"
+            )
+
+    def test_grouped_gemm_get_expected_sharded_shape(self):
+        world_size = 3
+        size = 9  # must be divisible by world_size (GroupedGemm requires it)
+        empty_param = torch.empty(size, 16, 32)
+        step = math.ceil(size / world_size)
+
+        for rank in range(world_size):
+            device_mesh = self.MockDeviceMesh(world_size=world_size, rank=rank)
+            layer = GroupedGemmParallel(device_mesh=device_mesh, rank=rank, empty_param=empty_param)
+            begin = rank * step
+            end = min(begin + step, size)
+            ground_truth = (end - begin,) + empty_param.shape[1:]
+            expected_shape = layer.get_expected_sharded_shape(empty_param.shape)
+            self.assertEqual(
+                expected_shape, ground_truth, f"Rank {rank} expected shape {ground_truth} but got {expected_shape}"
+            )
+
+    def test_colwise_update_module_attributes(self):
+        device_mesh = self.MockDeviceMesh(world_size=4, rank=0)
+
+        # gather_output=False (default): out_features is updated
+        module = torch.nn.Linear(32, 16)
+        layer = ColwiseParallel(device_mesh=device_mesh, rank=0, empty_param=torch.empty(16, 32))
+        layer.update_module_attributes(module)
+        self.assertEqual(module.out_features, 4)
+
+        # gather_output=True: out_features is NOT updated
+        module = torch.nn.Linear(32, 16)
+        layer = ColwiseParallel(device_mesh=device_mesh, rank=0, empty_param=torch.empty(16, 32), gather_output=True)
+        layer.update_module_attributes(module)
+        self.assertEqual(module.out_features, 16)
+
+    def test_rowwise_update_module_attributes(self):
+        device_mesh = self.MockDeviceMesh(world_size=4, rank=0)
+
+        module = torch.nn.Linear(32, 16)
+        layer = RowwiseParallel(device_mesh=device_mesh, rank=0, empty_param=torch.empty(16, 32))
+        layer.update_module_attributes(module)
+        self.assertEqual(module.in_features, 8)
+
+    def test_embedding_update_module_attributes(self):
+        device_mesh = self.MockDeviceMesh(world_size=4, rank=0)
+
+        # embedding_dim_sharding=0: num_embeddings is updated
+        module = torch.nn.Embedding(32, 16)
+        layer = EmbeddingParallel(
+            device_mesh=device_mesh, rank=0, empty_param=torch.empty(32, 16), embedding_dim_sharding=0
+        )
+        layer.update_module_attributes(module)
+        self.assertEqual(module.num_embeddings, 8)
+        self.assertEqual(module.embedding_dim, 16)
+
+        # embedding_dim_sharding=1: embedding_dim is updated
+        module = torch.nn.Embedding(32, 16)
+        layer = EmbeddingParallel(
+            device_mesh=device_mesh, rank=0, empty_param=torch.empty(32, 16), embedding_dim_sharding=1
+        )
+        layer.update_module_attributes(module)
+        self.assertEqual(module.num_embeddings, 32)
+        self.assertEqual(module.embedding_dim, 4)
+
+    def test_grouped_gemm_update_module_attributes(self):
+        device_mesh = self.MockDeviceMesh(world_size=4, rank=0)
+
+        # There is no torch module with num_experts attribute, it is more at the Transformers level,
+        # so just use a SimpleNamespace to test that the attribute is updated correctly.
+        module = SimpleNamespace(num_experts=8)
+        layer = GroupedGemmParallel(device_mesh=device_mesh, rank=0, empty_param=torch.empty(8, 16, 32))
+        layer.update_module_attributes(module)
+        self.assertEqual(module.num_experts, 2)
+
+    def test_update_module_attributes_missing_attribute(self):
+        device_mesh = self.MockDeviceMesh(world_size=4, rank=0)
+        module = SimpleNamespace(random_attr=123)
+        for cls in [ColwiseParallel, RowwiseParallel, GroupedGemmParallel]:
+            layer = cls(device_mesh=device_mesh, rank=0, empty_param=torch.empty(16, 32))
+            layer.update_module_attributes(module)
+
+        self.assertEqual(
+            module.__dict__,
+            {"random_attr": 123},
+            "update_module_attributes should not modify attributes that don't exist",
+        )
+
+    def test_shard_tensor_shape_consistency(self):
+        """
+        Test that shard_tensor returns tensors of the expected shape for different parallel styles and ranks.
+        """
+        WORLD_SIZE = 4
+        cases = [
+            (ColwiseParallel, (16, 32), {}),
+            (ColwiseParallel, (16, 32), {"gather_output": True}),
+            (ColwiseParallel, (16,), {}),
+            (RowwiseParallel, (16, 32), {}),
+            (RowwiseParallel, (32,), {}),
+            (EmbeddingParallel, (32, 16), {"embedding_dim_sharding": 0}),
+            (EmbeddingParallel, (32, 16), {"embedding_dim_sharding": 1}),
+        ]
+        for cls, shape, kwargs in cases:
+            for rank in range(WORLD_SIZE):
+                device_mesh = self.MockDeviceMesh(world_size=WORLD_SIZE, rank=rank)
+                layer = cls(device_mesh=device_mesh, rank=rank, empty_param=torch.empty(*shape), **kwargs)
+
+                full_tensor = torch.randn(*shape)
+                sharded = layer.shard_tensor(full_tensor)
+                expected = layer.get_expected_sharded_shape(shape)
+
+                self.assertEqual(tuple(sharded.shape), expected, f"{cls.__name__} rank={rank} shape={shape}")
+
+    def test_packed_colwise_shard_tensor(self):
+        WORLD_SIZE = 2
+        # 3D empty_param
+        empty = torch.empty(2, 16, 64)
+
+        # Packed vs unpacked path is determined by checking the following:
+        # input.dim() == get_expected_sharded_shape(empty_param).dim()
+
+        # Packed
+        full_packed = torch.randn(2, 16, 64)
+        full_packed.get_dtype = lambda: "F32"
+        for rank in range(WORLD_SIZE):
+            device_mesh = self.MockDeviceMesh(world_size=WORLD_SIZE, rank=rank)
+            layer = PackedColwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty)
+            sharded = layer.shard_tensor(full_packed)
+            expected_shape = (2, 8, 64)  # last dim is packed size, middle dim is sharded
+            self.assertEqual(sharded.shape, expected_shape)
+
+        # Unpacked
+        full_unpacked = torch.randn(16, 64)
+        for rank in range(WORLD_SIZE):
+            device_mesh = self.MockDeviceMesh(world_size=WORLD_SIZE, rank=rank)
+            layer = PackedColwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty)
+            sharded = layer.shard_tensor(full_unpacked)
+            expected_shape = (8, 64)  # last dim is not packed, so just sharded
+            self.assertEqual(sharded.shape, expected_shape)
+
+    def test_packed_rowwise_shard_tensor(self):
+        WORLD_SIZE = 2
+        # empty_param last dim = 64 signals the packed size (2 * 32)
+        empty = torch.empty(16, 64)
+
+        # Packed vs unpacked path is determined by checking the following:
+        # input.shape[-1] < empty_param.shape[-1]
+
+        # Packed
+        full_packed = torch.randn(16, 64)
+        full_packed.get_dtype = lambda: "F32"
+        for rank in range(WORLD_SIZE):
+            device_mesh = self.MockDeviceMesh(world_size=WORLD_SIZE, rank=rank)
+            layer = PackedRowwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty)
+            sharded = layer.shard_tensor(full_packed)
+            expected_shape = (16, 32)  # last dim is packed size, sharded
+            self.assertEqual(sharded.shape, expected_shape)
+
+        # Unpacked
+        full_unpacked = torch.randn(16, 32)
+        for rank in range(WORLD_SIZE):
+            device_mesh = self.MockDeviceMesh(world_size=WORLD_SIZE, rank=rank)
+            layer = PackedRowwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty)
+            sharded = layer.shard_tensor(full_unpacked)
+            expected_shape = (16, 16)  # last dim is not packed, so just sharded
+            self.assertEqual(sharded.shape, expected_shape)

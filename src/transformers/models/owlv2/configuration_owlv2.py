@@ -14,58 +14,16 @@
 """OWLv2 model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="google/owlv2-base-patch16")
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTTextConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
 class Owlv2TextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of an [`Owlv2TextModel`]. It is used to instantiate an
-    Owlv2 text encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Owlv2
-    [google/owlv2-base-patch16](https://huggingface.co/google/owlv2-base-patch16) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 49408):
-            Vocabulary size of the OWLv2 text model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`Owlv2TextModel`].
-        hidden_size (`int`, *optional*, defaults to 512):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        max_position_embeddings (`int`, *optional*, defaults to 16):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-        pad_token_id (`int`, *optional*, defaults to 0):
-            The id of the padding token in the input sequences.
-        bos_token_id (`int`, *optional*, defaults to 49406):
-            The id of the beginning-of-sequence token in the input sequences.
-        eos_token_id (`int`, *optional*, defaults to 49407):
-            The id of the end-of-sequence token in the input sequences.
-
     Example:
 
     ```python
@@ -120,45 +78,10 @@ class Owlv2TextConfig(PreTrainedConfig):
         self.initializer_factor = initializer_factor
 
 
+@auto_docstring(checkpoint="google/owlv2-base-patch16")
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTVisionConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2, 32->16
 class Owlv2VisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of an [`Owlv2VisionModel`]. It is used to instantiate
-    an OWLv2 image encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the OWLv2
-    [google/owlv2-base-patch16](https://huggingface.co/google/owlv2-base-patch16) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels in the input images.
-        image_size (`int`, *optional*, defaults to 768):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-
     Example:
 
     ```python
@@ -209,33 +132,9 @@ class Owlv2VisionConfig(PreTrainedConfig):
         self.initializer_factor = initializer_factor
 
 
+@auto_docstring(checkpoint="google/owlv2-base-patch16")
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
 class Owlv2Config(PreTrainedConfig):
-    r"""
-    [`Owlv2Config`] is the configuration class to store the configuration of an [`Owlv2Model`]. It is used to
-    instantiate an OWLv2 model according to the specified arguments, defining the text model and vision model
-    configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the OWLv2
-    [google/owlv2-base-patch16](https://huggingface.co/google/owlv2-base-patch16) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`Owlv2TextConfig`].
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`Owlv2VisionConfig`].
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of text and vision projection layers.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The initial value of the *logit_scale* parameter. Default is used as per the original OWLv2
-            implementation.
-        return_dict (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return a dictionary. If `False`, returns a tuple.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
-    """
-
     model_type = "owlv2"
     sub_configs = {"text_config": Owlv2TextConfig, "vision_config": Owlv2VisionConfig}
 

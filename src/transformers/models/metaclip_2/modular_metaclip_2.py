@@ -30,52 +30,9 @@ _CHECKPOINT_FOR_DOC = "facebook/metaclip-2-worldwide-huge-quickgelu"
 _CONFIG_FOR_DOC = "MetaClip2Config"
 
 
+@auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
 class MetaClip2TextConfig(CLIPTextConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MetaClip2TextModel`]. It is used to instantiate
-    a MetaClip2 text encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the MetaClip2
-    [facebook/metaclip-2-worldwide-huge-quickgelu](https://huggingface.co/facebook/metaclip-2-worldwide-huge-quickgelu) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 49408):
-            Vocabulary size of the MetaClip2 text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`MetaClip2TextModel`].
-        hidden_size (`int`, *optional*, defaults to 512):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of text and vision projection layers.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        max_position_embeddings (`int`, *optional*, defaults to 77):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-        pad_token_id (`int`, *optional*, defaults to 1):
-            Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 49406):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 49407):
-            End of stream token id.
-
     Example:
 
     ```python
@@ -92,46 +49,9 @@ class MetaClip2TextConfig(CLIPTextConfig):
     ```"""
 
 
+@auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
 class MetaClip2VisionConfig(CLIPVisionConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MetaClip2VisionModel`]. It is used to instantiate a MetaClip2
-    vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the vision encoder of the MetaClip2
-    [facebook/metaclip-2-worldwide-huge-quickgelu](https://huggingface.co/facebook/metaclip-2-worldwide-huge-quickgelu) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of text and vision projection layers.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 32):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-
     Example:
 
     ```python
@@ -148,28 +68,9 @@ class MetaClip2VisionConfig(CLIPVisionConfig):
     ```"""
 
 
+@auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
 class MetaClip2Config(CLIPConfig):
     r"""
-    [`MetaClip2Config`] is the configuration class to store the configuration of a [`MetaClip2Model`]. It is used to
-    instantiate a MetaClip2 model according to the specified arguments, defining the text model and vision model configs.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the MetaClip2
-    [facebook/metaclip-2-worldwide-huge-quickgelu](https://huggingface.co/facebook/metaclip-2-worldwide-huge-quickgelu) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`MetaClip2TextConfig`].
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`MetaClip2VisionConfig`].
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of text and vision projection layers.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The initial value of the *logit_scale* parameter. Default is used as per the original MetaClip2 implementation.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
-
     Example:
 
     ```python
