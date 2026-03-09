@@ -15,9 +15,9 @@
 
 import unittest
 
-from transformers import PI0Config, PI0ForConditionalGeneration, PI0Processor, is_torch_available
+from transformers import PI0Config, PI0Processor, is_torch_available
 from transformers.image_utils import load_image
-from transformers.testing_utils import require_torch, slow
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -26,13 +26,14 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
+    from transformers import PI0ForConditionalGeneration
+
 
 class PI0ModelTester:
     def __init__(self, parent):
         self.parent = parent
         self.is_training = True
         self.batch_size = 2
-        self.seq_length = 5
         self.num_cameras = 2
         self.image_size = 8
         self.patch_size = 4
@@ -44,51 +45,61 @@ class PI0ModelTester:
         self.chunk_size = 4
         self.max_state_dim = 8
         self.max_action_dim = 8
-        num_image_tokens = (self.image_size // self.patch_size) ** 2 * self.num_cameras
-        self.encoder_seq_length = num_image_tokens + self.seq_length + 1 + self.chunk_size
-        self.key_length = self.encoder_seq_length
+        self.num_inference_steps = 3
+        self.image_token_index = 127
+        self.pad_token_id = 0
+        self.num_image_tokens = (self.image_size // self.patch_size) ** 2 * self.num_cameras
+        self.encoder_seq_length = 5
+        self.seq_length = self.encoder_seq_length + self.num_image_tokens
+        self.key_length = self.encoder_seq_length + self.seq_length
+
+        self.vision_config = {
+            "model_type": "siglip_vision_model",
+            "hidden_size": self.hidden_size,
+            "intermediate_size": 32,
+            "num_hidden_layers": 1,
+            "num_attention_heads": 2,
+            "patch_size": self.patch_size,
+            "image_size": self.image_size,
+            "vision_use_head": False,
+            "num_channels": self.num_channels,
+        }
+        self.text_config = {
+            "model_type": "gemma",
+            "vocab_size": self.vocab_size,
+            "hidden_size": self.hidden_size,
+            "intermediate_size": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 1,
+            "head_dim": 8,
+            "pad_token_id": 0,
+        }
+        self.dit_config = {
+            "model_type": "gemma",
+            "vocab_size": self.vocab_size,
+            "hidden_size": self.hidden_size,
+            "intermediate_size": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 1,
+            "head_dim": 8,
+            "pad_token_id": 0,
+        }
 
     def get_config(self):
         return PI0Config(
-            image_token_index=127,
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            projection_dim=self.hidden_size,
+            dit_config=self.dit_config,
+            vlm_config={
+                "vision_config": self.vision_config,
+                "text_config": self.text_config,
+                "image_token_index": self.image_token_index,
+                "projection_dim": self.hidden_size,
+            },
             chunk_size=self.chunk_size,
             max_state_dim=self.max_state_dim,
             max_action_dim=self.max_action_dim,
-            num_inference_steps=3,
-            vision_config={
-                "model_type": "siglip_vision_model",
-                "hidden_size": self.hidden_size,
-                "intermediate_size": 32,
-                "num_hidden_layers": 1,
-                "num_attention_heads": 2,
-                "patch_size": self.patch_size,
-                "image_size": self.image_size,
-                "vision_use_head": False,
-                "num_channels": self.num_channels,
-            },
-            text_config={
-                "model_type": "gemma",
-                "vocab_size": self.vocab_size,
-                "hidden_size": self.hidden_size,
-                "intermediate_size": 32,
-                "num_hidden_layers": 2,
-                "num_attention_heads": 2,
-                "num_key_value_heads": 1,
-                "head_dim": 8,
-            },
-            expert_config={
-                "model_type": "gemma",
-                "vocab_size": self.vocab_size,
-                "hidden_size": self.hidden_size,
-                "intermediate_size": 32,
-                "num_hidden_layers": 2,
-                "num_attention_heads": 2,
-                "num_key_value_heads": 1,
-                "head_dim": 8,
-            },
+            num_inference_steps=self.num_inference_steps,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -96,17 +107,23 @@ class PI0ModelTester:
         pixel_values = floats_tensor(
             [self.batch_size, self.num_cameras, self.num_channels, self.image_size, self.image_size]
         )
-        image_masks = torch.tensor([[True, True], [True, False]], dtype=torch.bool)
+        pixel_attention_mask = torch.tensor([[True, True], [True, False]], dtype=torch.bool, device=torch_device)
+
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size - 1)
-        attention_mask = torch.ones(self.batch_size, self.seq_length, dtype=torch.long)
+        attention_mask = torch.ones(self.batch_size, self.seq_length, dtype=torch.long, device=torch_device)
+        input_ids[input_ids == config.vlm_config.image_token_id] = self.pad_token_id
+        # Pixel attention mask is not completely-unmasked, so we create different input ids
+        input_ids[0, : self.num_image_tokens] = config.vlm_config.image_token_id
+        input_ids[1, : self.num_image_tokens // 2] = config.vlm_config.image_token_id
+
         state = floats_tensor([self.batch_size, self.max_state_dim])
         actions = floats_tensor([self.batch_size, self.chunk_size, self.max_action_dim])
         noise = floats_tensor([self.batch_size, self.chunk_size, self.max_action_dim])
-        timestep = torch.tensor([0.5, 0.8], dtype=torch.float32)
+        timestep = torch.tensor([0.5, 0.8], dtype=torch.float32, device=torch_device)
 
         inputs_dict = {
             "pixel_values": pixel_values,
-            "image_masks": image_masks,
+            "pixel_attention_mask": pixel_attention_mask,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "state": state,
@@ -141,10 +158,10 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_model_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = PI0ForConditionalGeneration(config).eval()
+        model = PI0ForConditionalGeneration(config).eval().to(device=torch_device)
         with torch.no_grad():
             outputs = model(**inputs_dict)
-        self.assertEqual(outputs.loss_per_sample.shape, (2, config.chunk_size, config.max_action_dim))
+        self.assertEqual(outputs.loss.shape, (2, config.chunk_size, config.max_action_dim))
 
 
 @require_torch
@@ -187,7 +204,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
             images=load_image("/raid/raushan/image.png"),
             padding="max_length",
             truncation=True,
-            max_length=48,
+            max_length=304,
             return_tensors="pt",
         )
         input_ids = inputs["input_ids"]
@@ -223,7 +240,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
             prefix_embs[0, 0, :4], torch.tensor([2.6215, -0.2010, -0.0071, -0.0147]), atol=1e-3, rtol=1e-3
         )
         torch.testing.assert_close(
-            prefix_embs[0, -1, :4], torch.tensor([12.5511, -1.4584, -8.4411, 2.1213]), atol=1e-3, rtol=1e-3
+            prefix_embs[0, -1, :4], torch.tensor([23.8649, -1.4916, 4.2868, 4.3973]), atol=1e-3, rtol=1e-3
         )
 
         with torch.no_grad():
@@ -238,7 +255,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
                 timestep=timestep,
             )
         self.assertEqual(outputs.loss.shape, (1, 50, 32))
-        self.assertAlmostEqual(outputs.loss.mean().item(), 3.8787, places=3)
+        self.assertAlmostEqual(outputs.loss.mean().item(), 3.8819, places=3)
 
         torch.manual_seed(99)
         model.model.dit.config._attn_implementation = "eager"  # as per LeRobot impl
@@ -253,13 +270,11 @@ class PI0ModelIntegrationTest(unittest.TestCase):
             )
         self.assertEqual(sampled.shape, (1, 50, 32))
         print(sampled.mean(), sampled.std(), sampled[0, 0, :4], sampled[0, -1, :4])
-        self.assertAlmostEqual(sampled.mean().item(), -0.0617, places=3)
-        self.assertAlmostEqual(sampled.std().item(), 0.2745, places=3)
-        # expectations if norm scale is applied in lerobot branch gemma model
-        # tensor(0.0221) tensor(0.1538) tensor([ 0.1157,  0.3089, -0.1434,  0.2252]) tensor([0.0727, 0.0602, 0.0654, 0.2240])
+        self.assertAlmostEqual(sampled.mean().item(), -0.0689, places=3)
+        self.assertAlmostEqual(sampled.std().item(), 0.2650, places=3)
         torch.testing.assert_close(
-            sampled[0, 0, :4], torch.tensor([-0.1905, -0.5732, -0.5487, 0.6403]), atol=1e-3, rtol=1e-3
+            sampled[0, 0, :4], torch.tensor([-0.5143, -0.4314, -0.6774, 0.5146]), atol=1e-3, rtol=1e-3
         )
         torch.testing.assert_close(
-            sampled[0, -1, :4], torch.tensor([-0.0038, 0.0003, -0.0060, -0.0001]), atol=1e-3, rtol=1e-3
+            sampled[0, -1, :4], torch.tensor([0.1482, -0.0937, -0.7080, -0.6505]), atol=1e-3, rtol=1e-3
         )

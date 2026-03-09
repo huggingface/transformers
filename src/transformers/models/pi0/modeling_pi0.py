@@ -128,7 +128,14 @@ class PI0Model(PI0PreTrainedModel):
         llm_input_ids = input_ids.clone()
         llm_input_ids[input_ids == self.config.vlm_config.image_token_id] = 0
         inputs_embeds = self.vlm.get_input_embeddings()(llm_input_ids)
-        inputs_embeds[input_ids == self.config.vlm_config.image_token_id] = total_image_features
+        special_image_mask = (
+            (input_ids == self.config.vlm_config.image_token_id)
+            .unsqueeze(-1)
+            .expand_as(inputs_embeds)
+            .to(inputs_embeds.device)
+        )
+        inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, total_image_features)
+        # inputs_embeds[input_ids == self.config.vlm_config.image_token_id] = total_image_features
 
         # FIXME: remove after https://github.com/huggingface/transformers/pull/44432 is merged!
         inputs_embeds = inputs_embeds * math.sqrt(2048)
@@ -194,7 +201,7 @@ class PI0Model(PI0PreTrainedModel):
 
         # Only 1 state token and the rest are actions
         vlm_input_length = past_key_values.get_seq_length()
-        block_sizes = torch.tensor([vlm_input_length + 1, action_embeds.shape[1] - 1])
+        block_sizes = torch.tensor([vlm_input_length + 1, action_embeds.shape[1] - 1], device=action_embeds.device)
         block_boundaries = torch.cumsum(block_sizes, dim=0) - 1
         bidirectional_mask = create_bidirectional_mask(
             config=self.config.dit_config,
@@ -212,6 +219,7 @@ class PI0Model(PI0PreTrainedModel):
             attention_mask=bidirectional_mask,
             position_ids=dit_position_ids,
             past_key_values=past_key_values,
+            **kwargs,
         )
         return dit_output
 

@@ -43,9 +43,7 @@ class PI0ProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": "max_length",
             "max_length": 48,
-        },
-        "images_kwargs": {
-            "data_format": "channels_first",
+            "padding_side": "right",
         },
     }
 
@@ -55,8 +53,6 @@ class PI0Processor(PaligemmaProcessor):
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.height, self.width = image_processor.size["height"], image_processor.size["width"]
         super().__init__(image_processor, tokenizer)
-        # Enable it back, PI0 needs the tokenizer to handle special tokens
-        self.tokenizer.add_bos_token = True
 
     def __call__(
         self,
@@ -85,17 +81,16 @@ class PI0Processor(PaligemmaProcessor):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         output_kwargs["images_kwargs"].pop("return_tensors", None)
 
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        prompt_strings = []
+        for sample, image_list in zip(text, batched_images):
+            sample = (
+                f"{self.image_token * self.image_seq_length * len(image_list)}{self.tokenizer.bos_token}{sample}\n"
+            )
+            prompt_strings.append(sample)
 
-        # Image tokens should come before everything, including PAD or BOS tokens
-        image_text = f"{self.image_token * self.image_seq_length * len(batched_images)}"
-        output_kwargs["text_kwargs"]["add_special_tokens"] = False
-        output_kwargs["text_kwargs"]["padding"] = False
-        output_kwargs["text_kwargs"]["truncation"] = False
-        image_text_encoding = self.tokenizer(image_text, **output_kwargs["text_kwargs"])
-        for k in text_inputs:
-            text_inputs[k] = [image_text_encoding[k] + sample for sample in text_inputs[k]]
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
 
+        # Here is the diff from PaliGemma. Ideally we'd create a new ImageProcessor if it were a VLM
         max_num_cameras = max(len(sample_images) for sample_images in batched_images)
         pixel_attention_mask = torch.zeros((len(batched_images), max_num_cameras), dtype=torch.bool)
         padded_pixel_values = torch.zeros(len(batched_images), max_num_cameras, 3, self.height, self.width)
@@ -116,7 +111,7 @@ class PI0Processor(PaligemmaProcessor):
 
     @property
     def model_input_names(self):
-        return super().model_input_names + ["image_masks"]
+        return super().model_input_names + ["pixel_attention_mask"]
 
 
 class PI0Config(PreTrainedConfig):
@@ -172,6 +167,7 @@ class PI0Config(PreTrainedConfig):
         vlm_config=None,
         dit_config=None,
         image_token_id=257152,
+        vlm_projection_dim=2048,
         chunk_size=50,
         max_state_dim=32,
         max_action_dim=32,
@@ -209,7 +205,7 @@ class PI0Config(PreTrainedConfig):
                     "vocab_size": 257152,
                     "vision_use_head": False,
                 },
-                projection_dim=2048,
+                projection_dim=vlm_projection_dim,
                 image_token_id=image_token_id,
             )
 
@@ -344,7 +340,13 @@ class PI0Model(PI0PreTrainedModel):
         llm_input_ids = input_ids.clone()
         llm_input_ids[input_ids == self.config.vlm_config.image_token_id] = 0
         inputs_embeds = self.vlm.get_input_embeddings()(llm_input_ids)
-        inputs_embeds[input_ids == self.config.vlm_config.image_token_id] = total_image_features
+        special_image_mask = (
+            (input_ids == self.config.vlm_config.image_token_id)
+            .unsqueeze(-1)
+            .expand_as(inputs_embeds)
+            .to(inputs_embeds.device)
+        )
+        inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, total_image_features)
 
         # FIXME: remove after https://github.com/huggingface/transformers/pull/44432 is merged!
         inputs_embeds = inputs_embeds * math.sqrt(2048)
@@ -410,7 +412,7 @@ class PI0Model(PI0PreTrainedModel):
 
         # Only 1 state token and the rest are actions
         vlm_input_length = past_key_values.get_seq_length()
-        block_sizes = torch.tensor([vlm_input_length + 1, action_embeds.shape[1] - 1])
+        block_sizes = torch.tensor([vlm_input_length + 1, action_embeds.shape[1] - 1], device=action_embeds.device)
         block_boundaries = torch.cumsum(block_sizes, dim=0) - 1
         bidirectional_mask = create_bidirectional_mask(
             config=self.config.dit_config,
@@ -428,6 +430,7 @@ class PI0Model(PI0PreTrainedModel):
             attention_mask=bidirectional_mask,
             position_ids=dit_position_ids,
             past_key_values=past_key_values,
+            **kwargs,
         )
         return dit_output
 

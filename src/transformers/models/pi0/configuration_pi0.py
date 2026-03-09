@@ -74,6 +74,7 @@ class PI0Config(PreTrainedConfig):
         vlm_config=None,
         dit_config=None,
         image_token_id=257152,
+        vlm_projection_dim=2048,
         chunk_size=50,
         max_state_dim=32,
         max_action_dim=32,
@@ -111,7 +112,7 @@ class PI0Config(PreTrainedConfig):
                     "vocab_size": 257152,
                     "vision_use_head": False,
                 },
-                projection_dim=2048,
+                projection_dim=vlm_projection_dim,
                 image_token_id=image_token_id,
             )
 

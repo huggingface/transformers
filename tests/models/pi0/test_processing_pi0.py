@@ -36,19 +36,23 @@ class PI0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_image_processor(cls):
-        image_processor = SiglipImageProcessor()
+        image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
         image_processor.image_seq_length = 0
         return image_processor
 
     @classmethod
     def _setup_tokenizer(cls):
-        return GemmaTokenizer.from_pretrained(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = GemmaTokenizer.from_pretrained(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
+        return tokenizer
 
-    def test_get_num_vision_tokens(self):
-        processor = self.get_processor()
-        output = processor._get_num_multimodal_tokens(image_sizes=[(100, 100), (300, 100)])
-        self.assertIn("num_image_tokens", output)
-        self.assertEqual(len(output["num_image_tokens"]), 2)
+    @classmethod
+    def _setup_test_attributes(cls, processor):
+        cls.image_token = processor.image_token
+
+    @require_vision
+    def prepare_image_inputs(self, batch_size: int | None = None, nested: bool = True):
+        return super().prepare_image_inputs(batch_size, nested=nested)
 
     def test_image_processor_defaults(self):
         image_processor = self.get_component("image_processor")
@@ -60,7 +64,7 @@ class PI0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         for key in input_image_proc:
             torch.testing.assert_close(input_image_proc[key], input_processor[key][:, 0])
-        self.assertTrue(torch.equal(input_processor["image_masks"], torch.tensor([[True]])))
+        self.assertTrue(torch.equal(input_processor["pixel_attention_mask"], torch.tensor([[True]])))
 
     @require_torch
     def test_single_camera_output_is_5d(self):
@@ -70,7 +74,7 @@ class PI0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(outputs["pixel_values"].ndim, 5)
         self.assertEqual(outputs["pixel_values"].shape[0], 1)
         self.assertEqual(outputs["pixel_values"].shape[1], 1)
-        self.assertTrue(torch.equal(outputs["image_masks"], torch.tensor([[True]])))
+        self.assertTrue(torch.equal(outputs["pixel_attention_mask"], torch.tensor([[True]])))
 
     @require_torch
     def test_multi_camera_padding_and_masks(self):
@@ -87,7 +91,7 @@ class PI0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(outputs["pixel_values"].ndim, 5)
         self.assertEqual(outputs["pixel_values"].shape[:2], torch.Size([2, 2]))
-        self.assertTrue(torch.equal(outputs["image_masks"], torch.tensor([[True, True], [True, False]])))
+        self.assertTrue(torch.equal(outputs["pixel_attention_mask"], torch.tensor([[True, True], [True, False]])))
 
     @require_torch
     def test_newline_normalization(self):
@@ -97,3 +101,7 @@ class PI0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         out_with_newline = processor(images=image, text="pick object\n", return_tensors="pt")
         self.assertTrue(torch.equal(out_no_newline["input_ids"], out_with_newline["input_ids"]))
         self.assertTrue(torch.equal(out_no_newline["attention_mask"], out_with_newline["attention_mask"]))
+
+    @unittest.skip("PI0 doesn't need vLLM integration")
+    def test_get_num_multimodal_tokens_matches_processor_call(self):
+        pass

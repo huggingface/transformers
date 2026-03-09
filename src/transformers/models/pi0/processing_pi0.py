@@ -35,9 +35,7 @@ class PI0ProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": "max_length",
             "max_length": 48,
-        },
-        "images_kwargs": {
-            "data_format": "channels_first",
+            "padding_side": "right",
         },
     }
 
@@ -70,8 +68,6 @@ class PI0Processor(ProcessorMixin):
         tokenizer.add_eos_token = False
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
-        # Enable it back, PI0 needs the tokenizer to handle special tokens
-        self.tokenizer.add_bos_token = True
 
     @auto_docstring
     def __call__(
@@ -113,17 +109,16 @@ class PI0Processor(ProcessorMixin):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         output_kwargs["images_kwargs"].pop("return_tensors", None)
 
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        prompt_strings = []
+        for sample, image_list in zip(text, batched_images):
+            sample = (
+                f"{self.image_token * self.image_seq_length * len(image_list)}{self.tokenizer.bos_token}{sample}\n"
+            )
+            prompt_strings.append(sample)
 
-        # Image tokens should come before everything, including PAD or BOS tokens
-        image_text = f"{self.image_token * self.image_seq_length * len(batched_images)}"
-        output_kwargs["text_kwargs"]["add_special_tokens"] = False
-        output_kwargs["text_kwargs"]["padding"] = False
-        output_kwargs["text_kwargs"]["truncation"] = False
-        image_text_encoding = self.tokenizer(image_text, **output_kwargs["text_kwargs"])
-        for k in text_inputs:
-            text_inputs[k] = [image_text_encoding[k] + sample for sample in text_inputs[k]]
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
 
+        # Here is the diff from PaliGemma. Ideally we'd create a new ImageProcessor if it were a VLM
         max_num_cameras = max(len(sample_images) for sample_images in batched_images)
         pixel_attention_mask = torch.zeros((len(batched_images), max_num_cameras), dtype=torch.bool)
         padded_pixel_values = torch.zeros(len(batched_images), max_num_cameras, 3, self.height, self.width)
@@ -162,7 +157,7 @@ class PI0Processor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        return super().model_input_names + ["image_masks"]
+        return super().model_input_names + ["pixel_attention_mask"]
 
 
 __all__ = ["PI0Processor"]
