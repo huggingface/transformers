@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import re
 from collections import OrderedDict
 from math import ceil
 
@@ -58,12 +57,6 @@ class CudaGraphBuffer:
 def attn_mask_is_needed(config: PretrainedConfig) -> bool:
     """Checks if attention mask is needed for the given (config)."""
     return config._attn_implementation in ["paged|eager", "paged|sdpa"]
-
-
-def is_flash_attn_3(attn_implementation: str) -> bool:
-    if not isinstance(attn_implementation, str):
-        return False
-    return re.match(r".*flash[ ._-]?(attention|attn)[ ._-]?3", attn_implementation) is not None
 
 
 def pad_to_interval(size: int, interval_size: int, max_value: int) -> int:

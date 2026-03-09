@@ -30,13 +30,14 @@ from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import CompileConfig, GenerationConfig
 from ...generation.logits_process import LogitsProcessorList
 from ...modeling_flash_attention_utils import lazy_import_paged_flash_attention
+from ...utils.generic import is_flash_attention_requested
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import attn_mask_is_needed, is_flash_attn_3, pad_to_interval
+from .utils import attn_mask_is_needed, pad_to_interval
 
 
 """
@@ -184,7 +185,7 @@ class ContinuousBatchProcessor:
         """Ensures the decode fast path is available. If it is not, set the max blocks per request to 0."""
         if self.cache.max_blocks_per_request > 0:
             # NOTE: block table should be available with FA2 and FA3, but there seems to be an issue with FA2 atm
-            if is_flash_attn_3(self.config._attn_implementation):
+            if is_flash_attention_requested(self.config, version=3):
                 flash_attn_with_kvcache = lazy_import_paged_flash_attention(self.config._attn_implementation)[1]
                 conditions = [
                     self.cache.num_sliding_attention_groups == 0,  # TODO: add support for sliding window layers
