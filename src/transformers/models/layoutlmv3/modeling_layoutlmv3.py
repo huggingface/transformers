@@ -23,6 +23,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -811,15 +812,17 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
                 position_ids = position_ids.expand_as(input_ids)
                 final_position_ids = position_ids
 
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-            attention_mask, None, dtype=embedding_output.dtype
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=embedding_output,
+            attention_mask=attention_mask,
         )
 
         encoder_outputs = self.encoder(
             embedding_output,
             bbox=final_bbox,
             position_ids=final_position_ids,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

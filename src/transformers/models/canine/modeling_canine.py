@@ -23,6 +23,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -870,12 +871,8 @@ class CanineModel(CaninePreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
         molecule_attention_mask = self._downsample_attention_mask(
             attention_mask, downsampling_rate=self.config.downsampling_rate
-        )
-        extended_molecule_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-            molecule_attention_mask, (batch_size, molecule_attention_mask.shape[-1])
         )
 
         # `input_char_embeddings`: shape (batch_size, char_seq, char_dim)
@@ -916,11 +913,17 @@ class CanineModel(CaninePreTrainedModel):
         # feature space; intuitively, this makes sense.
         init_molecule_encoding = self.chars_to_molecules(input_char_encoding)
 
+        molecule_attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=init_molecule_encoding[:, 0:1, :],  # force q_len == 1
+            attention_mask=molecule_attention_mask.squeeze(1),  # 3D mask at times due to custom fn
+        )
+
         # Deep BERT encoder
         # `molecule_sequence_output`: shape (batch_size, mol_seq_len, mol_dim)
         encoder_outputs = self.encoder(
             init_molecule_encoding,
-            attention_mask=extended_molecule_attention_mask,
+            attention_mask=molecule_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -940,11 +943,17 @@ class CanineModel(CaninePreTrainedModel):
         # `sequence_output`: shape (batch_size, char_seq_len, hidden_size])
         sequence_output = self.projection(concat)
 
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=sequence_output,
+            attention_mask=attention_mask,
+        )
+
         # Apply final shallow Transformer
         # `sequence_output`: shape (batch_size, char_seq_len, hidden_size])
         final_chars_encoder_outputs = self.final_char_encoder(
             sequence_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )

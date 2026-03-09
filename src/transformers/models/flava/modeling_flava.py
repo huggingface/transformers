@@ -24,6 +24,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -831,25 +832,21 @@ class FlavaTextModel(FlavaPreTrainedModel):
         if input_ids is None:
             raise ValueError("You have to specify input_ids")
 
-        input_shape = input_ids.size()
-
-        if attention_mask is None:
-            attention_mask = torch.ones(input_shape, device=input_ids.device)
-
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-            attention_mask,
-            input_shape,
-        )
-
         embedding_output = self.embeddings(
             input_ids=input_ids,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
         )
 
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
+
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -921,17 +918,15 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
             hidden_states = torch.cat((cls_tokens, hidden_states), dim=1)
             seq_length += 1
 
-        if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_length), device=hidden_states.device)
-
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-            attention_mask,
-            (batch_size, seq_length),
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=attention_mask,
         )
 
         encoder_outputs = self.encoder(
             hidden_states,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

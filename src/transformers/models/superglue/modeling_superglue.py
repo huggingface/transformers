@@ -23,6 +23,7 @@ from transformers import PreTrainedModel
 from transformers.models.superglue.configuration_superglue import SuperGlueConfig
 
 from ... import initialization as init
+from ...masking_utils import create_bidirectional_mask
 from ...utils import ModelOutput, auto_docstring, logging
 from ..auto import AutoModelForKeypointDetection
 
@@ -587,11 +588,11 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         # Keypoint MLP encoder.
         descriptors = descriptors + last_hidden_state
 
-        if mask is not None:
-            input_shape = descriptors.size()
-            extended_attention_mask = self.get_extended_attention_mask(mask, input_shape)
-        else:
-            extended_attention_mask = torch.ones((batch_size, num_keypoints), device=keypoints.device)
+        extended_attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=descriptors[:, 0:1, :],  # force q_len == 1
+            attention_mask=mask,
+        )
 
         # Multi-layer Transformer network.
         gnn_outputs = self.gnn(

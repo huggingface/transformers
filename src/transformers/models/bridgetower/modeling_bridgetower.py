@@ -1290,8 +1290,11 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, dtype=torch.long, device=input_ids.device)
-        extend_text_masks = self.text_model.get_extended_attention_mask(attention_mask, input_shape).to(
-            input_ids.device
+
+        extend_text_masks = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=text_embeds[:, 0:1, :],  # weird case where the mask always wants q_len == 1
+            attention_mask=attention_mask,
         )
 
         # The split_index determines how many layers of the uni-modal encoder are applied before the cross-modal encoder
@@ -1345,8 +1348,10 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             dtype=torch.long,
             device=input_ids.device,
         )
-        extend_image_masks = self.text_model.get_extended_attention_mask(pixel_mask, pixel_mask.size()).to(
-            input_ids.device
+        extend_image_masks = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=cross_modal_image,
+            attention_mask=pixel_mask,
         )
 
         layer_outputs_text = self.cross_modal_text_layers[0](

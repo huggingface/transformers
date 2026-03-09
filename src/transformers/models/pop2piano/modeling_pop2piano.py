@@ -26,7 +26,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
@@ -714,16 +714,13 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
             causal_mask = causal_mask.to(dtype=inputs_embeds.dtype)
             causal_mask = (1.0 - causal_mask) * torch.finfo(inputs_embeds.dtype).min
 
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=inputs_embeds.device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_extended_attention_mask = None
+        if encoder_attention_mask is not None:
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=inputs_embeds,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
 
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -742,7 +739,7 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
                 causal_mask,
                 position_bias,
                 encoder_hidden_states,
-                encoder_extended_attention_mask,
+                encoder_attention_mask,
                 encoder_decoder_position_bias,  # as a positional argument for gradient checkpointing
                 past_key_values=past_key_values,
                 use_cache=use_cache,
