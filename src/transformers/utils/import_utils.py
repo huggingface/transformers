@@ -920,18 +920,9 @@ def is_flash_attn_2_available() -> bool:
     if not is_available or not (is_torch_cuda_available() or is_torch_mlu_available()):
         return False
 
-    import torch
-
+    # Only allow versions >= 2.3.3 to avoid very old legacy workarounds that are now 2+ years old
     try:
-        if torch.version.cuda:
-            return version.parse(flash_attn_version) >= version.parse("2.1.0")
-        elif torch.version.hip:
-            # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
-            return version.parse(flash_attn_version) >= version.parse("2.0.4")
-        elif is_torch_mlu_available():
-            return version.parse(flash_attn_version) >= version.parse("2.3.3")
-        else:
-            return False
+        return version.parse(flash_attn_version) >= version.parse("2.3.3")
     except packaging.version.InvalidVersion:
         return False
 
@@ -947,12 +938,6 @@ def is_flash_attn_4_available() -> bool:
     if not (is_torch_cuda_available() and _is_package_available("flash_attn")[0]):
         return False
     return _is_package_available("flash_attn.cute")[0]
-
-
-@lru_cache
-def is_flash_attn_greater_or_equal_2_10() -> bool:
-    _, flash_attn_version = _is_package_available("flash_attn", return_version=True)
-    return is_flash_attn_2_available() and version.parse(flash_attn_version) >= version.parse("2.1.0")
 
 
 @lru_cache

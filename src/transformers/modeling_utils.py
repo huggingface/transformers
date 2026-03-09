@@ -125,6 +125,7 @@ from .utils.import_utils import (
     PACKAGE_DISTRIBUTION_MAPPING,
     is_huggingface_hub_greater_or_equal,
     is_sagemaker_mp_enabled,
+    is_torch_cuda_available,
     is_tracing,
 )
 from .utils.loading_report import LoadStateDictInfo, log_state_dict_report
@@ -1549,88 +1550,68 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Otherwise, can't generate
         return False
 
-    def _flash_attn_2_import_error(self):
-        if not is_flash_attn_2_available():
-            preface = "FlashAttention2 has been toggled on, but it cannot be used due to the following error:"
-            install_message = "Please refer to the documentation of https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2 to install Flash Attention 2."
+    def _flash_attn_import_error(
+        self,
+        flash_attn_version: int,
+        general_availability_check: Callable,
+        pkg_availability_check: Callable,
+        supported_devices: tuple[tuple[Callable, str]],
+        custom_supported_devices: tuple[tuple[Callable, str]]=(),
+        cuda_major_versions: tuple[int] | None = None,
+    ):
+        """
+        Checks whether the specified Flash Attention version is supported and if not, searches for the specific reason
+        on why it failed - package import and/or device incompatibility issues.
 
-            # package `flash-attn` can not be installed on Ascend NPU, following validation logics can be ignored.
-            if is_torch_npu_available():
-                logger.info("Detect using FlashAttention2 on Ascend NPU.")
+        Args:
+            flash_attn_version (`int`):
+                The requested version of Flash Attention.
+            general_availability_check (`Callable`):
+                Checks whether our `is_available` function detects the specific FA version. Failing reasons
+                are then checked for one-by-one.
+            pkg_availability_check (`Callable`):
+                Checks whether the package could theoretically be detected in the environment by the init structures.
+                This is not a sure-fire check as device compatibility with FA is just as important.
+            supported_devices (`tuple[tuple[Callable, str]]`):
+                Essentially a list (for mutable kwargs reasons a tuple) of the supported devices in the format of
+                `(device_availability_check, device_name)`, i.e. a pair of the associated device's name and whether
+                it is available in the environment.
+            custom_supported_devices (`tuple[tuple[Callable, str]]`, *optional*, defaults to `()`):
+                Essentially a list (for mutable kwargs reasons a tuple) of the custom supported devices in the format of
+                `(device_availability_check, info_message)`. These custom devices have custom logic outside the torch
+                ecosystem either via kernels or other packages and hence have early checks for availability.
+            cuda_major_versions (`tuple[int]`, *optional*):
+                A potential list of major cuda versions supported for this version of Flash Attention. This is mostly
+                affecting more recent versions which are more specialized to the features of new hardware.
+        """
+        # Certain devices have custom workarounds e.g. with their own package distribution (NPU) or via kernels (XPU)
+        for device_availability_check, info_message in custom_supported_devices:
+            if device_availability_check():
+                logger.info(info_message)
                 return
 
-            if is_torch_xpu_available():
-                logger.info(
-                    f"Detect using FlashAttention2 (via kernel `{FLASH_ATTN_KERNEL_FALLBACK['flash_attention_2']}`) on XPU."
+        if not general_availability_check():
+            preface = f"FlashAttention{flash_attn_version} has been toggled on, but it cannot be used due to the following error:"
+
+            # Can the package be seen in the import structure
+            if not pkg_availability_check():
+                raise ImportError(
+                    f"{preface} the package for FlashAttention{flash_attn_version} seems to be not installed."
                 )
-                return True
-
-            if (
-                importlib.util.find_spec("flash_attn") is None
-                or "flash_attn" not in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
-            ):
-                raise ImportError(f"{preface} the package flash_attn seems to be not installed. {install_message}")
             else:
-                # Check FA2 installed version compatibility
-                flash_attention_version = version.parse(importlib.metadata.version("flash_attn"))
-                if torch.version.cuda:
-                    if flash_attention_version < version.parse("2.1.0"):
-                        raise ImportError(
-                            f"{preface} you need flash_attn package version to be greater or equal than 2.1.0. Detected version {flash_attention_version}. {install_message}"
-                        )
-                    elif not torch.cuda.is_available():
-                        raise ValueError(
-                            f"{preface} Flash Attention 2 is not available on CPU. Please make sure torch can access a CUDA device."
-                        )
-                    else:
-                        raise ImportError(f"{preface} Flash Attention 2 is not available. {install_message}")
-                elif torch.version.hip:
-                    if flash_attention_version < version.parse("2.0.4"):
-                        raise ImportError(
-                            f"{preface} you need flash_attn package version to be greater or equal than 2.0.4. Detected version {flash_attention_version}. {install_message}"
-                        )
-                    else:
-                        raise ImportError(f"{preface} Flash Attention 2 is not available. {install_message}")
-
-    def _flash_attn_3_import_error(self):
-        if not is_flash_attn_3_available():
-            preface = "FlashAttention3 has been toggled on, but it cannot be used due to the following error:"
-
-            if importlib.util.find_spec("flash_attn_3") is None:
-                raise ImportError(f"{preface} the package flash_attn_3 seems to be not installed.")
-
-            if torch.cuda.is_available():
-                major, _ = torch.cuda.get_device_capability()
-                if major < 8:
-                    raise ValueError(
-                        f"{preface} Flash Attention 3 requires compute capability >= 8.0, but found {torch.cuda.get_device_capability()} with compute capability {major}.0."
+                # Supported devices availability
+                device_availability_checks, device_names = zip(*supported_devices)
+                if not any(device_availability_check() for device_availability_check in device_availability_checks):
+                    raise ImportError(
+                        f"{preface} FlashAttention{flash_attn_version} is not available on CPU. Please make sure you are on any of the supported devices: {device_names}."
                     )
-                else:
-                    raise ImportError(f"{preface} Flash Attention 3 is not available.")
-            else:
-                raise ValueError(
-                    f"{preface} Flash Attention 3 is not available on CPU. Please make sure torch can access a CUDA device."
-                )
-
-    def _flash_attn_4_import_error(self):
-        if not is_flash_attn_4_available():
-            preface = "FlashAttention4 has been toggled on, but it cannot be used due to the following error:"
-
-            if importlib.util.find_spec("flash_attn") is None or importlib.util.find_spec("flash_attn.cute") is None:
-                raise ImportError(f"{preface} the package flash_attn (under cute) seems to be not installed.")
-
-            if torch.cuda.is_available():
-                major, _ = torch.cuda.get_device_capability()
-                if major < 9:
-                    raise ValueError(
-                        f"{preface} Flash Attention 4 requires compute capability >= 9.0, but found {torch.cuda.get_device_capability()} with compute capability {major}.0."
-                    )
-                else:
-                    raise ImportError(f"{preface} Flash Attention 4 is not available.")
-            else:
-                raise ValueError(
-                    f"{preface} Flash Attention 4 is not available on CPU. Please make sure torch can access a CUDA device."
-                )
+                # Cuda major versions (more recent FA versions are specialized to newer cuda devices)
+                elif cuda_major_versions is not None and is_torch_cuda_available():
+                    major, _ = torch.cuda.get_device_capability()
+                    if major not in cuda_major_versions:
+                        raise ImportError(
+                            f"{preface} FlashAttention{flash_attn_version} requires compute capability >= {min(cuda_major_versions)}, but found {torch.cuda.get_device_capability()} with compute capability {major}.x"
+                        )
 
     def _flash_attn_can_dispatch(self, flash_attn_version: int, is_init_check: bool = False) -> bool:
         """
@@ -1645,9 +1626,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 later after __init__. This allows to raise proper exceptions early before instantiating the full models
                 if we know that the model does not support the requested attention.
         """
-        if flash_attn_version not in [2, 3, 4]:
-            raise ValueError(f"Requested Flash Attention {flash_attn_version} which is not supported.")
-
         if not self._supports_flash_attn:
             raise ValueError(
                 f"{self.__class__.__name__} does not support Flash Attention {flash_attn_version} yet. Please request to add support where"
@@ -1655,18 +1633,64 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 " or in the Transformers GitHub repo: https://github.com/huggingface/transformers/issues/new"
             )
 
-        # Check if we can even use the FA version based on the env of the user
-        if flash_attn_version == 2:
-            self._flash_attn_2_import_error()
-        elif flash_attn_version == 3:
-            self._flash_attn_3_import_error()
-        else:
-            self._flash_attn_4_import_error()
+        if flash_attn_version not in [2, 3, 4]:
+            raise ValueError(f"Requested Flash Attention {flash_attn_version} which is not supported.")
 
+        # Big matrix that shows each FA versions limitations by device and major cuda versions
+        flash_attention_compatibility_matrix = {
+            2: {
+                "flash_attn_version": 2,
+                "general_availability_check": is_flash_attn_2_available,
+                "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn") is not None
+                and "flash_attn" in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"],
+                "supported_devices": (
+                    (is_torch_cuda_available, "cuda"),
+                    (is_torch_mlu_available, "mlu"),
+                    (is_torch_npu_available, "npu"),
+                    (is_torch_xpu_available, "xpu"),
+                ),
+                "custom_supported_devices": (
+                    (is_torch_npu_available, "Detect using FlashAttention2 on Ascend NPU."),
+                    (
+                        is_torch_xpu_available,
+                        f"Detect using FlashAttention2 (via kernel `{FLASH_ATTN_KERNEL_FALLBACK['flash_attention_2']}`) on XPU.",
+                    ),
+                ),
+            },
+            3: {
+                "flash_attn_version": 3,
+                "general_availability_check": is_flash_attn_3_available,
+                "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn_3") is not None,
+                "supported_devices": ((is_torch_cuda_available, "cuda"),),
+                "cuda_major_versions": (8, 9),  # Ampere and Hopper
+            },
+            4: {
+                "flash_attn_version": 4,
+                "general_availability_check": is_flash_attn_4_available,
+                "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn") is not None
+                and importlib.util.find_spec("flash_attn.cute") is not None,
+                "supported_devices": ((is_torch_cuda_available, "cuda"),),
+                "cuda_major_versions": (9, 10),  # Hopper and Blackwell
+            },
+        }
+
+        # Check if we can even use the FA version based on the env of the user
+        self._flash_attn_import_error(**flash_attention_compatibility_matrix[flash_attn_version])
+
+        # Check for attention dropout, which is incompatible with newer FA versions
+        # (many should not really care about dropout as it is not super effective, hence warning for now)
+        if flash_attn_version > 2:
+            if hasattr(self.config, "attention_dropout") and self.config.attention_dropout > 0:
+                logger.warning_once(
+                    f"You are attempting to use Flash Attention {flash_attn_version} with dropout. "
+                    "This might lead to unexpected behaviour as this is not supported on recent versions of Flash Attention."
+                )
+
+        # People often move dtypes after init so we only warn in those cases
         dtype = self.config.dtype
         if dtype is None:
             logger.warning_once(
-                f"You are attempting to use Flash Attention {flash_attn_version} without specifying a torch dtype. This might lead to unexpected behaviour"
+                f"You are attempting to use Flash Attention {flash_attn_version} without specifying a dtype. This might lead to unexpected behaviour"
             )
         elif dtype is not None and dtype not in [torch.float16, torch.bfloat16]:
             logger.warning_once(
@@ -1675,47 +1699,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 f' or load the model with the `dtype` argument. Example: `model = AutoModel.from_pretrained("meta-llama/Llama-3.2-1B", attn_implementation="flash_attention_{flash_attn_version}", dtype=torch.float16)`'
             )
 
-        # FA2 has broader support for some features and devices
-        is_fa2 = flash_attn_version == 2
-
-        if not is_fa2:
-            # Check for attention dropout, which is incompatible with newer FA versions
-            if hasattr(self.config, "attention_dropout") and self.config.attention_dropout > 0:
-                raise ValueError(
-                    f"Model has attention_dropout={self.config.attention_dropout}, which is not supported by Flash Attention {flash_attn_version}."
-                )
-
         # With the early check, the parameters are not yet initialized correctly
         if not is_init_check:
             param_devices = list({param.device for param in self.parameters()})
             if len(param_devices) == 1 and param_devices[0].type == "cpu":
-                if torch.cuda.is_available():
-                    logger.warning_once(
-                        f"You are attempting to use Flash Attention {flash_attn_version} with a model not initialized on GPU. Make sure to move the model to GPU"
-                        " after initializing it on CPU with `model.to('cuda')`."
-                    )
-                elif is_fa2:
-                    if is_torch_mlu_available():
-                        logger.warning_once(
-                            f"You are attempting to use Flash Attention {flash_attn_version} with a model not initialized on MLU. Make sure to move the model to MLU"
-                            " after initializing it on CPU with `model.to('mlu')`."
+                for device_availability_check, device_name in flash_attention_compatibility_matrix[flash_attn_version][
+                    "supported_devices"
+                ]:
+                    if device_availability_check():
+                        raise ValueError(
+                            f"You are attempting to use Flash Attention {flash_attn_version} with a model not initialized on GPU. Make sure to move the model to GPU "
+                            "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
+                            f"or initialising the model on CPU and then moving it to GPU, e.g. with `model.to('{device_name}')`."
                         )
-                    elif is_torch_npu_available():
-                        logger.warning_once(
-                            f"You are attempting to use Flash Attention {flash_attn_version} with a model not initialized on NPU. Make sure to move the model to NPU"
-                            " after initializing it on CPU with `model.to('npu')`."
-                        )
-                    elif is_torch_xpu_available():
-                        logger.warning_once(
-                            f"You are attempting to use Flash Attention {flash_attn_version} with a model not initialized on XPU. Make sure to move the model to XPU"
-                            " after initializing it on CPU with `model.to('xpu')`."
-                        )
-
-                raise ValueError(
-                    f"You are attempting to use Flash Attention {flash_attn_version} with a model not initialized on GPU and with no GPU available. "
-                    "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
-                    "or initialising the model on CPU and then moving it to GPU."
-                )
 
         # If no error raise by this point, we can return `True`
         return True

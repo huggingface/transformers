@@ -24,7 +24,6 @@ from .utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
-    is_flash_attn_greater_or_equal_2_10,
     is_torch_npu_available,
     is_torch_xpu_available,
     logging,
@@ -37,10 +36,8 @@ logger = logging.get_logger(__name__)
 
 # TODO Deprecate when all models have the attention interface
 def flash_attn_supports_top_left_mask():
-    if is_flash_attn_3_available() or is_flash_attn_4_available():
+    if is_flash_attn_2_available() or is_flash_attn_3_available() or is_flash_attn_4_available():
         return False
-    if is_flash_attn_2_available():
-        return not is_flash_attn_greater_or_equal_2_10()
 
     from .integrations.npu_flash_attention import is_npu_fa2_top_left_aligned_causal_mask
 
