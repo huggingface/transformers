@@ -185,11 +185,11 @@ def _process_image(image_file, data_args, image_folder, enable_dynamic_s2=False)
     else:
         image = image_file
     image = image.convert("RGB")
-    if hasattr(data_args.image_processor, "crop_size"):
-        crop_size = data_args.image_processor.crop_size
-    else:
-        assert hasattr(data_args.image_processor, "size")
-        crop_size = data_args.image_processor.size
+    crop_size = getattr(data_args.image_processor, "crop_size", None)
+    if crop_size is None:
+        crop_size = getattr(data_args.image_processor, "size", None)
+    if crop_size is None:
+        raise ValueError("OmniVinci image processor must define either `crop_size` or `size`.")
     if "dynamic_s2" in data_args.image_aspect_ratio and enable_dynamic_s2:
         assert crop_size["height"] == crop_size["width"]
         images, block_size = _dynamic_s2_preprocess(
