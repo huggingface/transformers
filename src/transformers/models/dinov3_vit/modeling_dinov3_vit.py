@@ -406,6 +406,7 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -414,6 +415,7 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
         hidden_states = self.norm1(hidden_states)
         hidden_states, _ = self.attention(
             hidden_states,
+            attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             **kwargs,
         )
