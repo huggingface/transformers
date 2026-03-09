@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from .auto import *
     from .autoformer import *
     from .aya_vision import *
+    from .ax_k1 import *
     from .bamba import *
     from .bark import *
     from .bart import *
