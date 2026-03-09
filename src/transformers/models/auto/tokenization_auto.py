@@ -680,8 +680,8 @@ class AutoTokenizer:
             and config_model_type is not None
             and config_model_type != ""
             and TOKENIZER_MAPPING_NAMES.get(config_model_type) is not None
-            and TOKENIZER_MAPPING_NAMES.get(config_model_type).replace("Fast", "")
-            != tokenizer_config_class.replace("Fast", "")
+            and (TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast"))
+            != (tokenizer_config_class.removesuffix("Fast"))
         ):
             # new model, but we ignore it unless the model type is the same
             if TokenizersBackend is not None:
@@ -697,8 +697,8 @@ class AutoTokenizer:
         if "_commit_hash" in tokenizer_config:
             kwargs["_commit_hash"] = tokenizer_config["_commit_hash"]
 
-        if tokenizer_config_class:
-            tokenizer_config_class = tokenizer_config_class.replace("Fast", "")
+        if tokenizer_config_class and tokenizer_config_class.endswith("Fast"):
+            tokenizer_config_class = tokenizer_config_class[:-4]
 
         has_remote_code = tokenizer_auto_map is not None
         has_local_code = type(config) in TOKENIZER_MAPPING or (
@@ -749,8 +749,8 @@ class AutoTokenizer:
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif getattr(config, "tokenizer_class", None):
             _class = config.tokenizer_class
-            if "PreTrainedTokenizerFast" not in _class:
-                _class = _class.replace("Fast", "")
+            if "PreTrainedTokenizerFast" not in _class and _class.endswith("Fast"):
+                _class = _class[:-4]
             tokenizer_class = tokenizer_class_from_name(_class)
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
@@ -775,7 +775,7 @@ class AutoTokenizer:
         # Fallback: try tokenizer_class from tokenizer_config.json
         tokenizer_config_class = tokenizer_config.get("tokenizer_class", None)
         if tokenizer_config_class is not None:
-            if tokenizer_config_class != "TokenizersBackend" and "Fast" in tokenizer_config_class:
+            if tokenizer_config_class != "TokenizersBackend" and tokenizer_config_class.endswith("Fast"):
                 tokenizer_config_class = tokenizer_config_class[:-4]
             tokenizer_class = tokenizer_class_from_name(tokenizer_config_class)
             if tokenizer_class is None and not tokenizer_config_class.endswith("Fast"):

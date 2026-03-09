@@ -14,66 +14,31 @@
 """VideoMAE model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="MCG-NJU/videomae-base")
 class VideoMAEConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VideoMAEModel`]. It is used to instantiate a
-    VideoMAE model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the VideoMAE
-    [MCG-NJU/videomae-base](https://huggingface.co/MCG-NJU/videomae-base) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        num_frames (`int`, *optional*, defaults to 16):
-            The number of frames in each video.
-        tubelet_size (`int`, *optional*, defaults to 2):
-            The number of tubelets.
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-        use_mean_pooling (`bool`, *optional*, defaults to `True`):
-            Whether to mean pool the final hidden states instead of using the final hidden state of the [CLS] token.
-        decoder_num_attention_heads (`int`, *optional*, defaults to 6):
-            Number of attention heads for each attention layer in the decoder.
-        decoder_hidden_size (`int`, *optional*, defaults to 384):
-            Dimensionality of the decoder.
-        decoder_num_hidden_layers (`int`, *optional*, defaults to 4):
-            Number of hidden layers in the decoder.
-        decoder_intermediate_size (`int`, *optional*, defaults to 1536):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the decoder.
-        norm_pix_loss (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the target patch pixels.
+    num_frames (`int`, *optional*, defaults to 16):
+        The number of frames in each video.
+    tubelet_size (`int`, *optional*, defaults to 2):
+        The number of tubelets.
+    use_mean_pooling (`bool`, *optional*, defaults to `True`):
+        Whether to mean pool the final hidden states instead of using the final hidden state of the [CLS] token.
+    decoder_num_attention_heads (`int`, *optional*, defaults to 6):
+        Number of attention heads for each attention layer in the decoder.
+    decoder_hidden_size (`int`, *optional*, defaults to 384):
+        Dimensionality of the decoder.
+    decoder_num_hidden_layers (`int`, *optional*, defaults to 4):
+        Number of hidden layers in the decoder.
+    decoder_intermediate_size (`int`, *optional*, defaults to 1536):
+        Dimensionality of the "intermediate" (i.e., feed-forward) layer in the decoder.
+    norm_pix_loss (`bool`, *optional*, defaults to `True`):
+        Whether to normalize the target patch pixels.
 
     Example:
 

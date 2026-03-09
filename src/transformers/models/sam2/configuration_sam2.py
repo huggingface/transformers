@@ -14,63 +14,38 @@
 """SAM2 model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
 class Sam2HieraDetConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Sam2HieraDetModel`]. It is used to instantiate
-    a HieraDet model as defined in the original sam2 repo according to the specified arguments, defining the model architecture.
-    Instantiating a configuration defaults will yield a similar configuration to that of SAM 2.1 Hiera-tiny
-    [facebook/sam2.1-hiera-tiny](https://huggingface.co/facebook/sam2.1-hiera-tiny) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 96):
-            The hidden dimension of the image encoder.
-        num_attention_heads (`int`, *optional*, defaults to 1):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of channels in the image.
-        image_size (`list[int]`, *optional*, defaults to `[1024, 1024]`):
-            The size of the image.
-        patch_kernel_size (`list[int]`, *optional*, defaults to `[7, 7]`):
-            The kernel size of the patch.
-        patch_stride (`list[int]`, *optional*, defaults to `[4, 4]`):
-            The stride of the patch.
-        patch_padding (`list[int]`, *optional*, defaults to `[3, 3]`):
-            The padding of the patch.
-        query_stride (`list[int]`, *optional*, defaults to `[2, 2]`):
-            The downsample stride between stages.
-        window_positional_embedding_background_size (`list[int]`, *optional*, defaults to `[7, 7]`):
-            The window size per stage when not using global attention.
-        num_query_pool_stages (`int`, *optional*, defaults to 3):
-            The number of query pool stages.
-        blocks_per_stage (`list[int]`, *optional*, defaults to `[1, 2, 7, 2]`):
-            The number of blocks per stage.
-        embed_dim_per_stage (`list[int]`, *optional*, defaults to `[96, 192, 384, 768]`):
-            The embedding dimension per stage.
-        num_attention_heads_per_stage (`list[int]`, *optional*, defaults to `[1, 2, 4, 8]`):
-            The number of attention heads per stage.
-        window_size_per_stage (`list[int]`, *optional*, defaults to `[8, 4, 14, 7]`):
-            The window size per stage.
-        global_attention_blocks (`list[int]`, *optional*, defaults to `[5, 7, 9]`):
-            The blocks where global attention is used.
-        mlp_ratio (`float`, *optional*, defaults to 4.0):
-            The ratio of the MLP hidden dimension to the embedding dimension.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the neck.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon for the layer normalization.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
+    patch_kernel_size (`list[int]`, *optional*, defaults to `[7, 7]`):
+        The kernel size of the patch.
+    patch_stride (`list[int]`, *optional*, defaults to `[4, 4]`):
+        The stride of the patch.
+    patch_padding (`list[int]`, *optional*, defaults to `[3, 3]`):
+        The padding of the patch.
+    query_stride (`list[int]`, *optional*, defaults to `[2, 2]`):
+        The downsample stride between stages.
+    window_positional_embedding_background_size (`list[int]`, *optional*, defaults to `[7, 7]`):
+        The window size per stage when not using global attention.
+    num_query_pool_stages (`int`, *optional*, defaults to 3):
+        The number of query pool stages.
+    blocks_per_stage (`list[int]`, *optional*, defaults to `[1, 2, 7, 2]`):
+        The number of blocks per stage.
+    embed_dim_per_stage (`list[int]`, *optional*, defaults to `[96, 192, 384, 768]`):
+        The embedding dimension per stage.
+    num_attention_heads_per_stage (`list[int]`, *optional*, defaults to `[1, 2, 4, 8]`):
+        The number of attention heads per stage.
+    window_size_per_stage (`list[int]`, *optional*, defaults to `[8, 4, 14, 7]`):
+        The window size per stage.
+    global_attention_blocks (`list[int]`, *optional*, defaults to `[5, 7, 9]`):
+        The blocks where global attention is used.
     """
 
     base_config_key = "backbone_config"
@@ -140,43 +115,25 @@ class Sam2HieraDetConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
 
 
+@auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
 class Sam2VisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Sam2VisionModel`]. It is used to instantiate a SAM
-    vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
-    defaults will yield a similar configuration to that of SAM 2.1 Hiera-tiny
-    [facebook/sam2.1-hiera-tiny](https://huggingface.co/facebook/sam2.1-hiera-tiny) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `Sam2HieraDetConfig()`):
-            Configuration for the vision backbone. This is used to instantiate the backbone using
-            `AutoModel.from_config`.
-        backbone_channel_list (`List[int]`, *optional*, defaults to `[768, 384, 192, 96]`):
-            The list of channel dimensions for the backbone.
-        backbone_feature_sizes (`List[List[int]]`, *optional*, defaults to `[[256, 256], [128, 128], [64, 64]]`):
-            The spatial sizes of the feature maps from the backbone.
-        fpn_hidden_size (`int`, *optional*, defaults to 256):
-            The hidden dimension of the FPN.
-        fpn_kernel_size (`int`, *optional*, defaults to 1):
-            The kernel size for the convolutions in the neck.
-        fpn_stride (`int`, *optional*, defaults to 1):
-            The stride for the convolutions in the neck.
-        fpn_padding (`int`, *optional*, defaults to 0):
-            The padding for the convolutions in the neck.
-        fpn_top_down_levels (`List[int]`, *optional*, defaults to `[2, 3]`):
-            The levels for the top-down FPN connections.
-        num_feature_levels (`int`, *optional*, defaults to 3):
-            The number of feature levels from the FPN to use.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the neck.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon for the layer normalization.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
+    backbone_channel_list (`List[int]`, *optional*, defaults to `[768, 384, 192, 96]`):
+        The list of channel dimensions for the backbone.
+    backbone_feature_sizes (`List[List[int]]`, *optional*, defaults to `[[256, 256], [128, 128], [64, 64]]`):
+        The spatial sizes of the feature maps from the backbone.
+    fpn_hidden_size (`int`, *optional*, defaults to 256):
+        The hidden dimension of the FPN.
+    fpn_kernel_size (`int`, *optional*, defaults to 1):
+        The kernel size for the convolutions in the neck.
+    fpn_stride (`int`, *optional*, defaults to 1):
+        The stride for the convolutions in the neck.
+    fpn_padding (`int`, *optional*, defaults to 0):
+        The padding for the convolutions in the neck.
+    fpn_top_down_levels (`List[int]`, *optional*, defaults to `[2, 3]`):
+        The levels for the top-down FPN connections.
+    num_feature_levels (`int`, *optional*, defaults to 3):
+        The number of feature levels from the FPN to use.
     """
 
     base_config_key = "vision_config"
@@ -233,31 +190,15 @@ class Sam2VisionConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
 class Sam2PromptEncoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Sam2PromptEncoder`]. The [`Sam2PromptEncoder`]
-    module is used to encode the input 2D points and bounding boxes.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the hidden states.
-        image_size (`int`, *optional*, defaults to 1024):
-            The expected output resolution of the image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        mask_input_channels (`int`, *optional*, defaults to 16):
-            The number of channels to be fed to the `MaskDecoder` module.
-        num_point_embeddings (`int`, *optional*, defaults to 4):
-            The number of point embeddings to be used.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the encoder and pooler.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        scale (`float`, *optional*, defaults to 1):
-            The scale factor for the prompt encoder.
+    mask_input_channels (`int`, *optional*, defaults to 16):
+        The number of channels to be fed to the `MaskDecoder` module.
+    num_point_embeddings (`int`, *optional*, defaults to 4):
+        The number of point embeddings to be used.
+    scale (`float`, *optional*, defaults to 1):
+        The scale factor for the prompt encoder.
     """
 
     base_config_key = "prompt_encoder_config"
@@ -285,40 +226,25 @@ class Sam2PromptEncoderConfig(PreTrainedConfig):
         self.scale = scale
 
 
+@auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
 class Sam2MaskDecoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Sam2MaskDecoder`]. It is used to instantiate a SAM2
-    memory encoder according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the hidden states.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the SAM2 mask decoder.
-        mlp_dim (`int`, *optional*, defaults to 2048):
-            The dimension of the MLP in the two-way transformer.
-        num_hidden_layers (`int`, *optional*, defaults to 2):
-            The number of hidden layers in the two-way transformer.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            The number of attention heads in the two-way transformer.
-        attention_downsample_rate (`int`, *optional*, defaults to 2):
-            The downsample rate for the attention layers.
-        num_multimask_outputs (`int`, *optional*, defaults to 3):
-            The number of multimask outputs.
-        iou_head_depth (`int`, *optional*, defaults to 3):
-            The depth of the IoU head.
-        iou_head_hidden_dim (`int`, *optional*, defaults to 256):
-            The hidden dimension of the IoU head.
-        dynamic_multimask_via_stability (`bool`, *optional*, defaults to `True`):
-            Whether to use dynamic multimask via stability.
-        dynamic_multimask_stability_delta (`float`, *optional*, defaults to 0.05):
-            The stability delta for the dynamic multimask.
-        dynamic_multimask_stability_thresh (`float`, *optional*, defaults to 0.98):
-            The stability threshold for the dynamic multimask.
-
+    mlp_dim (`int`, *optional*, defaults to 2048):
+        The dimension of the MLP in the two-way transformer.
+    attention_downsample_rate (`int`, *optional*, defaults to 2):
+        The downsample rate for the attention layers.
+    num_multimask_outputs (`int`, *optional*, defaults to 3):
+        The number of multimask outputs.
+    iou_head_depth (`int`, *optional*, defaults to 3):
+        The depth of the IoU head.
+    iou_head_hidden_dim (`int`, *optional*, defaults to 256):
+        The hidden dimension of the IoU head.
+    dynamic_multimask_via_stability (`bool`, *optional*, defaults to `True`):
+        Whether to use dynamic multimask via stability.
+    dynamic_multimask_stability_delta (`float`, *optional*, defaults to 0.05):
+        The stability delta for the dynamic multimask.
+    dynamic_multimask_stability_thresh (`float`, *optional*, defaults to 0.98):
+        The stability threshold for the dynamic multimask.
     """
 
     base_config_key = "mask_decoder_config"
@@ -358,33 +284,13 @@ class Sam2MaskDecoderConfig(PreTrainedConfig):
         self.attention_downsample_rate = attention_downsample_rate
 
 
+@auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
 class Sam2Config(PreTrainedConfig):
     r"""
-    [`Sam2Config`] is the configuration class to store the configuration of a [`Sam2Model`]. It is used to instantiate a
-    SAM2 model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
-    configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2.1 Hiera-tiny
-    [facebook/sam2.1-hiera-tiny](https://huggingface.co/facebook/sam2.1-hiera-tiny) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    <Tip>
-
-    SAM2 checkpoints with `model_type="sam2_video"` are compatible with `Sam2Model` since the video variant weights
-    are a superset of the image-only model weights. You may see a warning about model type mismatch when loading
-    such checkpoints, which can be safely ignored in this case.
-
-    </Tip>
-
-    Args:
-        vision_config (Union[`dict`, `Sam2VisionConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`Sam2VisionConfig`].
-        prompt_encoder_config (Union[`dict`, `Sam2PromptEncoderConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`Sam2PromptEncoderConfig`].
-        mask_decoder_config (Union[`dict`, `Sam2MaskDecoderConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`Sam2MaskDecoderConfig`].
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            Standard deviation for parameter initialization.
+    prompt_encoder_config (Union[`dict`, `Sam2PromptEncoderConfig`], *optional*):
+        Dictionary of configuration options used to initialize [`Sam2PromptEncoderConfig`].
+    mask_decoder_config (Union[`dict`, `Sam2MaskDecoderConfig`], *optional*):
+        Dictionary of configuration options used to initialize [`Sam2MaskDecoderConfig`].
 
     Example:
 
