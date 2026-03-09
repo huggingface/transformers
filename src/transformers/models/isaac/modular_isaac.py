@@ -50,7 +50,7 @@ from ...processing_utils import ProcessorMixin, Unpack
 from ...utils import TensorType, auto_docstring, torch_compilable_check
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
-from ...utils.generic import TransformersKwargs, can_return_tuple, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import TransformersKwargs, can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import (
     is_torch_available,
     is_torchdynamo_compiling,
@@ -1012,31 +1012,6 @@ class IsaacRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
         chunks = freqs.split(tuple(mrope_section), dim=-1)
         return torch.cat([chunk[i % 3] for i, chunk in enumerate(chunks)], dim=-1)
 
-    def forward(
-        self,
-        position_ids: torch.Tensor,
-        modality_tensor: torch.Tensor,
-        hidden_states: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        if hidden_states is None:
-            batch, seq_len, _ = position_ids.shape
-            hidden_states = torch.zeros(
-                batch,
-                seq_len,
-                self.hidden_size,
-                dtype=torch.float32,
-                device=position_ids.device,
-            )
-
-        with torch.no_grad():
-            pos = position_ids.clone()
-            not_spatial = modality_tensor == 1
-            data_1d = pos[not_spatial][..., 0].unsqueeze(-1)  # Collapse non-vision modalities to 1D positions
-            pos[not_spatial] = data_1d.expand(-1, pos.shape[-1])
-            pos_axes = pos.permute(2, 0, 1).contiguous()
-
-        return super().forward(hidden_states, pos_axes)
-
 
 @auto_docstring
 class IsaacModel(Qwen3PreTrainedModel):
@@ -1081,6 +1056,17 @@ class IsaacModel(Qwen3PreTrainedModel):
     @embed_tokens.setter
     def embed_tokens(self, value: nn.Module) -> None:
         self.text_model.embed_tokens = value
+
+    @staticmethod
+    def prepare_multimodal_rope_position_ids(
+        position_ids: torch.Tensor,
+        modality_tensor: torch.Tensor,
+    ) -> torch.Tensor:
+        pos = position_ids.clone()
+        text_mask = modality_tensor == ModalityType.text.value
+        text_positions = pos[text_mask][..., :1]
+        pos[text_mask] = text_positions.expand(-1, pos.shape[-1])
+        return pos.permute(2, 0, 1).contiguous()
 
     def embed_multimodal_inputs(
         self,
@@ -1302,7 +1288,8 @@ class IsaacModel(Qwen3PreTrainedModel):
         )
         self.rope_deltas = rope_deltas
 
-        cos, sin = self.rotary_emb(position_ids, modality_tensor, hidden_states=inputs_embeds)
+        rope_position_ids = self.prepare_multimodal_rope_position_ids(position_ids, modality_tensor)
+        cos, sin = self.rotary_emb(inputs_embeds, rope_position_ids)
 
         decoder_position_ids = position_ids[..., 0] if position_ids.ndim == 3 else position_ids
 
