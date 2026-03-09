@@ -123,6 +123,7 @@ from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
     PACKAGE_DISTRIBUTION_MAPPING,
+    is_flash_attn_greater_or_equal,
     is_huggingface_hub_greater_or_equal,
     is_sagemaker_mp_enabled,
     is_torch_cuda_available,
@@ -1597,6 +1598,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if not pkg_availability_check():
                 raise ImportError(
                     f"{preface} the package for FlashAttention{flash_attn_version} doesn't seem to be not installed."
+                )
+            # Minimum version (FA2 only)
+            elif flash_attn_version == 2 and not is_flash_attn_greater_or_equal("2.3.3"):
+                raise ImportError(
+                    f"{preface} FlashAttention{flash_attn_version} requires at least version `2.3.3`."
                 )
             else:
                 # Supported devices availability

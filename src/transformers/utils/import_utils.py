@@ -944,6 +944,9 @@ def is_flash_attn_4_available() -> bool:
 @lru_cache
 def is_flash_attn_greater_or_equal(library_version: str) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
+    # FA4 is also distributed under "flash_attn", hence we need to check the naming here
+    is_available = is_available and "flash_attn" in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+
     if not is_available:
         return False
     try:

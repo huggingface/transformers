@@ -585,13 +585,16 @@ def _process_flash_attention_kwargs(
     #   - Env: `TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1`
     #   - Before compiling: `torch._dynamo.config.capture_scalar_outputs = True`
     # to allow torch compile to handle scalar outputs in those cases.
+    same_max_seqlen = max_seqlen_q is max_seqlen_k  # to avoid 2x device syncs
     if supports_mapping["max_seqlen_q"] and max_seqlen_q is not None:
         if not isinstance(max_seqlen_q, int) and is_tracing(max_seqlen_q):
             max_seqlen_q = max_seqlen_q.item()
         flash_kwargs["max_seqlen_q"] = max_seqlen_q
 
     if supports_mapping["max_seqlen_k"] and max_seqlen_k is not None:
-        if not isinstance(max_seqlen_k, int) and is_tracing(max_seqlen_k):
+        if same_max_seqlen and flash_kwargs["max_seqlen_q"] is not None:
+            max_seqlen_k = flash_kwargs["max_seqlen_q"]
+        elif not isinstance(max_seqlen_k, int) and is_tracing(max_seqlen_k):
             max_seqlen_k = max_seqlen_k.item()
         flash_kwargs["max_seqlen_k"] = max_seqlen_k
 
