@@ -135,6 +135,7 @@ class ContinuousBatchingIOs:
         num_groups = self.cache.num_groups
         max_batch_tokens = self.cache.max_batch_tokens
         num_pages = self.cache.num_blocks * self.cache.block_size
+        # Pin memory on CPU only when an accelerator is available, to speed up H2D transfers
         pin_memory = self.device.type == "cpu" and len(get_available_devices()) > 1
 
         # Small inputs are allocated as slices in a larget tensor aligned to 128 bytes (32 * 4b). This reduces the
