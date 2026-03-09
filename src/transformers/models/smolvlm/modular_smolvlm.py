@@ -37,42 +37,9 @@ from ..idefics3.modeling_idefics3 import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="HuggingFaceTB/SmolVLM2-2.2B-Instruct")
 class SmolVLMVisionConfig(Idefics3VisionConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SmolVLMVisionModel`]. It is used to instantiate a
-    SmolVLM vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the SigLIP checkpoint
-    [google/siglip-so400m-patch14-384](https://huggingface.co/google/siglip-so400m-patch14-384) used in SmolVLM
-    [HuggingFaceTB/SmolVLM2-2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1152):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels in the input images.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 32):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
     Example:
 
     ```python
@@ -100,32 +67,11 @@ class SmolVLMVisionTransformer(Idefics3VisionTransformer):
     pass
 
 
+@auto_docstring(checkpoint="HuggingFaceTB/SmolVLM2-2.2B-Instruct")
 class SmolVLMConfig(Idefics3Config):
     r"""
-    This is the configuration class to store the configuration of a [`SmolVLMModel`]. It is used to instantiate a
-    SmolVLM model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the model of the SmolVLM
-    [HuggingFaceTB/SmolVLM2-2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should cache the key/value pairs of the attention mechanism. Only
-            relevant if `config.is_decoder=True`.
-        image_token_id (`int`, *optional*, defaults to 128257):
-            The id of the "image" token.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether or not to tie the word embeddings with the token embeddings.
-        vision_config (`IdeficsVisionConfig` or `dict`, *optional*, defaults to `IdeficsVisionConfig`):
-            Custom vision config or dict for the vision tower
-        text_config (`PreTrainedConfig` or `dict`, *optional*, defaults to `LlamaConfig`):
-            Custom text config or dict for the text model
-        scale_factor (`int`, *optional*, defaults to 2):
-            The scale factor for the image encoder.
-        pad_token_id (`int`, *optional*, defaults to 128002):
-            The id of the padding token.
+    scale_factor (`int`, *optional*, defaults to 2):
+        The scale factor for the image encoder.
 
     Example:
     ```python

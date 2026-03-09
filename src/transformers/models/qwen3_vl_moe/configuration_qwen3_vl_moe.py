@@ -19,72 +19,18 @@
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
 class Qwen3VLMoeTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen3VLMoeTextModel`]. It is used to instantiate a
-    Qwen3-VL-MOE model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of
-    Qwen3-VL-30B-A3B-Instruct [Qwen/Qwen3-VL-30B-A3B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 151936):
-            Vocabulary size of the Qwen2MoE model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Qwen2MoeModel`]
-        hidden_size (`int`, *optional*, defaults to 2048):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 5632):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 16):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 128000):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        decoder_sparse_step (`int`, *optional*, defaults to 1):
-            The frequency of the MoE layer.
-        moe_intermediate_size (`int`, *optional*, defaults to 1408):
-            Intermediate size of the routed expert.
-        num_experts_per_tok (`int`, *optional*, defaults to 4):
-            Number of selected experts.
-        num_experts (`int`, *optional*, defaults to 60):
-            Number of routed experts.
-        mlp_only_layers (`List[int]`, *optional*, defaults to `[]`):
-            Indicate which layers use Qwen3VLMoeMLP rather than Qwen3VLMoeSparseMoeBlock
-            The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
-            If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        head_dim (`int`, *optional*):
-            The dimension of the head. If not specified, will default to `hidden_size // num_attention_heads`.
-        pad_token_id (`int`, *optional*):
-            The id of the padding token.
+    decoder_sparse_step (`int`, *optional*, defaults to 1):
+        The frequency of the MoE layer.
+    mlp_only_layers (`List[int]`, *optional*, defaults to `[]`):
+        Indicate which layers use Qwen3VLMoeMLP rather than Qwen3VLMoeSparseMoeBlock
+        The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
+        If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
 
     ```python
     >>> from transformers import Qwen3VLMoeForConditionalGeneration, Qwen3VLMoeConfig
@@ -179,7 +125,17 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         )
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
 class Qwen3VLMoeVisionConfig(PreTrainedConfig):
+    r"""
+    num_position_embeddings (`int`, *optional*, defaults to 2304):
+        The maximum sequence length that this model might ever be used with
+    out_hidden_size (`int`, *optional*, defaults to 3584):
+        The output hidden size of the vision model.
+    deepstack_visual_indexes (`list[int]`, *optional*, defaults to `[8, 16, 24]`):
+        Indexed of layers for deepstack embeddings.
+    """
+
     model_type = "qwen3_vl_moe"
     base_config_key = "vision_config"
 
@@ -217,32 +173,10 @@ class Qwen3VLMoeVisionConfig(PreTrainedConfig):
         self.deepstack_visual_indexes = deepstack_visual_indexes
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
 class Qwen3VLMoeConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen3VLMoeModel`]. It is used to instantiate a
-    Qwen3-VL-MOE model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of
-    Qwen3-VL-30B-A3B-Instruct [Qwen/Qwen3-VL-30B-A3B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Qwen3VLMoeTextConfig`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Qwen3VLMoeVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to 151655):
-            The image token index to encode the image prompt.
-        video_token_id (`int`, *optional*, defaults to 151656):
-            The video token index to encode the image prompt.
-        vision_start_token_id (`int`, *optional*, defaults to 151652):
-            The start token index to encode the image prompt.
-        vision_end_token_id (`int`, *optional*, defaults to 151653):
-            The end token index to encode the image prompt.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
+    Example:
 
     ```python
     >>> from transformers import Qwen3VLMoeForConditionalGeneration, Qwen3VLMoeConfig

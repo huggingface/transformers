@@ -844,14 +844,17 @@ class TimesFm2_5ModelForPrediction(TimesFm2_5PreTrainedModel):
         loss = None
         if future_values is not None:
             target_len = future_values.shape[1]
-            valid_mean_predictions = mean_predictions[:, :target_len]
-            valid_full_predictions = full_predictions[:, :target_len]
-            mse_loss = F.mse_loss(valid_mean_predictions, future_values)
-            quantile_indices = [i for i in range(valid_full_predictions.shape[-1]) if i != decode_index]
+            # Compute loss in normalized space for scale-invariant training.
+            # full_forecast is already in normalized space (before denormalization).
+            normalized_preds = full_forecast[:, :target_len]
+            normalized_targets = self.model._revin(future_values, mu_global, sigma_global, reverse=False)
+            normalized_mean_preds = normalized_preds[:, :, decode_index]
+            mse_loss = F.mse_loss(normalized_mean_preds, normalized_targets)
+            quantile_indices = [i for i in range(normalized_preds.shape[-1]) if i != decode_index]
             if quantile_indices:
-                index_tensor = torch.tensor(quantile_indices, device=valid_full_predictions.device, dtype=torch.long)
-                quantile_tensor = torch.index_select(valid_full_predictions, dim=-1, index=index_tensor)
-                quantile_loss = self._quantile_loss(quantile_tensor, future_values)
+                index_tensor = torch.tensor(quantile_indices, device=normalized_preds.device, dtype=torch.long)
+                quantile_tensor = torch.index_select(normalized_preds, dim=-1, index=index_tensor)
+                quantile_loss = self._quantile_loss(quantile_tensor, normalized_targets)
                 loss = mse_loss + quantile_loss
             else:
                 loss = mse_loss

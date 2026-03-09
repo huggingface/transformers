@@ -15,15 +15,21 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="itazap/blt-1b-hf")
 class BltLocalEncoderConfig(PreTrainedConfig):
-    """
-    Configuration class for the Blt Local Encoder component.
+    r"""
+    cross_attn_k (`int`, *optional*, defaults to 2):
+        Number of cross-attention heads used in the model.
+    cross_attn_all_layers (`bool`, *optional*, defaults to `True`):
+        Whether all attention layers have cross attention.
+    hidden_size_global (`int`, *int*, defaults to 2048):
+        Hidden size of the global transformer layer.
     """
 
     model_type = "blt_local_encoder"
@@ -70,9 +76,15 @@ class BltLocalEncoderConfig(PreTrainedConfig):
         super().__init__(**kwargs, tie_word_embeddings=False)
 
 
+@auto_docstring(checkpoint="itazap/blt-1b-hf")
 class BltLocalDecoderConfig(PreTrainedConfig):
-    """
-    Configuration class for the Blt Local Decoder component.
+    r"""
+    cross_attn_k (`int`, *optional*, defaults to 2):
+        Number of cross-attention heads used in the model.
+    cross_attn_all_layers (`bool`, *optional*, defaults to `True`):
+        Whether all attention layers have cross attention.
+    hidden_size_global (`int`, *int*, defaults to 2048):
+        Hidden size of the global transformer layer.
     """
 
     model_type = "blt_local_decoder"
@@ -125,11 +137,8 @@ class BltLocalDecoderConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="itazap/blt-1b-hf")
 class BltGlobalTransformerConfig(PreTrainedConfig):
-    """
-    Configuration class for the Blt Global Transformer component.
-    """
-
     model_type = "blt_global_transformer"
     default_theta = 500000.0
 
@@ -166,44 +175,8 @@ class BltGlobalTransformerConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="itazap/blt-1b-hf")
 class BltPatcherConfig(PreTrainedConfig):
-    r"""
-    Configuration class for the Blt Patcher/Entropy model component.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 260):
-            Vocabulary size of the Blt patcher model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling the patcher model.
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimension of the hidden representations.
-        num_hidden_layers (`int`, *optional*, defaults to 14):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
-            `num_attention_heads`.
-        max_position_embeddings (`int`, *optional*, defaults to 8192):
-            The maximum sequence length that this model might ever be used with.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimension of the MLP representations.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-    """
-
     model_type = "blt_patcher"
 
     def __init__(
@@ -240,57 +213,35 @@ class BltPatcherConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="itazap/blt-1b-hf")
 class BltConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`BltModel`]. It is used to instantiate a
-    Blt model according to the specified arguments, defining the model architecture.
+    patch_in_forward (`bool`, *optional*, defaults to `True`):
+        Whether to perform patching during the forward pass.
+    patch_size (`int`, *optional*, defaults to 4):
+        Size of the patches used in the patching mechanism.
+    patching_mode (`str`, *optional*, defaults to `"entropy"`):
+        The mode used for patching, such as entropy-based patching.
+    patching_threshold (`float`, *optional*, defaults to 1.34):
+        Threshold value used for determining when to apply patches.
+    patching_batch_size (`int`, *optional*, defaults to 1):
+        Batch size used during the patching process.
+    max_patch_length (`int`, *optional*):
+        Maximum length of patches that can be generated.
+    cross_attn_k (`int`, *optional*, defaults to 2):
+        Number of cross-attention heads used in the model.
+    encoder_hash_byte_group_size (`list`, *optional*):
+        List of byte group sizes used in the encoder hash function.
+    encoder_hash_byte_group_vocab (`int`, *optional*, defaults to 500002):
+        Vocabulary size for the encoder hash byte groups.
+    encoder_hash_byte_group_nb_functions (`int`, *optional*, defaults to 1):
+        Number of hash functions used in the encoder byte grouping.
+    patcher_config (`BltPatcherConfig`, *optional*):
+        Configuration for the patcher component of the model.
+    global_config (`BltGlobalTransformerConfig`, *optional*):
+        Configuration for the global transformer component of the model.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 260):
-            Vocabulary size of the Blt model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`BltModel`].
-        max_position_embeddings (`int`, *optional*, defaults to 4096):
-            The maximum sequence length that this model might ever be used with.
-        patch_in_forward (`bool`, *optional*, defaults to `True`):
-            Whether to perform patching during the forward pass.
-        patch_size (`int`, *optional*, defaults to 4):
-            Size of the patches used in the patching mechanism.
-        patching_mode (`str`, *optional*, defaults to `"entropy"`):
-            The mode used for patching, such as entropy-based patching.
-        patching_threshold (`float`, *optional*, defaults to 1.34):
-            Threshold value used for determining when to apply patches.
-        patching_batch_size (`int`, *optional*, defaults to 1):
-            Batch size used during the patching process.
-        max_patch_length (`int`, *optional*):
-            Maximum length of patches that can be generated.
-        cross_attn_k (`int`, *optional*, defaults to 2):
-            Number of cross-attention heads used in the model.
-        encoder_hash_byte_group_size (`list`, *optional*):
-            List of byte group sizes used in the encoder hash function.
-        encoder_hash_byte_group_vocab (`int`, *optional*, defaults to 500002):
-            Vocabulary size for the encoder hash byte groups.
-        encoder_hash_byte_group_nb_functions (`int`, *optional*, defaults to 1):
-            Number of hash functions used in the encoder byte grouping.
-        patcher_config (`BltPatcherConfig`, *optional*):
-            Configuration for the patcher component of the model.
-        encoder_config (`BltLocalEncoderConfig`, *optional*):
-            Configuration for the local encoder component of the model.
-        decoder_config (`BltLocalDecoderConfig`, *optional*):
-            Configuration for the local decoder component of the model.
-        global_config (`BltGlobalTransformerConfig`, *optional*):
-            Configuration for the global transformer component of the model.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-
+    Example:
     ```python
     >>> from transformers import BltModel, BltConfig
 
@@ -302,10 +253,7 @@ class BltConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-
-    Checkpoint: [facebook/blt](https://huggingface.co/facebook/blt)
-    """
+    ```"""
 
     model_type = "blt"
     keys_to_ignore_at_inference = ["past_key_values"]

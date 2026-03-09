@@ -217,6 +217,19 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 ):
                     vocab = local_kwargs.pop("vocab", None)
                     merges = local_kwargs.pop("merges", None)
+
+                    # Replace placeholder tokens as specified in added_tokens_decoder
+                    added_tokens_decoder = local_kwargs.get("added_tokens_decoder") or {}
+                    if vocab is not None and added_tokens_decoder:
+                        id_to_token = {token_id: token for token, token_id in vocab.items()}
+                        for token_id, new_token in added_tokens_decoder.items():
+                            token_id = int(token_id)
+                            new_token = str(new_token)
+                            current_token = id_to_token.get(token_id)
+                            if current_token and current_token != new_token and new_token not in vocab:
+                                vocab[new_token] = vocab.pop(current_token)
+                                id_to_token[token_id] = new_token
+
                     tokenizer_object = SpmConverter.build_tokenizer_from_spm_proto(
                         proto=extractor.proto,
                         vocab=vocab,

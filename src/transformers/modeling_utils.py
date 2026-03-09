@@ -4609,11 +4609,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Note: this is never an issue in main Transformers, as we never do module-tying, only parameter-tying, and we know
         # which params are supposed to be tied to which other params
         if self.is_remote_code():
-            # Remove those that are already initialized, but appear as missing due to module tying
+            # Remove those that are already initialized, but appear as missing due to module tying (only if they are not known
+            # tied weights, i.e. we did not explicitly mark them as initialized just above)
             loading_info.missing_keys = {
                 key
                 for key in loading_info.missing_keys
-                if not getattr(self.get_parameter_or_buffer(key), "_is_hf_initialized", False)
+                if key in self.all_tied_weights_keys
+                or not getattr(self.get_parameter_or_buffer(key), "_is_hf_initialized", False)
             }
 
     def get_parameter_or_buffer(self, target: str):
