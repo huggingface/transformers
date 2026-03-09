@@ -195,6 +195,9 @@ class JinaEmbeddingsV3Embeddings(XLMRobertaEmbeddings):
         input_shape = embeddings.shape[:-1]
         device = embeddings.device
 
+        if position_ids is None:
+            position_ids = self.position_ids[:, : input_shape[1]]
+
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
                 buffered_token_type_ids = self.token_type_ids.expand(input_shape[0], -1)
@@ -292,7 +295,7 @@ class JinaEmbeddingsV3Layer(LlamaDecoderLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         attention_output, _ = self.self_attn(
-            hidden_states=hidden_states,
+            hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -342,19 +345,8 @@ class JinaEmbeddingsV3Model(XLMRobertaModel):
         inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling | tuple:
-        if (input_ids is not None) and (inputs_embeds is not None):
+        if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-        elif input_ids is not None:
-            batch_size, seq_length = input_ids.shape
-            device = input_ids.device
-        else:
-            batch_size, seq_length = inputs_embeds.shape[:-1]
-            device = inputs_embeds.device
-
-        if position_ids is None:
-            # Default RoPE positions assume right padding; left padding requires explicit corrected position_ids for RoPE.
-            position_ids = torch.arange(seq_length, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
@@ -363,6 +355,11 @@ class JinaEmbeddingsV3Model(XLMRobertaModel):
             inputs_embeds=inputs_embeds,
         )
         hidden_states = embedding_output
+
+        if position_ids is None:
+            # Default RoPE positions assume right padding; left padding requires explicit corrected position_ids for RoPE.
+            position_ids = torch.arange(hidden_states.shape[1], dtype=torch.long, device=hidden_states.device)
+            position_ids = position_ids.unsqueeze(0)
 
         position_embeddings = self.rotary_emb(embedding_output, position_ids)
 
@@ -374,7 +371,7 @@ class JinaEmbeddingsV3Model(XLMRobertaModel):
 
         for encoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = encoder_layer(
-                hidden_states=hidden_states,
+                hidden_states,
                 attention_mask=attention_mask,
                 position_embeddings=position_embeddings,
                 **kwargs,
