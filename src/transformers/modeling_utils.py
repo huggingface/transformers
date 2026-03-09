@@ -1556,7 +1556,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         general_availability_check: Callable,
         pkg_availability_check: Callable,
         supported_devices: tuple[tuple[Callable, str]],
-        custom_supported_devices: tuple[tuple[Callable, str]]=(),
+        custom_supported_devices: tuple[tuple[Callable, str]] = (),
         cuda_major_versions: tuple[int] | None = None,
     ):
         """
