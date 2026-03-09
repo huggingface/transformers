@@ -114,7 +114,7 @@ def _parse_type_hint(hint: str) -> dict:
         if len(subtypes) == 1:
             # A single non-null type can be expressed directly
             return_dict = subtypes[0]
-        elif all(isinstance(subtype["type"], str) for subtype in subtypes):
+        elif all("type" in subtype and isinstance(subtype["type"], str) for subtype in subtypes):
             # A union of basic types can be expressed as a list in the schema
             return_dict = {"type": sorted([subtype["type"] for subtype in subtypes])}
         else:
