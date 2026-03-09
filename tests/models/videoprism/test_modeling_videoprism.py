@@ -49,6 +49,7 @@ if is_torch_available():
 
     from transformers import (
         VideoPrismClipModel,
+        VideoPrismForVideoClassification,
         VideoPrismTextModel,
         VideoPrismVideoModel,
         VideoPrismVisionModel,
@@ -223,15 +224,21 @@ class VideoPrismVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="VideoPrismVisionModel exposes spatial/temporal backbone states, not a single hidden_states tuple.")
+    @unittest.skip(
+        reason="VideoPrismVisionModel exposes spatial/temporal backbone states, not a single hidden_states tuple."
+    )
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="VideoPrismVisionModel does not expose a single attentions tuple compatible with ModelTesterMixin.")
+    @unittest.skip(
+        reason="VideoPrismVisionModel does not expose a single attentions tuple compatible with ModelTesterMixin."
+    )
     def test_attention_outputs(self):
         pass
 
-    @unittest.skip(reason="VideoPrismVisionModel does not expose common hidden_states/attentions fields for retain-grad checks.")
+    @unittest.skip(
+        reason="VideoPrismVisionModel does not expose common hidden_states/attentions fields for retain-grad checks."
+    )
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
@@ -526,7 +533,7 @@ class VideoPrismClipModelTest(ModelTesterMixin, unittest.TestCase):
             config.save_pretrained(tmp_dir_name)
             text_config = VideoPrismTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
-    
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "MHRDYN7/videoprism-lvt-base-f16r288"
@@ -541,19 +548,10 @@ class VideoPrismForVideoClassificationModelTester(ModelTesterMixin, VideoPrismVi
             vision_kwargs = {}
         super().__init__(parent, **vision_kwargs)
 
-    # Copied from tests.models.vivit.test_modeling_vivit.VivitModelTester.prepare_config_and_inputs with Vivit->VideoPrism
-    def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor(
-            [self.batch_size, self.num_frames, self.num_channels, self.image_size, self.image_size]
-        )
-
-        labels = None
-        if self.use_labels:
-            labels = ids_tensor([self.batch_size], self.num_labels)
-
-        config = self.get_config()
-
-        return config, pixel_values, labels
+    def prepare_config_and_inputs_for_common(self):
+        config, pixel_values = self.prepare_config_and_inputs()
+        inputs_dict = {"pixel_values_videos": pixel_values}
+        return config, inputs_dict
 
     def create_and_check_model(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
@@ -577,34 +575,57 @@ class VideoPrismForVideoClassificationModelTester(ModelTesterMixin, VideoPrismVi
         )
 
 
-# @require_vision
-# class VideoPrismForVideoClassificationTest(ModelTesterMixin, unittest.TestCase):
-#     """
-#     Here we also overwrite some of the tests of test_modeling_common.py, as VideoPrismVisionModel does not use input_ids, inputs_embeds,
-#     attention_mask and seq_length.
-#     """
+@require_vision
+class VideoPrismForVideoClassificationTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (VideoPrismForVideoClassification,) if is_torch_available() else ()
+    test_resize_embeddings = False
 
-#     def setUp(self):
-#         self.model_tester = VideoPrismForVideoClassificationModelTester(
-#             self, vision_kwargs={"use_labels": True, "num_labels": 10}
-#         )
+    def setUp(self):
+        self.model_tester = VideoPrismForVideoClassificationModelTester(
+            self, vision_kwargs={"use_labels": True, "num_labels": 10}
+        )
+        self.config_tester = ConfigTester(
+            self,
+            config_class=VideoPrismVisionConfig,
+            has_text_modality=False,
+            hidden_size=37,
+            common_properties=["num_channels", "hidden_size", "num_attention_heads"],
+        )
 
-#     def test_model(self):
-#         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-#         self.model_tester.create_and_check_model(*config_and_inputs)
+    def test_model_get_set_embeddings(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), nn.Module)
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
 
-#     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-#     @unittest.skip(reason="VideoPrism reference outputs are validated only with eager attention.")
-#     def test_eager_matches_sdpa_inference(
-#         self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
-#     ):
-#         pass
+    @unittest.skip(reason="VideoPrismForVideoClassification does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
 
-#     @slow
-#     def test_model_from_pretrained(self):
-#         model_name = "MHRDYN7/videoprism-base-f16r288"
-#         model = VideoPrismVisionModel.from_pretrained(model_name)
-#         self.assertIsNotNone(model)
+    @unittest.skip(reason="VideoPrismForVideoClassification does not expose top-level attentions")
+    def test_attention_outputs(self):
+        pass
+
+    @unittest.skip(
+        reason="VideoPrismForVideoClassification returns a single hidden_states tensor, not layer-wise hidden states"
+    )
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(
+        reason="VideoPrismForVideoClassification does not expose common hidden_states/attentions fields for retain-grad checks"
+    )
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip(reason="VideoPrism reference outputs are validated only with eager attention.")
+    def test_eager_matches_sdpa_inference(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        pass
 
 
 def prepare_video(video_type="water_bottle_drumming"):
