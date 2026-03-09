@@ -52,7 +52,7 @@ This guide covers prompt engineering best practices, techniques, and examples fo
     Base models are excellent at completing text given an initial prompt, but they're not as good at following instructions. Instruction-tuned models are specifically trained versions of the base models on instructional or conversational data. This makes instruction-tuned models a better fit for prompting.
 
     > [!WARNING]
-    > Modern LLMs are typically decoder-only models, but there are some encoder-decoder LLMs like [Flan-T5](../model_doc/flan-t5) or [BART](../model_doc/bart) that may be used for prompting. For encoder-decoder models, make sure you set the pipeline task identifier to `text2text-generation` instead of `text-generation`.
+    > Modern LLMs are typically decoder-only models, but there are some encoder-decoder LLMs like [Flan-T5](../model_doc/flan-t5) or [BART](../model_doc/bart) that may be used for prompting. Load these models directly with the [`AutoModelForSeq2SeqLM`] class (instead of using [`Pipeline`]) and generate outputs from the model itself.
 
 2. Start with a short and simple prompt, and iterate on it to get better results.
 
