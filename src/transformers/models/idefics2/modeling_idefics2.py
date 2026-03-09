@@ -437,9 +437,6 @@ class Idefics2PreTrainedModel(PreTrainedModel):
 class Idefics2VisionTransformer(Idefics2PreTrainedModel):
     config: Idefics2VisionConfig
     input_modalities = ("image",)
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
     _can_record_outputs = {
         "hidden_states": Idefics2EncoderLayer,
         "attentions": Idefics2VisionAttention,
