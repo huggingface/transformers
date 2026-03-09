@@ -560,50 +560,6 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
 
         return encoded_inputs
 
-    def post_process_object_detection(
-        self,
-        preds,
-        threshold: float = 0.3,
-        target_sizes: list[tuple[int, int]] | torch.Tensor | None = None,
-        box_thresh: float = 0.6,
-        max_candidates: int = 1000,
-        min_size: int = 3,
-        unclip_ratio: float = 1.5,
-    ):
-        """
-        Converts model outputs into detected text boxes.
-
-        Args:
-            preds (torch.Tensor): Model outputs.
-            threshold (float):Binarization threshold.
-            target_sizes (TensorType or list[tuple]): Original image sizes.
-            box_thresh (float): Box score threshold.
-            max_candidates (int): Maximum number of boxes.
-            min_size (int): Minimum box size.
-            unclip_ratio (float): Expansion ratio.
-
-        Returns:
-            list[dict]: List of detection results.
-        """
-
-        results = []
-        for pred, size in zip(preds.logits, target_sizes):
-            pred = pred[0, :, :].cpu().detach().numpy()
-            size = size.cpu().detach().numpy()
-            src_h, src_w = size
-            mask = pred > threshold
-            box, score = boxes_from_bitmap(
-                pred, mask, src_w, src_h, box_thresh, unclip_ratio, min_size, max_candidates
-            )
-
-            results.append(
-                {
-                    "boxes": box,
-                    "scores": score,
-                }
-            )
-        return results
-
     def get_image_size(
         self,
         image: np.ndarray,
@@ -665,6 +621,50 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
             return None, (None, None)
 
         return SizeDict(height=resize_height, width=resize_width), torch.tensor([height, width], dtype=torch.float32)
+    
+    def post_process_object_detection(
+        self,
+        preds,
+        threshold: float = 0.3,
+        target_sizes: list[tuple[int, int]] | torch.Tensor | None = None,
+        box_thresh: float = 0.6,
+        max_candidates: int = 1000,
+        min_size: int = 3,
+        unclip_ratio: float = 1.5,
+    ):
+        """
+        Converts model outputs into detected text boxes.
+
+        Args:
+            preds (torch.Tensor): Model outputs.
+            threshold (float):Binarization threshold.
+            target_sizes (TensorType or list[tuple]): Original image sizes.
+            box_thresh (float): Box score threshold.
+            max_candidates (int): Maximum number of boxes.
+            min_size (int): Minimum box size.
+            unclip_ratio (float): Expansion ratio.
+
+        Returns:
+            list[dict]: List of detection results.
+        """
+
+        results = []
+        for pred, size in zip(preds.logits, target_sizes):
+            pred = pred[0, :, :].cpu().detach().numpy()
+            size = size.cpu().detach().numpy()
+            src_h, src_w = size
+            mask = pred > threshold
+            box, score = boxes_from_bitmap(
+                pred, mask, src_w, src_h, box_thresh, unclip_ratio, min_size, max_candidates
+            )
+
+            results.append(
+                {
+                    "boxes": box,
+                    "scores": score,
+                }
+            )
+        return results
 
 
 class PPOCRV5ServerDetDSConv(nn.Module):
