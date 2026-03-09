@@ -122,6 +122,13 @@ class Qwen3TTSTalkerCodePredictorConfig(PreTrainedConfig):
             The dropout ratio for the attention probabilities.
         num_code_groups (`int`, *optional*, defaults to 32):
             Number of code groups (codebooks).
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie word embedding weights with output projection weights.
+        layer_types (`list[str]`, *optional*):
+            List of attention layer types for each hidden layer. Defaults to alternating between `"full_attention"`
+            and `"sliding_attention"` based on `max_window_layers`.
+        pad_token_id (`int`, *optional*):
+            Padding token ID.
     """
 
     model_type = "qwen3_tts_talker_code_predictor"
@@ -243,6 +250,26 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
             The padding token ID for codec tokens.
         codec_bos_id (`int`, *optional*, defaults to 4197):
             The beginning-of-sequence token ID for codec tokens.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie word embedding weights with output projection weights.
+        codec_think_id (`int`, *optional*, defaults to 4202):
+            Token ID used to signal thinking mode in codec generation.
+        codec_nothink_id (`int`, *optional*, defaults to 4203):
+            Token ID used to signal non-thinking mode in codec generation.
+        codec_think_bos_id (`int`, *optional*, defaults to 4204):
+            Beginning-of-sequence token ID for codec thinking mode.
+        codec_think_eos_id (`int`, *optional*, defaults to 4205):
+            End-of-sequence token ID for codec thinking mode.
+        spk_id (`int`, *optional*):
+            Speaker ID for built-in voice presets.
+        spk_is_dialect (`bool`, *optional*):
+            Whether the speaker uses a dialect variant.
+        codec_language_id (`int`, *optional*):
+            Language ID for codec generation.
+        text_vocab_size (`int`, *optional*, defaults to 152064):
+            Vocabulary size of the text tokenizer.
+        pad_token_id (`int`, *optional*):
+            Padding token ID.
     """
 
     model_type = "qwen3_tts_talker"

@@ -22,6 +22,7 @@ from transformers.testing_utils import require_torch, slow
 
 if is_torch_available():
     import torch
+
     from transformers import Qwen3TTSProcessor
 
 

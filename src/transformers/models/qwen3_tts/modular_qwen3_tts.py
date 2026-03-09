@@ -1600,7 +1600,7 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel):
             "suppress_tokens": [
                 i
                 for i in range(self.config.talker_config.vocab_size - 1024, self.config.talker_config.vocab_size)
-                if i not in (self.config.talker_config.codec_eos_token_id,)
+                if i != self.config.talker_config.codec_eos_token_id
             ],
             "output_hidden_states": getattr(kwargs, "output_hidden_states", True),
             "return_dict_in_generate": getattr(kwargs, "return_dict_in_generate", True),
@@ -2423,6 +2423,7 @@ class Qwen3TTSTokenizerV1Decoder(Qwen2_5OmniToken2WavModel):
         self.bigvgan = Qwen3TTSTokenizerV1DecoderBigVGANModel._from_config(
             config.bigvgan_config, attn_implementation=attn_impl
         )
+        self.post_init()
 
     def forward(
         self,
