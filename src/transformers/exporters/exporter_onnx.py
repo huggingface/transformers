@@ -110,6 +110,16 @@ class OnnxExporter(DynamoExporter):
                 export_params=self.export_config.export_params,
                 optimize=self.export_config.optimize,
             )
+            # ORT's CUDA EP rejects TopK nodes that don't have sorted=1 explicitly
+            # set (e.g. nodes emitted from aten.sort.default which onnxscript translates
+            # to TopK without setting the attribute).  Force sorted=1 on every TopK node
+            # in the IR; this is always correct since sort/topk callers using sorted=False
+            # only care about the selected set, not ordering.
+            import onnxscript.ir as onnx_ir
+
+            for ir_node in onnx_program.model.graph.all_nodes():
+                if ir_node.op_type == "TopK":
+                    ir_node.attributes["sorted"] = onnx_ir.Attr("sorted", onnx_ir.AttributeType.INT, 1)
 
         return onnx_program
 
@@ -190,20 +200,54 @@ def _onnx_fix_index_put_bool_mask(gm: "torch.fx.GraphModule", node: "torch.fx.No
         expanded_mask = mask_node
         for _ in range(extra_dims):
             expanded_mask = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(expanded_mask, -1))
+        flat = gm.graph.call_function(torch.ops.aten.flatten.using_ints, args=(mask_node,))
+        flat_int = gm.graph.call_function(
+            torch.ops.aten._to_copy.default, args=(flat,), kwargs={"dtype": torch.int64}
+        )
+        cs = gm.graph.call_function(torch.ops.aten.cumsum.default, args=(flat_int, 0))
+        cs_m1 = gm.graph.call_function(torch.ops.aten.add.Scalar, args=(cs, -1))
+        positions_flat = gm.graph.call_function(torch.ops.aten.clamp.default, args=(cs_m1,), kwargs={"min": 0})
+        # Build the shape from size.int nodes so step-2 re-tracing can track each
+        # dimension — passing raw SymInts from meta["val"].shape causes a "not tracked
+        # with proxy" error when the batch/seq dimension is symbolic.
+        dyn_shape = [
+            gm.graph.call_function(torch.ops.aten.size.int, args=(mask_node, i))
+            for i in range(len(mask_shape))
+        ]
+        positions = gm.graph.call_function(torch.ops.aten.view.default, args=(positions_flat, dyn_shape))
         if values_val is not None and values_val.ndim == 0:
-            # Scalar constant: Where(mask, scalar, self) already broadcasts correctly in ONNX.
-            result = gm.graph.call_function(torch.ops.aten.where.self, args=(expanded_mask, values_arg, self_arg))
-        else:
-            flat = gm.graph.call_function(torch.ops.aten.flatten.using_ints, args=(mask_node,))
-            flat_int = gm.graph.call_function(
-                torch.ops.aten._to_copy.default, args=(flat,), kwargs={"dtype": torch.int64}
+            # 0-D scalar: unsqueeze to [1] so the standard gather path can be used.
+            # zeros_like(positions) ensures every slot indexes element 0 of the
+            # 1-element tensor (no out-of-bounds regardless of n_true).
+            # The constant scalar is lifted on CPU; move to self's device so the
+            # downstream index.Tensor and where nodes see uniform devices.
+            effective_values = gm.graph.call_function(
+                torch.ops.aten.unsqueeze.default, args=(values_arg, 0)
             )
-            cs = gm.graph.call_function(torch.ops.aten.cumsum.default, args=(flat_int, 0))
-            cs_m1 = gm.graph.call_function(torch.ops.aten.add.Scalar, args=(cs, -1))
-            positions_flat = gm.graph.call_function(torch.ops.aten.clamp.default, args=(cs_m1,), kwargs={"min": 0})
-            positions = gm.graph.call_function(torch.ops.aten.view.default, args=(positions_flat, mask_shape))
-            gathered = gm.graph.call_function(torch.ops.aten.index.Tensor, args=(values_arg, [positions]))
-            result = gm.graph.call_function(torch.ops.aten.where.self, args=(expanded_mask, gathered, self_arg))
+            if self_val is not None and values_val.device != self_val.device:
+                effective_values = gm.graph.call_function(
+                    torch.ops.aten._to_copy.default,
+                    args=(effective_values,),
+                    kwargs={"device": self_val.device},
+                )
+            positions_for_index = gm.graph.call_function(
+                torch.ops.aten.zeros_like.default, args=(positions,)
+            )
+            effective_ndim = 1
+        else:
+            effective_values = values_arg
+            positions_for_index = positions
+            effective_ndim = values_val.ndim if values_val is not None else 1
+        gathered = gm.graph.call_function(
+            torch.ops.aten.index.Tensor, args=(effective_values, [positions_for_index])
+        )
+        # If values has fewer dims than self (e.g. 1-D scalar-per-true-slot with
+        # a multi-dim self), the gather produces shape mask_shape instead of
+        # self_shape.  Unsqueeze trailing dims so Where can broadcast correctly.
+        gather_extra = extra_dims - max(0, effective_ndim - 1)
+        for _ in range(gather_extra):
+            gathered = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(gathered, -1))
+        result = gm.graph.call_function(torch.ops.aten.where.self, args=(expanded_mask, gathered, self_arg))
     node.replace_all_uses_with(result)
     gm.graph.erase_node(node)
     return True
@@ -243,6 +287,33 @@ def _onnx_fix_topk_sorted(_gm: "torch.fx.GraphModule", node: "torch.fx.Node") ->
     return False  # node stays; ONNX translation handles it
 
 
+def _onnx_fix_sort_stable(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
+    """Replace ``aten.sort.stable`` with ``aten.sort.default``.
+
+    Any ``torch.sort``/``torch.argsort`` call with an explicit ``stable=``
+    keyword (even ``stable=False``) dispatches to the ``aten.sort.stable``
+    overload, which has no registered ONNX translation and causes step 2 to
+    fail with a ConversionError.  ``aten.sort.default`` translates to ONNX
+    ``TopK`` with ``sorted=True``, which ORT's CUDA EP accepts.
+
+    Dropping ``stable=`` is safe for export: ONNX ``TopK`` makes no guarantee
+    about stable ordering of equal elements, so callers that requested stability
+    cannot rely on it in the exported model regardless.
+    """
+    if node.target is not torch.ops.aten.sort.stable:
+        return False
+    # aten.sort.stable args: (self, stable, dim=-1, descending=False)
+    # aten.sort.default args: (self, dim=-1, descending=False)
+    self_arg = node.args[0]
+    dim = node.args[2] if len(node.args) > 2 else node.kwargs.get("dim", -1)
+    descending = node.args[3] if len(node.args) > 3 else node.kwargs.get("descending", False)
+    with gm.graph.inserting_before(node):
+        new = gm.graph.call_function(torch.ops.aten.sort.default, args=(self_arg, dim, descending))
+    node.replace_all_uses_with(new)
+    gm.graph.erase_node(node)
+    return True
+
+
 # Ordered list of per-node fixers.  The first fixer that returns True consumes
 # the node and stops further processing.  Append new entries to extend the
 # sanitisation pipeline.
@@ -252,6 +323,7 @@ _ONNX_FX_NODE_FIXES = [
     _onnx_fix_index_put_bool_mask,
     _onnx_fix_index_put_inplace,
     _onnx_fix_topk_sorted,
+    _onnx_fix_sort_stable,
 ]
 
 
