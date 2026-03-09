@@ -1785,7 +1785,11 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
 
             if itm_labels is not None:
                 pos_pairs = itm_labels.ne(0)
-                pos_mask = torch.where(pos_pairs.any(), pos_pairs, pos_pairs.new([True]))
+                pos_mask = torch.where(
+                    pos_pairs.any().unsqueeze(0).expand_as(pos_pairs),
+                    pos_pairs,
+                    torch.ones_like(pos_pairs, dtype=torch.bool),
+                )
                 if return_loss:
                     itm_loss = nn.functional.cross_entropy(itm_logits, itm_labels)
                     itm_loss *= self.itm_weight
@@ -1901,7 +1905,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
                 mlm_logits,
                 itm_logits,
                 logits_per_image,
-                logits_per_image,
+                logits_per_text,
                 mmm_image_logits,
                 mmm_text_logits,
             )
@@ -1912,7 +1916,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
                 ) + output
 
             # Filter None as transformer by default won't handle it
-            return tuple(x for x in output if x is None)
+            return tuple(x for x in output if x is not None)
 
         return FlavaForPreTrainingOutput(
             loss=total_loss,

@@ -26,10 +26,11 @@ if is_torch_available():
     from torch.export import ExportedProgram
 
 if is_executorch_available():
-    from executorch.exir.program import ExecutorchProgramManager, to_edge_transform_and_lower
+    from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+
 
 logger = logging.get_logger(__file__)
 
@@ -70,17 +71,18 @@ class ExecutorchExporter(DynamoExporter):
         else:
             raise ValueError(f"Unsupported backend {self.export_config.backend} for ExecuTorch export")
 
-        with patch_torch_for_executorch_export():
+        with patch_for_executorch_export(model):
             exported_program: ExportedProgram = super().export(model, sample_inputs)
-            executorch_programs_manager: ExecutorchProgramManager = to_edge_transform_and_lower(
+            edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
                 exported_program, partitioner=partitioner
-            ).to_executorch()
+            )
+            executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch()
 
         return executorch_programs_manager
 
 
 @contextmanager
-def patch_torch_for_executorch_export():
+def patch_for_executorch_export(model: "PreTrainedModel"):
     # ExecuTorch export patcher context
     # This context manager monkey-patches PyTorch ops that are unsupported or buggy in ExecuTorch backends.
     # The following ops are patched with fallback implementations:
@@ -88,7 +90,8 @@ def patch_torch_for_executorch_export():
     #   - torch.chunk / torch.Tensor.chunk: replaced with narrow-based fallback
     #   - torch.topk / torch.Tensor.topk: replaced with argsort-based fallback
     #   - torch.detach / torch.Tensor.detach: replaced with no-op fallback
-    #   - torch.nn.functional.avg_pool2d: decomposed as depthwise conv2d with uniform weights
+    #   - torch.nn.functional.avg_pool2d: decomposed as depthwise conv2d with uniform weights (kernel clamped to input size)
+    #   - torch.nn.functional.scaled_dot_product_attention: manual matmul+softmax fallback when D_q != D_v
     # These patches are only active during export and are reverted afterwards.
     original_torch_split = torch.split
     original_tensor_split = torch.Tensor.split
@@ -99,6 +102,7 @@ def patch_torch_for_executorch_export():
     original_torch_detach = torch.detach
     original_tensor_detach = torch.Tensor.detach
     original_avg_pool2d = torch.nn.functional.avg_pool2d
+    original_scaled_dot_product_attention = torch.nn.functional.scaled_dot_product_attention
 
     def _split(input, split_size_or_sections, dim=0):
         if isinstance(split_size_or_sections, int):
@@ -135,7 +139,9 @@ def patch_torch_for_executorch_export():
     def _detach(input):
         return input
 
-    def _avg_pool2d(input, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True, divisor_override=None):
+    def _avg_pool2d(
+        input, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True, divisor_override=None
+    ):
         # aten::avg_pool2d has no CUDA ExecuTorch kernel. Decompose as a depthwise conv2d
         # with uniform weights (1 / kernel_area), which IS supported by the CUDA backend.
         if isinstance(kernel_size, int):
@@ -147,10 +153,37 @@ def patch_torch_for_executorch_export():
         if isinstance(padding, int):
             padding = (padding, padding)
         kh, kw = kernel_size
+        h, w = input.shape[-2:]
         channels = input.shape[1]
-        divisor = divisor_override if divisor_override is not None else kh * kw
-        weight = input.new_ones(channels, 1, kh, kw) / divisor
+        # Clamp kernel to padded input size (handles large-kernel global-pooling patterns where
+        # kernel_size == feature_map_size, e.g. nn.AvgPool2d(hidden_dim, ceil_mode=True)).
+        actual_kh = min(kh, h + padding[0] * 2)
+        actual_kw = min(kw, w + padding[1] * 2)
+        divisor = divisor_override if divisor_override is not None else actual_kh * actual_kw
+        weight = input.new_ones(channels, 1, actual_kh, actual_kw) / divisor
         return torch.nn.functional.conv2d(input, weight, bias=None, stride=stride, padding=padding, groups=channels)
+
+    def _scaled_dot_product_attention(
+        query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, **kwargs
+    ):
+        # ExecuTorch CUDA SDPA requires D_q == D_k == D_v. For asymmetric head dims
+        # (e.g. DiffLlama where D_v = 2*D_q), implement attention manually using matmul + softmax.
+        if query.shape[-1] != value.shape[-1]:
+            import math
+
+            scale_factor = scale if scale is not None else math.sqrt(query.shape[-1]) ** -1
+            attn_weight = torch.matmul(query, key.transpose(-2, -1)) * scale_factor
+            if is_causal:
+                L, S = query.shape[-2], key.shape[-2]
+                causal_mask = torch.ones(L, S, dtype=torch.bool, device=query.device).tril()
+                attn_weight = attn_weight.masked_fill(~causal_mask, float("-inf"))
+            if attn_mask is not None:
+                attn_weight = attn_weight + attn_mask
+            attn_weight = torch.nn.functional.softmax(attn_weight, dim=-1)
+            return torch.matmul(attn_weight, value)
+        return original_scaled_dot_product_attention(
+            query, key, value, attn_mask=attn_mask, dropout_p=dropout_p, is_causal=is_causal, scale=scale, **kwargs
+        )
 
     torch.split = _split
     torch.Tensor.split = _split
@@ -161,6 +194,7 @@ def patch_torch_for_executorch_export():
     torch.detach = _detach
     torch.Tensor.detach = _detach
     torch.nn.functional.avg_pool2d = _avg_pool2d
+    torch.nn.functional.scaled_dot_product_attention = _scaled_dot_product_attention
 
     try:
         yield
@@ -174,3 +208,4 @@ def patch_torch_for_executorch_export():
         torch.detach = original_torch_detach
         torch.Tensor.detach = original_tensor_detach
         torch.nn.functional.avg_pool2d = original_avg_pool2d
+        torch.nn.functional.scaled_dot_product_attention = original_scaled_dot_product_attention

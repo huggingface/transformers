@@ -142,7 +142,10 @@ class Idefics3VisionEmbeddings(nn.Module):
             1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side, device=pixel_values.device
         )
         position_ids = torch.full(
-            size=(batch_size, max_nb_patches_h * max_nb_patches_w), fill_value=0, device=pixel_values.device
+            size=(batch_size, max_nb_patches_h * max_nb_patches_w),
+            fill_value=0,
+            dtype=torch.long,
+            device=pixel_values.device,
         )
 
         nb_patches_h = patch_attention_mask[:, :, 0].sum(dim=1)  # (batch_size,)
@@ -171,7 +174,7 @@ class Idefics3VisionEmbeddings(nn.Module):
         pos_ids = bucket_coords_h[:, :, None] * self.num_patches_per_side + bucket_coords_w[:, None, :]
         pos_ids = pos_ids.reshape(batch_size, -1)
 
-        position_ids[patch_attention_mask.view(batch_size, -1)] = pos_ids[patch_attention_mask.view(batch_size, -1)]
+        position_ids = torch.where(patch_attention_mask.view(batch_size, -1), pos_ids, position_ids)
 
         embeddings = embeddings + self.position_embedding(position_ids)
         return embeddings

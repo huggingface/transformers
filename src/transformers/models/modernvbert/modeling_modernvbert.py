@@ -265,10 +265,10 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
         local_idx = (row_cum - 1) % patch_size
         block_idx = block_offset.unsqueeze(1) + chunk_idx
 
-        image_embeds = torch.zeros_like(inputs_embeds)
-        image_embeds[image_mask] = image_hidden_states[block_idx[image_mask], local_idx[image_mask], :]
-
-        merged_embeds = torch.where(image_mask.unsqueeze(-1), image_embeds, inputs_embeds)
+        # Gather image features for all positions (safe at non-image positions since
+        # those values are discarded by the subsequent where).
+        gathered = image_hidden_states[block_idx, local_idx, :]
+        merged_embeds = torch.where(image_mask.unsqueeze(-1), gathered, inputs_embeds)
         return merged_embeds
 
     @can_return_tuple

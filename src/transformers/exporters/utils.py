@@ -324,6 +324,48 @@ def inject_cache_into_inputs(
     return inputs, outputs
 
 
+def get_inputs_outputs_names(inputs: dict[str, Any], outputs: dict[str, Any]) -> tuple[list[str], list[str]]:
+    inputs_names = list(get_leaf_tensors(inputs).keys())
+    outputs_names = list(get_leaf_tensors(outputs).keys())
+    for name in set(inputs_names).intersection(set(outputs_names)):
+        inputs_names[inputs_names.index(name)] = f"input.{name}"
+        outputs_names[outputs_names.index(name)] = f"output.{name}"
+    return inputs_names, outputs_names
+
+
+def dedup_output_tensors(obj: Any, seen: dict | None = None) -> Any:
+    """Clone tensors that appear more than once in an output structure.
+
+    When a model returns the same tensor under two output names (e.g. ``last_hidden_state``
+    and ``hidden_states[0]``), the ONNX optimizer deduplicates the two output nodes and
+    renames one, breaking the expected name mapping. Cloning duplicates gives each output
+    leaf a distinct identity so the optimizer has nothing to merge.
+    """
+    if seen is None:
+        seen = {}
+    if isinstance(obj, type):  # class objects: not tensors, can't be reconstructed generically
+        return obj
+    if isinstance(obj, torch.Tensor):
+        if id(obj) in seen:
+            return obj.clone()
+        seen[id(obj)] = True
+        return obj
+    if isinstance(obj, dict):
+        return type(obj)({k: dedup_output_tensors(v, seen) for k, v in obj.items()})
+    if isinstance(obj, (list, tuple)):
+        items = [dedup_output_tensors(v, seen) for v in obj]
+        try:
+            return type(obj)(items)
+        except TypeError:
+            return type(obj)(*items)  # NamedTuple
+    if hasattr(obj, "__dict__"):
+        cls = type(obj)
+        instance = cls.__new__(cls)
+        instance.__dict__.update({k: dedup_output_tensors(v, seen) for k, v in vars(obj).items()})
+        return instance
+    return obj
+
+
 def _cast_inputs(obj: Any, device: "torch.device", dtype: "torch.dtype") -> Any:
     """Recursively move tensors to `device`, casting floating-point tensors to `dtype`."""
     if isinstance(obj, torch.Tensor):

@@ -4215,7 +4215,7 @@ class ModelTesterMixin:
 
                 set_seed(1234)
                 onnx_outputs = onnx_program(**copy.deepcopy(inputs_dict))
-                onnx_names = (re.sub(r"^output.", "", node.name) for node in onnx_program.model_proto.graph.output)
+                onnx_names = (re.sub(r"^output\.", "", node.name) for node in onnx_program.model_proto.graph.output)
                 onnx_outputs = dict(zip(onnx_names, onnx_outputs))
                 self.assertTrue(onnx_outputs, "ONNX outputs is empty.")
 

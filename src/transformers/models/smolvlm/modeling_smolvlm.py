@@ -105,7 +105,10 @@ class SmolVLMVisionEmbeddings(nn.Module):
             1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side, device=pixel_values.device
         )
         position_ids = torch.full(
-            size=(batch_size, max_nb_patches_h * max_nb_patches_w), fill_value=0, device=pixel_values.device
+            size=(batch_size, max_nb_patches_h * max_nb_patches_w),
+            fill_value=0,
+            dtype=torch.long,
+            device=pixel_values.device,
         )
 
         nb_patches_h = patch_attention_mask[:, :, 0].sum(dim=1)  # (batch_size,)
@@ -134,7 +137,7 @@ class SmolVLMVisionEmbeddings(nn.Module):
         pos_ids = bucket_coords_h[:, :, None] * self.num_patches_per_side + bucket_coords_w[:, None, :]
         pos_ids = pos_ids.reshape(batch_size, -1)
 
-        position_ids[patch_attention_mask.view(batch_size, -1)] = pos_ids[patch_attention_mask.view(batch_size, -1)]
+        position_ids = torch.where(patch_attention_mask.view(batch_size, -1), pos_ids, position_ids)
 
         embeddings = embeddings + self.position_embedding(position_ids)
         return embeddings
@@ -520,10 +523,10 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         local_idx = (row_cum - 1) % patch_size
         block_idx = block_offset.unsqueeze(1) + chunk_idx
 
-        image_embeds = torch.zeros_like(inputs_embeds)
-        image_embeds[image_mask] = image_hidden_states[block_idx[image_mask], local_idx[image_mask], :]
-
-        merged_embeds = torch.where(image_mask.unsqueeze(-1), image_embeds, inputs_embeds)
+        # Gather image features for all positions (safe at non-image positions since
+        # those values are discarded by the subsequent where).
+        gathered = image_hidden_states[block_idx, local_idx, :]
+        merged_embeds = torch.where(image_mask.unsqueeze(-1), gathered, inputs_embeds)
         return merged_embeds
 
     @can_return_tuple

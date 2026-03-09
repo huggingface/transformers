@@ -88,8 +88,12 @@ class DiaMultiChannelEmbedding(nn.Module):
         self.register_buffer("offsets", offsets, persistent=False)
 
     def forward(self, audio_codes: torch.Tensor) -> torch.Tensor:
-        tokens = (audio_codes + self.offsets.to(audio_codes.device)).squeeze(1)
-        embeds = self.embed(tokens).view(tokens.shape[0], audio_codes.shape[1], -1, self.hidden_size)
+        # audio_codes: (B, S, C). Reshape to (B*S, C) before embedding to avoid squeeze(1)
+        # which requires dim 1 to be exactly 1 at ONNX runtime — squeeze with a static axis
+        # is rejected by ORT when the dimension is not 1.
+        B, S, C = audio_codes.shape
+        tokens = (audio_codes + self.offsets.to(audio_codes.device)).view(B * S, C)
+        embeds = self.embed(tokens).view(B, S, C, self.hidden_size)
         return embeds.sum(dim=2)
 
 
