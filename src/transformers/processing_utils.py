@@ -1847,27 +1847,77 @@ class ProcessorMixin(PushToHubMixin):
                     assistant_masks = []
                     offset_mapping = out.pop("offset_mapping")
                     input_ids = out["input_ids"]
-                    for i in range(len(input_ids)):
-                        current_mask = [0] * len(input_ids[i])
-                        offsets = offset_mapping[i]
-                        offset_starts = [start for start, end in offsets]
-                        for assistant_start_char, assistant_end_char in generation_indices[i]:
-                            start_pos = bisect.bisect_left(offset_starts, assistant_start_char)
-                            end_pos = bisect.bisect_left(offset_starts, assistant_end_char)
+                    has_multimodal = images_exist or videos_exist or bool(batch_audios)
 
-                            if not (
-                                start_pos >= 0
-                                and start_pos < len(offsets)
-                                and offsets[start_pos][0] <= assistant_start_char < offsets[start_pos][1]
-                            ):
-                                # start_token is out of bounds maybe due to truncation.
-                                continue
-                            # Ensure end_pos is also within bounds
-                            if end_pos > len(input_ids[i]):
-                                end_pos = len(input_ids[i])
-                            for token_id in range(start_pos, end_pos if end_pos else len(input_ids[i])):
-                                current_mask[token_id] = 1
-                        assistant_masks.append(current_mask)
+                    if has_multimodal:
+                        # Multimodal processors expand placeholder tokens (e.g. a single
+                        # <|image_pad|> becomes N copies), so offset_mapping from the
+                        # expanded text is misaligned with generation_indices which were
+                        # computed from the original (unexpanded) text.
+                        # Fix: tokenize the original text to get aligned offsets, build
+                        # the mask on that, then map it onto the expanded input_ids.
+                        original_prompts = prompt if is_batched else [prompt]
+                        orig_tokenized = self.tokenizer(
+                            original_prompts,
+                            return_offsets_mapping=True,
+                            add_special_tokens=kwargs.get("add_special_tokens", True),
+                        )
+                        for i in range(len(input_ids)):
+                            orig_offsets = orig_tokenized["offset_mapping"][i]
+                            orig_ids = orig_tokenized["input_ids"][i]
+                            orig_offset_starts = [s for s, e in orig_offsets]
+
+                            # Build mask on original (unexpanded) tokenization
+                            orig_mask = [0] * len(orig_ids)
+                            for assistant_start_char, assistant_end_char in generation_indices[i]:
+                                start_pos = bisect.bisect_left(orig_offset_starts, assistant_start_char)
+                                end_pos = bisect.bisect_left(orig_offset_starts, assistant_end_char)
+
+                                if not (
+                                    start_pos >= 0
+                                    and start_pos < len(orig_offsets)
+                                    and orig_offsets[start_pos][0] <= assistant_start_char < orig_offsets[start_pos][1]
+                                ):
+                                    continue
+                                if end_pos > len(orig_ids):
+                                    end_pos = len(orig_ids)
+                                for token_id in range(start_pos, end_pos if end_pos else len(orig_ids)):
+                                    orig_mask[token_id] = 1
+
+                            # Align orig_mask to expanded input_ids via two-pointer:
+                            # tokens shared between original and expanded are matched
+                            # sequentially; extra expansion tokens get mask value 0.
+                            expanded_ids = input_ids[i]
+                            current_mask = [0] * len(expanded_ids)
+                            orig_ptr = 0
+                            for exp_idx in range(len(expanded_ids)):
+                                if orig_ptr < len(orig_ids) and expanded_ids[exp_idx] == orig_ids[orig_ptr]:
+                                    current_mask[exp_idx] = orig_mask[orig_ptr]
+                                    orig_ptr += 1
+                            assistant_masks.append(current_mask)
+                    else:
+                        for i in range(len(input_ids)):
+                            current_mask = [0] * len(input_ids[i])
+                            offsets = offset_mapping[i]
+                            offset_starts = [start for start, end in offsets]
+                            for assistant_start_char, assistant_end_char in generation_indices[i]:
+                                start_pos = bisect.bisect_left(offset_starts, assistant_start_char)
+                                end_pos = bisect.bisect_left(offset_starts, assistant_end_char)
+
+                                if not (
+                                    start_pos >= 0
+                                    and start_pos < len(offsets)
+                                    and offsets[start_pos][0] <= assistant_start_char < offsets[start_pos][1]
+                                ):
+                                    # start_token is out of bounds maybe due to truncation.
+                                    continue
+                                # Ensure end_pos is also within bounds
+                                if end_pos > len(input_ids[i]):
+                                    end_pos = len(input_ids[i])
+                                for token_id in range(start_pos, end_pos if end_pos else len(input_ids[i])):
+                                    current_mask[token_id] = 1
+                            assistant_masks.append(current_mask)
+
                     out["assistant_masks"] = assistant_masks
                     out.convert_to_tensors(tensor_type=kwargs.get("return_tensors"))
                 return out
