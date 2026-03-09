@@ -45,7 +45,8 @@ ONNX_UNSUPPORTED_MODEL_TYPES: set[str] = {
     # --- Missing ONNX ops ---
     "splinter",  # aten.bincount has no ONNX decomposition
     # --- ONNX Runtime runtime / graph errors (model-specific, needs per-model investigation) ---
-    "fine_acoustics",  # BarkFineModel: attention_mask exported as rank-3 but ORT expects rank-2
+    "fine_acoustics",  # Invalid rank for input: attention_mask Got: 3 Expected: 2 Please fix either the inputs/outputs or the model.
+    "higgs_audio_v2",  # Non-zero status code returned while running Where node. Name:'node_index_put' Status Message: node_index_put: condition operand cannot broadcast on dim 1 Condition Shape: {3,14,1}, X Shape: {20,32}, Y Shape: {3,14,32}
 }
 
 # The following are models that can be exported but their outputs
@@ -101,7 +102,7 @@ class OnnxExporter(DynamoExporter):
 
         with patch_for_onnx_export(model):
             exported_program: ExportedProgram = super().export(model, inputs)
-            _sanitize_exported_graph_for_onnx(exported_program.graph_module)
+            sanitize_fx_graph_for_onnx_export(exported_program.graph_module)
             onnx_program: ONNXProgram = torch.onnx.export(
                 exported_program,
                 args=(),
@@ -114,30 +115,9 @@ class OnnxExporter(DynamoExporter):
                 export_params=self.export_config.export_params,
                 optimize=self.export_config.optimize,
             )
+
+        patch_onnx_program_for_onnxruntime(onnx_program)
         return onnx_program
-
-
-def fix_onnx_for_ort(onnx_program: "ONNXProgram") -> None:
-    """Patch an exported ONNXProgram in-place for ORT compatibility.
-
-    ORT's CUDA EP rejects ``TopK`` nodes that have no ``sorted`` attribute
-    (nodes emitted from ``aten.sort.default`` are translated to ``TopK``
-    without setting it).  Every ``TopK`` node is unconditionally set to
-    ``sorted=1``; this is always correct because callers that use
-    ``sorted=False`` only care about the selected set, not its order.
-
-    Call this function after :meth:`OnnxExporter.export` and before running ORT
-    inference (i.e. before ``onnx_program(...)``).
-    """
-
-    def _fix_graph(graph_like: "onnx_ir.Graph") -> None:
-        for ir_node in list(graph_like.all_nodes()):
-            if ir_node.op_type == "TopK":
-                ir_node.attributes["sorted"] = onnx_ir.Attr("sorted", onnx_ir.AttributeType.INT, 1)
-
-    _fix_graph(onnx_program.model.graph)
-    for func in onnx_program.model.functions.values():
-        _fix_graph(func)
 
 
 # ── per-node ONNX sanitisation fixers ─────────────────────────────────────────
@@ -231,7 +211,7 @@ _ONNX_FX_NODE_FIXES = [
 ]
 
 
-def _sanitize_exported_graph_for_onnx(graph_module: "torch.fx.GraphModule") -> None:
+def sanitize_fx_graph_for_onnx_export(graph_module: "torch.fx.GraphModule") -> None:
     """Sanitize the exported FX graph before ONNX step 2 (run_decompositions).
 
     Walks every sub-GraphModule once and applies ``_ONNX_FX_NODE_FIXES`` to each
@@ -266,6 +246,10 @@ def _sanitize_exported_graph_for_onnx(graph_module: "torch.fx.GraphModule") -> N
                     break
         gm.graph.eliminate_dead_code()
         gm.recompile()
+
+
+# ── ONNX export patcher context manager ───────────────────────────────────
+# Some PyTorch ops have unsupported patterns or buggy decompositions in ONNX export that cause export to fail or produce incorrect models.  This context manager monkey-patches those ops with fallback implementations or workarounds during export, and reverts the patches afterwards.  See the docstring for details on the patched ops and their fixes.
 
 
 @contextmanager
@@ -485,3 +469,31 @@ def patch_for_onnx_export(model):
         torch.nn.functional.scaled_dot_product_attention = original_scaled_dot_product_attention
 
         _masking_utils_mod._vmap_expansion_sdpa = original_vmap_expansion_sdpa
+
+
+# ── post-ONNX-export ORT compatibility fixer ───────────────────────────────────
+# Some ONNX ops have attributes or input patterns that are technically valid but cause ORT to reject the model.
+# This function applies in-place fixes to the exported ONNXProgram to ensure ORT compatibility.  See its docstring for details.
+
+
+def patch_onnx_program_for_onnxruntime(onnx_program: "ONNXProgram") -> None:
+    """Patch an exported ONNXProgram in-place for ORT compatibility.
+
+    ORT's CUDA EP rejects ``TopK`` nodes that have no ``sorted`` attribute
+    (nodes emitted from ``aten.sort.default`` are translated to ``TopK``
+    without setting it).  Every ``TopK`` node is unconditionally set to
+    ``sorted=1``; this is always correct because callers that use
+    ``sorted=False`` only care about the selected set, not its order.
+
+    Call this function after :meth:`OnnxExporter.export` and before running ORT
+    inference (i.e. before ``onnx_program(...)``).
+    """
+
+    def _fix_graph(graph_like: "onnx_ir.Graph") -> None:
+        for ir_node in list(graph_like.all_nodes()):
+            if ir_node.op_type == "TopK":
+                ir_node.attributes["sorted"] = onnx_ir.Attr("sorted", onnx_ir.AttributeType.INT, 1)
+
+    _fix_graph(onnx_program.model.graph)
+    for func in onnx_program.model.functions.values():
+        _fix_graph(func)
