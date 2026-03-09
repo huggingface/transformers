@@ -287,3 +287,42 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs[self.images_input_name].shape[0], 612)
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(inputs[self.images_input_name].shape[0], 100)
+
+    def test_batched_apply_chat_template_no_padding(self):
+        """Regression test for #44521: batched call with padding=False must not crash."""
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        image_url = url_to_local_path(
+            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"
+        )
+        # Two conversations with different text so token counts differ when padding=False
+        batch = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "url": image_url},
+                        {"type": "text", "text": "Describe this image."},
+                    ],
+                }
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "url": image_url},
+                        {"type": "text", "text": "What do you see?"},
+                    ],
+                }
+            ],
+        ]
+        # Should not raise ValueError with the default padding=False
+        out = processor.apply_chat_template(
+            batch, tokenize=True, return_dict=True, padding=False
+        )
+        self.assertIn("input_ids", out)
+        self.assertEqual(len(out["input_ids"]), 2)
+        self.assertIn("mm_token_type_ids", out)
+        self.assertEqual(len(out["mm_token_type_ids"]), 2)
