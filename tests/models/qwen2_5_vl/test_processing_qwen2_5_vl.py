@@ -319,9 +319,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ],
         ]
         # Should not raise ValueError with the default padding=False
-        out = processor.apply_chat_template(
-            batch, tokenize=True, return_dict=True, padding=False
-        )
+        out = processor.apply_chat_template(batch, tokenize=True, return_dict=True, padding=False)
         self.assertIn("input_ids", out)
         self.assertEqual(len(out["input_ids"]), 2)
         self.assertIn("mm_token_type_ids", out)
