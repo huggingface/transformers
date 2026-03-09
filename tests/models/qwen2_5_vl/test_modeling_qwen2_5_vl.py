@@ -547,14 +547,22 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
-        EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-            'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, an AI language model created by Alibaba Cloud. I am designed to assist with various tasks such as answering questions, providing information,'
-        ]  # fmt: skip
+        expected_decoded_texts = Expectations(
+            {
+                (None, None): [
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
+                    'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, an AI language model created by Alibaba Cloud. I am designed to assist with various tasks such as answering questions, providing information,'
+                ],
+                ("xpu", None): [
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
+                    'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to assist with a wide range of tasks, from answering questions and'
+                ],
+            }
+        ).get_expectation()  # fmt: skip
 
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+            expected_decoded_texts,
         )
 
     @slow
@@ -588,6 +596,10 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
                 ("rocm", None): [
                     'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
                     'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is',
+                ],
+                ("xpu", None): [
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is evident in',
                 ],
             }
         ).get_expectation()  # fmt: skip
@@ -667,7 +679,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
             ],
             ("xpu", None): [
                 'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-                "system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nanvas is an AI language model created by Alibaba Cloud. I am here to assist with any questions or tasks you may have, as long as they are",
+                "system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to assist with a wide range of tasks, from answering questions and",
             ],
         }).get_expectation()  # fmt: skip
 
@@ -714,10 +726,17 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat is shown in this video?\nassistant\nThe video shows an indoor tennis court with a person standing on the service line, preparing to serve. The individual is wearing athletic attire, including a white',
-        ]  # fmt: skip
+        expected_decoded_texts = Expectations(
+            {
+                (None, None): [
+                    'system\nYou are a helpful assistant.\nuser\nWhat is shown in this video?\nassistant\nThe video shows an indoor tennis court with a person standing on the service line, preparing to serve. The individual is wearing athletic attire, including a white',
+                ],
+                ("xpu", None): [
+                    'system\nYou are a helpful assistant.\nuser\nWhat is shown in this video?\nassistant\nThe video shows an indoor tennis court with a person standing on the service line, preparing to serve. The individual appears to be practicing or warming up,',
+                ],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+            expected_decoded_texts,
         )

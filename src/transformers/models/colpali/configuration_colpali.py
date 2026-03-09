@@ -17,35 +17,16 @@ import logging
 from copy import deepcopy
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.getLogger(__name__)
 
 
+@auto_docstring(checkpoint="vidore/colpali-v1.2")
 class ColPaliConfig(PreTrainedConfig):
     r"""
-    Configuration class to store the configuration of a [`ColPaliForRetrieval`]. It is used to instantiate an instance
-    of `ColPaliForRetrieval` according to the specified arguments, defining the model architecture following the methodology
-    from the "ColPali: Efficient Document Retrieval with Vision Language Models" paper.
-
-    Creating a configuration with the default settings will result in a configuration where the VLM backbone is set to the
-    default PaliGemma configuration, i.e the one from [vidore/colpali-v1.2](https://huggingface.co/vidore/colpali-v1.2).
-
-    Note that contrarily to what the class name suggests (actually the name refers to the ColPali **methodology**), you can
-    use a different VLM backbone model than PaliGemma by passing the corresponding VLM configuration to the class constructor.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vlm_config (`PreTrainedConfig`, *optional*):
-            Configuration of the VLM backbone model.
-        text_config (`PreTrainedConfig`, *optional*):
-            Configuration of the text backbone model. Overrides the `text_config` attribute of the `vlm_config` if provided.
-        embedding_dim (`int`, *optional*, defaults to 128):
-            Dimension of the multi-vector embeddings produced by the model.
-
     Example:
 
     ```python

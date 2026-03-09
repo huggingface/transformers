@@ -13,41 +13,16 @@
 """PaliGemmamodel configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="paligemma-hf/paligemma-2b")
 class PaliGemmaConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PaliGemmaForConditionalGeneration`]. It is used to instantiate an
-    PaliGemmamodel according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the PaliGemma-2B.
-
-    e.g. [paligemma-hf/paligemma-2b](https://huggingface.co/paligemma-hf/paligemma-2b)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vision_config (`PaliGemmaVisionConfig`,  *optional*):
-            Custom vision config or dict
-        text_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
-        image_token_index (`int`, *optional*, defaults to 256000):
-            The image token index to encode the image prompt.
-        vocab_size (`int`, *optional*, defaults to 257152):
-            Vocabulary size of the PaliGemmamodel. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~PaliGemmaForConditionalGeneration`]
-        projection_dim (`int`, *optional*, defaults to 2048):
-            Dimension of the multimodal projection space.
-        hidden_size (`int`, *optional*, defaults to 2048):
-            Dimension of the hidden layer of the Language model.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
-
     Example:
 
     ```python
