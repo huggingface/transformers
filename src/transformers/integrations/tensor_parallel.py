@@ -55,7 +55,7 @@ def initialize_tensor_parallelism(
         # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
         device_type = torch._C._get_accelerator().type
         if device_type == "mps":
-            device_type = "cpu"  # fallback
+            raise RuntimeError("Tensor parallelism is not supported on MPS devices.")
         current_device = getattr(torch, device_type)
         if not torch.distributed.is_initialized():
             try:
