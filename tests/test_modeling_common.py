@@ -47,7 +47,7 @@ from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.core_model_loading import WeightRenaming, process_target_pattern
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchExporter
-from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
+from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter, fix_onnx_for_ort
 from transformers.exporters.utils import get_leaf_tensors, prepare_for_export
 from transformers.integrations import HfDeepSpeedConfig
 from transformers.integrations.deepspeed import (
@@ -4214,6 +4214,7 @@ class ModelTesterMixin:
                     continue
 
                 set_seed(1234)
+                fix_onnx_for_ort(onnx_program)
                 onnx_outputs = onnx_program(**copy.deepcopy(inputs_dict))
                 onnx_names = (re.sub(r"^output\.", "", node.name) for node in onnx_program.model_proto.graph.output)
                 onnx_outputs = dict(zip(onnx_names, onnx_outputs))

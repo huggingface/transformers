@@ -974,9 +974,13 @@ class Kosmos2TextTransformer(nn.Module):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if image_embeds is not None:
-            inputs_embeds[img_input_mask.to(dtype=torch.bool)] = image_embeds.to(inputs_embeds.device).view(
-                -1, image_embeds.size(-1)
-            )
+            bool_mask = img_input_mask.to(dtype=torch.bool)
+            flat_image_embeds = image_embeds.to(inputs_embeds.device).view(-1, image_embeds.size(-1))
+            # Build a position index for every slot via cumsum so we can gather
+            # without boolean indexing (avoids index_put→Where shape mismatch in ONNX).
+            # Positions at False slots are clamped to 0; those values are discarded by where.
+            positions = (bool_mask.reshape(-1).to(torch.int64).cumsum(0) - 1).clamp(min=0).view(bool_mask.shape)
+            inputs_embeds = torch.where(bool_mask.unsqueeze(-1), flat_image_embeds[positions], inputs_embeds)
 
         inputs_embeds = inputs_embeds * self.embed_scale
 

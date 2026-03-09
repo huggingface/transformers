@@ -1746,7 +1746,9 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
             if mim_labels is not None:
                 mim_labels = self._resize_to_2d(mim_labels)
                 bool_masked_pos = self._resize_to_2d(bool_masked_pos)
-                mim_labels[bool_masked_pos.ne(True)] = self.ce_ignore_index
+                mim_labels = torch.where(
+                    bool_masked_pos.bool(), mim_labels, torch.full_like(mim_labels, self.ce_ignore_index)
+                )
 
                 sequence_for_image = sequence_for_image[:, -mim_labels.size(1) :, :]
                 masked_tokens = mim_labels.ne(self.ce_ignore_index)
@@ -1785,11 +1787,10 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
 
             if itm_labels is not None:
                 pos_pairs = itm_labels.ne(0)
-                pos_mask = torch.where(
-                    pos_pairs.any().unsqueeze(0).expand_as(pos_pairs),
-                    pos_pairs,
-                    torch.ones_like(pos_pairs, dtype=torch.bool),
-                )
+                # Use boolean ops instead of torch.where to avoid Where(cond,bool,bool)
+                # which ORT's CUDA EP rejects.  Semantics: if any positive pair exists,
+                # keep pos_pairs; otherwise treat every sample as positive (all True).
+                pos_mask = pos_pairs | ~pos_pairs.any().unsqueeze(0).expand_as(pos_pairs)
                 if return_loss:
                     itm_loss = nn.functional.cross_entropy(itm_logits, itm_labels)
                     itm_loss *= self.itm_weight
@@ -1813,7 +1814,9 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
             if mim_labels is not None:
                 mim_labels = self._resize_to_2d(mim_labels)
                 bool_masked_pos = self._resize_to_2d(bool_masked_pos)
-                mim_labels[bool_masked_pos.ne(True)] = self.ce_ignore_index
+                mim_labels = torch.where(
+                    bool_masked_pos.bool(), mim_labels, torch.full_like(mim_labels, self.ce_ignore_index)
+                )
 
                 masked_tokens = mim_labels.ne(self.ce_ignore_index)
                 mim_labels_filtered = mim_labels[masked_tokens]

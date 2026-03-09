@@ -53,6 +53,7 @@ ONNX_EXTREMELY_INACCURATE_MODEL_TYPES: set[str] = {
     "parakeet_ctc",  # 100% NaN in logits
     "parakeet_encoder",  # 100% NaN in last_hidden_state
     "patchtst",  # NaN loss output
+    "pp_doclayout_v2",  # 68.3% mismatch in enc_topk_bboxes (non-deterministic top-k selection)
     "pp_doclayout_v3",  # 68.3% mismatch in enc_topk_bboxes
     "d_fine",  # 43.3% mismatch in enc_topk_bboxes (non-deterministic top-k)
     "mm-grounding-dino",  # 25% mismatch in encoder_pred_boxes (non-deterministic top-k selection)
@@ -110,18 +111,31 @@ class OnnxExporter(DynamoExporter):
                 export_params=self.export_config.export_params,
                 optimize=self.export_config.optimize,
             )
-            # ORT's CUDA EP rejects TopK nodes that don't have sorted=1 explicitly
-            # set (e.g. nodes emitted from aten.sort.default which onnxscript translates
-            # to TopK without setting the attribute).  Force sorted=1 on every TopK node
-            # in the IR; this is always correct since sort/topk callers using sorted=False
-            # only care about the selected set, not ordering.
-            import onnxscript.ir as onnx_ir
-
-            for ir_node in onnx_program.model.graph.all_nodes():
-                if ir_node.op_type == "TopK":
-                    ir_node.attributes["sorted"] = onnx_ir.Attr("sorted", onnx_ir.AttributeType.INT, 1)
-
         return onnx_program
+
+
+def fix_onnx_for_ort(onnx_program: "ONNXProgram") -> None:
+    """Patch an exported ONNXProgram in-place for ORT compatibility.
+
+    ORT's CUDA EP rejects ``TopK`` nodes that have no ``sorted`` attribute
+    (nodes emitted from ``aten.sort.default`` are translated to ``TopK``
+    without setting it).  Every ``TopK`` node is unconditionally set to
+    ``sorted=1``; this is always correct because callers that use
+    ``sorted=False`` only care about the selected set, not its order.
+
+    Call this function after :meth:`OnnxExporter.export` and before running ORT
+    inference (i.e. before ``onnx_program(...)``).
+    """
+    import onnxscript.ir as onnx_ir
+
+    def _fix_graph(graph_like: "onnx_ir.Graph") -> None:
+        for ir_node in list(graph_like.all_nodes()):
+            if ir_node.op_type == "TopK":
+                ir_node.attributes["sorted"] = onnx_ir.Attr("sorted", onnx_ir.AttributeType.INT, 1)
+
+    _fix_graph(onnx_program.model.graph)
+    for func in onnx_program.model.functions.values():
+        _fix_graph(func)
 
 
 # ── per-node ONNX sanitisation fixers ─────────────────────────────────────────
@@ -162,103 +176,11 @@ def _onnx_fix_detach_inplace(gm: "torch.fx.GraphModule", node: "torch.fx.Node") 
     return True
 
 
-def _onnx_fix_index_put_bool_mask(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
-    """Rewrite ``index_put(self, [bool_mask], values)`` → cumsum-gather-where.
-
-    ``tensor[bool_mask] = values`` lowers ``aten.index.Tensor`` to a ``values``
-    tensor of shape ``(n_true, D)``.  The standard ONNX translation emits
-    ``Where(mask, values, self)`` which ORT rejects because ``(n_true, D)``
-    cannot broadcast against ``(B, S, D)``.  The cumsum approach maps every
-    sequence position to its offset in ``values`` without changing the result.
-    Handles both the in-place (``index_put_``) and out-of-place (``index_put``)
-    variants; the non-boolean in-place case falls through to
-    ``_onnx_fix_index_put_inplace``.
-    """
-    if node.target not in (torch.ops.aten.index_put_.default, torch.ops.aten.index_put.default):
-        return False
-    self_arg, indices_list, values_arg = node.args[0], node.args[1], node.args[2]
-    accumulate = node.args[3] if len(node.args) > 3 else False
-    if (
-        accumulate
-        or len(indices_list) != 1
-        or not isinstance(indices_list[0], torch.fx.Node)
-        or indices_list[0].meta.get("val") is None
-        or indices_list[0].meta["val"].dtype != torch.bool
-    ):
-        return False
-    mask_node = indices_list[0]
-    mask_shape = list(mask_node.meta["val"].shape)
-    self_val = self_arg.meta.get("val")
-    values_val = values_arg.meta.get("val") if isinstance(values_arg, torch.fx.Node) else None
-    if self_val is not None:
-        extra_dims = len(self_val.shape) - len(mask_shape)
-    elif values_val is not None:
-        extra_dims = max(0, values_val.ndim - 1)
-    else:
-        extra_dims = 0
-    with gm.graph.inserting_before(node):
-        expanded_mask = mask_node
-        for _ in range(extra_dims):
-            expanded_mask = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(expanded_mask, -1))
-        flat = gm.graph.call_function(torch.ops.aten.flatten.using_ints, args=(mask_node,))
-        flat_int = gm.graph.call_function(
-            torch.ops.aten._to_copy.default, args=(flat,), kwargs={"dtype": torch.int64}
-        )
-        cs = gm.graph.call_function(torch.ops.aten.cumsum.default, args=(flat_int, 0))
-        cs_m1 = gm.graph.call_function(torch.ops.aten.add.Scalar, args=(cs, -1))
-        positions_flat = gm.graph.call_function(torch.ops.aten.clamp.default, args=(cs_m1,), kwargs={"min": 0})
-        # Build the shape from size.int nodes so step-2 re-tracing can track each
-        # dimension — passing raw SymInts from meta["val"].shape causes a "not tracked
-        # with proxy" error when the batch/seq dimension is symbolic.
-        dyn_shape = [
-            gm.graph.call_function(torch.ops.aten.size.int, args=(mask_node, i))
-            for i in range(len(mask_shape))
-        ]
-        positions = gm.graph.call_function(torch.ops.aten.view.default, args=(positions_flat, dyn_shape))
-        if values_val is not None and values_val.ndim == 0:
-            # 0-D scalar: unsqueeze to [1] so the standard gather path can be used.
-            # zeros_like(positions) ensures every slot indexes element 0 of the
-            # 1-element tensor (no out-of-bounds regardless of n_true).
-            # The constant scalar is lifted on CPU; move to self's device so the
-            # downstream index.Tensor and where nodes see uniform devices.
-            effective_values = gm.graph.call_function(
-                torch.ops.aten.unsqueeze.default, args=(values_arg, 0)
-            )
-            if self_val is not None and values_val.device != self_val.device:
-                effective_values = gm.graph.call_function(
-                    torch.ops.aten._to_copy.default,
-                    args=(effective_values,),
-                    kwargs={"device": self_val.device},
-                )
-            positions_for_index = gm.graph.call_function(
-                torch.ops.aten.zeros_like.default, args=(positions,)
-            )
-            effective_ndim = 1
-        else:
-            effective_values = values_arg
-            positions_for_index = positions
-            effective_ndim = values_val.ndim if values_val is not None else 1
-        gathered = gm.graph.call_function(
-            torch.ops.aten.index.Tensor, args=(effective_values, [positions_for_index])
-        )
-        # If values has fewer dims than self (e.g. 1-D scalar-per-true-slot with
-        # a multi-dim self), the gather produces shape mask_shape instead of
-        # self_shape.  Unsqueeze trailing dims so Where can broadcast correctly.
-        gather_extra = extra_dims - max(0, effective_ndim - 1)
-        for _ in range(gather_extra):
-            gathered = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(gathered, -1))
-        result = gm.graph.call_function(torch.ops.aten.where.self, args=(expanded_mask, gathered, self_arg))
-    node.replace_all_uses_with(result)
-    gm.graph.erase_node(node)
-    return True
-
-
 def _onnx_fix_index_put_inplace(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
-    """Make non-boolean ``aten.index_put_`` out-of-place.
+    """Make ``aten.index_put_`` out-of-place.
 
-    Runs after ``_onnx_fix_index_put_bool_mask``, so any surviving
-    ``index_put_`` node is non-boolean.  The in-place form causes AOT autograd
-    to regenerate ``alias → detach_`` during step 2 re-tracing.
+    The in-place form causes AOT autograd to regenerate ``alias → detach_``
+    during step 2 re-tracing.
     """
     if node.target is not torch.ops.aten.index_put_.default:
         return False
@@ -267,24 +189,6 @@ def _onnx_fix_index_put_inplace(gm: "torch.fx.GraphModule", node: "torch.fx.Node
     node.replace_all_uses_with(new)
     gm.graph.erase_node(node)
     return True
-
-
-def _onnx_fix_topk_sorted(_gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
-    """Force ``sorted=True`` in ``aten.topk`` so ORT's CUDA EP accepts the node.
-
-    ``aten.topk`` translates directly to ONNX ``TopK``.  ORT's CUDA execution
-    provider rejects ``TopK(sorted=False)`` (provider type not set), while
-    ``TopK(sorted=True)`` is accepted by both CPU and CUDA EP.  Forcing
-    ``sorted=True`` is safe: the top-k *set* is unchanged; only the tie-breaking
-    order of equal elements may differ, which callers using ``sorted=False`` do
-    not rely on by definition.
-    """
-    if node.target is not torch.ops.aten.topk.default:
-        return False
-    # aten.topk positional arg 4 is `sorted` (self, k, dim, largest, sorted).
-    if len(node.args) >= 5 and node.args[4] is False:
-        node.update_arg(4, True)
-    return False  # node stays; ONNX translation handles it
 
 
 def _onnx_fix_sort_stable(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
@@ -320,9 +224,7 @@ def _onnx_fix_sort_stable(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> 
 _ONNX_FX_NODE_FIXES = [
     _onnx_fix_alias,
     _onnx_fix_detach_inplace,
-    _onnx_fix_index_put_bool_mask,
     _onnx_fix_index_put_inplace,
-    _onnx_fix_topk_sorted,
     _onnx_fix_sort_stable,
 ]
 
