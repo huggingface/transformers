@@ -665,7 +665,10 @@ class Qwen3_5IntegrationTest(unittest.TestCase):
             dtype=torch.float32,
             device="cpu",
         )
-        self.assertTrue(torch.allclose(expected_pixel_slice, inputs.pixel_values[:4, :3], atol=3e-3))
+        self.assertListEqual(
+            [round(x, 3) for x in expected_pixel_slice.flatten().tolist()],
+            [round(x, 3) for x in inputs.pixel_values[:4, :3].flatten().tolist()],
+        )
 
         inputs = inputs.to(model.device)
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -707,7 +710,10 @@ class Qwen3_5IntegrationTest(unittest.TestCase):
             dtype=torch.float32,
             device="cpu",
         )
-        self.assertTrue(torch.allclose(expected_video_slice, inputs.pixel_values_videos[:4, :3], atol=3e-3))
+        self.assertListEqual(
+            [round(x, 3) for x in expected_video_slice.flatten().tolist()],
+            [round(x, 3) for x in inputs.pixel_values_videos[:4, :3].flatten().tolist()],
+        )
 
         inputs = inputs.to(model.device)
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
