@@ -20,9 +20,10 @@ import unittest
 from parameterized import parameterized
 
 from transformers import (
+    PPLCNetBackbone,
     PPLCNetConfig,
     PPLCNetForImageClassification,
-    PPLCNetImageProcessor,
+    PPLCNetImageProcessorFast,
     is_torch_available,
     is_vision_available,
 )
@@ -34,6 +35,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -111,6 +113,16 @@ class PPLCNetModelTester:
         result = model(pixel_values)
 
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
+
+@require_torch
+class PPLCNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
+    all_model_classes = (PPLCNetBackbone,) if is_torch_available() else ()
+    has_attentions = False
+    config_class = PPLCNetConfig
+
+    def setUp(self):
+        self.model_tester = PPLCNetModelTester()
 
 
 @require_torch
@@ -280,7 +292,7 @@ class PPLCNetModelIntegrationTest(unittest.TestCase):
         model_path = "/workspace/model_weight_torch/PP-LCNet_x1_0_doc_ori"
 
         self.model = PPLCNetForImageClassification.from_pretrained(model_path).to(torch_device)
-        self.image_processor = PPLCNetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
+        self.image_processor = PPLCNetImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
         path = "/workspace/PaddleX/paddlex/inference/models/image_classification/modeling/doc_ori/img_rot180_demo.jpg"
         self.image = Image.open(path)
 

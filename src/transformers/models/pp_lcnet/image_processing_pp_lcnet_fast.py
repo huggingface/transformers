@@ -76,7 +76,6 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
                 Defaults to None (returns PyTorch tensors).
             interpolation (Optional[InterpolationMode]): TorchVision interpolation mode for resizing. Defaults to None.
             resample (Optional[PILImageResampling]): Unused (for compatibility with base class). Defaults to None.
-            **kwargs: Additional unused keyword arguments (for compatibility).
 
         Returns:
             BatchFeature: Preprocessed image batch with key "pixel_values" containing the processed PyTorch tensors.
