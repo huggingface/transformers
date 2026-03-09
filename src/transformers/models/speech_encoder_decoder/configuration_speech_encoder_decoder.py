@@ -15,30 +15,22 @@
 
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="")
 class SpeechEncoderDecoderConfig(PreTrainedConfig):
     r"""
-    [`SpeechEncoderDecoderConfig`] is the configuration class to store the configuration of a
-    [`SpeechEncoderDecoderModel`]. It is used to instantiate an Encoder Decoder model according to the specified
-    arguments, defining the encoder and decoder configs.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        kwargs (*optional*):
-            Dictionary of keyword arguments. Notably:
-
-                - **encoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
-                  the encoder config.
-                - **decoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
-                  the decoder config.
+    kwargs (*optional*):
+        Dictionary of keyword arguments. Notably:
+            - **encoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
+              the encoder config.
+            - **decoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
+              the decoder config.
 
     Examples:
 
