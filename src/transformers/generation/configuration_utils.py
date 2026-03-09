@@ -1657,7 +1657,7 @@ class ContinuousBatchingConfig:
 
         # Else if use_cuda_graph is specified, we follow the user's choice
         elif self.use_cuda_graph is not None:
-            pass # nothing to do but catch this case and wait for the function to return later
+            pass  # nothing to do but catch this case and wait for the function to return later
 
         # Else if the user specified a parameter related to cuda graphs, we activate cuda graphs
         elif self.q_padding_interval_size or self.kv_padding_interval_size or self.max_cached_graphs:
