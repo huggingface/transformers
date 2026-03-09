@@ -15,9 +15,9 @@ import torch.nn.functional as F
 
 from transformers.cache_utils import Cache
 from transformers.generation import GenerationMixin
-from transformers.modeling_outputs import ModelOutput
+from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.modeling_utils import PreTrainedModel
-from transformers.utils import can_return_tuple
+from transformers.utils import auto_docstring, can_return_tuple
 from transformers.utils.generic import check_model_inputs
 
 from ...activations import ACT2FN
@@ -26,11 +26,10 @@ from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hu
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs
 from ...utils.generic import maybe_autocast
 from .configuration_pp_chart2table import PPChart2TableConfig, PPChart2TableTextConfig, PPChart2TableVisionConfig
 
@@ -346,6 +345,11 @@ class PPChart2TableVisionNeck(nn.Module):
         return hidden_states
 
 
+@auto_docstring(
+    custom_intro="""
+    
+    """
+)
 class PPChart2TableVisionPreTrainedModel(PreTrainedModel):
     r"""
     Base class for all PP-Chart2Table vision models, inheriting from Hugging Face `PreTrainedModel`.
@@ -393,6 +397,11 @@ class PPChart2TableVisionPreTrainedModel(PreTrainedModel):
     }
 
 
+@auto_docstring(
+    custom_intro="""
+    
+    """
+)
 class PPChart2TableVisionModel(PPChart2TableVisionPreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = "image"
@@ -661,7 +670,11 @@ class PPChart2TableTextDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    
+    """
+)
 class PPChart2TableTextPreTrainedModel(PreTrainedModel):
     config: PPChart2TableTextConfig
     base_model_prefix = "model"
@@ -837,7 +850,7 @@ class PPChart2TableTextModel(PPChart2TableTextPreTrainedModel):
 
 
 @dataclass
-class PPChart2TableModelOutputWithPast(ModelOutput):
+class PPChart2TableModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     Output class for PPChart2Table multimodal model's forward pass, extending Hugging Face `ModelOutput`.
 
@@ -855,15 +868,11 @@ class PPChart2TableModelOutputWithPast(ModelOutput):
             Tuple of attention weights from each layer of the text decoder (for debugging/analysis).
     """
 
-    past_key_values: Optional[Cache] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
 @dataclass
-class PPChart2TableCausalLMOutputWithPast(ModelOutput):
+class PPChart2TableCausalLMOutputWithPast(BaseModelOutputWithPast):
     r"""
     Output class for PP-Chart2Table conditional generation model's forward pass.
 
@@ -873,24 +882,18 @@ class PPChart2TableCausalLMOutputWithPast(ModelOutput):
     Attributes:
         logits (`Optional[torch.FloatTensor]`, defaults to `None`):
             Language modeling logits (shape: `[B, seq_len, vocab_size]`), output from the LM head.
-        past_key_values (`Optional[Cache]`, defaults to `None`):
-            Cached attention key/value pairs (inherited from base model output).
-        last_hidden_state (`Optional[torch.FloatTensor]`, defaults to `None`):
-            Final hidden states from the text decoder (inherited from base model output).
-        hidden_states (`Optional[tuple[torch.FloatTensor]]`, defaults to `None`):
-            Tuple of decoder layer hidden states (inherited from base model output).
-        attentions (`Optional[tuple[torch.FloatTensor]]`, defaults to `None`):
-            Tuple of decoder layer attention weights (inherited from base model output).
     """
 
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: Optional[torch.FloatTensor] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
+@auto_docstring(
+    custom_intro="""
+    
+    """
+)
 class PPChart2TablePreTrainedModel(PreTrainedModel):
     r"""
     Base class for all PP-Chart2Table multimodal models, inheriting from Hugging Face `PreTrainedModel`.
@@ -937,6 +940,11 @@ class PPChart2TablePreTrainedModel(PreTrainedModel):
     }
 
 
+@auto_docstring(
+    custom_intro="""
+    Core PP-Chart2Table multimodal model (vision encoder + text decoder) for chart-to-table parsing.
+    """
+)
 class PPChart2TableModel(PPChart2TablePreTrainedModel):
     r"""
     Core PP-Chart2Table multimodal model (vision encoder + text decoder) for chart-to-table parsing.
@@ -1094,6 +1102,12 @@ class PPChart2TableModel(PPChart2TablePreTrainedModel):
         )
 
 
+@auto_docstring(
+    custom_intro="""
+    PP-Chart2Table model for conditional generation (table text generation from chart images),
+    extending the core model with a language modeling (LM) head and generation utilities.
+    """
+)
 class PPChart2TableForConditionalGeneration(PPChart2TablePreTrainedModel, GenerationMixin):
     r"""
     PP-Chart2Table model for conditional generation (table text generation from chart images),

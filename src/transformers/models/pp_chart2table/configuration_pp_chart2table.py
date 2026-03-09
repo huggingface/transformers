@@ -8,8 +8,19 @@ from typing import Optional
 
 from transformers.configuration_utils import PreTrainedConfig, layer_type_validation
 from transformers.modeling_rope_utils import RopeParameters
+from transformers.utils import auto_docstring
 
 
+@auto_docstring(
+    custom_intro="""
+    This configuration class defines all the hyperparameters for the vision component
+    of the PP-Chart2Table model, which is responsible for processing chart images
+    and extracting visual features for table structure recognition and content extraction.
+    PaddlePaddle/PP-Chart2Table_safetensors [PaddlePaddle/PP-Chart2Table_safetensors]
+    (https://huggingface.co/PaddlePaddle/PP-Chart2Table_safetensors)
+    """,
+    checkpoint="PaddlePaddle/PP-Chart2Table_safetensors",
+)
 class PPChart2TableVisionConfig(PreTrainedConfig):
     """
     Configuration class for the vision backbone of PP-Chart2Table model.
@@ -94,6 +105,11 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
+@auto_docstring(
+    custom_intro="""
+    
+    """,
+)
 class PPChart2TableTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PPChart2TableTextModel`]. It is used to instantiate a
@@ -248,6 +264,11 @@ class PPChart2TableTextConfig(PreTrainedConfig):
         )
 
 
+@auto_docstring(
+    custom_intro="""
+    
+    """
+)
 class PPChart2TableConfig(PreTrainedConfig):
     r"""
     This is the main configuration class to store the configuration of a [PPChart2TableModel] or [PPChart2TableForConditionalGeneration].

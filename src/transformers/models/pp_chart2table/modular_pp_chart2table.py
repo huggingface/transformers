@@ -10,20 +10,8 @@ from transformers.cache_utils import Cache
 from transformers.configuration_utils import PreTrainedConfig, layer_type_validation
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.generation import GenerationMixin
-from transformers.image_processing_utils import BaseImageProcessor
 from transformers.image_processing_utils_fast import BaseImageProcessorFast
-from transformers.image_transforms import flip_channel_order, resize, to_channel_dimension_format
-from transformers.image_utils import (
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    infer_channel_dimension_format,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
-)
-from transformers.modeling_outputs import ModelOutput
+from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.modeling_rope_utils import RopeParameters
 from transformers.modeling_utils import PreTrainedModel
 from transformers.models.got_ocr2.modeling_got_ocr2 import (
@@ -40,13 +28,27 @@ from transformers.models.qwen2.modeling_qwen2 import (
     Qwen2Model,
     Qwen2PreTrainedModel,
 )
-from transformers.processing_utils import ProcessorMixin, TensorType
 from transformers.utils import (
+    auto_docstring,
     can_return_tuple,
-    filter_out_non_signature_kwargs,
+    logging,
 )
+from transformers.processing_utils import ProcessorMixin, TensorType
+from transformers.utils import can_return_tuple
+
+logger = logging.get_logger(__name__)
 
 
+@auto_docstring(
+    custom_intro="""
+    This configuration class defines all the hyperparameters for the vision component
+    of the PP-Chart2Table model, which is responsible for processing chart images
+    and extracting visual features for table structure recognition and content extraction.
+    PaddlePaddle/PP-Chart2Table_safetensors [PaddlePaddle/PP-Chart2Table_safetensors]
+    (https://huggingface.co/PaddlePaddle/PP-Chart2Table_safetensors)
+    """,
+    checkpoint="PaddlePaddle/PP-Chart2Table_safetensors",
+)
 class PPChart2TableVisionConfig(PreTrainedConfig):
     """
     Configuration class for the vision backbone of PP-Chart2Table model.
@@ -131,6 +133,12 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
+@auto_docstring(
+    custom_intro="""
+    
+    """,
+
+)
 class PPChart2TableTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PPChart2TableTextModel`]. It is used to instantiate a
@@ -285,6 +293,11 @@ class PPChart2TableTextConfig(PreTrainedConfig):
         )
 
 
+@auto_docstring(
+    custom_intro="""
+    
+    """
+)
 class PPChart2TableConfig(PreTrainedConfig):
     r"""
     This is the main configuration class to store the configuration of a [PPChart2TableModel] or [PPChart2TableForConditionalGeneration].
@@ -389,142 +402,11 @@ class PPChart2TableConfig(PreTrainedConfig):
 
         super().__init__(**kwargs)
 
+@auto_docstring(
+    custom_intro="""
 
-class PPChart2TableImageProcessor(BaseImageProcessor):
-    r"""
-    Image processor for the PP-Chart2Table multimodal model, optimized for chart image preprocessing tasks.
-
-    This processor handles the complete preprocessing pipeline for chart images, including resizing, rescaling,
-    normalization, and channel dimension reordering, tailored to the input requirements of the PP-Chart2Table vision encoder.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the input images to the specified `size`.
-        size (`dict[str, int]`, *optional*, defaults to `{"height": 256, "width": 256}`):
-            Dictionary containing the target height and width for resizing. Format: `{"height": int, "width": int}`.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-            Resampling filter to use when resizing images (e.g., BICUBIC, BILINEAR).
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the pixel values from the range [0, 255] to [0, 1] using `rescale_factor`.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Factor to apply for rescaling pixel values (e.g., 1/255 scales 0-255 to 0-1).
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the input images using `image_mean` and `image_std`.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `[0.406, 0.456, 0.485]`):
-            Mean values for image normalization (per channel, RGB order).
-        image_std (`float` or `list[float]`, *optional*, defaults to `[0.225, 0.224, 0.229]`):
-            Standard deviation values for image normalization (per channel, RGB order).
-        patch_size (`int`, *optional*, defaults to 16):
-            Size of image patches used by the PP-Chart2Table vision encoder (for alignment with model input).
-        merge_size (`int`, *optional*, defaults to 4):
-            Size factor for merging image patches (specific to PP-Chart2Table's vision processing pipeline).
     """
-
-    model_input_names = ["pixel_values"]
-
-    def __init__(
-        self,
-        do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = PILImageResampling.BICUBIC,
-        do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = [0.406, 0.456, 0.485],
-        image_std: Optional[Union[float, list[float]]] = [0.225, 0.224, 0.229],
-        patch_size: int = 16,
-        merge_size: int = 4,
-        **kwargs,
-    ) -> None:
-        super().__init__(**kwargs)
-        size = size if size is not None else {"height": 256, "width": 256}
-
-        self.do_resize = do_resize
-        self.size = size
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.resample = resample
-        self.patch_size = patch_size
-        self.merge_size = merge_size
-
-    @filter_out_non_signature_kwargs()
-    def preprocess(
-        self,
-        images: ImageInput,
-        size: Optional[dict[str, int]] = None,
-        do_resize: Optional[bool] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[Union[int, float]] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        return_tensors: Optional[Union[TensorType, str]] = None,
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> BatchFeature:
-        size = self.size if size is None else size
-        do_resize = self.do_resize if do_resize is None else do_resize
-        resample = self.resample if resample is None else resample
-        do_rescale = self.do_rescale if do_rescale is None else do_rescale
-        rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
-        do_normalize = self.do_normalize if do_normalize is None else do_normalize
-        image_mean = self.image_mean if image_mean is None else image_mean
-        image_std = self.image_std if image_std is None else image_std
-
-        images = make_flat_list_of_images(images)
-
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            size=size,
-            do_resize=do_resize,
-            resample=resample,
-        )
-
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-
-        # All transformations expect numpy arrays
-        images = [to_numpy_array(image) for image in images]
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(images[0])
-
-        # transformations
-        resize_images = []
-        if do_resize:
-            for image in images:
-                image = resize(
-                    image,
-                    size=(size["height"], size["width"]),
-                    resample=resample,
-                    input_data_format=input_data_format,
-                )
-                resize_images.append(image)
-            images = resize_images
-
-        if do_rescale:
-            images = [self.rescale(image, rescale_factor, input_data_format=input_data_format) for image in images]
-
-        if do_normalize:
-            images = [
-                self.normalize(image, image_mean, image_std, input_data_format=input_data_format) for image in images
-            ]
-        images = [flip_channel_order(image, input_data_format=input_data_format) for image in images]
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
-
-        encoded_inputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
-        return encoded_inputs
-
-
+)
 class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
     r"""
     Fast image processor for the PP-Chart2Table multimodal model, optimized for GPU-accelerated chart image preprocessing.
@@ -603,12 +485,23 @@ class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
         return encoded_inputs
 
 
+@auto_docstring(
+    custom_intro="""
+    A multi-modal processor for the PPChart2Table model, combining image preprocessing and text tokenization
+    capabilities to handle chart-to-table conversion tasks.
+    
+    This processor integrates `PPChart2TableImageProcessorFast` for chart image preprocessing (e.g., patch-based 
+    resizing) and `Qwen2Tokenizer` for text prompt construction/tokenization. It encapsulates the end-to-end 
+    processing pipeline from raw chart images + text instructions to model-ready input tensors, and also provides 
+    postprocessing logic to decode model outputs back to human-readable table text.
+    """
+)
 class PPChart2TableProcessor(ProcessorMixin):
     r"""
-    [`PPChart2TableProcessor`] offers all the functionalities of [`PPChart2TableImageProcessor`] and [`Qwen2Tokenizer`]. See the
+    [`PPChart2TableProcessor`] offers all the functionalities of [`PPChart2TableImageProcessorFast`] and [`Qwen2Tokenizer`]. See the
     [`~PPChart2TableProcessor.__call__`] and [`~PPChart2TableProcessor.decode`] for more information.
     Args:
-        image_processor ([`PPChart2TableImageProcessor`], *optional*):
+        image_processor ([`PPChart2TableImageProcessorFast`], *optional*):
             The image processor is a required input.
         tokenizer ([`Qwen2Tokenizer`], *optional*):
             The tokenizer is a required input.
@@ -713,6 +606,11 @@ class PPChart2TableVisionNeck(GotOcr2VisionNeck):
         self.layer_norm2 = PPChart2TableVisionLayerNorm(config.output_channels, data_format="channels_first")
 
 
+@auto_docstring(
+    custom_intro="""
+    
+    """
+)
 class PPChart2TableVisionPreTrainedModel(PreTrainedModel):
     r"""
     Base class for all PP-Chart2Table vision models, inheriting from Hugging Face `PreTrainedModel`.
@@ -760,6 +658,11 @@ class PPChart2TableVisionPreTrainedModel(PreTrainedModel):
     }
 
 
+@auto_docstring(
+    custom_intro="""
+    
+    """
+)
 class PPChart2TableVisionModel(PPChart2TableVisionPreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = "image"
@@ -815,6 +718,11 @@ class PPChart2TableTextDecoderLayer(Qwen2DecoderLayer):
     pass
 
 
+@auto_docstring(
+    custom_intro="""
+    
+    """
+)
 class PPChart2TableTextPreTrainedModel(Qwen2PreTrainedModel):
     pass
 
@@ -824,7 +732,7 @@ class PPChart2TableTextModel(Qwen2Model):
 
 
 @dataclass
-class PPChart2TableModelOutputWithPast(ModelOutput):
+class PPChart2TableModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     Output class for PPChart2Table multimodal model's forward pass, extending Hugging Face `ModelOutput`.
 
@@ -841,16 +749,11 @@ class PPChart2TableModelOutputWithPast(ModelOutput):
         attentions (`Optional[tuple[torch.FloatTensor]]`, defaults to `None`):
             Tuple of attention weights from each layer of the text decoder (for debugging/analysis).
     """
-
-    past_key_values: Optional[Cache] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
 @dataclass
-class PPChart2TableCausalLMOutputWithPast(ModelOutput):
+class PPChart2TableCausalLMOutputWithPast(BaseModelOutputWithPast):
     r"""
     Output class for PP-Chart2Table conditional generation model's forward pass.
 
@@ -860,24 +763,18 @@ class PPChart2TableCausalLMOutputWithPast(ModelOutput):
     Attributes:
         logits (`Optional[torch.FloatTensor]`, defaults to `None`):
             Language modeling logits (shape: `[B, seq_len, vocab_size]`), output from the LM head.
-        past_key_values (`Optional[Cache]`, defaults to `None`):
-            Cached attention key/value pairs (inherited from base model output).
-        last_hidden_state (`Optional[torch.FloatTensor]`, defaults to `None`):
-            Final hidden states from the text decoder (inherited from base model output).
-        hidden_states (`Optional[tuple[torch.FloatTensor]]`, defaults to `None`):
-            Tuple of decoder layer hidden states (inherited from base model output).
-        attentions (`Optional[tuple[torch.FloatTensor]]`, defaults to `None`):
-            Tuple of decoder layer attention weights (inherited from base model output).
     """
 
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: Optional[torch.FloatTensor] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
+@auto_docstring(
+    custom_intro="""
+    
+    """
+)
 class PPChart2TablePreTrainedModel(PreTrainedModel):
     r"""
     Base class for all PP-Chart2Table multimodal models, inheriting from Hugging Face `PreTrainedModel`.
@@ -924,6 +821,11 @@ class PPChart2TablePreTrainedModel(PreTrainedModel):
     }
 
 
+@auto_docstring(
+    custom_intro="""
+    Core PP-Chart2Table multimodal model (vision encoder + text decoder) for chart-to-table parsing.
+    """
+)
 class PPChart2TableModel(PPChart2TablePreTrainedModel):
     r"""
     Core PP-Chart2Table multimodal model (vision encoder + text decoder) for chart-to-table parsing.
@@ -1081,6 +983,12 @@ class PPChart2TableModel(PPChart2TablePreTrainedModel):
         )
 
 
+@auto_docstring(
+    custom_intro="""
+    PP-Chart2Table model for conditional generation (table text generation from chart images),
+    extending the core model with a language modeling (LM) head and generation utilities.
+    """
+)
 class PPChart2TableForConditionalGeneration(PPChart2TablePreTrainedModel, GenerationMixin):
     r"""
     PP-Chart2Table model for conditional generation (table text generation from chart images),
@@ -1235,7 +1143,6 @@ __all__ = [
     "PPChart2TableVisionModel",
     "PPChart2TableVisionConfig",
     "PPChart2TableTextConfig",
-    "PPChart2TableImageProcessor",
     "PPChart2TableImageProcessorFast",
     "PPChart2TableProcessor",
 ]

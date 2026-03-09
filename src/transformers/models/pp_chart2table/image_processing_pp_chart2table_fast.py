@@ -12,8 +12,14 @@ from torchvision.transforms.v2.functional import InterpolationMode
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_processing_utils_fast import BaseImageProcessorFast
 from transformers.processing_utils import TensorType
+from transformers.utils import auto_docstring
 
 
+@auto_docstring(
+    custom_intro="""
+
+    """
+)
 class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
     r"""
     Fast image processor for the PP-Chart2Table multimodal model, optimized for GPU-accelerated chart image preprocessing.
