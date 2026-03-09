@@ -83,16 +83,6 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Quang tổng hợp hay gọi tắt là quang hợp là quá trình thu nhận và chuyển hóa năng lượng ánh sáng Mặt trời của thực vật,
-tảo và một số vi khuẩn để tạo ra hợp chất hữu cơ phục vụ bản thân cũng như làm nguồn thức ăn cho hầu hết các sinh vật
-trên Trái Đất. Quang hợp trong thực vật thường liên quan đến chất tố diệp lục màu xanh lá cây và tạo ra oxy như một sản phẩm phụ" | \
-transformers run --task summarization --model vinai/bartpho-word --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 ## Notes
