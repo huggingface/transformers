@@ -153,7 +153,6 @@ class GraniteDoclingHybridProcessor(Idefics3Processor):
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
         audio=None,
         videos=None,
-        image_seq_len: int | None = None,
         **kwargs: Unpack[GraniteDoclingHybridProcessorKwargs],
     ) -> BatchEncoding:
         """
@@ -171,9 +170,6 @@ class GraniteDoclingHybridProcessor(Idefics3Processor):
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
                 Wherever an image token, `<image>` is encountered it is expanded to
                 `<fake_token_around_image>` + `<row_x_col_y>` + `<image>` * `image_seq_len` * <fake_token_around_image>`.
-            image_seq_len (`int`, *optional*):
-                The length of the image sequence. If not provided, the default value of self.image_seq_len is used.
-                image_seq_len should be equal to int(((image_size // patch_size) ** 2) / (scale_factor**2))
             return_tensors (`Union[str, TensorType]`, *optional*):
                 If set, will return tensors of a particular framework. See [`PreTrainedTokenizerFast.__call__`] for more
                 information.
@@ -187,7 +183,6 @@ class GraniteDoclingHybridProcessor(Idefics3Processor):
             **kwargs,
         )
 
-        image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
 
@@ -262,7 +257,7 @@ class GraniteDoclingHybridProcessor(Idefics3Processor):
                         image_prompt_string = get_image_prompt_string(
                             n_rows,
                             n_cols,
-                            image_seq_len,
+                            self.image_seq_len,
                             image_token=image_token,
                             fake_token_around_image=fake_image_token,
                             global_img_token=global_img_token,
