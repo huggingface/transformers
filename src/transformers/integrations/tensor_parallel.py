@@ -648,11 +648,11 @@ class TensorParallelLayer:
         self.device_mesh = device_mesh
         self.empty_param = empty_param
 
-    @staticmethod
-    def _prepare_input_fn(mod, inputs, device_mesh): ...
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
+        raise NotImplementedError
 
-    @staticmethod
-    def _prepare_output_fn(mod, outputs, device_mesh): ...
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
+        raise NotImplementedError
 
     def shard_tensor(
         self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
@@ -753,12 +753,10 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
     backward hook to all-reduce the parameter gradient.
     """
 
-    @staticmethod
-    def _prepare_input_fn(mod, inputs, device_mesh):
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
         return inputs
 
-    @staticmethod
-    def _prepare_output_fn(mod, outputs, device_mesh):
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
         return outputs
 
     def shard_tensor(self, param, tensor_idx=None, device=None, dtype=None):
@@ -1098,12 +1096,10 @@ class RouterParallel(TensorParallelLayer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    @staticmethod
-    def _prepare_input_fn(mod, inputs, device_mesh):
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
         return inputs[0] if inputs else inputs
 
-    @staticmethod
-    def _prepare_output_fn(mod, outputs, device_mesh):
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
         """
         Imagine if you had 4 tokens, top_k = 4, and 128experts.
         With EP = 8. The num_local_expert should be 128/8 = 16
@@ -1173,8 +1169,7 @@ class MoeTensorParalellExperts(TensorParallelLayer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    @staticmethod
-    def _prepare_input_fn(mod, inputs, device_mesh):
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
         # inputs = (hidden_states, top_k_index, top_k_weights)
         hidden_states = inputs[0]
         top_k_index = inputs[1]
@@ -1190,8 +1185,7 @@ class MoeTensorParalellExperts(TensorParallelLayer):
 
         return (hidden_states, top_k_index, top_k_weights)
 
-    @staticmethod
-    def _prepare_output_fn(mod, outputs, device_mesh):
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
         # all_reduce_forward to sum partial expert outputs across GPUs
         return all_reduce_forward(outputs, device_mesh)
 
@@ -1213,8 +1207,7 @@ class MoeIdentityExpertParallel(TensorParallelLayer):
     input by world_size to compensate.
     """
 
-    @staticmethod
-    def _prepare_input_fn(mod, inputs, device_mesh):
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
         input_tensor = inputs[0] if inputs else inputs
         # TODO(fmom): when 2D-device mesh, need to select a //-ism axis to divide the input tensor by.
         return input_tensor / device_mesh.size()
