@@ -117,7 +117,7 @@ class SpectrogramConfig:
     """Configuration for spectrogram extraction, composed of STFT and mel scale sub-configs."""
 
     stft_config: StftConfig = field(default_factory=StftConfig)
-    mel_scale_config: MelScaleConfig = field(default_factory=MelScaleConfig)
+    mel_scale_config: MelScaleConfig | None = None
     log_mode: str = "log10"
     chunk_length: int | None = None
     global_log_mel_max: float | None = None
@@ -155,7 +155,7 @@ class SpectrogramConfig:
     @classmethod
     def from_dict(cls, d: dict) -> "SpectrogramConfig":
         stft_config = StftConfig.from_dict(d["stft_config"]) if "stft_config" in d else StftConfig()
-        mel_scale_config = MelScaleConfig.from_dict(d["mel_scale_config"]) if "mel_scale_config" in d else MelScaleConfig()
+        mel_scale_config = MelScaleConfig.from_dict(d["mel_scale_config"]) if "mel_scale_config" in d else None
         return cls(
             stft_config=stft_config,
             mel_scale_config=mel_scale_config,
@@ -168,41 +168,6 @@ class SpectrogramConfig:
             waveform_scale=d.get("waveform_scale"),
         )
 
-
-@dataclass(frozen=True)
-class NormalizationConfig:
-    """Hashable dictionary to store audio normalization configuration."""
-
-    method: str = "zero_mean_unit_var"
-    normalize_before_pad: bool = True
-
-    def __getitem__(self, key):
-        if hasattr(self, key):
-            return getattr(self, key)
-        raise KeyError(f"Key {key} not found in NormalizationConfig.")
-
-    def __iter__(self):
-        for f in fields(self):
-            val = getattr(self, f.name)
-            if val is not None:
-                yield f.name, val
-
-    def __eq__(self, other):
-        if isinstance(other, dict):
-            return dict(self) == other
-        if isinstance(other, NormalizationConfig):
-            return tuple(getattr(self, f.name) for f in fields(self)) == tuple(
-                getattr(other, f.name) for f in fields(self)
-            )
-        return NotImplemented
-
-    def to_dict(self) -> dict:
-        return dict(self)
-
-    @classmethod
-    def from_dict(cls, d: dict) -> "NormalizationConfig":
-        valid_keys = {f.name for f in fields(cls)}
-        return cls(**{k: v for k, v in d.items() if k in valid_keys})
 
 
 def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np.ndarray:
