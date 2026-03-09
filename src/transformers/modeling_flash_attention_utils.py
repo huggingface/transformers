@@ -112,6 +112,7 @@ def _lazy_imports(
             from flash_attn_interface import flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache
         elif implementation == "flash_attention_4" or (implementation is None and is_fa4):
             from flash_attn.cute import flash_attn_func, flash_attn_varlen_func
+
             flash_attn_with_kvcache = None  # not supported yet
         # Kernels fallback
         else:

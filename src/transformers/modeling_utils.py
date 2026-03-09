@@ -1601,9 +1601,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 )
             # Minimum version (FA2 only)
             elif flash_attn_version == 2 and not is_flash_attn_greater_or_equal("2.3.3"):
-                raise ImportError(
-                    f"{preface} FlashAttention{flash_attn_version} requires at least version `2.3.3`."
-                )
+                raise ImportError(f"{preface} FlashAttention{flash_attn_version} requires at least version `2.3.3`.")
             else:
                 # Supported devices availability
                 device_availability_checks, device_names = zip(*supported_devices)
