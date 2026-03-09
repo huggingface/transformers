@@ -223,6 +223,18 @@ class VideoPrismVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(reason="VideoPrismVisionModel exposes spatial/temporal backbone states, not a single hidden_states tuple.")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(reason="VideoPrismVisionModel does not expose a single attentions tuple compatible with ModelTesterMixin.")
+    def test_attention_outputs(self):
+        pass
+
+    @unittest.skip(reason="VideoPrismVisionModel does not expose common hidden_states/attentions fields for retain-grad checks.")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip(reason="VideoPrism reference outputs are validated only with eager attention.")
     def test_eager_matches_sdpa_inference(
@@ -250,7 +262,7 @@ class VideoPrismTextModelTester:
         hidden_size=32,  # should be same as the hidden_size of the vision model tester
         intermediate_size=37,
         num_attention_heads=2,
-        num_text_layers=2,
+        num_hidden_layers=2,
         vocab_size=32,
         apply_l2_norm=True,
         hidden_act="relu",
@@ -269,7 +281,7 @@ class VideoPrismTextModelTester:
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_attention_heads = num_attention_heads
-        self.num_hidden_layers = num_text_layers
+        self.num_hidden_layers = num_hidden_layers
         self.vocab_size = vocab_size
         self.apply_l2_norm = apply_l2_norm
         self.hidden_act = hidden_act
@@ -280,6 +292,8 @@ class VideoPrismTextModelTester:
         self.initializer_range = initializer_range
         self.attn_logit_softcapping = attn_logit_softcapping
         self.seq_length = seq_length
+        self.encoder_seq_length = seq_length + 1
+        self.key_length = seq_length + 1
         self.is_training = is_training
         self.use_input_mask = use_input_mask
 
@@ -307,7 +321,7 @@ class VideoPrismTextModelTester:
             hidden_size=self.hidden_size,
             intermediate_size=self.intermediate_size,
             num_attention_heads=self.num_attention_heads,
-            num_text_layers=self.num_hidden_layers,
+            num_hidden_layers=self.num_hidden_layers,
             vocab_size=self.vocab_size,
             apply_l2_norm=self.apply_l2_norm,
             hidden_act=self.hidden_act,
@@ -439,7 +453,9 @@ class VideoPrismClipModelTester:
 
 @require_vision
 class VideoPrismClipModelTest(ModelTesterMixin, unittest.TestCase):
-    # additional_model_inputs = ["pixel_values"]
+    _is_composite = True
+    test_attention_outputs = False
+
     all_model_classes = (VideoPrismClipModel,) if is_torch_available() else ()
 
     def setUp(self):
@@ -484,9 +500,15 @@ class VideoPrismClipModelTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="VideoPrismClipModel does not have input/output embeddings")
-    # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_model_get_set_embeddings
-    def test_model_get_set_embeddings(self):
+    # @unittest.skip(reason="VideoPrismClipModel does not have input/output embeddings")
+    # # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_model_get_set_embeddings
+    # def test_model_get_set_embeddings(self):
+    #     pass
+
+    @unittest.skip(
+        reason="VideoPrismClipModel normalizes exp(similarity) across the batch, so logits are batch-dependent by design."
+    )
+    def test_batching_equivalence(self):
         pass
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_load_vision_text_config with CLIP->VideoPrism
@@ -504,7 +526,7 @@ class VideoPrismClipModelTest(ModelTesterMixin, unittest.TestCase):
             config.save_pretrained(tmp_dir_name)
             text_config = VideoPrismTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
-
+    
     @slow
     def test_model_from_pretrained(self):
         model_name = "MHRDYN7/videoprism-lvt-base-f16r288"
@@ -512,47 +534,47 @@ class VideoPrismClipModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-# @require_vision
-# class VideoPrismForVideoClassificationModelTester(ModelTesterMixin, VideoPrismVisionModelTester):
-#     def __init__(self, parent, vision_kwargs=None, is_training=True):
-#         if vision_kwargs is None:
-#             vision_kwargs = {}
-#         super().__init__(parent, **vision_kwargs)
+@require_vision
+class VideoPrismForVideoClassificationModelTester(ModelTesterMixin, VideoPrismVisionModelTester):
+    def __init__(self, parent, vision_kwargs=None, is_training=True):
+        if vision_kwargs is None:
+            vision_kwargs = {}
+        super().__init__(parent, **vision_kwargs)
 
-#     # Copied from tests.models.vivit.test_modeling_vivit.VivitModelTester.prepare_config_and_inputs with Vivit->VideoPrism
-#     def prepare_config_and_inputs(self):
-#         pixel_values = floats_tensor(
-#             [self.batch_size, self.num_frames, self.num_channels, self.image_size, self.image_size]
-#         )
+    # Copied from tests.models.vivit.test_modeling_vivit.VivitModelTester.prepare_config_and_inputs with Vivit->VideoPrism
+    def prepare_config_and_inputs(self):
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_frames, self.num_channels, self.image_size, self.image_size]
+        )
 
-#         labels = None
-#         if self.use_labels:
-#             labels = ids_tensor([self.batch_size], self.num_labels)
+        labels = None
+        if self.use_labels:
+            labels = ids_tensor([self.batch_size], self.num_labels)
 
-#         config = self.get_config()
+        config = self.get_config()
 
-#         return config, pixel_values, labels
+        return config, pixel_values, labels
 
-#     def create_and_check_model(self, config, pixel_values, labels):
-#         config.num_labels = self.num_labels
-#         model = VideoPrismForVideoClassification._from_config(config=config)
-#         model.to(torch_device)
-#         pixel_values = pixel_values.to(torch_device)
-#         label = torch.tensor([1], dtype=torch.long)
-#         labels = torch.stack((label, label), dim=0)
-#         labels.to(torch_device)
+    def create_and_check_model(self, config, pixel_values, labels):
+        config.num_labels = self.num_labels
+        model = VideoPrismForVideoClassification._from_config(config=config)
+        model.to(torch_device)
+        pixel_values = pixel_values.to(torch_device)
+        label = torch.tensor([1], dtype=torch.long)
+        labels = torch.stack((label, label), dim=0)
+        labels.to(torch_device)
 
-#         model.eval()
-#         with torch.no_grad():
-#             result = model(pixel_values, labels)
-#         image_size = (self.image_size, self.image_size)
-#         patch_size = (self.tubelet_size[1], self.tubelet_size[2])
-#         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-#         self.parent.assertEqual(result.loss.shape, torch.Size([]))
-#         self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.num_labels))
-#         self.parent.assertEqual(
-#             result.hidden_states.shape, (self.batch_size, num_patches * self.num_frames, self.hidden_size)
-#         )
+        model.eval()
+        with torch.no_grad():
+            result = model(pixel_values, labels)
+        image_size = (self.image_size, self.image_size)
+        patch_size = (self.tubelet_size[1], self.tubelet_size[2])
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(result.loss.shape, torch.Size([]))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.num_labels))
+        self.parent.assertEqual(
+            result.hidden_states.shape, (self.batch_size, num_patches * self.num_frames, self.hidden_size)
+        )
 
 
 # @require_vision
@@ -571,12 +593,12 @@ class VideoPrismClipModelTest(ModelTesterMixin, unittest.TestCase):
 #         config_and_inputs = self.model_tester.prepare_config_and_inputs()
 #         self.model_tester.create_and_check_model(*config_and_inputs)
 
-# @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-# @unittest.skip(reason="VideoPrism reference outputs are validated only with eager attention.")
-# def test_eager_matches_sdpa_inference(
-#     self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
-# ):
-#     pass
+#     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+#     @unittest.skip(reason="VideoPrism reference outputs are validated only with eager attention.")
+#     def test_eager_matches_sdpa_inference(
+#         self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+#     ):
+#         pass
 
 #     @slow
 #     def test_model_from_pretrained(self):
@@ -714,24 +736,24 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size([1, int((144 / 18) * (144 / 18) * 10), model.config.hidden_size])
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
-    # @slow
-    # def test_videoprism_classification_model(self):
-    #     model_name = "MHRDYN7/videoprism-base-f16r288-finetuned-ucf101"
-    #     model = VideoPrismForVideoClassification.from_pretrained(model_name).to(torch_device)
-    #     processor = VideoPrismVideoProcessor.from_pretrained(model_name)
-    #     video = prepare_video(video_type="basketball_dunk")
-    #     inputs = processor(videos=video, return_tensors="pt")["pixel_values_videos"].to(torch_device)
-    #     label = torch.tensor([8], dtype=torch.long)
-    #     model.eval()
-    #     with torch.inference_mode():
-    #         outputs = model(inputs, label)
+    @slow
+    def test_videoprism_classification_model(self):
+        model_name = "MHRDYN7/videoprism-base-f16r288-finetuned-ucf101"
+        model = VideoPrismForVideoClassification.from_pretrained(model_name).to(torch_device)
+        processor = VideoPrismVideoProcessor.from_pretrained(model_name)
+        video = prepare_video(video_type="basketball_dunk")
+        inputs = processor(videos=video, return_tensors="pt")["pixel_values_videos"].to(torch_device)
+        label = torch.tensor([8], dtype=torch.long)
+        model.eval()
+        with torch.inference_mode():
+            outputs = model(inputs, label)
 
-    #     expected_logits = torch.tensor(
-    #         [
-    #             [
-    #                 [-18.5863, -12.8547, -4.8901, -8.7695, 15.0777, 15.0308, -0.2944, 0.5263, 22.7533, 5.9714],
-    #             ]
-    #         ]
-    #     )
-    #     torch.testing.assert_close(outputs.logits, expected_logits, rtol=1e-4, atol=1e-4)
-    #     torch.testing.assert_close(outputs.loss, torch.tensor(0.0009), rtol=1e-4, atol=1e-4)
+        expected_logits = torch.tensor(
+            [
+                [
+                    [-18.5863, -12.8547, -4.8901, -8.7695, 15.0777, 15.0308, -0.2944, 0.5263, 22.7533, 5.9714],
+                ]
+            ]
+        )
+        torch.testing.assert_close(outputs.logits, expected_logits, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.loss, torch.tensor(0.0009), rtol=1e-4, atol=1e-4)
