@@ -36,7 +36,7 @@ def parse_pytest_errors_output(file_path):
     print(file_path)
     error_tests = {}
     error_count = 0
-    with open(file_path, 'r', encoding='utf-8') as file:
+    with open(file_path, 'r') as file:
         for line in file:
             match = re.match(r'^ERROR (tests/.*) - (.*): (.*)$', line)
             if match:
