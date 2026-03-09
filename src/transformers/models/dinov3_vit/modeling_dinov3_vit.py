@@ -487,7 +487,7 @@ class DINOv3ViTEncoder(DINOv3ViTPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         for layer_module in self.layer:
-            hidden_states = layer_module(hidden_states, position_embeddings, **kwargs)
+            hidden_states = layer_module(hidden_states, position_embeddings=position_embeddings, **kwargs)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 

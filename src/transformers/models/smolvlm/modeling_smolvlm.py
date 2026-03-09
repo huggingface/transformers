@@ -318,9 +318,6 @@ class SmolVLMEncoder(nn.Module):
 class SmolVLMVisionTransformer(SmolVLMPreTrainedModel):
     config: SmolVLMVisionConfig
     input_modalities = ("image",)
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
     _can_record_outputs = {
         "hidden_states": SmolVLMEncoderLayer,
         "attentions": SmolVLMVisionAttention,
@@ -744,8 +741,7 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
             pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask, **kwargs
         )
 
-    @merge_with_config_defaults
-    @capture_outputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
