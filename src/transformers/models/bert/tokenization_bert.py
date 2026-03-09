@@ -16,6 +16,7 @@
 import collections
 import os
 
+from pathlib import Path
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import WordPiece
 
@@ -31,8 +32,13 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
 
-    if not isinstance(vocab_file, str):
-        raise ValueError("vocab_file must be a string path")
+    if vocab_file is None:
+        raise ValueError("vocab_file cannot be None")
+
+    if not isinstance(vocab_file, (str, Path)):
+        raise ValueError("vocab_file must be a string or Path")
+
+    vocab_file = str(vocab_file)
 
     if not os.path.exists(vocab_file):
         raise FileNotFoundError(f"Vocabulary file not found at path: {vocab_file}")
