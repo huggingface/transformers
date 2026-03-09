@@ -20,7 +20,6 @@
 
 import re
 from functools import lru_cache
-from itertools import accumulate
 from typing import TYPE_CHECKING, Union
 
 import numpy as np
@@ -52,10 +51,6 @@ class GraniteDoclingHybridProcessorKwargs(ProcessingKwargs, total=False):
 
 def is_url(val) -> bool:
     return isinstance(val, str) and val.startswith("http")
-
-
-def is_image_or_image_url(elem):
-    return is_url(elem) or is_valid_image(elem)
 
 
 def _prompt_split_image(image_seq_len, image_rows, image_cols, fake_token_around_image, image_token, global_img_token):
@@ -285,35 +280,9 @@ class GraniteDoclingHybridProcessor(ProcessorMixin):
             n_images_in_text = [sample.count(self.image_token) for sample in text]
 
         if images is not None:
-            if is_image_or_image_url(images):
-                images = [[images]]
-            elif isinstance(images, (list, tuple)) and is_image_or_image_url(images[0]):
-                if text is not None:
-                    if sum(n_images_in_text) != len(images):
-                        raise ValueError(
-                            f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
-                            f" Found {sum(n_images_in_text)} {self.image_token} tokens and {len(images)} images."
-                        )
-                    # Reorganize the images to match the prompts
-                    cumsum_images_in_text = [0] + list(accumulate(n_images_in_text))
-                    images = [
-                        images[cumsum_images_in_text[i] : cumsum_images_in_text[i + 1]]
-                        for i in range(len(n_images_in_text))
-                    ]
-                else:
-                    images = [images]
-            elif (
-                not isinstance(images, (list, tuple))
-                and not isinstance(images[0], (list, tuple))
-                and not is_image_or_image_url(images[0][0])
-            ):
-                raise ValueError(
-                    "Invalid input images. Please provide a single image or a list of images or a list of list of images."
-                )
-            n_images_in_images = [len(sample) for sample in images]
-
-            # Load images if they are URLs
-            images = [[load_image(im) if is_url(im) else im for im in sample] for sample in images]
+            images = self.image_processor.fetch_images(images)
+            n_images_in_images = [len(sample) if isinstance(sample, (list, tuple)) else 1 for sample in images]
+            images = [[sample] if not isinstance(sample, (list, tuple)) else sample for sample in images]
 
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
             inputs.update(image_inputs)
