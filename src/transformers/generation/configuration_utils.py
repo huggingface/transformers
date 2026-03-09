@@ -1560,6 +1560,7 @@ class ContinuousBatchingConfig:
         q_padding_interval_size: Query padding granularity in tokens. Default is 0 (uses a preset in continuous_api.py)
         kv_padding_interval_size: KV padding granularity in tokens. Default is 0 (uses a preset in continuous_api.py)
         max_cached_graphs: Maximum number of cached CUDA graphs. Default is 0 (uses a preset in continuous_api.py)
+        scheduler: Scheduler type to use. Default is "fifo".
         max_queue_size: Maximum request queue size for serving. Default is 0 (unlimited).
     """
 
@@ -1608,7 +1609,6 @@ class ContinuousBatchingConfig:
         allow_block_sharing: bool = True,
         use_async_batching: bool | None = None,
         max_cached_graphs: int = 0,
-        **ignored_kwargs,
     ) -> None:
         """Some arguments given to `generate_batch`, `init_continuous_batching` or `continuous_batching_context_manager`
         are now deprecated and are expected inside the continuous batching config. This method checks if any were
@@ -1638,11 +1638,6 @@ class ContinuousBatchingConfig:
             logger.warning(
                 "The following arguments were provided to a continuous batching entry point instead of being passed "
                 "through the continuous_batching_config: " + ", ".join(kwargs_to_warn)
-            )
-        if ignored_kwargs:
-            logger.warning(
-                "The following arguments were provided to a continuous batching entry point but were ignored: "
-                + ", ".join(ignored_kwargs.keys())
             )
 
     def decide_use_cuda_graphs(self, compile_config: CompileConfig | None, is_attn_mask_needed: bool) -> bool:

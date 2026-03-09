@@ -123,7 +123,6 @@ class PagedAttentionCache:
         device: torch.device | str,
         dtype: torch.dtype = torch.float16,
         tp_size: int | None = None,
-        allow_block_sharing: bool = True,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
         only full attention layers.
@@ -134,8 +133,6 @@ class PagedAttentionCache:
             device: Device for the cache tensors
             dtype: Data type of the cache
             tp_size: Tensor parallelism size
-            allow_block_sharing: A flag to allow block sharing. If the model has some full attention layers, then prefix
-                sharing is enabled as well.
         """
         self.config = config
         self.dtype = dtype
@@ -235,7 +232,7 @@ class PagedAttentionCache:
         logger.info(f"{self.cache_shape = } {self.key_cache[0].shape = } {self.key_cache[0].numel() = }")
 
         # Block management data structures
-        self.allow_block_sharing = allow_block_sharing
+        self.allow_block_sharing = cb_config.allow_block_sharing
         self.group_cache_managers: list[CacheAllocator] = []
         self.num_full_attention_groups = 0
         self.num_sliding_attention_groups = 0
@@ -243,7 +240,7 @@ class PagedAttentionCache:
 
         for i, group_type in enumerate(group_types):
             if group_type == "full_attention":
-                cm = FullAttentionCacheAllocator(i, self.block_size, allow_block_sharing=allow_block_sharing)
+                cm = FullAttentionCacheAllocator(i, self.block_size, allow_block_sharing=self.allow_block_sharing)
                 self.num_full_attention_groups += 1
             elif group_type == "sliding_attention":
                 cm = SlidingAttentionCacheAllocator(i, self.block_size, config.sliding_window)
@@ -254,7 +251,7 @@ class PagedAttentionCache:
             self.group_cache_managers.append(cm)
 
         # We only use prefix sharing if the whole model has only full attention layers and block sharing is allowed
-        self.use_prefix_sharing = allow_block_sharing and group_types == ["full_attention"]
+        self.use_prefix_sharing = self.allow_block_sharing and group_types == ["full_attention"]
         self._block_manager = BlockManager(num_blocks, self.block_size)
         self._total_prefix_length: int = 0  # a counter to measure the impact of prefix sharing, also used in tests
 

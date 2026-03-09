@@ -551,7 +551,6 @@ class ContinuousBatchingManager:
         self.generation_config = generation_config
         self.cb_config = continuous_batching_config
 
-        self._allow_block_sharing = self.cb_config.allow_block_sharing
         self._use_prefix_sharing = self.cb_config.allow_block_sharing  # approximation until the cache is created
 
         self.input_queue = queue.Queue(maxsize=self.cb_config.max_queue_size)
@@ -791,7 +790,6 @@ class ContinuousBatchingManager:
                 self.model.device,
                 self.model.dtype,
                 tp_size=getattr(self.model, "_tp_size", None),  # Use model's actual TP setting
-                allow_block_sharing=self._allow_block_sharing,
             )
             self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing  # update the approximation
             logger.debug(f"PagedAttentionCache created in {perf_counter() - t0} seconds")
