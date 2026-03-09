@@ -286,6 +286,7 @@ class EomtDinov3Layer(GradientCheckpointingLayer):
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = EomtDinov3Attention(config)
+        self.layer_scale1 = EomtDinov3LayerScale(config)
         self.drop_path = EomtDinov3DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -294,7 +295,6 @@ class EomtDinov3Layer(GradientCheckpointingLayer):
             self.mlp = EomtDinov3GatedMLP(config)
         else:
             self.mlp = EomtDinov3MLP(config)
-        self.layer_scale1 = EomtDinov3LayerScale(config)
         self.layer_scale2 = EomtDinov3LayerScale(config)
 
     def forward(

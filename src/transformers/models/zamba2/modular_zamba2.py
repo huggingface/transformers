@@ -38,8 +38,8 @@ from ..zamba.modeling_zamba import (
     ZambaForCausalLM,
     ZambaForSequenceClassification,
     ZambaHybridDynamicCache,
+    ZambaHybridLayer,
     ZambaMambaDecoderLayer,
-    ZambaMixedLayer,
     ZambaModel,
     ZambaRMSNorm,
     eager_attention_forward,
@@ -822,7 +822,7 @@ class Zamba2InnerMambaDecoderLayer(ZambaMambaDecoderLayer):
         self.input_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
-class Zamba2MixedLayer(ZambaMixedLayer):
+class Zamba2HybridLayer(ZambaHybridLayer):
     def __init__(
         self, shared_transformer: Zamba2AttentionDecoderLayer, linear: nn.Linear, mamba: Zamba2MambaDecoderLayer
     ):
@@ -897,7 +897,7 @@ class Zamba2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _is_stateful = True
     _can_record_outputs = {
-        "hidden_states": [Zamba2MambaDecoderLayer, Zamba2MixedLayer],
+        "hidden_states": [Zamba2MambaDecoderLayer, Zamba2HybridLayer],
         "attentions": Zamba2Attention,
     }
 
@@ -983,7 +983,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                 block_id = layer_id % self.config.num_mem_blocks
                 attn_block = Zamba2AttentionDecoderLayer(self.config, block_id=block_id)
                 linear_layer = nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False)
-                layers.append(Zamba2MixedLayer(attn_block, linear_layer, mamba_layer))
+                layers.append(Zamba2HybridLayer(attn_block, linear_layer, mamba_layer))
             else:
                 layers.append(mamba_layer)
         return nn.ModuleList(layers)

@@ -473,7 +473,6 @@ class LwDetrViTEncoder(LwDetrViTPreTrainedModel):
 
 @auto_docstring()
 class LwDetrViTBackbone(VitDetBackbone):
-    @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
         r"""
         Examples:

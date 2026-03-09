@@ -303,7 +303,6 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
     def get_input_embeddings(self) -> Dinov2WithRegistersPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,

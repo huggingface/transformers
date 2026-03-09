@@ -300,7 +300,6 @@ class PixioModel(PixioPreTrainedModel):
     """
 )
 class PixioBackbone(Dinov2Backbone):
-    @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
         r"""
         Examples:
