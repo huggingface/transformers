@@ -14,15 +14,17 @@
 
 """FSDP tester mixin for model tests."""
 
+import json
 import logging
 import os
 import socket
+import sys
 import tempfile
+import traceback
 from abc import ABC, abstractmethod
 
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, is_torch_available
 from transformers.testing_utils import (
-    Colors,
     backend_device_count,
     init_test_logger,
     require_fsdp,
@@ -44,7 +46,12 @@ if is_torch_available():
     from torch.distributed.tensor import DTensor
     from torch.nn.parallel import DistributedDataParallel as DDP
 
-    from transformers.integrations.fsdp import _find_final_norm, apply_fsdp2, get_transformer_block_classes, initialize_fsdp
+    from transformers.integrations.fsdp import (
+        _find_final_norm,
+        apply_fsdp2,
+        get_transformer_block_classes,
+        initialize_fsdp,
+    )
 
 
 # =============================================================================
@@ -63,21 +70,54 @@ SEED = 42
 # =============================================================================
 
 
-def _fsdp_global_wrapper(rank, func, world_size, port, func_args, func_kwargs):
-    """Set up distributed environment and run the test function."""
+def _fsdp_global_wrapper_batched(rank, test_specs, world_size, port, results_file):
+    """Set up distributed environment once and run multiple test functions sequentially.
+
+    This avoids the mp.spawn + NCCL/GLOO init overhead per test by initializing the
+    process group once and running all tests within the same spawned processes.
+    """
     os.environ["WORLD_SIZE"] = str(world_size)
     os.environ["RANK"] = str(rank)
     os.environ["LOCAL_RANK"] = str(rank)
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = str(port)
 
-    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-    torch.use_deterministic_algorithms(True)
+    _set_determinism(SEED)
 
-    dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
+    dist.init_process_group(rank=rank, world_size=world_size)
     torch.cuda.set_device(rank)
 
-    func(rank, *func_args, **func_kwargs)
+    results = {}
+    total = len(test_specs)
+    for idx, (test_name, func, func_args, func_kwargs) in enumerate(test_specs, 1):
+        if rank == 0:
+            print(f"  [{idx}/{total}] Running: {test_name} ...", file=sys.stderr, flush=True)
+
+        error = None
+        try:
+            func(rank, *func_args, **func_kwargs)
+        except Exception as e:
+            error = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+
+        error_flag = torch.tensor([1 if error else 0], device=f"cuda:{rank}")
+        dist.all_reduce(error_flag, op=dist.ReduceOp.MAX)
+        any_failed = error_flag.item() > 0
+
+        if any_failed:
+            results[test_name] = error if error else "Failed on another rank"
+            if rank == 0:
+                print(f"  [{idx}/{total}] FAILED:  {test_name}", file=sys.stderr, flush=True)
+        else:
+            results[test_name] = None
+            if rank == 0:
+                print(f"  [{idx}/{total}] PASSED:  {test_name}", file=sys.stderr, flush=True)
+
+        torch.cuda.empty_cache()
+        dist.barrier()
+
+    if rank == 0:
+        with open(results_file, "w") as f:
+            json.dump(results, f)
 
     dist.barrier()
     dist.destroy_process_group()
@@ -90,18 +130,14 @@ def _get_free_port():
         return s.getsockname()[1]
 
 
-def _fsdp_init_distributed(world_size):
-    """Decorator to run function in distributed mode using mp.spawn."""
-
-    def _init_distributed(func):
-        def wrapper(*args, **kwargs):
-            port = _get_free_port()
-            spawn_args = (func, world_size, port, args, kwargs)
-            mp.spawn(_fsdp_global_wrapper, args=spawn_args, nprocs=world_size)
-
-        return wrapper
-
-    return _init_distributed
+def _set_determinism(seed):
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+    set_seed(seed)
 
 
 # =============================================================================
@@ -118,6 +154,37 @@ def _create_deterministic_data(batch_size, seq_len, vocab_size, device, seed):
     return [(input_ids, labels)]
 
 
+def _create_shared_tmpdir(rank):
+    if rank == 0:
+        tmpdir_obj = tempfile.TemporaryDirectory()
+        tmpdir = tmpdir_obj.name
+        tmpdir_list = [tmpdir]
+    else:
+        tmpdir_obj = None
+        tmpdir_list = [None]
+    dist.broadcast_object_list(tmpdir_list, src=0)
+    return tmpdir_list[0], tmpdir_obj
+
+
+def _run_training_steps(model, optimizer, batches, start_step, end_step):
+    losses = []
+    grad_norms = []
+
+    for step in range(start_step, end_step):
+        input_ids, labels = batches[step]
+        optimizer.zero_grad()
+        output = model(input_ids=input_ids, labels=labels, use_cache=False)
+        loss = output.loss
+        loss.backward()
+        grad_norm = _compute_grad_norm(model)
+        optimizer.step()
+
+        losses.append(loss.detach().item())
+        grad_norms.append(grad_norm)
+
+    return losses, grad_norms
+
+
 def _gather_fsdp2_state_dict(model):
     """Gather FSDP2 sharded parameters into full tensors via DTensor.full_tensor()."""
     state_dict = {}
@@ -129,124 +196,244 @@ def _gather_fsdp2_state_dict(model):
     return state_dict
 
 
+def _gather_ddp_state_dict(model):
+    return {k: v.clone().detach() for k, v in model.module.state_dict().items()}
+
+
 def _compute_grad_norm(model):
     total_norm_sq = 0.0
     for p in model.parameters():
         if p.grad is not None:
             grad = p.grad.full_tensor() if isinstance(p.grad, DTensor) else p.grad
             total_norm_sq += grad.data.float().norm(2).item() ** 2
-    return total_norm_sq ** 0.5
+    return total_norm_sq**0.5
 
 
-def _log_comparison_table(title, ddp_vals, fsdp_vals):
-    """Log a side-by-side comparison table for DDP vs FSDP2 values."""
-    C = Colors
-    SEP = f"{C.DIM}|{C.RESET}"
-    ROW = f"  {C.DIM}{'─' * 52}{C.RESET}"
+def _assert_training_trace_match(
+    ref_losses,
+    ref_grad_norms,
+    ref_state_dict,
+    test_losses,
+    test_grad_norms,
+    test_state_dict,
+    ref_label,
+    test_label,
+):
+    for step in range(len(ref_losses)):
+        torch.testing.assert_close(
+            torch.tensor(ref_losses[step]),
+            torch.tensor(test_losses[step]),
+            rtol=0,
+            atol=0,
+            msg=f"Loss mismatch at step {step}: {ref_label}={ref_losses[step]}, {test_label}={test_losses[step]}",
+        )
+        torch.testing.assert_close(
+            torch.tensor(ref_grad_norms[step]),
+            torch.tensor(test_grad_norms[step]),
+            rtol=0,
+            atol=0,
+            msg=f"Grad norm mismatch at step {step}: {ref_label}={ref_grad_norms[step]}, {test_label}={test_grad_norms[step]}",
+        )
 
-    logger.info(f"  {C.BOLD}{title}{C.RESET}")
-    logger.info(ROW)
-    logger.info(
-        f"  {C.DIM}{'step':>4}{C.RESET}  "
-        f"{SEP}  {C.BLUE}{C.BOLD}{'DDP':^14}{C.RESET}  "
-        f"{SEP}  {C.MAGENTA}{C.BOLD}{'FSDP2':^14}{C.RESET}  "
-        f"{SEP}  {C.DIM}{'diff':^10}{C.RESET}"
+    for key in ref_state_dict:
+        assert key in test_state_dict, f"Key {key} missing from {test_label} state dict"
+        torch.testing.assert_close(
+            ref_state_dict[key],
+            test_state_dict[key],
+            rtol=0,
+            atol=0,
+            msg=f"Weight mismatch for {key}: {ref_label} vs {test_label}",
+        )
+
+
+def _create_init_state_dict(config, dtype):
+    """Create a deterministic initial state dict for reproducible model initialization."""
+    set_seed(SEED)
+    model = AutoModelForCausalLM.from_config(config).to(dtype)
+    state_dict = {k: v.clone().detach() for k, v in model.state_dict().items()}
+    del model
+    return state_dict
+
+
+def _save_checkpoint(model, optimizer, tmpdir):
+    """Save model, optimizer, and RNG states to a distributed checkpoint."""
+    model_sd, optim_sd = get_state_dict(model, optimizer)
+    dcp.save(
+        {
+            "model": model_sd,
+            "optim": optim_sd,
+            "cpu_rng_state": torch.get_rng_state(),
+            "cuda_rng_state": torch.cuda.get_rng_state(),
+        },
+        checkpoint_id=tmpdir,
     )
-    logger.info(ROW)
-    for step in range(len(ddp_vals)):
-        diff = abs(ddp_vals[step] - fsdp_vals[step])
-        match = f"{C.GREEN}={C.RESET}" if diff < 1e-6 else f"{C.YELLOW}{diff:.1e}{C.RESET}"
-        logger.info(
-            f"  {C.DIM}{step + 1:>4}{C.RESET}  "
-            f"{SEP}  {C.BLUE}{ddp_vals[step]:>14.6f}{C.RESET}  "
-            f"{SEP}  {C.MAGENTA}{fsdp_vals[step]:>14.6f}{C.RESET}  "
-            f"{SEP}  {match:^10}"
-        )
-    logger.info(ROW)
 
 
-def _train_ddp(rank, config, batches, lr, device, dtype):
-    set_seed(SEED)
-    model = AutoModelForCausalLM.from_config(config).to(device).to(dtype)
-    ddp_model = DDP(model, device_ids=[rank]).to(dtype)
-    ddp_model.train()
-
-    optimizer = torch.optim.Adam(ddp_model.parameters(), lr=lr)
-
-    losses = []
-    grad_norms = []
-
-    for input_ids, labels in batches:
-        optimizer.zero_grad()
-        output = ddp_model(input_ids=input_ids, labels=labels)
-        loss = output.loss
-        loss.backward()
-        grad_norm = _compute_grad_norm(ddp_model)
-        optimizer.step()
-
-        losses.append(loss.detach().item())
-        grad_norms.append(grad_norm)
-
-    state_dict = {k: v.clone().detach() for k, v in ddp_model.module.state_dict().items()}
-    return losses, grad_norms, state_dict
+def _load_checkpoint(model, optimizer, tmpdir):
+    """Load model, optimizer, and RNG states from a distributed checkpoint."""
+    model_sd, optim_sd = get_state_dict(model, optimizer)
+    loaded_state = {
+        "model": model_sd,
+        "optim": optim_sd,
+        "cpu_rng_state": torch.empty_like(torch.get_rng_state()),
+        "cuda_rng_state": torch.empty_like(torch.cuda.get_rng_state()),
+    }
+    dcp.load(loaded_state, checkpoint_id=tmpdir)
+    set_state_dict(
+        model,
+        optimizer,
+        model_state_dict=loaded_state["model"],
+        optim_state_dict=loaded_state["optim"],
+    )
+    torch.set_rng_state(loaded_state["cpu_rng_state"])
+    torch.cuda.set_rng_state(loaded_state["cuda_rng_state"])
 
 
-def _train_fsdp2(rank, config, batches, lr, device_map, device_mesh, dtype, fsdp_plan):
-    """Run an FSDP2 training loop with Adam."""
-    set_seed(SEED)
-    model = AutoModelForCausalLM.from_config(config).to(device_map).to(dtype)
-    model = apply_fsdp2(model, device_mesh, fsdp_plan=fsdp_plan)
-    model.train()
+def _run_ddp_checkpoint_repro(rank, config, batches, lr, device, dtype, init_state_dict, checkpoint_step):
+    # -- Phase 1: Reference run -- train all steps without interruption to get ground truth
+    _set_determinism(SEED)
+    ref_model = AutoModelForCausalLM.from_config(config).to(device).to(dtype)
+    ref_model.load_state_dict(init_state_dict)
+    ref_ddp = DDP(ref_model, device_ids=[rank]).to(dtype)
+    ref_ddp.train()
+    ref_optimizer = torch.optim.Adam(ref_ddp.parameters(), lr=lr)
+    ref_losses, ref_grad_norms = _run_training_steps(ref_ddp, ref_optimizer, batches, 0, len(batches))
+    ref_state_dict = _gather_ddp_state_dict(ref_ddp)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    del ref_optimizer
+    del ref_ddp
+    del ref_model
+    torch.cuda.empty_cache()
+    dist.barrier()
 
-    losses = []
-    grad_norms = []
+    # -- Phase 2: Pre-checkpoint run -- train only the first `checkpoint_step` steps, then save
+    _set_determinism(SEED)
+    pre_ckpt_model = AutoModelForCausalLM.from_config(config).to(device).to(dtype)
+    pre_ckpt_model.load_state_dict(init_state_dict)
+    pre_ckpt_ddp = DDP(pre_ckpt_model, device_ids=[rank]).to(dtype)
+    pre_ckpt_ddp.train()
+    pre_ckpt_optimizer = torch.optim.Adam(pre_ckpt_ddp.parameters(), lr=lr)
+    pre_ckpt_losses, pre_ckpt_grad_norms = _run_training_steps(
+        pre_ckpt_ddp, pre_ckpt_optimizer, batches, 0, checkpoint_step
+    )
 
-    for input_ids, labels in batches:
-        optimizer.zero_grad()
-        output = model(input_ids=input_ids, labels=labels)
-        loss = output.loss
-        loss.backward()
-        grad_norm = _compute_grad_norm(model)
-        optimizer.step()
+    # -- Phase 3: Save checkpoint, then load into a fresh model
+    tmpdir, tmpdir_obj = _create_shared_tmpdir(rank)
+    try:
+        _save_checkpoint(pre_ckpt_ddp, pre_ckpt_optimizer, tmpdir)
+        dist.barrier()
 
-        losses.append(loss.detach().item())
-        grad_norms.append(grad_norm)
+        # Intentionally scramble RNG to prove checkpoint restore works
+        _set_determinism(SEED + 1234)
+        resumed_model = AutoModelForCausalLM.from_config(config).to(device).to(dtype)
+        resumed_ddp = DDP(resumed_model, device_ids=[rank]).to(dtype)
+        resumed_ddp.train()
+        resumed_optimizer = torch.optim.Adam(resumed_ddp.parameters(), lr=lr)
 
-    state_dict = _gather_fsdp2_state_dict(model)
-    return losses, grad_norms, state_dict
+        _load_checkpoint(resumed_ddp, resumed_optimizer, tmpdir)
+        dist.barrier()
+    finally:
+        if rank == 0:
+            tmpdir_obj.cleanup()
+
+    # -- Phase 4: Post-checkpoint run -- continue training the remaining steps from the resumed model
+    post_ckpt_losses, post_ckpt_grad_norms = _run_training_steps(
+        resumed_ddp,
+        resumed_optimizer,
+        batches,
+        checkpoint_step,
+        len(batches),
+    )
+    combined_losses = pre_ckpt_losses + post_ckpt_losses
+    combined_grad_norms = pre_ckpt_grad_norms + post_ckpt_grad_norms
+    combined_state_dict = _gather_ddp_state_dict(resumed_ddp)
+
+    # -- Phase 5: Verify that the full uninterrupted run and the save/resume run are identical
+    _assert_training_trace_match(
+        ref_losses,
+        ref_grad_norms,
+        ref_state_dict,
+        combined_losses,
+        combined_grad_norms,
+        combined_state_dict,
+        ref_label="DDP(full)",
+        test_label="DDP(resumed)",
+    )
+    return ref_losses, ref_grad_norms, ref_state_dict
 
 
-def _assert_ddp_fsdp_match(ddp_losses, ddp_grad_norms, ddp_state_dict, fsdp_losses, fsdp_grad_norms, fsdp_state_dict, label="FSDP2"):
-    """Assert that DDP and FSDP2 training produced identical results."""
-    for step in range(len(ddp_losses)):
-        torch.testing.assert_close(
-            torch.tensor(ddp_losses[step]),
-            torch.tensor(fsdp_losses[step]),
-            rtol=1e-5,
-            atol=1e-5,
-            msg=f"Step {step} loss mismatch: DDP={ddp_losses[step]}, {label}={fsdp_losses[step]}",
-        )
+def _run_fsdp2_checkpoint_repro(
+    rank, config, batches, lr, device_map, device_mesh, dtype, init_state_dict, checkpoint_step, fsdp_plan
+):
+    # -- Phase 1: Reference run -- train all steps without interruption to get ground truth
+    _set_determinism(SEED)
+    ref_model = AutoModelForCausalLM.from_config(config).to(device_map).to(dtype)
+    ref_model.load_state_dict(init_state_dict)
+    ref_model = apply_fsdp2(ref_model, device_mesh, fsdp_plan=fsdp_plan)
+    ref_model.train()
+    ref_optimizer = torch.optim.Adam(ref_model.parameters(), lr=lr)
+    ref_losses, ref_grad_norms = _run_training_steps(ref_model, ref_optimizer, batches, 0, len(batches))
+    ref_state_dict = _gather_fsdp2_state_dict(ref_model)
 
-    for step in range(len(ddp_grad_norms)):
-        torch.testing.assert_close(
-            torch.tensor(ddp_grad_norms[step]),
-            torch.tensor(fsdp_grad_norms[step]),
-            rtol=1e-5,
-            atol=1e-5,
-            msg=f"Step {step} grad norm mismatch: DDP={ddp_grad_norms[step]}, {label}={fsdp_grad_norms[step]}",
-        )
+    del ref_optimizer
+    del ref_model
+    torch.cuda.empty_cache()
+    dist.barrier()
 
-    for key in ddp_state_dict:
-        assert key in fsdp_state_dict, f"Key {key} missing from {label} state dict"
-        torch.testing.assert_close(
-            ddp_state_dict[key],
-            fsdp_state_dict[key],
-            rtol=1e-5,
-            atol=1e-5,
-            msg=f"Weight mismatch for {key}",
-        )
+    # -- Phase 2: Pre-checkpoint run -- train only the first `checkpoint_step` steps, then save
+    _set_determinism(SEED)
+    pre_ckpt_model = AutoModelForCausalLM.from_config(config).to(device_map).to(dtype)
+    pre_ckpt_model.load_state_dict(init_state_dict)
+    pre_ckpt_model = apply_fsdp2(pre_ckpt_model, device_mesh, fsdp_plan=fsdp_plan)
+    pre_ckpt_model.train()
+    pre_ckpt_optimizer = torch.optim.Adam(pre_ckpt_model.parameters(), lr=lr)
+    pre_ckpt_losses, pre_ckpt_grad_norms = _run_training_steps(
+        pre_ckpt_model, pre_ckpt_optimizer, batches, 0, checkpoint_step
+    )
+
+    # -- Phase 3: Save checkpoint, then load into a fresh model
+    tmpdir, tmpdir_obj = _create_shared_tmpdir(rank)
+    try:
+        _save_checkpoint(pre_ckpt_model, pre_ckpt_optimizer, tmpdir)
+        dist.barrier()
+
+        # Intentionally scramble RNG to prove checkpoint restore works
+        _set_determinism(SEED + 1234)
+        resumed_model = AutoModelForCausalLM.from_config(config).to(device_map).to(dtype)
+        resumed_model = apply_fsdp2(resumed_model, device_mesh, fsdp_plan=fsdp_plan)
+        resumed_model.train()
+        resumed_optimizer = torch.optim.Adam(resumed_model.parameters(), lr=lr)
+
+        _load_checkpoint(resumed_model, resumed_optimizer, tmpdir)
+        dist.barrier()
+    finally:
+        if rank == 0:
+            tmpdir_obj.cleanup()
+
+    # -- Phase 4: Post-checkpoint run -- continue training the remaining steps from the resumed model
+    post_ckpt_losses, post_ckpt_grad_norms = _run_training_steps(
+        resumed_model,
+        resumed_optimizer,
+        batches,
+        checkpoint_step,
+        len(batches),
+    )
+    combined_losses = pre_ckpt_losses + post_ckpt_losses
+    combined_grad_norms = pre_ckpt_grad_norms + post_ckpt_grad_norms
+    combined_state_dict = _gather_fsdp2_state_dict(resumed_model)
+
+    # -- Phase 5: Verify that the full uninterrupted run and the save/resume run are identical
+    _assert_training_trace_match(
+        ref_losses,
+        ref_grad_norms,
+        ref_state_dict,
+        combined_losses,
+        combined_grad_norms,
+        combined_state_dict,
+        ref_label="FSDP2(full)",
+        test_label="FSDP2(resumed)",
+    )
+    return ref_losses, ref_grad_norms, ref_state_dict
 
 
 # =============================================================================
@@ -279,10 +466,13 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
     block_classes = get_transformer_block_classes(model)
     assert block_classes, "get_transformer_block_classes found no block classes"
 
-    decoder_layer_names = {
-        name for name, module in model.named_modules() if type(module) in block_classes
-    }
-    assert len(decoder_layer_names) == config.num_hidden_layers
+    decoder_layer_names = {name for name, module in model.named_modules() if type(module) in block_classes}
+    # Use >= because some architectures (e.g. BLT) have multiple groups of
+    # transformer blocks (encoder, global, decoder), so total block count
+    # exceeds config.num_hidden_layers which only reflects one group.
+    assert len(decoder_layer_names) >= config.num_hidden_layers, (
+        f"Expected at least {config.num_hidden_layers} decoder layers, found {len(decoder_layer_names)}"
+    )
 
     id_to_name = {id(module): name for name, module in model.named_modules()}
 
@@ -301,21 +491,13 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
     output_name = id_to_name.get(id(output_embed))
     norm_name = id_to_name.get(id(final_norm))
 
-    expected_targets = (
-        {""}
-        | decoder_layer_names
-        | {embed_name}
-        | {norm_name}
-    )
+    expected_targets = {""} | decoder_layer_names | {embed_name} | {norm_name}
     if not weights_tied:
         expected_targets |= {output_name}
 
     model = apply_fsdp2(model, device_mesh, fsdp_plan="auto")
 
-    actual_targets = {
-        name for name, module in model.named_modules()
-        if type(module).__name__.startswith("FSDP")
-    }
+    actual_targets = {name for name, module in model.named_modules() if type(module).__name__.startswith("FSDP")}
 
     if rank == 0:
         logger.info(f"  Weights tied: {weights_tied}")
@@ -335,105 +517,134 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
 
 
 def _test_fsdp2_auto_plan_vs_ddp_impl(rank, config_class, config_dict, dtype, tie_word_embeddings):
-    """Compare losses, grad norms, and final weights between DDP and FSDP2."""
+    """Validate checkpoint reproducibility for both DDP and FSDP2(auto) under same config."""
     init_test_logger()
 
     device = torch.device(f"cuda:{rank}")
     config = config_class.from_dict(config_dict)
     config.tie_word_embeddings = tie_word_embeddings
+    checkpoint_step = NUM_STEPS // 2
+
+    init_state_dict = _create_init_state_dict(config, dtype)
 
     batches = _create_deterministic_data(BATCH_SIZE, SEQ_LEN, config.vocab_size, device, seed=SEED)
     batches = batches * NUM_STEPS
 
-    ddp_losses, ddp_grad_norms, ddp_state_dict = _train_ddp(rank, config, batches, LR, device, dtype)
-
-    dist.barrier()
+    _run_ddp_checkpoint_repro(rank, config, batches, LR, device, dtype, init_state_dict, checkpoint_step)
 
     device_map, device_mesh, _ = initialize_fsdp(fsdp_plan="auto")
-    fsdp_losses, fsdp_grad_norms, fsdp_state_dict = _train_fsdp2(
-        rank, config, batches, LR, device_map, device_mesh, dtype, fsdp_plan="auto",
+    _run_fsdp2_checkpoint_repro(
+        rank,
+        config,
+        batches,
+        LR,
+        device_map,
+        device_mesh,
+        dtype,
+        init_state_dict=init_state_dict,
+        checkpoint_step=checkpoint_step,
+        fsdp_plan="auto",
     )
 
-    dist.barrier()
-
     if rank == 0:
-        logger.info("")
-        _log_comparison_table("Loss per step", ddp_losses, fsdp_losses)
-        logger.info("")
-        _log_comparison_table("Gradient norm per step", ddp_grad_norms, fsdp_grad_norms)
-        logger.info("")
-
-    _assert_ddp_fsdp_match(ddp_losses, ddp_grad_norms, ddp_state_dict, fsdp_losses, fsdp_grad_norms, fsdp_state_dict)
+        logger.info("DDP and FSDP2(auto) checkpoint reproducibility checks passed.")
 
 
 def _test_fsdp2_manual_plan_vs_ddp_impl(rank, config_class, config_dict, dtype, tie_word_embeddings):
-    """Compare DDP vs FSDP2 with a per-sublayer manual plan (self_attn + mlp buckets)."""
+    """Validate checkpoint reproducibility for DDP and FSDP2(manual plan).
+    Uses prefix matching (supported by apply_fsdp2) so that e.g. "model.layers" matches
+    "model.layers.0", "model.layers.1", etc.
+
+    Example for a Llama-like model (untied):
+       {
+           "model.embed_tokens": "free_full_weight",
+           "model.layers":       "free_full_weight",   # prefix -> shards each layer
+           "model.norm":         "keep_full_weight",
+           "lm_head":            "keep_full_weight",
+       }
+
+    Example for a multi-group model like BLT (untied):
+       {
+           "model.local_encoder.embed_tokens":  "free_full_weight",
+           "model.local_encoder.layers":        "free_full_weight",
+           "model.global_transformer.layers":   "free_full_weight",
+           "model.local_decoder.layers":        "free_full_weight",
+           "model.global_transformer.norm":     "keep_full_weight",
+           "lm_head":                           "keep_full_weight",
+       }
+    """
     init_test_logger()
 
     device = torch.device(f"cuda:{rank}")
     config = config_class.from_dict(config_dict)
     config.tie_word_embeddings = tie_word_embeddings
+    checkpoint_step = NUM_STEPS // 2
+
+    init_state_dict = _create_init_state_dict(config, dtype)
 
     batches = _create_deterministic_data(BATCH_SIZE, SEQ_LEN, config.vocab_size, device, seed=SEED)
     batches = batches * NUM_STEPS
 
-    ddp_losses, ddp_grad_norms, ddp_state_dict = _train_ddp(rank, config, batches, LR, device, dtype)
+    _run_ddp_checkpoint_repro(rank, config, batches, LR, device, dtype, init_state_dict, checkpoint_step)
 
-    dist.barrier()
-
-    # Build manual plan by discovering the sub-modules of each decoder layer.
     set_seed(SEED)
     probe_model = AutoModelForCausalLM.from_config(config).to(device)
     block_classes = get_transformer_block_classes(probe_model)
+    id_to_name = {id(m): n for n, m in probe_model.named_modules()}
+
+    input_embed = probe_model.get_input_embeddings()
+    output_embed = probe_model.get_output_embeddings()
+    weights_tied = (
+        input_embed is not None
+        and output_embed is not None
+        and hasattr(input_embed, "weight")
+        and hasattr(output_embed, "weight")
+        and input_embed.weight is output_embed.weight
+    )
+
+    # Get unique layer-group prefixes by stripping the index from each decoder layer name.
+    # e.g. {"model.layers.0", "model.layers.1"} -> {"model.layers"}
+    # For multi-group models like BLT: -> {"model.local_encoder.layers", "model.global_transformer.layers", ...}
+    decoder_layer_names = {n for n, m in probe_model.named_modules() if type(m) in block_classes}
+    layer_prefixes = {".".join(n.split(".")[:-1]) for n in decoder_layer_names}
+
+    # Find final norm and output embed names
+    final_norm = _find_final_norm(probe_model, decoder_layer_names)
+    norm_name = id_to_name.get(id(final_norm)) if final_norm is not None else None
+    embed_name = id_to_name.get(id(input_embed)) if input_embed is not None else None
+    out_name = id_to_name.get(id(output_embed)) if output_embed is not None else None
 
     fsdp_plan = {}
-    for name, module in probe_model.named_modules():
-        # Embed tokens
-        if module is probe_model.get_input_embeddings():
-            fsdp_plan[name] = "free_full_weight"
-        # Each direct child of a decoder layer gets its own shard unit
-        parent_name = ".".join(name.split(".")[:-1]) if "." in name else ""
-        parent_module = dict(probe_model.named_modules()).get(parent_name)
-        if parent_module is not None and type(parent_module) in block_classes and name != parent_name:
-            # Only direct children (one level deeper)
-            depth_diff = len(name.split(".")) - len(parent_name.split("."))
-            if depth_diff == 1:
-                fsdp_plan[name] = "free_full_weight"
+    if not weights_tied and embed_name:
+        fsdp_plan[embed_name] = "free_full_weight"
+    fsdp_plan.update(dict.fromkeys(layer_prefixes, "free_full_weight"))
+    if norm_name:
+        fsdp_plan[norm_name] = "keep_full_weight"
+    if weights_tied:
+        if embed_name:
+            fsdp_plan[embed_name] = "keep_full_weight"
+    else:
+        if out_name:
+            fsdp_plan[out_name] = "keep_full_weight"
 
-    # Final norm + optional lm_head
-    decoder_layer_names = {n for n, m in probe_model.named_modules() if type(m) in block_classes}
-    final_norm = _find_final_norm(probe_model, decoder_layer_names)
-    if final_norm is not None:
-        norm_name = {id(m): n for n, m in probe_model.named_modules()}.get(id(final_norm))
-        if norm_name:
-            fsdp_plan[norm_name] = "keep_full_weight"
-    if not tie_word_embeddings:
-        output_embed = probe_model.get_output_embeddings()
-        if output_embed is not None:
-            out_name = {id(m): n for n, m in probe_model.named_modules()}.get(id(output_embed))
-            if out_name:
-                fsdp_plan[out_name] = "keep_full_weight"
     del probe_model
 
     device_map, device_mesh, _ = initialize_fsdp(fsdp_plan=fsdp_plan)
-    fsdp_losses, fsdp_grad_norms, fsdp_state_dict = _train_fsdp2(
-        rank, config, batches, LR, device_map, device_mesh, dtype, fsdp_plan=fsdp_plan,
+    _run_fsdp2_checkpoint_repro(
+        rank,
+        config,
+        batches,
+        LR,
+        device_map,
+        device_mesh,
+        dtype,
+        init_state_dict=init_state_dict,
+        checkpoint_step=checkpoint_step,
+        fsdp_plan=fsdp_plan,
     )
-
-    dist.barrier()
 
     if rank == 0:
-        logger.info("")
-        _log_comparison_table("Loss per step (manual plan)", ddp_losses, fsdp_losses)
-        logger.info("")
-        _log_comparison_table("Gradient norm per step (manual plan)", ddp_grad_norms, fsdp_grad_norms)
-        logger.info("")
-
-    _assert_ddp_fsdp_match(
-        ddp_losses, ddp_grad_norms, ddp_state_dict,
-        fsdp_losses, fsdp_grad_norms, fsdp_state_dict,
-        label="FSDP2(manual)",
-    )
+        logger.info("DDP and FSDP2(manual) checkpoint reproducibility checks passed.")
 
 
 def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
@@ -448,7 +659,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
 
     device_map, device_mesh, _ = initialize_fsdp(fsdp_plan="auto")
 
-    set_seed(SEED)
+    _set_determinism(SEED)
     model = AutoModelForCausalLM.from_config(config).to(device_map)
     model = apply_fsdp2(model, device_mesh, fsdp_plan="auto")
     model.train()
@@ -456,34 +667,23 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
 
     for input_ids, labels in batches:
         optimizer.zero_grad()
-        output = model(input_ids=input_ids, labels=labels)
+        output = model(input_ids=input_ids, labels=labels, use_cache=False)
         output.loss.backward()
         optimizer.step()
 
     state_dict_before = _gather_fsdp2_state_dict(model)
 
-    if rank == 0:
-        tmpdir_obj = tempfile.TemporaryDirectory()
-        tmpdir = tmpdir_obj.name
-        tmpdir_list = [tmpdir]
-    else:
-        tmpdir_list = [None]
-    dist.broadcast_object_list(tmpdir_list, src=0)
-    tmpdir = tmpdir_list[0]
-
+    tmpdir, tmpdir_obj = _create_shared_tmpdir(rank)
     try:
-        model_state_dict, optimizer_state_dict = get_state_dict(model, optimizer)
-        dcp.save({"model": model_state_dict, "optim": optimizer_state_dict}, checkpoint_id=tmpdir)
+        _save_checkpoint(model, optimizer, tmpdir)
         dist.barrier()
 
-        set_seed(SEED)
+        _set_determinism(SEED + 1234)
         new_model = AutoModelForCausalLM.from_config(config).to(device_map)
         new_model = apply_fsdp2(new_model, device_mesh, fsdp_plan="auto")
         new_optimizer = torch.optim.Adam(new_model.parameters(), lr=LR)
 
-        new_model_state_dict, new_optimizer_state_dict = get_state_dict(new_model, new_optimizer)
-        dcp.load({"model": new_model_state_dict, "optim": new_optimizer_state_dict}, checkpoint_id=tmpdir)
-        set_state_dict(new_model, new_optimizer, model_state_dict=new_model_state_dict, optim_state_dict=new_optimizer_state_dict)
+        _load_checkpoint(new_model, new_optimizer, tmpdir)
         dist.barrier()
     finally:
         if rank == 0:
@@ -504,7 +704,6 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
     if rank == 0:
         logger.info(f"FSDP2 save/load test passed: all {len(state_dict_before)} parameters match exactly.")
 
-
 # =============================================================================
 # Mixin class
 # =============================================================================
@@ -522,20 +721,23 @@ class FSDPTesterMixin(ABC):
 
     Tests included:
       - test_get_transformer_block_classes: CPU-only, meta device (no GPU needed)
-      - test_fsdp2_sharding_structure_untied: 2 GPUs, verifies FSDP wrapping structure
-      - test_fsdp2_sharding_structure_tied: 2 GPUs, same but with tied embeddings
-      - test_fsdp2_auto_plan_vs_ddp: 2 GPUs, compares DDP vs FSDP2 training
-      - test_fsdp2_manual_plan_vs_ddp: 2 GPUs, compares DDP vs FSDP2 with manual plan
-      - test_fsdp2_save_load: 2 GPUs, save/load checkpoint round-trip
+      - test_fsdp2_all: 2 GPUs, batches all 11 distributed subtests in a single
+        mp.spawn to amortize NCCL init overhead (sharding structure, auto/manual plan
+        vs DDP with float32/bfloat16 and tied/untied embeddings, save/load)
     """
 
     fsdp_nproc_per_node: int = 2
+    skip_fsdp_tests: bool = False
 
     @property
     @abstractmethod
     def model_tester(self):
         """The model tester instance (e.g., CausalLMModelTester)."""
         ...
+
+    def _skip_if_fsdp_disabled(self):
+        if self.skip_fsdp_tests:
+            self.skipTest("FSDP tests disabled for this model (skip_fsdp_tests=True)")
 
     def _create_model_on_meta(self, config):
         """Instantiate a model on the meta device (no memory allocated)."""
@@ -549,10 +751,10 @@ class FSDPTesterMixin(ABC):
         self.skipTest(f"Cannot instantiate model with any Auto class for config {type(config).__name__}")
 
     def _skip_if_insufficient_devices(self):
+        self._skip_if_fsdp_disabled()
         if backend_device_count(torch_device) < self.fsdp_nproc_per_node:
             self.skipTest(
-                f"Need at least {self.fsdp_nproc_per_node} devices, "
-                f"have {backend_device_count(torch_device)}"
+                f"Need at least {self.fsdp_nproc_per_node} devices, have {backend_device_count(torch_device)}"
             )
 
     def _get_config_for_fsdp(self):
@@ -565,6 +767,8 @@ class FSDPTesterMixin(ABC):
             config.num_attention_heads = 4
         if hasattr(config, "num_key_value_heads"):
             config.num_key_value_heads = 4
+        if hasattr(config, "vocab_size_per_layer_input"):
+            config.vocab_size_per_layer_input = config.vocab_size
         return type(config), config.to_dict()
 
     # =========================================================================
@@ -573,6 +777,7 @@ class FSDPTesterMixin(ABC):
 
     def test_get_transformer_block_classes(self):
         """get_transformer_block_classes() finds >= 1 block class for the model."""
+        self._skip_if_fsdp_disabled()
         config = self.model_tester.get_config()
         model = self._create_model_on_meta(config)
 
@@ -584,127 +789,105 @@ class FSDPTesterMixin(ABC):
             self.assertGreater(count, 0, f"Block class {cls.__name__} has no instances in model")
 
     # =========================================================================
-    # Test: FSDP2 sharding structure (2 GPUs)
+    # Batched test: all distributed FSDP2 tests in a single mp.spawn
     # =========================================================================
 
     @require_fsdp
     @require_torch_multi_accelerator
-    def test_fsdp2_sharding_structure_untied(self):
-        """Verify FSDP sharding structure with untied embeddings."""
+    def test_fsdp2_all(self):
+        """Run all distributed FSDP2 tests in a single process group spawn.
+        This amortizes the mp.spawn + NCCL init overhead across all 
+        distributed tests instead of paying it once per test method.
+        """
         self._skip_if_insufficient_devices()
+
         config_class, config_dict = self._get_config_for_fsdp()
-        _fsdp_init_distributed(world_size=self.fsdp_nproc_per_node)(
-            _test_fsdp2_sharding_structure_impl
-        )(config_class, config_dict, False)
 
-    @require_fsdp
-    @require_torch_multi_accelerator
-    def test_fsdp2_sharding_structure_tied(self):
-        """Verify FSDP sharding structure with tied embeddings."""
-        self._skip_if_insufficient_devices()
-        config_class, config_dict = self._get_config_for_fsdp()
-        _fsdp_init_distributed(world_size=self.fsdp_nproc_per_node)(
-            _test_fsdp2_sharding_structure_impl
-        )(config_class, config_dict, True)
+        test_specs = [
+            ("sharding_structure_untied", _test_fsdp2_sharding_structure_impl, (config_class, config_dict, False), {}),
+            ("sharding_structure_tied", _test_fsdp2_sharding_structure_impl, (config_class, config_dict, True), {}),
+            (
+                "auto_plan_float32_untied",
+                _test_fsdp2_auto_plan_vs_ddp_impl,
+                (config_class, config_dict, torch.float32, False),
+                {},
+            ),
+            (
+                "auto_plan_bfloat16_untied",
+                _test_fsdp2_auto_plan_vs_ddp_impl,
+                (config_class, config_dict, torch.bfloat16, False),
+                {},
+            ),
+            (
+                "auto_plan_float32_tied",
+                _test_fsdp2_auto_plan_vs_ddp_impl,
+                (config_class, config_dict, torch.float32, True),
+                {},
+            ),
+            (
+                "auto_plan_bfloat16_tied",
+                _test_fsdp2_auto_plan_vs_ddp_impl,
+                (config_class, config_dict, torch.bfloat16, True),
+                {},
+            ),
+            (
+                "manual_plan_float32_untied",
+                _test_fsdp2_manual_plan_vs_ddp_impl,
+                (config_class, config_dict, torch.float32, False),
+                {},
+            ),
+            (
+                "manual_plan_bfloat16_untied",
+                _test_fsdp2_manual_plan_vs_ddp_impl,
+                (config_class, config_dict, torch.bfloat16, False),
+                {},
+            ),
+            (
+                "manual_plan_float32_tied",
+                _test_fsdp2_manual_plan_vs_ddp_impl,
+                (config_class, config_dict, torch.float32, True),
+                {},
+            ),
+            (
+                "manual_plan_bfloat16_tied",
+                _test_fsdp2_manual_plan_vs_ddp_impl,
+                (config_class, config_dict, torch.bfloat16, True),
+                {},
+            ),
+            ("save_load", _test_fsdp2_save_load_impl, (config_class, config_dict), {}),
+        ]
 
-    # =========================================================================
-    # Test: FSDP2 auto plan vs DDP (2 GPUs)
-    # =========================================================================
+        results_file = tempfile.mktemp(suffix=".json")
+        port = _get_free_port()
+        try:
+            mp.spawn(
+                _fsdp_global_wrapper_batched,
+                args=(test_specs, self.fsdp_nproc_per_node, port, results_file),
+                nprocs=self.fsdp_nproc_per_node,
+            )
 
-    @require_fsdp
-    @require_torch_multi_accelerator
-    def test_fsdp2_auto_plan_vs_ddp_float32_untied(self):
-        """DDP vs FSDP2 auto plan: float32, untied embeddings."""
-        self._skip_if_insufficient_devices()
-        config_class, config_dict = self._get_config_for_fsdp()
-        _fsdp_init_distributed(world_size=self.fsdp_nproc_per_node)(
-            _test_fsdp2_auto_plan_vs_ddp_impl
-        )(config_class, config_dict, torch.float32, False)
+            with open(results_file) as f:
+                results = json.load(f)
+        finally:
+            if os.path.exists(results_file):
+                os.unlink(results_file)
 
-    @require_fsdp
-    @require_torch_multi_accelerator
-    def test_fsdp2_auto_plan_vs_ddp_bfloat16_untied(self):
-        """DDP vs FSDP2 auto plan: bfloat16, untied embeddings."""
-        self._skip_if_insufficient_devices()
-        config_class, config_dict = self._get_config_for_fsdp()
-        _fsdp_init_distributed(world_size=self.fsdp_nproc_per_node)(
-            _test_fsdp2_auto_plan_vs_ddp_impl
-        )(config_class, config_dict, torch.bfloat16, False)
+        passed = [name for name, err in results.items() if err is None]
+        failed = {name: err for name, err in results.items() if err is not None}
 
-    @require_fsdp
-    @require_torch_multi_accelerator
-    def test_fsdp2_auto_plan_vs_ddp_float32_tied(self):
-        """DDP vs FSDP2 auto plan: float32, tied embeddings."""
-        self._skip_if_insufficient_devices()
-        config_class, config_dict = self._get_config_for_fsdp()
-        _fsdp_init_distributed(world_size=self.fsdp_nproc_per_node)(
-            _test_fsdp2_auto_plan_vs_ddp_impl
-        )(config_class, config_dict, torch.float32, True)
+        summary_lines = [
+            "",
+            "=" * 60,
+            f"  test_fsdp2_all: {len(passed)} passed, {len(failed)} failed (out of {len(results)} subtests)",
+            "=" * 60,
+        ]
+        for name in results:
+            status = "PASSED" if results[name] is None else "FAILED"
+            summary_lines.append(f"  {'[PASS]' if status == 'PASSED' else '[FAIL]'} {name}")
+        summary_lines.append("=" * 60)
+        print("\n".join(summary_lines), flush=True)
 
-    @require_fsdp
-    @require_torch_multi_accelerator
-    def test_fsdp2_auto_plan_vs_ddp_bfloat16_tied(self):
-        """DDP vs FSDP2 auto plan: bfloat16, tied embeddings."""
-        self._skip_if_insufficient_devices()
-        config_class, config_dict = self._get_config_for_fsdp()
-        _fsdp_init_distributed(world_size=self.fsdp_nproc_per_node)(
-            _test_fsdp2_auto_plan_vs_ddp_impl
-        )(config_class, config_dict, torch.bfloat16, True)
-
-    # =========================================================================
-    # Test: FSDP2 manual plan vs DDP (2 GPUs)
-    # =========================================================================
-
-    @require_fsdp
-    @require_torch_multi_accelerator
-    def test_fsdp2_manual_plan_vs_ddp_float32_untied(self):
-        """DDP vs FSDP2 manual plan: float32, untied embeddings."""
-        self._skip_if_insufficient_devices()
-        config_class, config_dict = self._get_config_for_fsdp()
-        _fsdp_init_distributed(world_size=self.fsdp_nproc_per_node)(
-            _test_fsdp2_manual_plan_vs_ddp_impl
-        )(config_class, config_dict, torch.float32, False)
-
-    @require_fsdp
-    @require_torch_multi_accelerator
-    def test_fsdp2_manual_plan_vs_ddp_bfloat16_untied(self):
-        """DDP vs FSDP2 manual plan: bfloat16, untied embeddings."""
-        self._skip_if_insufficient_devices()
-        config_class, config_dict = self._get_config_for_fsdp()
-        _fsdp_init_distributed(world_size=self.fsdp_nproc_per_node)(
-            _test_fsdp2_manual_plan_vs_ddp_impl
-        )(config_class, config_dict, torch.bfloat16, False)
-
-    @require_fsdp
-    @require_torch_multi_accelerator
-    def test_fsdp2_manual_plan_vs_ddp_float32_tied(self):
-        """DDP vs FSDP2 manual plan: float32, tied embeddings."""
-        self._skip_if_insufficient_devices()
-        config_class, config_dict = self._get_config_for_fsdp()
-        _fsdp_init_distributed(world_size=self.fsdp_nproc_per_node)(
-            _test_fsdp2_manual_plan_vs_ddp_impl
-        )(config_class, config_dict, torch.float32, True)
-
-    @require_fsdp
-    @require_torch_multi_accelerator
-    def test_fsdp2_manual_plan_vs_ddp_bfloat16_tied(self):
-        """DDP vs FSDP2 manual plan: bfloat16, tied embeddings."""
-        self._skip_if_insufficient_devices()
-        config_class, config_dict = self._get_config_for_fsdp()
-        _fsdp_init_distributed(world_size=self.fsdp_nproc_per_node)(
-            _test_fsdp2_manual_plan_vs_ddp_impl
-        )(config_class, config_dict, torch.bfloat16, True)
-
-    # =========================================================================
-    # Test: FSDP2 save/load checkpoint (2 GPUs)
-    # =========================================================================
-
-    @require_fsdp
-    @require_torch_multi_accelerator
-    def test_fsdp2_save_load(self):
-        """Save FSDP2 checkpoint via DCP, load into fresh model, verify exact match."""
-        self._skip_if_insufficient_devices()
-        config_class, config_dict = self._get_config_for_fsdp()
-        _fsdp_init_distributed(world_size=self.fsdp_nproc_per_node)(
-            _test_fsdp2_save_load_impl
-        )(config_class, config_dict)
+        for test_name, error in results.items():
+            with self.subTest(test_name=test_name):
+                if error is not None:
+                    self.fail(f"FSDP subtest '{test_name}' failed:\n{error}")

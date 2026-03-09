@@ -322,6 +322,8 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Gemma3nTextModelTester
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
+    # Skip FSDP tests: Gemma3n's AltUp architecture produces different gradients in FSDP2 vs DDP
+    skip_fsdp_tests = True
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False

@@ -1,12 +1,55 @@
 #!/bin/bash
 
 # Script to run all FSDP mixin tests for dense models in parallel.
-# Tests are run in parallel using GPU pairs (each test uses 2 GPUs)
+# Work in tandem with a special test_fsdp_mixin.py that batches all 11 distributed tests in a single mp.spawn. (will not be committed)
+# Uses concurrency-limited dispatch: multiple models share GPU pairs since test models are tiny (~7 MiB).
+# Each model runs test_fsdp2_all which batches all 11 distributed tests in a single mp.spawn.
+
 # Usage: ./run_fsdp_mixin_dense_tests.sh [/path/to/results]
 #        ./run_fsdp_mixin_dense_tests.sh --model <model_name> [/path/to/results]
+#        ./run_fsdp_mixin_dense_tests.sh --test <test_method> [/path/to/results]
+#        ./run_fsdp_mixin_dense_tests.sh --model <model_name> --test <test_method> [/path/to/results]
 #        ./run_fsdp_mixin_dense_tests.sh --report /path/to/results
 #        ./run_fsdp_mixin_dense_tests.sh --debug --model <model_name>
 #        ./run_fsdp_mixin_dense_tests.sh --rerun-failed /path/to/results
+
+# Rerunning 11 failed model(s):
+#   apertus
+#   blt
+#   exaone4
+#   gemma2
+#   gemma3
+#   gemma3n
+#   glm4
+#   modernbert_decoder
+#   olmo3
+#   phi
+#   qwen3_5
+# Using 8 GPUs (4 GPU pairs, 2 GPUs each)
+# Min free memory per GPU to launch a new test: 1000 MiB
+# Results directory: /fsx/ferdinandmom/ferdinand-hf/transformers_pr/work/v5-distributed-training-ci/results_fsdp_dense
+# ==========================================
+#   FSDP Mixin Dense Tests
+#   (11 models, 12 tests each)
+#   (Memory-gated parallel execution across 4 GPU pairs)
+# ==========================================
+
+# [GPUs 0,1] Starting: apertus
+# [GPUs 2,3] Starting: blt
+# [GPUs 4,5] Starting: exaone4
+# [GPUs 6,7] Starting: gemma2
+# [GPUs 0,1] Starting: gemma3
+# [GPUs 2,3] Starting: gemma3n
+# [GPUs 4,5] Starting: glm4
+# [GPUs 6,7] Starting: modernbert_decoder
+# [GPUs 0,1] Starting: olmo3
+# [GPUs 2,3] Starting: phi
+
+# Waiting for all tests to complete...
+# [GPUs 4,5] Starting: qwen3_5
+
+
+SCRIPT_START=$(date +%s)
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -17,20 +60,16 @@ NC='\033[0m'
 
 GPUS_PER_TEST=2
 
-# All FSDP mixin test methods
+# Batched test method that runs all 11 distributed FSDP tests in a single mp.spawn.
+# Individual methods are still available for debugging via --test:
+#   test_get_transformer_block_classes, test_fsdp2_sharding_structure_untied,
+#   test_fsdp2_sharding_structure_tied, test_fsdp2_auto_plan_vs_ddp_float32_untied,
+#   test_fsdp2_auto_plan_vs_ddp_bfloat16_untied, test_fsdp2_auto_plan_vs_ddp_float32_tied,
+#   test_fsdp2_auto_plan_vs_ddp_bfloat16_tied, test_fsdp2_manual_plan_vs_ddp_float32_untied,
+#   test_fsdp2_manual_plan_vs_ddp_bfloat16_untied, test_fsdp2_manual_plan_vs_ddp_float32_tied,
+#   test_fsdp2_manual_plan_vs_ddp_bfloat16_tied, test_fsdp2_save_load
 TEST_METHODS=(
-    "test_get_transformer_block_classes"
-    "test_fsdp2_sharding_structure_untied"
-    "test_fsdp2_sharding_structure_tied"
-    "test_fsdp2_auto_plan_vs_ddp_float32_untied"
-    "test_fsdp2_auto_plan_vs_ddp_bfloat16_untied"
-    "test_fsdp2_auto_plan_vs_ddp_float32_tied"
-    "test_fsdp2_auto_plan_vs_ddp_bfloat16_tied"
-    "test_fsdp2_manual_plan_vs_ddp_float32_untied"
-    "test_fsdp2_manual_plan_vs_ddp_bfloat16_untied"
-    "test_fsdp2_manual_plan_vs_ddp_float32_tied"
-    "test_fsdp2_manual_plan_vs_ddp_bfloat16_tied"
-    "test_fsdp2_save_load"
+    "test_fsdp2_all"
 )
 
 # Dense models that inherit from CausalLMModelTest
@@ -194,6 +233,35 @@ if [ "$1" == "--model" ]; then
     TEST_ENTRIES=("$MATCHED_ENTRY")
 fi
 
+if [ "$1" == "--test" ]; then
+    if [ -z "$2" ]; then
+        echo "Usage: $0 --test <test_method> [/path/to/results]"
+        echo "Available test methods:"
+        for method in "${TEST_METHODS[@]}"; do
+            printf '  %s\n' "$method"
+        done
+        exit 1
+    fi
+    SINGLE_TEST="$2"
+    shift 2
+    MATCHED_METHOD=""
+    for method in "${TEST_METHODS[@]}"; do
+        if [ "$method" == "$SINGLE_TEST" ]; then
+            MATCHED_METHOD="$method"
+            break
+        fi
+    done
+    if [ -z "$MATCHED_METHOD" ]; then
+        echo "Error: Unknown test method '$SINGLE_TEST'"
+        echo "Available test methods:"
+        for method in "${TEST_METHODS[@]}"; do
+            printf '  %s\n' "$method"
+        done
+        exit 1
+    fi
+    TEST_METHODS=("$MATCHED_METHOD")
+fi
+
 RERUN_FAILED=""
 if [ "$1" == "--rerun-failed" ]; then
     if [ -z "$2" ]; then
@@ -236,8 +304,9 @@ if [ "$AVAILABLE_GPUS" -lt "$GPUS_PER_TEST" ]; then
     echo "Need at least $GPUS_PER_TEST GPUs, but only $AVAILABLE_GPUS detected!"
     exit 1
 fi
-NUM_PARALLEL=$((AVAILABLE_GPUS / GPUS_PER_TEST))
-echo "Using $AVAILABLE_GPUS GPUs ($NUM_PARALLEL parallel test slots, $GPUS_PER_TEST GPUs each)"
+NUM_GPU_PAIRS=$((AVAILABLE_GPUS / GPUS_PER_TEST))
+MAX_CONCURRENT=${MAX_CONCURRENT:-$((NUM_GPU_PAIRS * 2))}
+echo "Using $AVAILABLE_GPUS GPUs ($NUM_GPU_PAIRS GPU pairs, max $MAX_CONCURRENT concurrent models)"
 
 if [ -n "$DEBUG_MODE" ] && [ -z "$SINGLE_MODEL" ]; then
     echo "Error: --debug requires --model <model_name>"
@@ -270,20 +339,19 @@ echo "Results directory: $RESULTS_DIR"
 
 echo "=========================================="
 echo "  FSDP Mixin Dense Tests"
-echo "  (${#TEST_ENTRIES[@]} models, ${#TEST_METHODS[@]} tests each)"
-echo "  (Parallel execution: $NUM_PARALLEL tests at a time)"
+echo "  (${#TEST_ENTRIES[@]} models, ${#TEST_METHODS[@]} test method(s) each)"
+echo "  (Max $MAX_CONCURRENT concurrent models across $NUM_GPU_PAIRS GPU pairs)"
 echo "=========================================="
 echo ""
 
 # ── Run a single model's tests on a GPU pair ───────────────────────────────
 run_test() {
     local entry=$1
-    local slot_id=$2
+    local gpu_pair_idx=$2
     local model_name
     model_name=$(extract_model_name "$entry")
-    local result_file="$RESULTS_DIR/${model_name}.result"
 
-    local gpu_start=$((slot_id * GPUS_PER_TEST))
+    local gpu_start=$((gpu_pair_idx * GPUS_PER_TEST))
     local gpu_end=$((gpu_start + GPUS_PER_TEST - 1))
     local gpu_list=""
     for ((g=gpu_start; g<=gpu_end; g++)); do
@@ -291,7 +359,6 @@ run_test() {
         gpu_list+="$g"
     done
 
-    # Build pytest node IDs for all test methods
     local test_ids=()
     for test_method in "${TEST_METHODS[@]}"; do
         test_ids+=("${entry}::${test_method}")
@@ -299,17 +366,19 @@ run_test() {
 
     echo -e "${YELLOW}[GPUs ${gpu_list}] Starting: ${model_name}${NC}"
 
+    local log_file="$RESULTS_DIR/${model_name}.log"
+    local result_file="$RESULTS_DIR/${model_name}.result"
+
     CUDA_VISIBLE_DEVICES=$gpu_list \
         python -m pytest -v -rs "${test_ids[@]}" \
-        > "$RESULTS_DIR/${model_name}.log" 2>&1
+        > "$log_file" 2>&1
 
     local exit_code=$?
-    local log_file="$RESULTS_DIR/${model_name}.log"
 
     local skipped_only=false
-    if [ $exit_code -eq 5 ]; then
+    if [ "$exit_code" -eq 5 ]; then
         skipped_only=true
-    elif [ $exit_code -eq 0 ]; then
+    elif [ "$exit_code" -eq 0 ] && [ -f "$log_file" ]; then
         if grep -q "passed" "$log_file"; then
             skipped_only=false
         elif grep -q "skipped" "$log_file"; then
@@ -321,13 +390,18 @@ run_test() {
 
     if [ "$skipped_only" = true ]; then
         echo "SKIPPED" > "$result_file"
-        echo -e "${GREY}○ [GPUs ${gpu_list}] ${model_name}: SKIPPED${NC}"
-    elif [ $exit_code -eq 0 ]; then
+    elif [ "$exit_code" -eq 0 ]; then
         echo "SUCCESS" > "$result_file"
-        echo -e "${GREEN}✓ [GPUs ${gpu_list}] ${model_name}: SUCCESS${NC}"
     else
         echo "FAILED (exit code: $exit_code)" > "$result_file"
-        echo -e "${RED}✗ [GPUs ${gpu_list}] ${model_name}: FAILED (exit code: $exit_code)${NC}"
+    fi
+
+    if [ "$skipped_only" = true ]; then
+        echo -e "${GREY}[GPUs ${gpu_list}] Skipped: ${model_name}${NC}"
+    elif [ "$exit_code" -eq 0 ]; then
+        echo -e "${GREEN}[GPUs ${gpu_list}] Success: ${model_name}${NC}"
+    else
+        echo -e "${RED}[GPUs ${gpu_list}] Failed: ${model_name}${NC}"
     fi
 }
 
@@ -349,57 +423,22 @@ if [ -n "$DEBUG_MODE" ]; then
     exit $?
 fi
 
-# ── Parallel dispatch ───────────────────────────────────────────────────────
-declare -a PIDS=()
-declare -A PID_SLOT=()
+# ── Concurrency-limited dispatch ─────────────────────────────────────────────
+# Multiple models can share GPU pairs since test models are tiny (~7 MiB each).
+# GPU pairs are assigned round-robin; concurrency is throttled by MAX_CONCURRENT.
 
-next_free_slot() {
-    local used_slots=()
-    for pid in "${PIDS[@]}"; do
-        if kill -0 "$pid" 2>/dev/null; then
-            used_slots+=("${PID_SLOT[$pid]}")
-        fi
-    done
-    for ((s=0; s<NUM_PARALLEL; s++)); do
-        local in_use=false
-        for u in "${used_slots[@]}"; do
-            if [ "$u" -eq "$s" ]; then
-                in_use=true
-                break
-            fi
-        done
-        if [ "$in_use" = false ]; then
-            echo "$s"
-            return
-        fi
-    done
-    echo "-1"
+active_jobs() {
+    jobs -r 2>/dev/null | wc -l
 }
 
+model_idx=0
 for entry in "${TEST_ENTRIES[@]}"; do
-    # Wait until a slot is free
-    while true; do
-        slot=$(next_free_slot)
-        if [ "$slot" -ge 0 ]; then
-            break
-        fi
-        wait -n 2>/dev/null || sleep 0.5
-        # Prune finished PIDs
-        NEW_PIDS=()
-        for pid in "${PIDS[@]}"; do
-            if kill -0 "$pid" 2>/dev/null; then
-                NEW_PIDS+=("$pid")
-            else
-                unset PID_SLOT[$pid]
-            fi
-        done
-        PIDS=("${NEW_PIDS[@]}")
+    while [ "$(active_jobs)" -ge "$MAX_CONCURRENT" ]; do
+        sleep 1
     done
-
-    run_test "$entry" "$slot" &
-    pid=$!
-    PIDS+=($pid)
-    PID_SLOT[$pid]=$slot
+    gpu_pair_idx=$((model_idx % NUM_GPU_PAIRS))
+    run_test "$entry" "$gpu_pair_idx" &
+    ((model_idx++))
 done
 
 echo ""
@@ -456,6 +495,13 @@ if [ $fail_count -gt 0 ]; then
         fi
     done
 fi
+
+SCRIPT_END=$(date +%s)
+ELAPSED=$((SCRIPT_END - SCRIPT_START))
+MINS=$((ELAPSED / 60))
+SECS=$((ELAPSED % 60))
+echo ""
+echo "Total time: ${MINS}m ${SECS}s"
 
 if [ $fail_count -gt 0 ]; then
     exit 1
