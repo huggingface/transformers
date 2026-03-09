@@ -37,6 +37,9 @@ if TYPE_CHECKING:
     import torch
 
 
+a = 3
+
+
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
     "tokenizer_config_file": "tokenizer_config.json",
