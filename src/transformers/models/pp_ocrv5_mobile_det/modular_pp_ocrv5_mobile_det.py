@@ -1,6 +1,6 @@
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional
 
 import numpy as np
 import torch
@@ -16,26 +16,14 @@ from transformers.models.mobilenet_v2.modeling_mobilenet_v2 import make_divisibl
 
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import BaseImageProcessor
 from ...image_processing_utils_fast import BaseImageProcessorFast
-from ...image_transforms import flip_channel_order, resize, to_channel_dimension_format
 from ...image_utils import (
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
     SizeDict,
-    infer_channel_dimension_format,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
 )
-from ...processing_utils import ImagesKwargs, Unpack
-from ...modeling_outputs import BaseModelOutputWithNoAttentionfrom, BackboneOutput
+from ...processing_utils import Unpack
+from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    ModelOutput,
-    filter_out_non_signature_kwargs,
     auto_docstring,
     can_return_tuple,
     is_cv2_available,
@@ -55,7 +43,12 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(
     custom_intro="""
-    """
+    This is the configuration class to store the configuration of a [`PPOCRV5MobileDet`]. It is used to instantiate a
+    PPOCRV5 Mobile text detection model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the PPOCRV5 Mobile Det
+    [PaddlePaddle/PP-OCRv5-mobile-det](https://huggingface.co/PaddlePaddle/PP-OCRv5-mobile-det) architecture.
+    """,
+    checkpoint="PaddlePaddle/PP-OCRv5-mobile-det"
 )
 class PPOCRV5MobileDetConfig(PreTrainedConfig):
     r"""
@@ -449,7 +442,7 @@ def boxes_from_bitmap(
     unclip_ratio: float,
     min_size: int,
     max_candidates: int,
-) -> tuple[np.ndarray, list[float]]:
+) -> tuple[list[np.ndarray] | np.ndarray, list[float]]:
     """
     Extracts axis-aligned or rotated bounding boxes from a binary segmentation map.
 
@@ -537,9 +530,6 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        # limit_side_len: int,
-        # limit_type: str,
-        # max_side_limit: int,
         interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
@@ -631,7 +621,9 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
         resize_width = max(int(round(resize_width / 32) * 32), 32)
 
         if resize_height == height and resize_width == width:
-            return SizeDict(height=resize_height, width=resize_width), torch.tensor([height, width], dtype=torch.float32)
+            return SizeDict(height=resize_height, width=resize_width), torch.tensor(
+                [height, width], dtype=torch.float32
+            )
 
         if resize_width <= 0 or resize_height <= 0:
             return None, (None, None)
@@ -642,7 +634,7 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
         self,
         outputs,
         threshold: float = 0.3,
-        target_sizes: Optional[Union[list[tuple[int, int]], torch.Tensor]] = None,
+        target_sizes: list[tuple[int, int]] | torch.Tensor | None = None,
         box_thresh: float = 0.6,
         max_candidates: int = 1000,
         min_size: int = 3,
@@ -948,13 +940,11 @@ class PPOCRV5MobileDetBlock(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    """
-)
-class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
-    """
     Base class for all PPOCRV5 Mobile Det pre-trained models. Handles model initialization,
     configuration, and loading of pre-trained weights, following the Transformers library conventions.
     """
+)
+class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
 
     config: PPOCRV5MobileDetConfig
     base_model_prefix = "pp_ocrv5_mobile_det"
@@ -1317,31 +1307,26 @@ class PPOCRV5MobileDetDBHead(nn.Module):
 
 
 @dataclass
-class PPOCRV5MobileDetModelOutput(ModelOutput):
+class PPOCRV5MobileDetModelOutput(BaseModelOutputWithNoAttention):
     """
     Output class for the PPOCRV5MobileDetModel.
 
     Args:
-        last_hidden_state (torch.FloatTensor, optional): Last hidden state from the backbone network,
-            shape (B, C, H, W).
-        hidden_states (tuple[torch.FloatTensor], optional): Tuple of all intermediate hidden states from the backbone
+        logits (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
+            Binary segmentation probability maps from the head. Higher values indicate
+            higher probability of text presence.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-
-
+    logits: torch.FloatTensor | None = None
 
 
 @auto_docstring(
     custom_intro="""
-    """
-)
-class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
-    """
     Core PPOCRV5 Mobile Det model, consisting of Backbone, Neck, and Head networks.
     Generates binary text segmentation maps for text detection tasks.
     """
+)
+class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
 
     def __init__(self, config: PPOCRV5MobileDetConfig):
         super().__init__(config)
@@ -1355,44 +1340,40 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
     def forward(
         self,
         hidden_state: torch.FloatTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.FloatTensor], PPOCRV5MobileDetModelOutput]:
+        **kwargs,
+    ) -> tuple[torch.FloatTensor] | PPOCRV5MobileDetModelOutput:
         
         hidden_state = self.backbone(hidden_state)
         hidden_state = self.neck(hidden_state)
 
         return PPOCRV5MobileDetModelOutput(
-            last_hidden_state=hidden_state,
+            logits=hidden_state,
         )
-
-
-@dataclass
-class PPOCRV5MobileDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
-    """
-    Output class for PPOCRV5MobileDetForObjectDetection. Extends BaseModelOutputWithNoAttention
-    to include text segmentation logits.
-
-    Args:
-        logits (torch.FloatTensor, optional): Binary segmentation logits from the head network,
-            shape (B, 1, H, W).
-        shape (torch.FloatTensor, optional): Unused placeholder for consistency with object detection output formats.
-        last_hidden_state (torch.FloatTensor, optional): Last hidden state from the backbone network.
-        hidden_states (tuple[torch.FloatTensor], optional): Tuple of all intermediate hidden states from the backbone
-    """
-
-    logits: Optional[torch.FloatTensor] = None
-    shape: Optional[torch.FloatTensor] = None
 
 
 @auto_docstring(
     custom_intro="""
+    Output class for PPOCRV5MobileDetForObjectDetection.
     """
 )
-class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
+@dataclass
+class PPOCRV5MobileDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
     """
+    Args:
+        logits (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
+            The predicted text mask.
+    """
+
+    logits: torch.FloatTensor | None = None
+
+
+@auto_docstring(
+    custom_intro="""
     PPOCRV5 Mobile Det model for object (text) detection tasks. Wraps the core PPOCRV5MobileDetModel
     and returns outputs compatible with the Transformers object detection API.
     """
+)
+class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
 
     _keys_to_ignore_on_load_missing = ["num_batches_tracked"]
 
@@ -1407,15 +1388,14 @@ class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.FloatTensor], PPOCRV5MobileDetForObjectDetectionOutput]:
+        **kwargs,
+    ) -> tuple[torch.FloatTensor] | PPOCRV5MobileDetForObjectDetectionOutput:
         
         outputs = self.model(pixel_values, **kwargs)
-        logits = self.head(outputs.last_hidden_state)
+        logits = self.head(outputs.logits)
 
         return PPOCRV5MobileDetForObjectDetectionOutput(
             logits=logits,
-            last_hidden_state=outputs.last_hidden_state,
         )
 
 

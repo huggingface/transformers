@@ -15,7 +15,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.output_capturing import capture_outputs
 from .configuration_pp_ocrv5_mobile_det import PPOCRV5MobileDetConfig
 
@@ -343,14 +343,11 @@ class PPOCRV5MobileDetBlock(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    """
-)
-class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
-    """
     Base class for all PPOCRV5 Mobile Det pre-trained models. Handles model initialization,
     configuration, and loading of pre-trained weights, following the Transformers library conventions.
     """
-
+)
+class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
     config: PPOCRV5MobileDetConfig
     base_model_prefix = "pp_ocrv5_mobile_det"
     main_input_name = "pixel_values"
@@ -710,30 +707,26 @@ class PPOCRV5MobileDetDBHead(nn.Module):
 
 
 @dataclass
-class PPOCRV5MobileDetModelOutput(ModelOutput):
+class PPOCRV5MobileDetModelOutput(BaseModelOutputWithNoAttention):
     """
     Output class for the PPOCRV5MobileDetModel.
 
     Args:
-        last_hidden_state (torch.FloatTensor, optional): Last hidden state from the backbone network,
-            shape (B, C, H, W).
-        hidden_states (tuple[torch.FloatTensor], optional): Tuple of all intermediate hidden states from the backbone
+        logits (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
+            Binary segmentation probability maps from the head. Higher values indicate
+            higher probability of text presence.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    logits: torch.FloatTensor | None = None
 
 
 @auto_docstring(
     custom_intro="""
-    """
-)
-class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
-    """
     Core PPOCRV5 Mobile Det model, consisting of Backbone, Neck, and Head networks.
     Generates binary text segmentation maps for text detection tasks.
     """
-
+)
+class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
     def __init__(self, config: PPOCRV5MobileDetConfig):
         super().__init__(config)
 
@@ -746,44 +739,39 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
     def forward(
         self,
         hidden_state: torch.FloatTensor,
-        **kwargs: Unpack[TransformersKwargs],
+        **kwargs,
     ) -> tuple[torch.FloatTensor] | PPOCRV5MobileDetModelOutput:
         hidden_state = self.backbone(hidden_state)
         hidden_state = self.neck(hidden_state)
 
         return PPOCRV5MobileDetModelOutput(
-            last_hidden_state=hidden_state,
+            logits=hidden_state,
         )
-
-
-@dataclass
-class PPOCRV5MobileDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
-    """
-    Output class for PPOCRV5MobileDetForObjectDetection. Extends BaseModelOutputWithNoAttention
-    to include text segmentation logits.
-
-    Args:
-        logits (torch.FloatTensor, optional): Binary segmentation logits from the head network,
-            shape (B, 1, H, W).
-        shape (torch.FloatTensor, optional): Unused placeholder for consistency with object detection output formats.
-        last_hidden_state (torch.FloatTensor, optional): Last hidden state from the backbone network.
-        hidden_states (tuple[torch.FloatTensor], optional): Tuple of all intermediate hidden states from the backbone
-    """
-
-    logits: torch.FloatTensor | None = None
-    shape: torch.FloatTensor | None = None
 
 
 @auto_docstring(
     custom_intro="""
+    Output class for PPOCRV5MobileDetForObjectDetection.
     """
 )
-class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
+@dataclass
+class PPOCRV5MobileDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
     """
+    Args:
+        logits (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
+            The predicted text mask.
+    """
+
+    logits: torch.FloatTensor | None = None
+
+
+@auto_docstring(
+    custom_intro="""
     PPOCRV5 Mobile Det model for object (text) detection tasks. Wraps the core PPOCRV5MobileDetModel
     and returns outputs compatible with the Transformers object detection API.
     """
-
+)
+class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["num_batches_tracked"]
 
     def __init__(self, config: PPOCRV5MobileDetConfig):
@@ -797,14 +785,13 @@ class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        **kwargs: Unpack[TransformersKwargs],
+        **kwargs,
     ) -> tuple[torch.FloatTensor] | PPOCRV5MobileDetForObjectDetectionOutput:
         outputs = self.model(pixel_values, **kwargs)
-        logits = self.head(outputs.last_hidden_state)
+        logits = self.head(outputs.logits)
 
         return PPOCRV5MobileDetForObjectDetectionOutput(
             logits=logits,
-            last_hidden_state=outputs.last_hidden_state,
         )
 
 

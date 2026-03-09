@@ -320,7 +320,7 @@ def boxes_from_bitmap(
     unclip_ratio: float,
     min_size: int,
     max_candidates: int,
-) -> tuple[np.ndarray, list[float]]:
+) -> tuple[list[np.ndarray] | np.ndarray, list[float]]:
     """
     Extracts axis-aligned or rotated bounding boxes from a binary segmentation map.
 
@@ -408,9 +408,6 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        # limit_side_len: int,
-        # limit_type: str,
-        # max_side_limit: int,
         interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
