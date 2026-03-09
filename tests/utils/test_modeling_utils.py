@@ -2404,9 +2404,7 @@ class InitializeMissingKeysTest(unittest.TestCase):
 
         # Params should not have changed (guarded inits skip marked params)
         for name, param in model.named_parameters():
-            torch.testing.assert_close(
-                param, pre_values[name], msg=f"param {name} should not be re-initialized"
-            )
+            torch.testing.assert_close(param, pre_values[name], msg=f"param {name} should not be re-initialized")
 
     def test_move_missing_keys_fsdp_non_rank0_moves_meta_to_cpu(self):
         """FSDP non-rank-0 path should move all params/buffers from meta to CPU."""
@@ -2455,9 +2453,7 @@ class InitializeMissingKeysTest(unittest.TestCase):
 
         # Param values should NOT have changed (no re-initialization)
         for name, param in model.named_parameters():
-            torch.testing.assert_close(
-                param, pre_init_values[name], msg=f"param {name} should not be re-initialized"
-            )
+            torch.testing.assert_close(param, pre_init_values[name], msg=f"param {name} should not be re-initialized")
 
 
 @slow
