@@ -477,22 +477,19 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
 
         if input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-            batch_size, seq_length = input_ids.shape[:2]
-        else:
-            batch_size, seq_length = inputs_embeds.shape[:2]
+
+        # Calculate embeddings
+        hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
 
         # Handle past_key_values and cache setup
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
         if position_ids is None:
+            batch_size = hidden_states.shape[0]
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
-            position_ids = torch.arange(inputs_embeds.shape[1], device=device) + past_seen_tokens
+            position_ids = torch.arange(inputs_embeds.shape[1], device=hidden_states.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
-
-        # Calculate embeddings
-        hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
