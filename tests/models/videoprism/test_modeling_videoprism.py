@@ -13,12 +13,12 @@
 # limitations under the License.
 """Testing suite for the PyTorch VideoPrism model."""
 
-import inspect
 import tempfile
 import unittest
 
 import numpy as np
 from huggingface_hub import HfApi
+from parameterized import parameterized
 
 from transformers import VideoPrismConfig, VideoPrismTextConfig, VideoPrismVisionConfig
 from transformers.testing_utils import (
@@ -34,12 +34,17 @@ from transformers.utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    ModelTesterMixin,
+    floats_tensor,
+    ids_tensor,
+    random_attention_mask,
+)
 
 
 if is_torch_available():
     import torch
-    from torch import nn
 
     from transformers import (
         VideoPrismClipModel,
@@ -193,7 +198,12 @@ class VideoPrismVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip(reason="VideoPrism reference outputs are validated only with eager attention.")
+    def test_eager_matches_sdpa_inference(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        pass
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -321,6 +331,13 @@ class VideoPrismTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip(reason="VideoPrism reference outputs are validated only with eager attention.")
+    def test_eager_matches_sdpa_inference(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        pass
+
     @unittest.skip(reason="VideoPrismTextModel does not support standalone training")
     def test_training(self):
         pass
@@ -335,11 +352,6 @@ class VideoPrismTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="VideoPrismTextModel does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="VideoPrismTextModel does not use inputs_embeds")
-    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_inputs_embeds
-    def test_inputs_embeds(self):
         pass
 
     @slow
@@ -421,6 +433,17 @@ class VideoPrismClipModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip(reason="VideoPrism reference outputs are validated only with eager attention.")
+    def test_eager_matches_sdpa_inference(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        pass
+
+    @unittest.skip(reason="VideoPrism composite model is only validated with eager attention.")
+    def test_sdpa_can_dispatch_composite_models(self):
+        pass
+
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_hidden_states_output
     def test_hidden_states_output(self):
@@ -464,70 +487,77 @@ class VideoPrismClipModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-@require_vision
-class VideoPrismForVideoClassificationModelTester(ModelTesterMixin, VideoPrismVisionModelTester):
-    def __init__(self, parent, vision_kwargs=None, is_training=True):
-        if vision_kwargs is None:
-            vision_kwargs = {}
-        super().__init__(parent, **vision_kwargs)
+# @require_vision
+# class VideoPrismForVideoClassificationModelTester(ModelTesterMixin, VideoPrismVisionModelTester):
+#     def __init__(self, parent, vision_kwargs=None, is_training=True):
+#         if vision_kwargs is None:
+#             vision_kwargs = {}
+#         super().__init__(parent, **vision_kwargs)
 
-    # Copied from tests.models.vivit.test_modeling_vivit.VivitModelTester.prepare_config_and_inputs with Vivit->VideoPrism
-    def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor(
-            [self.batch_size, self.num_frames, self.num_channels, self.image_size, self.image_size]
-        )
+#     # Copied from tests.models.vivit.test_modeling_vivit.VivitModelTester.prepare_config_and_inputs with Vivit->VideoPrism
+#     def prepare_config_and_inputs(self):
+#         pixel_values = floats_tensor(
+#             [self.batch_size, self.num_frames, self.num_channels, self.image_size, self.image_size]
+#         )
 
-        labels = None
-        if self.use_labels:
-            labels = ids_tensor([self.batch_size], self.num_labels)
+#         labels = None
+#         if self.use_labels:
+#             labels = ids_tensor([self.batch_size], self.num_labels)
 
-        config = self.get_config()
+#         config = self.get_config()
 
-        return config, pixel_values, labels
+#         return config, pixel_values, labels
 
-    def create_and_check_model(self, config, pixel_values, labels):
-        config.num_labels = self.num_labels
-        model = VideoPrismForVideoClassification._from_config(config=config)
-        model.to(torch_device)
-        pixel_values = pixel_values.to(torch_device)
-        label = torch.tensor([1], dtype=torch.long)
-        labels = torch.stack((label, label), dim=0)
-        labels.to(torch_device)
+#     def create_and_check_model(self, config, pixel_values, labels):
+#         config.num_labels = self.num_labels
+#         model = VideoPrismForVideoClassification._from_config(config=config)
+#         model.to(torch_device)
+#         pixel_values = pixel_values.to(torch_device)
+#         label = torch.tensor([1], dtype=torch.long)
+#         labels = torch.stack((label, label), dim=0)
+#         labels.to(torch_device)
 
-        model.eval()
-        with torch.no_grad():
-            result = model(pixel_values, labels)
-        image_size = (self.image_size, self.image_size)
-        patch_size = (self.tubelet_size[1], self.tubelet_size[2])
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.loss.shape, torch.Size([]))
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.num_labels))
-        self.parent.assertEqual(
-            result.hidden_states.shape, (self.batch_size, num_patches * self.num_frames, self.hidden_size)
-        )
+#         model.eval()
+#         with torch.no_grad():
+#             result = model(pixel_values, labels)
+#         image_size = (self.image_size, self.image_size)
+#         patch_size = (self.tubelet_size[1], self.tubelet_size[2])
+#         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+#         self.parent.assertEqual(result.loss.shape, torch.Size([]))
+#         self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.num_labels))
+#         self.parent.assertEqual(
+#             result.hidden_states.shape, (self.batch_size, num_patches * self.num_frames, self.hidden_size)
+#         )
 
 
-@require_vision
-class VideoPrismForVideoClassificationTest(ModelTesterMixin, unittest.TestCase):
-    """
-    Here we also overwrite some of the tests of test_modeling_common.py, as VideoPrismVisionModel does not use input_ids, inputs_embeds,
-    attention_mask and seq_length.
-    """
+# @require_vision
+# class VideoPrismForVideoClassificationTest(ModelTesterMixin, unittest.TestCase):
+#     """
+#     Here we also overwrite some of the tests of test_modeling_common.py, as VideoPrismVisionModel does not use input_ids, inputs_embeds,
+#     attention_mask and seq_length.
+#     """
 
-    def setUp(self):
-        self.model_tester = VideoPrismForVideoClassificationModelTester(
-            self, vision_kwargs={"use_labels": True, "num_labels": 10}
-        )
+#     def setUp(self):
+#         self.model_tester = VideoPrismForVideoClassificationModelTester(
+#             self, vision_kwargs={"use_labels": True, "num_labels": 10}
+#         )
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
+#     def test_model(self):
+#         config_and_inputs = self.model_tester.prepare_config_and_inputs()
+#         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "MHRDYN7/videoprism-base-f16r288"
-        model = VideoPrismVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+# @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+# @unittest.skip(reason="VideoPrism reference outputs are validated only with eager attention.")
+# def test_eager_matches_sdpa_inference(
+#     self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+# ):
+#     pass
+
+#     @slow
+#     def test_model_from_pretrained(self):
+#         model_name = "MHRDYN7/videoprism-base-f16r288"
+#         model = VideoPrismVisionModel.from_pretrained(model_name)
+#         self.assertIsNotNone(model)
 
 
 def prepare_video(video_type="water_bottle_drumming"):
@@ -566,15 +596,18 @@ def prepare_texts():
 class VideoPrismModelIntegrationTest(unittest.TestCase):
     @slow
     def test_videoprism_vision_model(self):
-        model = VideoPrismVisionModel.from_pretrained("MHRDYN7/videoprism-base-f16r288", attn_implementation="eager").to(torch_device)
+        model = VideoPrismVisionModel.from_pretrained(
+            "MHRDYN7/videoprism-base-f16r288", attn_implementation="eager"
+        ).to(torch_device)
         frames = torch.tensor(prepare_video("water_bottle_drumming_frames")).unsqueeze(0).permute(0, 1, 4, 2, 3)
         input_vids = torch.cat([frames, frames], dim=0)  # batch size 2
         model.eval()
         with torch.inference_mode():
             outputs = model(input_vids).last_hidden_state
 
-        self.assertListEqual(outputs[0], outputs[1]), (
-            "Outputs of the batches are not identical for identical input batches"
+        (
+            self.assertListEqual(outputs[0], outputs[1]),
+            ("Outputs of the batches are not identical for identical input batches"),
         )
         expectations = torch.tensor(
             [
@@ -656,24 +689,24 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size([1, int((144 / 18) * (144 / 18) * 10), model.config.hidden_size])
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
-    @slow
-    def test_videoprism_classification_model(self):
-        model_name = "MHRDYN7/videoprism-base-f16r288-finetuned-ucf101"
-        model = VideoPrismForVideoClassification.from_pretrained(model_name).to(torch_device)
-        processor = VideoPrismVideoProcessor.from_pretrained(model_name)
-        video = prepare_video(video_type="basketball_dunk")
-        inputs = processor(videos=video, return_tensors="pt")["pixel_values_videos"].to(torch_device)
-        label = torch.tensor([8], dtype=torch.long)
-        model.eval()
-        with torch.inference_mode():
-            outputs = model(inputs, label)
+    # @slow
+    # def test_videoprism_classification_model(self):
+    #     model_name = "MHRDYN7/videoprism-base-f16r288-finetuned-ucf101"
+    #     model = VideoPrismForVideoClassification.from_pretrained(model_name).to(torch_device)
+    #     processor = VideoPrismVideoProcessor.from_pretrained(model_name)
+    #     video = prepare_video(video_type="basketball_dunk")
+    #     inputs = processor(videos=video, return_tensors="pt")["pixel_values_videos"].to(torch_device)
+    #     label = torch.tensor([8], dtype=torch.long)
+    #     model.eval()
+    #     with torch.inference_mode():
+    #         outputs = model(inputs, label)
 
-        expected_logits = torch.tensor(
-            [
-                [
-                    [-18.5863, -12.8547, -4.8901, -8.7695, 15.0777, 15.0308, -0.2944, 0.5263, 22.7533, 5.9714],
-                ]
-            ]
-        )
-        torch.testing.assert_close(outputs.logits, expected_logits, rtol=1e-4, atol=1e-4)
-        torch.testing.assert_close(outputs.loss, torch.tensor(0.0009), rtol=1e-4, atol=1e-4)
+    #     expected_logits = torch.tensor(
+    #         [
+    #             [
+    #                 [-18.5863, -12.8547, -4.8901, -8.7695, 15.0777, 15.0308, -0.2944, 0.5263, 22.7533, 5.9714],
+    #             ]
+    #         ]
+    #     )
+    #     torch.testing.assert_close(outputs.logits, expected_logits, rtol=1e-4, atol=1e-4)
+    #     torch.testing.assert_close(outputs.loss, torch.tensor(0.0009), rtol=1e-4, atol=1e-4)

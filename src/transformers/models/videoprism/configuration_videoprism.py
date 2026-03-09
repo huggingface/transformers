@@ -5,12 +5,13 @@
 #                          modular_videoprism.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="google/videoprism-base-f16r288")
 class VideoPrismVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VideoPrismVisionModel`]. It is used to instantiate a
@@ -58,20 +59,6 @@ class VideoPrismVisionConfig(PreTrainedConfig):
             Number of auxiliary layers. This is used in the VideoPrismVideoModel that is a part of VideoPrismClipModel.
         apply_l2_norm (`bool`, *optional*, defaults to `True`):
             Whether to apply L2 normalization to the output. This is used in the VideoPrismVideoModel that is a part of VideoPrismClipModel.
-
-    Example:
-
-    ```python
-    >>> from transformers import VideoPrismVisionConfig, VideoPrismVisionModel
-
-    >>> # Initializing a VideoPrismVisionConfig with default values
-    >>> configuration = VideoPrismVisionConfig()
-
-    >>> # Initializing a VideoPrismVisionModel with the configuration
-    >>> model = VideoPrismVisionModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
 
     model_type = "videoprism_vision_model"
@@ -121,57 +108,15 @@ class VideoPrismVisionConfig(PreTrainedConfig):
         self.apply_l2_norm = apply_l2_norm
 
 
+@auto_docstring(checkpoint="google/videoprism-lvt-base-f16r288")
 class VideoPrismTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VideoPrismTextModel`]. It is used to instantiate a
-    VideoPrism text encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the text encoder of the VideoPrism
-    [google/videoprism-base-patch16-224](https://huggingface.co/google/videoprism-base-patch16-224) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
     Args:
-            hidden_size (`int`, *optional*, defaults to 768):
-                Dimensionality of the encoder layers and the pooler layer.
-            intermediate_size (`int`, *optional*, defaults to 3072):
-                Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-            num_attention_heads (`int`, *optional*, defaults to 12):
-                Number of attention heads for each attention layer in the Transformer encoder.
-            num_hidden_layers (`int`, *optional*, defaults to 12):
-                Number of hidden layers in the Transformer encoder.
-            vocab_size (`int`, *optional*, defaults to 32000):
-                Vocabulary size of the VideoPrism text model. Defines the number of different tokens that can be represented by
-                the `inputs_ids` passed when calling [`VideoPrismModel`].
-            apply_l2_norm (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-            hidden_act (`str` or `function`, *optional*, defaults to `"relu"`):
-                The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-                `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-            attention_probs_dropout_prob (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
-            qkv_bias (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-            hidden_dropout_prob (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
-            layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-                The epsilon used by the layer normalization layers.
-            initializer_range (`<fill_type>`, *optional*, defaults to 0.02): <fill_docstring>
-            attn_logit_softcapping (`<fill_type>`, *optional*, defaults to 50.0): <fill_docstring>
-            max_position_embeddings (`int`, *optional*, defaults to 64):
-                The maximum sequence length that this model might ever be used with. Typically set this to something large
-                just in case (e.g., 512 or 1024 or 2048).
-
-    Example:
-
-    ```python
-    >>> from transformers import VideoPrismTextConfig, VideoPrismTextModel
-
-    >>> # Initializing a VideoPrismTextConfig with google/videoprism-base-patch16-224 style configuration
-    >>> configuration = VideoPrismTextConfig()
-
-    >>> # Initializing a VideoPrismTextModel (with random weights) from the google/videoprism-base-patch16-224 style configuration
-    >>> model = VideoPrismTextModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+        apply_l2_norm (`bool`, *optional*, defaults to `True`):
+            Whether to apply L2 normalization to the output of VideoPrismTextEncoder.
+        attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
+            Softcapping constant for attention logits.
+    """
 
     model_type = "videoprism_text_model"
     base_config_key = "text_config"
@@ -212,6 +157,7 @@ class VideoPrismTextConfig(PreTrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
 
 
+@auto_docstring(checkpoint="google/videoprism-base-patch16-224")
 class VideoPrismConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VideoPrismModel`]. It is used to instantiate a

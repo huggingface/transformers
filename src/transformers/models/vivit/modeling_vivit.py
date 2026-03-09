@@ -334,7 +334,7 @@ class VivitEncoder(nn.Module):
         self.layer = nn.ModuleList([VivitLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def forward(self, hidden_states: torch.Tensor) -> BaseModelOutput:
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(hidden_states)
 

@@ -29,7 +29,7 @@ from ..vivit.modeling_vivit import (
 
 logger = logging.get_logger(__name__)
 
-
+@auto_docstring(checkpoint="google/videoprism-base-f16r288")
 class VideoPrismVisionConfig(VivitConfig):
     r"""
     This is the configuration class to store the configuration of a [`VideoPrismVisionModel`]. It is used to instantiate a
@@ -77,20 +77,6 @@ class VideoPrismVisionConfig(VivitConfig):
             Number of auxiliary layers. This is used in the VideoPrismVideoModel that is a part of VideoPrismClipModel.
         apply_l2_norm (`bool`, *optional*, defaults to `True`):
             Whether to apply L2 normalization to the output. This is used in the VideoPrismVideoModel that is a part of VideoPrismClipModel.
-
-    Example:
-
-    ```python
-    >>> from transformers import VideoPrismVisionConfig, VideoPrismVisionModel
-
-    >>> # Initializing a VideoPrismVisionConfig with default values
-    >>> configuration = VideoPrismVisionConfig()
-
-    >>> # Initializing a VideoPrismVisionModel with the configuration
-    >>> model = VideoPrismVisionModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
 
     model_type = "videoprism_vision_model"
@@ -142,7 +128,15 @@ class VideoPrismVisionConfig(VivitConfig):
         del self.num_hidden_layers
 
 
+@auto_docstring(checkpoint="google/videoprism-lvt-base-f16r288")
 class VideoPrismTextConfig(SiglipTextConfig):
+    r"""
+    Args:
+        apply_l2_norm (`bool`, *optional*, defaults to `True`):
+            Whether to apply L2 normalization to the output of VideoPrismTextEncoder.
+        attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
+            Softcapping constant for attention logits.
+    """
     def __init__(
         self,
         hidden_size=768,
@@ -260,6 +254,7 @@ class VideoPrismTokenizer(T5Tokenizer):
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
+        _spm_precompiled_charsmap=None,
         extra_ids=100,
         additional_special_tokens=None,
         **kwargs,
@@ -269,6 +264,7 @@ class VideoPrismTokenizer(T5Tokenizer):
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
+            _spm_precompiled_charsmap=_spm_precompiled_charsmap,
             extra_ids=extra_ids,
             additional_special_tokens=additional_special_tokens,
             **kwargs,
@@ -384,24 +380,25 @@ class VideoPrismVideoOutput(ModelOutput):
 @dataclass
 @auto_docstring
 class VideoPrismClipOutput(ModelOutput):
-    """
+    r"""
     Base class for VideoPrismClip model outputs.
-    logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
-        The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
-        similarity scores.
-    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, video_batch_size)`):
-        The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-image
-        similarity scores.
-    video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-        The image embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismVideoModel`].
-    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-        The text embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismTextModel`].
-    video_model_output (`VideoPrismVideoOutput`):
-        The output of the [`VideoPrismVideoModel`].
-    text_model_output (`BaseModelOutputWithPooling`):
-        The output of the [`VideoPrismTextModel`].
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-        Contrastive loss for image-text similarity.
+    Args:
+        logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
+            The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
+            similarity scores.
+        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, video_batch_size)`):
+            The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-image
+            similarity scores.
+        video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The image embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismVideoModel`].
+        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The text embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismTextModel`].
+        video_model_output (`VideoPrismVideoOutput`):
+            The output of the [`VideoPrismVideoModel`].
+        text_model_output (`BaseModelOutputWithPooling`):
+            The output of the [`VideoPrismTextModel`].
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+            Contrastive loss for image-text similarity.
     """
 
     logits_per_video: torch.FloatTensor | None = None
@@ -497,7 +494,9 @@ class VideoPrismSpatialEmbeddings(VivitEmbeddings):
         return patch_pos_embed
 
     def forward(
-        self, pixel_values_videos: torch.Tensor, interpolate_pos_encoding: bool | None = False
+        self,
+        pixel_values_videos: torch.Tensor,
+        interpolate_pos_encoding: bool | None = False,
     ) -> torch.Tensor:
         batch, frames, channel, height, width = pixel_values_videos.shape
         if height != width:
@@ -582,6 +581,7 @@ def eager_attention_forward(
     scaling: float,
     dropout: float = 0.0,
     softcap: float | None = None,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
@@ -996,23 +996,23 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
 
         hidden_states = inputs_embeds * (self.config.hidden_size**0.5)
         seq_len = hidden_states.shape[1]
-        cls_padding = torch.ones(batch_size, 1)
-        input_ids = torch.cat((input_ids, cls_padding), dim=1)
-        attention_mask = torch.cat((attention_mask, cls_padding), dim=1) if attention_mask is not None else None
-
-        if attention_mask is not None:
-            attention_mask = create_causal_mask(
-                config=self.config,
-                inputs_embeds=hidden_states,
-                attention_mask=attention_mask,
-                cache_position=torch.arange(hidden_states.shape[1] + 1, device=hidden_states.device),
-                past_key_values=None,
-            )
 
         features = hidden_states + self.position_embeddings[:seq_len]
         cls_emb = self.cls_emb * (self.config.hidden_size**0.5)
         cls_emb = cls_emb.expand(features.shape[0], -1, -1)
         features = torch.cat((features, cls_emb), dim=1)
+
+        if attention_mask is not None:
+            cls_padding = torch.ones(batch_size, 1, device=attention_mask.device, dtype=attention_mask.dtype)
+            attention_mask = torch.cat((attention_mask, cls_padding), dim=1)
+            attention_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=features,
+                attention_mask=attention_mask,
+                cache_position=torch.arange(features.shape[1], device=features.device),
+                past_key_values=None,
+            )
+
         text_encoder_output = self.text_encoder(features, attention_mask)
         features = text_encoder_output.last_hidden_state
         features = self.layernorm(features)
@@ -1088,6 +1088,12 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         self.video_model = VideoPrismVideoModel._from_config(config.vision_config)
         self.text_model = VideoPrismTextModel._from_config(config.text_config)
         self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.text_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value: nn.Module):
+        self.text_model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring
