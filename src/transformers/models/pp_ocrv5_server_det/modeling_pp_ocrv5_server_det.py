@@ -24,11 +24,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple
-from ...utils.output_capturing import capture_outputs
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from .configuration_pp_ocrv5_server_det import PPOCRV5ServerDetConfig
 
 
@@ -69,15 +70,7 @@ class PPOCRV5ServerDetDSConv(nn.Module):
         if groups is None:
             groups = in_channels
 
-        if self.hidden_act == "relu":
-            self.act = nn.ReLU()
-        elif self.hidden_act == "hardswish":
-            self.act = nn.Hardswish()
-        else:
-            print(f"The activation function({self.hidden_act}) is selected incorrectly.")
-            exit()
-
-        self.hidden_act = hidden_act
+        self.act = ACT2FN[hidden_act]
         self.conv1 = nn.Conv2d(
             in_channels=in_channels,
             out_channels=in_channels,
@@ -346,7 +339,6 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
         stride (`int`): Stride for the convolution.
         padding (`Union[int, str]`): Padding value or strategy.
         groups (`int`, *optional*, defaults to 1): Grouped convolution parameter.
-        if_act (`bool`, *optional*, defaults to `True`): Whether to apply activation.
         hidden_act (`str`, *optional*): Type of activation ("relu" or "hardswish").
     """
 
@@ -358,11 +350,9 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
         stride: int,
         padding: int | str,
         groups: int = 1,
-        if_act: bool = True,
-        hidden_act: str | None = None,
+        hidden_act: str = "relu",
     ):
         super().__init__()
-        self.if_act = if_act
         self.hidden_act = hidden_act
         self.conv = nn.Conv2d(
             in_channels=in_channels,
@@ -375,6 +365,7 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
         )
 
         self.bn = nn.BatchNorm2d(out_channels, momentum=0.9)
+        self.act = ACT2FN[hidden_act]
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         """
@@ -389,14 +380,7 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
         """
         hidden_state = self.conv(hidden_state)
         hidden_state = self.bn(hidden_state)
-        if self.if_act:
-            if self.hidden_act == "relu":
-                hidden_state = F.relu(hidden_state)
-            elif self.hidden_act == "hardswish":
-                hidden_state = F.hardswish(hidden_state)
-            else:
-                print(f"The activation function({self.hidden_act}) is selected incorrectly.")
-                exit()
+        hidden_state = self.act(hidden_state)
         return hidden_state
 
 
@@ -446,22 +430,18 @@ class PPOCRV5ServerDetHead(nn.Module):
             stride=2,
         )
 
-    def forward(
-        self, hidden_state: torch.Tensor, return_feature: bool = False
-    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_state: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Forward pass of the PPOCRV5ServerDetHead.
 
         Args:
             hidden_state (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
                 Input feature map.
-            return_feature (`bool`, *optional*, defaults to `False`):
-                Whether to return the intermediate feature map before the final convolution.
 
         Returns:
-            `torch.FloatTensor` or `tuple(torch.FloatTensor, torch.FloatTensor)`:
+            `tuple(torch.FloatTensor, torch.FloatTensor)`:
                 - **hidden_state** (`torch.FloatTensor`): Final probability map of shape `(batch_size, 1, H*4, W*4)`.
-                - **feature** (`torch.FloatTensor`, *optional*): Intermediate features, returned only if `return_feature` is `True`.
+                - **feature** (`torch.FloatTensor`): Intermediate features.
         """
         hidden_state = self.conv1(hidden_state)
         hidden_state = self.conv_bn1(hidden_state)
@@ -469,40 +449,10 @@ class PPOCRV5ServerDetHead(nn.Module):
         hidden_state = self.conv2(hidden_state)
         hidden_state = self.conv_bn2(hidden_state)
         hidden_state = self.relu2(hidden_state)
-        if return_feature is True:
-            feature = hidden_state
+        feature = hidden_state
         hidden_state = self.conv3(hidden_state)
         hidden_state = torch.sigmoid(hidden_state)
-        if return_feature is True:
-            return hidden_state, feature
-        return hidden_state
-
-
-class PPOCRV5ServerDetDBHead(nn.Module):
-    """
-    Differentiable Binarization (DB) Head wrapper.
-
-    Args:
-        in_channels (`int`): Input channel depth.
-        kernel_list (`List[int]`, *optional*, defaults to `[3, 2, 2]`): Kernel sizes for the internal Head.
-    """
-
-    def __init__(self, in_channels: int, kernel_list: list[int] = [3, 2, 2]):
-        super().__init__()
-        self.binarize = PPOCRV5ServerDetHead(in_channels=in_channels, kernel_list=kernel_list)
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass to generate the initial shrink map.
-
-        Args:
-            hidden_state (`torch.FloatTensor`): Input feature map.
-
-        Returns:
-            `torch.FloatTensor`: Shrink probability map.
-        """
-        hidden_state = self.binarize(hidden_state)
-        return hidden_state
+        return hidden_state, feature
 
 
 class PPOCRV5ServerDetLocalModule(nn.Module):
@@ -543,7 +493,7 @@ class PPOCRV5ServerDetLocalModule(nn.Module):
         return hidden_state
 
 
-class PPOCRV5ServerDetPFHeadLocal(PPOCRV5ServerDetDBHead):
+class PPOCRV5ServerDetPFHeadLocal(nn.Module):
     """
     PPOCRV5ServerDetPFHeadLocal implements the Progressive Fusion Head with Local refinement,
     the core detection head of PP-OCRv5.
@@ -555,8 +505,8 @@ class PPOCRV5ServerDetPFHeadLocal(PPOCRV5ServerDetDBHead):
     """
 
     def __init__(self, config: PPOCRV5ServerDetConfig):
-        super().__init__(in_channels=config.neck_out_channels, kernel_list=config.kernel_list)
-
+        super().__init__()
+        self.binarize = PPOCRV5ServerDetHead(in_channels=config.neck_out_channels, kernel_list=config.kernel_list)
         self.up_conv = nn.Upsample(scale_factor=config.scale_factor, mode=config.interpolate_mode)
         if config.mode == "large":
             out_channels = config.neck_out_channels // 4
@@ -579,7 +529,7 @@ class PPOCRV5ServerDetPFHeadLocal(PPOCRV5ServerDetDBHead):
                 The final refined text detection probability map, calculated as the
                 average of the base map and the refined local map.
         """
-        hidden_state, feature = self.binarize(hidden_state, return_feature=True)
+        hidden_state, feature = self.binarize(hidden_state)
         identity = hidden_state
         feature = self.up_conv(feature)
         hidden_state = self.cbn_layer(feature, hidden_state)
@@ -594,12 +544,10 @@ class PPOCRV5ServerDetModelOutput(BaseModelOutputWithNoAttention):
     Output class for the PPOCRV5ServerDetModel.
 
     Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
-            Binary segmentation probability maps from the head. Higher values indicate
-            higher probability of text presence.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, neck_out_channels, height, width)`, *optional*):
+            Fused feature maps from the neck (LKPAN). These are intermediate representations ready for the
+            detection head, not final predictions.
     """
-
-    logits: torch.FloatTensor | None = None
 
 
 class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
@@ -648,25 +596,21 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
         self.neck = PPOCRV5ServerDetLKPAN(config)
         self.post_init()
 
-    @capture_outputs
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
-        hidden_state: torch.FloatTensor,
-        **kwargs,
+        pixel_values: torch.FloatTensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | PPOCRV5ServerDetModelOutput:
-        """
-        Forward pass of the PPOCRV5ServerDetModel.
-
-        Args:
-            hidden_state (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
-                Input image pixels.
-
-        """
-        hidden_state = self.backbone(hidden_state).feature_maps
+        backbone_outputs = self.backbone(pixel_values, **kwargs)
+        hidden_state = backbone_outputs.feature_maps
         hidden_state = self.neck(hidden_state)
 
-        return PPOCRV5ServerDetModelOutput(logits=hidden_state)
+        return PPOCRV5ServerDetModelOutput(
+            last_hidden_state=hidden_state,
+            hidden_states=backbone_outputs.hidden_states,
+        )
 
 
 @auto_docstring(
@@ -676,10 +620,15 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
 )
 @dataclass
 class PPOCRV5ServerDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
-    """
-    Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
-            The predicted text mask.
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, neck_out_channels, height, width)`, *optional*):
+        Fused feature maps from the neck (LKPAN) before the detection head.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of feature maps from backbone stages when `output_hidden_states=True`.
+    logits (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`):
+        The predicted text mask (binary probability maps). Values in [0, 1] indicate probability of text
+        presence at each pixel. Use [`PPOCRV5ServerDetImageProcessorFast.post_process_object_detection`]
+        to convert to bounding boxes.
     """
 
     logits: torch.FloatTensor | None = None
@@ -705,25 +654,15 @@ class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | PPOCRV5ServerDetForObjectDetectionOutput:
-        """
-        Forward pass of the PPOCRV5 detection model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
-                Pixel values of the input images.
-
-        Returns:
-            `PPOCRV5ServerDetForObjectDetectionOutput` or `tuple(torch.FloatTensor)`:
-                The detection result containing `logits` (segmentation mask).
-        """
-
-        outputs = self.model(pixel_values)
-        logits = self.head(outputs.logits)
+        outputs = self.model(pixel_values, **kwargs)
+        logits = self.head(outputs.last_hidden_state)
 
         return PPOCRV5ServerDetForObjectDetectionOutput(
             logits=logits,
+            last_hidden_state=outputs.last_hidden_state,
+            hidden_states=outputs.hidden_states,
         )
 
 

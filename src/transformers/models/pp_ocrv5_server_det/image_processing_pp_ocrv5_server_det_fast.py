@@ -26,7 +26,7 @@ import torch
 import torchvision.transforms.v2.functional as tvF
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import SizeDict
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, is_cv2_available
@@ -407,38 +407,56 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
+        limit_side_len: int,
+        limit_type: str,
+        max_side_limit: int,
+        disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        data = {}
-        resize_images, target_sizes = [], []
+        target_sizes = []
+
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        target_shape_per_shape = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                resize_size, target_shape = self.get_image_size(
+                    stacked_images[0], limit_side_len, limit_type, max_side_limit
+                )
+                target_shape_per_shape[shape] = target_shape
+                stacked_images = self.resize(image=stacked_images, size=resize_size, interpolation=interpolation)
+            resized_images_grouped[shape] = stacked_images
+
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
         if do_resize:
-            for image in images:
-                size, shape = self.get_image_size(image, self.limit_side_len, self.limit_type, self.max_side_limit)
-                image = self.resize(image, size=size, interpolation=interpolation)
-                resize_images.append(image)
-                target_sizes.append(shape)
-            images = resize_images
+            target_sizes = [target_shape_per_shape[grouped_images_index[i][0]] for i in range(len(images))]
 
-        processed_images = []
-        for image in images:
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
-            processed_images.append(image)
+        # Group images by size for further processing
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            # BGR to RGB conversion
+            stacked_images = stacked_images[:, [2, 1, 0], :, :]
+            processed_images_grouped[shape] = stacked_images
 
-        images = processed_images
-        images = [image[[2, 1, 0], :, :] for image in images]
+        pixel_values = reorder_images(processed_images_grouped, grouped_images_index)
 
-        data.update({"pixel_values": torch.stack(images, dim=0), "target_sizes": target_sizes})
-        encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
-
-        return encoded_inputs
+        return BatchFeature(
+            data={"pixel_values": pixel_values, "target_sizes": target_sizes},
+            tensor_type=return_tensors,
+        )
 
     def get_image_size(
         self,
         image: np.ndarray,
         limit_side_len: int,
         limit_type: str,
-        max_side_limit: int = 4000,
+        max_side_limit: int,
     ) -> tuple[dict, np.ndarray]:
         """
         Computes the target size for resizing an image while preserving aspect ratio.
@@ -454,8 +472,6 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
                 - SizeDict: Target size.
                 - torch.Tensor: Original size.
         """
-        limit_side_len = limit_side_len or self.limit_side_len
-        limit_type = limit_type or self.limit_type
         _, height, width = image.shape
         height, width = int(height), int(width)
 
@@ -506,35 +522,51 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         unclip_ratio: float = 1.5,
     ):
         """
-        Converts model outputs into detected text boxes.
+        Converts model outputs into detected text boxes in corners format (xmin, ymin, xmax, ymax).
 
         Args:
-            preds (torch.Tensor): Model outputs.
-            threshold (float):Binarization threshold.
-            target_sizes (TensorType or list[tuple]): Original image sizes.
+            preds: Model outputs with `logits` attribute (probability maps of shape `(batch_size, 1, H, W)`).
+            threshold (float): Binarization threshold.
+            target_sizes: Original image sizes (height, width) per image.
             box_thresh (float): Box score threshold.
             max_candidates (int): Maximum number of boxes.
             min_size (int): Minimum box size.
             unclip_ratio (float): Expansion ratio.
 
         Returns:
-            list[dict]: List of detection results.
+            list[dict]: List of detection results per image. Each dict contains:
+                - "boxes": `torch.Tensor` of shape `(N, 4)` in corners format (xmin, ymin, xmax, ymax)
+                - "scores": `torch.Tensor` of shape `(N,)`
+                - "labels": `torch.Tensor` of shape `(N,)` (class id 0 for text)
         """
+        if target_sizes is None:
+            raise ValueError("target_sizes must be provided for post_process_object_detection")
 
+        device = preds.logits.device
         results = []
         for pred, size in zip(preds.logits, target_sizes):
             pred = pred[0, :, :].cpu().detach().numpy()
             size = size.cpu().detach().numpy()
             src_h, src_w = size
             mask = pred > threshold
-            box, score = boxes_from_bitmap(
+            boxes_polygon, scores = boxes_from_bitmap(
                 pred, mask, src_w, src_h, box_thresh, unclip_ratio, min_size, max_candidates
             )
 
+            # Convert polygon (N, 4, 2) to axis-aligned corners [xmin, ymin, xmax, ymax]
+            if len(boxes_polygon) == 0:
+                boxes = np.zeros((0, 4), dtype=np.float32)
+            else:
+                boxes = np.array(
+                    [[p[:, 0].min(), p[:, 1].min(), p[:, 0].max(), p[:, 1].max()] for p in boxes_polygon],
+                    dtype=np.float32,
+                )
+
             results.append(
                 {
-                    "boxes": box,
-                    "scores": score,
+                    "boxes": torch.from_numpy(boxes).to(device),
+                    "scores": torch.tensor(scores, dtype=torch.float32, device=device),
+                    "labels": torch.zeros(len(scores), dtype=torch.long, device=device),  # Single class: text
                 }
             )
         return results

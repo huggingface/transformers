@@ -24,6 +24,7 @@ from transformers import (
     PPOCRV5ServerDetConfig,
     PPOCRV5ServerDetForObjectDetection,
     PPOCRV5ServerDetImageProcessorFast,
+    PPOCRV5ServerDetModel,
     is_torch_available,
     is_vision_available,
 )
@@ -37,6 +38,7 @@ from transformers.testing_utils import (
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -70,15 +72,23 @@ class PPOCRV5ServerDetModelTester:
         return config, pixel_values
 
     def get_config(self) -> PPOCRV5ServerDetConfig:
+        # Minimal backbone config for fast tests (< 1M params for test_model_is_small)
         backbone_config = {
             "model_type": "hgnet_v2",
-            "arch": "L",
-            "return_idx": [0, 1, 2, 3],
-            "freeze_stem_only": True,
-            "freeze_at": 0,
-            "freeze_norm": True,
-            "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
             "out_features": ["stage1", "stage2", "stage3", "stage4"],
+            "out_indices": [1, 2, 3, 4],
+            "depths": [1, 1, 1, 1],
+            "hidden_sizes": [16, 32, 64, 128],
+            "stage_in_channels": [16, 16, 32, 64],
+            "stage_mid_channels": [16, 16, 32, 64],
+            "stage_out_channels": [16, 32, 64, 128],
+            "stage_num_blocks": [1, 1, 1, 1],
+            "stage_downsample": [False, True, True, True],
+            "stage_light_block": [False, False, True, True],
+            "stage_kernel_size": [3, 3, 5, 5],
+            "stage_numb_of_layers": [1, 1, 1, 1],
+            "stem_channels": [3, 8, 16],
+            "embedding_size": 16,
         }
 
         intraclblock_config = {
@@ -98,15 +108,9 @@ class PPOCRV5ServerDetModelTester:
         config = PPOCRV5ServerDetConfig(
             backbone_config=backbone_config,
             interpolate_mode="nearest",
-            use_last_conv=True,
-            class_expand=2048,
-            dropout_prob=0.0,
-            class_num=1000,
-            out_indices=[0, 1, 2, 3],
-            neck_out_channels=256,
+            neck_out_channels=32,
             reduce_factor=2,
             intraclblock_config=intraclblock_config,
-            head_in_channels=1024,
             mode="large",
             scale_factor=2,
             hidden_act="relu",
@@ -126,10 +130,11 @@ class PPOCRV5ServerDetModelTester:
 
 
 @require_torch
-class PPOCRV5ServerDetModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (PPOCRV5ServerDetForObjectDetection,) if is_torch_available() else ()
+class PPOCRV5ServerDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (PPOCRV5ServerDetModel, PPOCRV5ServerDetForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = {"object-detection": PPOCRV5ServerDetForObjectDetection} if is_torch_available() else {}
 
+    test_resize_embeddings = False
     has_attentions = False
 
     def setUp(self):
@@ -147,51 +152,59 @@ class PPOCRV5ServerDetModelTest(ModelTesterMixin, unittest.TestCase):
         )
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        # Skip create_and_test_config_with_num_labels: PP-OCRV5 has fixed single class (text)
+        self.config_tester.create_and_test_config_common_properties()
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_from_and_save_pretrained_subfolder()
+        self.config_tester.create_and_test_config_from_and_save_pretrained_composite()
+        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.check_config_arguments_init()
+        self.config_tester.create_and_test_config_from_pretrained_custom_kwargs()
 
     def test_pp_ocrv5_server_det_object_detection(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_pp_ocrv5_server_det_object_detection(*config_and_inputs)
 
-    @unittest.skip(reason="PPOCRV5ServerDet does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="PPOCRV5ServerDet does not use test_inputs_embeds_matches_input_ids")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip(reason="PPOCRV5ServerDet does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="PPOCRV5ServerDet does not support input and output embeddings")
-    def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(reason="PPOCRV5ServerDet does not use token embeddings")
-    def test_resize_tokens_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Feed forward chunking is not implemented")
-    def test_feed_forward_chunking(self):
-        pass
-
-    @unittest.skip(reason="PPOCRV5ServerDet does not support this test")
-    def test_model_is_small(self):
-        pass
-
-    @unittest.skip(reason="PPOCRV5ServerDet does not support attention")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(reason="PPOCRV5ServerDet does not support attention")
-    def test_attention_outputs(self):
-        pass
-
-    @unittest.skip("PPOCRV5ServerDet does not support hidden state output")
     def test_hidden_states_output(self):
-        pass
+        # PP-OCRV5 uses HGNetV2 backbone: hidden_states = (embedding, stage1, ..., stageN) = num_stages + 1
+        config = self.model_tester.get_config()
+        num_expected_hidden_states = len(config.backbone_config.depths) + 1
+
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.hidden_states
+            self.assertIsNotNone(hidden_states)
+            self.assertEqual(len(hidden_states), num_expected_hidden_states)
+
+            # First hidden state (embedding output) is 4x downsampled
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [self.model_tester.image_size // 4, self.model_tester.image_size // 4],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict.copy(), config, model_class)
+
+            # Check that output_hidden_states also works via config (including backbone subconfig)
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+            if config.backbone_config is not None:
+                config.backbone_config.output_hidden_states = True
+            check_hidden_states_output(inputs_dict.copy(), config, model_class)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -264,28 +277,20 @@ class PPOCRV5ServerDetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
         torch.testing.assert_close(outputs.logits[0, 0, :3, :3], expected_logits, rtol=2e-4, atol=2e-4)
 
-        expected_shape_boxes = torch.Size((4, 4, 2))
+        # Axis-aligned boxes in corners format (xmin, ymin, xmax, ymax)
+        expected_shape_boxes = torch.Size((4, 4))
         expected_boxes = torch.tensor(
-            [
-                [[76, 546], [398, 534], [400, 575], [77, 587]],
-                [[14, 499], [517, 478], [519, 532], [16, 553]],
-                [[193, 447], [401, 438], [403, 483], [195, 492]],
-                [[31, 400], [488, 378], [491, 434], [34, 456]],
-            ],
-        ).to(torch_device)
+            [[75, 532, 400, 589], [14, 478, 520, 553], [187, 430, 409, 498], [31, 378, 491, 456]],
+            dtype=torch.float32,
+            device=torch_device,
+        )
 
         self.assertEqual(results[0]["boxes"].shape, expected_shape_boxes)
-        torch.testing.assert_close(
-            torch.from_numpy(results[0]["boxes"]).to(device=torch_device, dtype=torch.int64),
-            expected_boxes,
-            rtol=2e-4,
-            atol=2e-4,
-        )
+        torch.testing.assert_close(results[0]["boxes"], expected_boxes, rtol=2e-4, atol=2e-4)
 
-        expected_scores = torch.tensor(
-            [0.9024514491711588, 0.8939725431302765, 0.8937050561554075, 0.8780838469131043]
-        ).to(torch_device)
-        self.assertEqual(len(results[0]["scores"]), 4)
-        torch.testing.assert_close(
-            torch.tensor(results[0]["scores"]).to(device=torch_device), expected_scores, rtol=2e-4, atol=2e-4
-        )
+        expected_scores = torch.tensor([0.9037, 0.8942, 0.8938, 0.8781], device=torch_device)
+        self.assertEqual(results[0]["scores"].shape, (4,))
+        torch.testing.assert_close(results[0]["scores"], expected_scores, rtol=2e-4, atol=2e-4)
+
+        self.assertEqual(results[0]["labels"].shape, (4,))
+        self.assertTrue((results[0]["labels"] == 0).all())  # Single class: text

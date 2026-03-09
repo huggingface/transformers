@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
@@ -121,6 +120,12 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         self.scale_factor = scale_factor
         self.hidden_act = hidden_act
         self.kernel_list = kernel_list
+
+        # For object detection pipeline compatibility: single class "text"
+        if "id2label" not in kwargs:
+            kwargs["id2label"] = {0: "text"}
+        if "num_labels" not in kwargs:
+            kwargs["num_labels"] = 1
 
         super().__init__(**kwargs)
 

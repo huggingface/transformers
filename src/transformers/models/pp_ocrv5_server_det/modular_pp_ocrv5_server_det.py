@@ -22,24 +22,23 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms.v2.functional as tvF
 
+from ...activations import ACT2FN
 from ...backbone_utils import consolidate_backbone_kwargs_to_config, load_backbone
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_processing_utils_fast import (
+    BaseImageProcessorFast,
+    group_images_by_shape,
+    reorder_images,
+)
 from ...image_utils import (
     SizeDict,
 )
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import (
-    auto_docstring,
-    can_return_tuple,
-    is_cv2_available,
-    logging,
-)
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_cv2_available, logging
 from ...utils.generic import TensorType
-from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
 
 
@@ -146,6 +145,12 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         self.scale_factor = scale_factor
         self.hidden_act = hidden_act
         self.kernel_list = kernel_list
+
+        # For object detection pipeline compatibility: single class "text"
+        if "id2label" not in kwargs:
+            kwargs["id2label"] = {0: "text"}
+        if "num_labels" not in kwargs:
+            kwargs["num_labels"] = 1
 
         super().__init__(**kwargs)
 
@@ -534,38 +539,56 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
+        limit_side_len: int,
+        limit_type: str,
+        max_side_limit: int,
+        disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        data = {}
-        resize_images, target_sizes = [], []
+        target_sizes = []
+
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        target_shape_per_shape = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                resize_size, target_shape = self.get_image_size(
+                    stacked_images[0], limit_side_len, limit_type, max_side_limit
+                )
+                target_shape_per_shape[shape] = target_shape
+                stacked_images = self.resize(image=stacked_images, size=resize_size, interpolation=interpolation)
+            resized_images_grouped[shape] = stacked_images
+
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
         if do_resize:
-            for image in images:
-                size, shape = self.get_image_size(image, self.limit_side_len, self.limit_type, self.max_side_limit)
-                image = self.resize(image, size=size, interpolation=interpolation)
-                resize_images.append(image)
-                target_sizes.append(shape)
-            images = resize_images
+            target_sizes = [target_shape_per_shape[grouped_images_index[i][0]] for i in range(len(images))]
 
-        processed_images = []
-        for image in images:
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
-            processed_images.append(image)
+        # Group images by size for further processing
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            # BGR to RGB conversion
+            stacked_images = stacked_images[:, [2, 1, 0], :, :]
+            processed_images_grouped[shape] = stacked_images
 
-        images = processed_images
-        images = [image[[2, 1, 0], :, :] for image in images]
+        pixel_values = reorder_images(processed_images_grouped, grouped_images_index)
 
-        data.update({"pixel_values": torch.stack(images, dim=0), "target_sizes": target_sizes})
-        encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
-
-        return encoded_inputs
+        return BatchFeature(
+            data={"pixel_values": pixel_values, "target_sizes": target_sizes},
+            tensor_type=return_tensors,
+        )
 
     def get_image_size(
         self,
         image: np.ndarray,
         limit_side_len: int,
         limit_type: str,
-        max_side_limit: int = 4000,
+        max_side_limit: int,
     ) -> tuple[dict, np.ndarray]:
         """
         Computes the target size for resizing an image while preserving aspect ratio.
@@ -581,8 +604,6 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
                 - SizeDict: Target size.
                 - torch.Tensor: Original size.
         """
-        limit_side_len = limit_side_len or self.limit_side_len
-        limit_type = limit_type or self.limit_type
         _, height, width = image.shape
         height, width = int(height), int(width)
 
@@ -621,7 +642,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
             return None, (None, None)
 
         return SizeDict(height=resize_height, width=resize_width), torch.tensor([height, width], dtype=torch.float32)
-    
+
     def post_process_object_detection(
         self,
         preds,
@@ -633,35 +654,51 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         unclip_ratio: float = 1.5,
     ):
         """
-        Converts model outputs into detected text boxes.
+        Converts model outputs into detected text boxes in corners format (xmin, ymin, xmax, ymax).
 
         Args:
-            preds (torch.Tensor): Model outputs.
-            threshold (float):Binarization threshold.
-            target_sizes (TensorType or list[tuple]): Original image sizes.
+            preds: Model outputs with `logits` attribute (probability maps of shape `(batch_size, 1, H, W)`).
+            threshold (float): Binarization threshold.
+            target_sizes: Original image sizes (height, width) per image.
             box_thresh (float): Box score threshold.
             max_candidates (int): Maximum number of boxes.
             min_size (int): Minimum box size.
             unclip_ratio (float): Expansion ratio.
 
         Returns:
-            list[dict]: List of detection results.
+            list[dict]: List of detection results per image. Each dict contains:
+                - "boxes": `torch.Tensor` of shape `(N, 4)` in corners format (xmin, ymin, xmax, ymax)
+                - "scores": `torch.Tensor` of shape `(N,)`
+                - "labels": `torch.Tensor` of shape `(N,)` (class id 0 for text)
         """
+        if target_sizes is None:
+            raise ValueError("target_sizes must be provided for post_process_object_detection")
 
+        device = preds.logits.device
         results = []
         for pred, size in zip(preds.logits, target_sizes):
             pred = pred[0, :, :].cpu().detach().numpy()
             size = size.cpu().detach().numpy()
             src_h, src_w = size
             mask = pred > threshold
-            box, score = boxes_from_bitmap(
+            boxes_polygon, scores = boxes_from_bitmap(
                 pred, mask, src_w, src_h, box_thresh, unclip_ratio, min_size, max_candidates
             )
 
+            # Convert polygon (N, 4, 2) to axis-aligned corners [xmin, ymin, xmax, ymax]
+            if len(boxes_polygon) == 0:
+                boxes = np.zeros((0, 4), dtype=np.float32)
+            else:
+                boxes = np.array(
+                    [[p[:, 0].min(), p[:, 1].min(), p[:, 0].max(), p[:, 1].max()] for p in boxes_polygon],
+                    dtype=np.float32,
+                )
+
             results.append(
                 {
-                    "boxes": box,
-                    "scores": score,
+                    "boxes": torch.from_numpy(boxes).to(device),
+                    "scores": torch.tensor(scores, dtype=torch.float32, device=device),
+                    "labels": torch.zeros(len(scores), dtype=torch.long, device=device),  # Single class: text
                 }
             )
         return results
@@ -704,15 +741,7 @@ class PPOCRV5ServerDetDSConv(nn.Module):
         if groups is None:
             groups = in_channels
 
-        if self.hidden_act == "relu":
-            self.act = nn.ReLU()
-        elif self.hidden_act == "hardswish":
-            self.act = nn.Hardswish()
-        else:
-            print(f"The activation function({self.hidden_act}) is selected incorrectly.")
-            exit()
-
-        self.hidden_act = hidden_act
+        self.act = ACT2FN[hidden_act]
         self.conv1 = nn.Conv2d(
             in_channels=in_channels,
             out_channels=in_channels,
@@ -981,7 +1010,6 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
         stride (`int`): Stride for the convolution.
         padding (`Union[int, str]`): Padding value or strategy.
         groups (`int`, *optional*, defaults to 1): Grouped convolution parameter.
-        if_act (`bool`, *optional*, defaults to `True`): Whether to apply activation.
         hidden_act (`str`, *optional*): Type of activation ("relu" or "hardswish").
     """
 
@@ -993,11 +1021,9 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
         stride: int,
         padding: int | str,
         groups: int = 1,
-        if_act: bool = True,
-        hidden_act: str | None = None,
+        hidden_act: str = "relu",
     ):
         super().__init__()
-        self.if_act = if_act
         self.hidden_act = hidden_act
         self.conv = nn.Conv2d(
             in_channels=in_channels,
@@ -1010,6 +1036,7 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
         )
 
         self.bn = nn.BatchNorm2d(out_channels, momentum=0.9)
+        self.act = ACT2FN[hidden_act]
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         """
@@ -1024,14 +1051,7 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
         """
         hidden_state = self.conv(hidden_state)
         hidden_state = self.bn(hidden_state)
-        if self.if_act:
-            if self.hidden_act == "relu":
-                hidden_state = F.relu(hidden_state)
-            elif self.hidden_act == "hardswish":
-                hidden_state = F.hardswish(hidden_state)
-            else:
-                print(f"The activation function({self.hidden_act}) is selected incorrectly.")
-                exit()
+        hidden_state = self.act(hidden_state)
         return hidden_state
 
 
@@ -1081,22 +1101,18 @@ class PPOCRV5ServerDetHead(nn.Module):
             stride=2,
         )
 
-    def forward(
-        self, hidden_state: torch.Tensor, return_feature: bool = False
-    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_state: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Forward pass of the PPOCRV5ServerDetHead.
 
         Args:
             hidden_state (`torch.FloatTensor` of shape `(batch_size, in_channels, height, width)`):
                 Input feature map.
-            return_feature (`bool`, *optional*, defaults to `False`):
-                Whether to return the intermediate feature map before the final convolution.
 
         Returns:
-            `torch.FloatTensor` or `tuple(torch.FloatTensor, torch.FloatTensor)`:
+            `tuple(torch.FloatTensor, torch.FloatTensor)`:
                 - **hidden_state** (`torch.FloatTensor`): Final probability map of shape `(batch_size, 1, H*4, W*4)`.
-                - **feature** (`torch.FloatTensor`, *optional*): Intermediate features, returned only if `return_feature` is `True`.
+                - **feature** (`torch.FloatTensor`): Intermediate features.
         """
         hidden_state = self.conv1(hidden_state)
         hidden_state = self.conv_bn1(hidden_state)
@@ -1104,40 +1120,10 @@ class PPOCRV5ServerDetHead(nn.Module):
         hidden_state = self.conv2(hidden_state)
         hidden_state = self.conv_bn2(hidden_state)
         hidden_state = self.relu2(hidden_state)
-        if return_feature is True:
-            feature = hidden_state
+        feature = hidden_state
         hidden_state = self.conv3(hidden_state)
         hidden_state = torch.sigmoid(hidden_state)
-        if return_feature is True:
-            return hidden_state, feature
-        return hidden_state
-
-
-class PPOCRV5ServerDetDBHead(nn.Module):
-    """
-    Differentiable Binarization (DB) Head wrapper.
-
-    Args:
-        in_channels (`int`): Input channel depth.
-        kernel_list (`List[int]`, *optional*, defaults to `[3, 2, 2]`): Kernel sizes for the internal Head.
-    """
-
-    def __init__(self, in_channels: int, kernel_list: list[int] = [3, 2, 2]):
-        super().__init__()
-        self.binarize = PPOCRV5ServerDetHead(in_channels=in_channels, kernel_list=kernel_list)
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass to generate the initial shrink map.
-
-        Args:
-            hidden_state (`torch.FloatTensor`): Input feature map.
-
-        Returns:
-            `torch.FloatTensor`: Shrink probability map.
-        """
-        hidden_state = self.binarize(hidden_state)
-        return hidden_state
+        return hidden_state, feature
 
 
 class PPOCRV5ServerDetLocalModule(nn.Module):
@@ -1178,7 +1164,7 @@ class PPOCRV5ServerDetLocalModule(nn.Module):
         return hidden_state
 
 
-class PPOCRV5ServerDetPFHeadLocal(PPOCRV5ServerDetDBHead):
+class PPOCRV5ServerDetPFHeadLocal(nn.Module):
     """
     PPOCRV5ServerDetPFHeadLocal implements the Progressive Fusion Head with Local refinement,
     the core detection head of PP-OCRv5.
@@ -1190,8 +1176,8 @@ class PPOCRV5ServerDetPFHeadLocal(PPOCRV5ServerDetDBHead):
     """
 
     def __init__(self, config: PPOCRV5ServerDetConfig):
-        super().__init__(in_channels=config.neck_out_channels, kernel_list=config.kernel_list)
-
+        super().__init__()
+        self.binarize = PPOCRV5ServerDetHead(in_channels=config.neck_out_channels, kernel_list=config.kernel_list)
         self.up_conv = nn.Upsample(scale_factor=config.scale_factor, mode=config.interpolate_mode)
         if config.mode == "large":
             out_channels = config.neck_out_channels // 4
@@ -1214,7 +1200,7 @@ class PPOCRV5ServerDetPFHeadLocal(PPOCRV5ServerDetDBHead):
                 The final refined text detection probability map, calculated as the
                 average of the base map and the refined local map.
         """
-        hidden_state, feature = self.binarize(hidden_state, return_feature=True)
+        hidden_state, feature = self.binarize(hidden_state)
         identity = hidden_state
         feature = self.up_conv(feature)
         hidden_state = self.cbn_layer(feature, hidden_state)
@@ -1229,12 +1215,10 @@ class PPOCRV5ServerDetModelOutput(BaseModelOutputWithNoAttention):
     Output class for the PPOCRV5ServerDetModel.
 
     Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
-            Binary segmentation probability maps from the head. Higher values indicate
-            higher probability of text presence.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, neck_out_channels, height, width)`, *optional*):
+            Fused feature maps from the neck (LKPAN). These are intermediate representations ready for the
+            detection head, not final predictions.
     """
-
-    logits: torch.FloatTensor | None = None
 
 
 class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
@@ -1283,25 +1267,21 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
         self.neck = PPOCRV5ServerDetLKPAN(config)
         self.post_init()
 
-    @capture_outputs
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
-        hidden_state: torch.FloatTensor,
-        **kwargs,
+        pixel_values: torch.FloatTensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | PPOCRV5ServerDetModelOutput:
-        """
-        Forward pass of the PPOCRV5ServerDetModel.
-
-        Args:
-            hidden_state (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
-                Input image pixels.
-
-        """
-        hidden_state = self.backbone(hidden_state).feature_maps
+        backbone_outputs = self.backbone(pixel_values, **kwargs)
+        hidden_state = backbone_outputs.feature_maps
         hidden_state = self.neck(hidden_state)
 
-        return PPOCRV5ServerDetModelOutput(logits=hidden_state)
+        return PPOCRV5ServerDetModelOutput(
+            last_hidden_state=hidden_state,
+            hidden_states=backbone_outputs.hidden_states,
+        )
 
 
 @auto_docstring(
@@ -1311,10 +1291,15 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
 )
 @dataclass
 class PPOCRV5ServerDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
-    """
-    Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
-            The predicted text mask.
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, neck_out_channels, height, width)`, *optional*):
+        Fused feature maps from the neck (LKPAN) before the detection head.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of feature maps from backbone stages when `output_hidden_states=True`.
+    logits (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`):
+        The predicted text mask (binary probability maps). Values in [0, 1] indicate probability of text
+        presence at each pixel. Use [`PPOCRV5ServerDetImageProcessorFast.post_process_object_detection`]
+        to convert to bounding boxes.
     """
 
     logits: torch.FloatTensor | None = None
@@ -1340,25 +1325,15 @@ class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | PPOCRV5ServerDetForObjectDetectionOutput:
-        """
-        Forward pass of the PPOCRV5 detection model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
-                Pixel values of the input images.
-
-        Returns:
-            `PPOCRV5ServerDetForObjectDetectionOutput` or `tuple(torch.FloatTensor)`:
-                The detection result containing `logits` (segmentation mask).
-        """
-
-        outputs = self.model(pixel_values)
-        logits = self.head(outputs.logits)
+        outputs = self.model(pixel_values, **kwargs)
+        logits = self.head(outputs.last_hidden_state)
 
         return PPOCRV5ServerDetForObjectDetectionOutput(
             logits=logits,
+            last_hidden_state=outputs.last_hidden_state,
+            hidden_states=outputs.hidden_states,
         )
 
 
