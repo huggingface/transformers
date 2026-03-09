@@ -1,47 +1,38 @@
 import math
-from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torchvision.transforms.v2.functional as tvF
 
-from transformers.models.mobilenet_v2.modeling_mobilenet_v2 import make_divisible
-
+from ...activations import get_activation
+from ...backbone_utils import BackboneConfigMixin, BackboneMixin
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import BaseImageProcessor
 from ...image_processing_utils_fast import BaseImageProcessorFast
-from ...image_transforms import flip_channel_order, resize, to_channel_dimension_format
 from ...image_utils import (
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
     SizeDict,
-    infer_channel_dimension_format,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
 )
-from ...modeling_outputs import BaseModelOutputWithNoAttention
+from ...modeling_outputs import (
+    BackboneOutput,
+    BaseModelOutputWithNoAttention,
+)
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    ModelOutput,
     auto_docstring,
     can_return_tuple,
-    filter_out_non_signature_kwargs,
 )
-from ...utils.output_capturing import capture_outputs
 from ...utils.generic import TensorType
+from ...utils.output_capturing import capture_outputs
+from ..mobilenet_v2.modeling_mobilenet_v2 import make_divisible
+from ..resnet.modeling_resnet import ResNetConvLayer
 
 
 @auto_docstring(
     custom_intro="""
     """
 )
-class PPLCNetConfig(PreTrainedConfig):
+class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PPLCNet`]. It is used to instantiate a
     PP-LCNet model according to the specified arguments, defining the model architecture.
@@ -50,12 +41,33 @@ class PPLCNetConfig(PreTrainedConfig):
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
     Args:
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
         scale (`float`, *optional*, defaults to 1.0):
             The scaling factor for the model's channel dimensions, used to adjust the model size and computational cost
             without changing the overall architecture (e.g., 0.25, 0.5, 1.0, 1.5).
-        stride_list (`List[int]`, *optional*, defaults to `[2, 2, 2, 2, 2]`):
-            The list of stride values for convolutional layers in the backbone network, controlling the downsampling
-            rate of feature maps at each stage to capture multi-scale visual information.
+        hidden_act (`str`, *optional*, defaults to `"hardswish"`):
+            The non-linear activation function used in the model's hidden layers. Supported functions include
+            `"hardswish"`, `"relu"`, `"silu"`, and `"gelu"`. `"hardswish"` is preferred for lightweight and efficient
+            inference on edge devices.
+        out_features (`list[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        out_indices (`list[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        stem_channels (`int`, *optional*, defaults to 16):
+            The number of output channels for the stem layer.
+        stem_stride (`int`, *optional*, defaults to 2):
+            The stride for the stem convolution layer.
+        block_configs (`list[list[tuple]]`, *optional*, defaults to `None`):
+            Configuration for each block in each stage. Each tuple contains:
+            (kernel_size, in_channels, out_channels, stride, use_squeeze_excitation).
+            If `None`, uses the default PP-LCNet configuration.
         reduction (`int`, *optional*, defaults to 4):
             The reduction factor for feature channel dimensions in the squeeze-and-excitation (SE) blocks, used to
             reduce the number of model parameters and computational complexity while maintaining feature representability.
@@ -68,13 +80,6 @@ class PPLCNetConfig(PreTrainedConfig):
         use_last_conv (`bool`, *optional*, defaults to `True`):
             Whether to use the final convolutional layer in the classification head. Setting this to `True` helps
             extract more discriminative features for the classification task.
-        hidden_act (`str`, *optional*, defaults to `"hardswish"`):
-            The non-linear activation function used in the model's hidden layers. Supported functions include
-            `"hardswish"`, `"relu"`, `"silu"`, and `"gelu"`. `"hardswish"` is preferred for lightweight and efficient
-            inference on edge devices.
-        backbone_config (`Union[dict, PreTrainedConfig]`, *optional*, defaults to `None`):
-            The configuration of the backbone model. If `None`, the default backbone configuration for PP-LCNet
-            will be used, which includes the standard block settings for feature extraction.
         divisor (`int`, *optional*, defaults to 8):
             The divisor used to ensure that various model parameters (e.g., channel dimensions, kernel sizes) are
             multiples of this value, promoting efficient model implementation and resource utilization.
@@ -94,28 +99,61 @@ class PPLCNetConfig(PreTrainedConfig):
 
     def __init__(
         self,
+        num_channels=3,
         scale=1.0,
-        stride_list=[2, 2, 2, 2, 2],
+        hidden_act="hardswish",
+        out_features=None,
+        out_indices=None,
+        stem_channels=16,
+        stem_stride=2,
+        block_configs=None,
         reduction=4,
         dropout_prob=0.2,
         class_expand=1280,
         use_last_convolution=True,
-        hidden_act="hardswish",
-        backbone_config=None,
         divisor=8,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
+        self.num_channels = num_channels
         self.scale = scale
-        self.stride_list = stride_list
+        self.hidden_act = hidden_act
+        self.stem_channels = stem_channels
+        self.stem_stride = stem_stride
         self.reduction = reduction
         self.dropout_prob = dropout_prob
         self.class_expand = class_expand
         self.use_last_convolution = use_last_convolution
-        self.hidden_act = hidden_act
-        self.backbone_config = backbone_config
         self.divisor = divisor
+
+        # Default block configs for PP-LCNet
+        # Each tuple: (kernel_size, in_channels, out_channels, stride, use_squeeze_excitation)
+        if block_configs is None:
+            block_configs = [
+                # Stage 1 (blocks2)
+                [(3, 16, 32, 1, False)],
+                # Stage 2 (blocks3)
+                [(3, 32, 64, 2, False), (3, 64, 64, 1, False)],
+                # Stage 3 (blocks4)
+                [(3, 64, 128, 2, False), (3, 128, 128, 1, False)],
+                # Stage 4 (blocks5)
+                [
+                    (3, 128, 256, 2, False),
+                    (5, 256, 256, 1, False),
+                    (5, 256, 256, 1, False),
+                    (5, 256, 256, 1, False),
+                    (5, 256, 256, 1, False),
+                    (5, 256, 256, 1, False),
+                ],
+                # Stage 5 (blocks6)
+                [(5, 256, 512, 2, True), (5, 512, 512, 1, True)],
+            ]
+        self.block_configs = block_configs
+
+        self.depths = [len(blocks) for blocks in block_configs]
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(block_configs) + 1)]
+
+        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
+        super().__init__(**kwargs)
 
 
 @auto_docstring(
@@ -177,7 +215,6 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
                 Defaults to None (returns PyTorch tensors).
             interpolation (Optional[InterpolationMode]): TorchVision interpolation mode for resizing. Defaults to None.
             resample (Optional[PILImageResampling]): Unused (for compatibility with base class). Defaults to None.
-            **kwargs: Additional unused keyword arguments (for compatibility).
 
         Returns:
             BatchFeature: Preprocessed image batch with key "pixel_values" containing the processed PyTorch tensors.
@@ -217,8 +254,8 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
     def get_image_size(
         self,
         image: torch.Tensor,
-        target_short_edge: Union[int, None],
-        size_divisor: Optional[int] = None,
+        target_short_edge: int | None,
+        size_divisor: int | None = None,
     ) -> tuple[SizeDict, torch.Tensor]:
         """
         Calculate target image size for PyTorch tensors (preserve aspect ratio + align with size_divisor).
@@ -242,75 +279,36 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
         return SizeDict(height=resized_height, width=resized_width)
 
 
-def _create_act(hidden_act):
+def create_activation(hidden_act):
     if hidden_act == "hardswish":
         return nn.Hardswish()
-    elif hidden_act == "relu":
-        return nn.ReLU()
-    elif hidden_act == "relu6":
-        return nn.ReLU6()
-    else:
-        raise RuntimeError(f"The activation function is not supported: {hidden_act}")
+    return get_activation(hidden_act)
 
 
-class PPLCNetConvBNLayer(nn.Module):
-    """
-    Combined layer: Conv2d -> BatchNorm2d -> Activation
-    A common basic component in lightweight models to reduce redundant code.
-    """
-
+class PPLCNetConvLayer(ResNetConvLayer):
     def __init__(
         self,
-        in_channels,
-        out_channels,
-        kernel_size,
-        stride,
-        groups=1,
-        hidden_act="hardswish",
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 3,
+        stride: int = 1,
+        activation: str = "hardswish",
+        groups: int = 1,
     ):
-        """
-        Initialize the PPLCNetConvBNLayer module.
-
-        Args:
-            in_channels (int): Number of channels of the input feature map.
-            kernel_size (int): Size of the convolutional kernel (square kernel).
-            out_channels (int): Number of channels of the output feature map.
-            stride (int): Stride of the convolution operation.
-            groups (int, optional): Number of groups for grouped convolution. Defaults to 1 (standard convolution).
-            hidden_act (str, optional): Name of activation function. Defaults to "hardswish".
-        """
         super().__init__()
-
         self.convolution = nn.Conv2d(
-            in_channels=in_channels,
-            out_channels=out_channels,
+            in_channels,
+            out_channels,
             kernel_size=kernel_size,
             stride=stride,
-            padding=(kernel_size - 1) // 2,
-            groups=groups,
+            padding=kernel_size // 2,
             bias=False,
+            groups=groups,
         )
-
-        self.normalization = nn.BatchNorm2d(out_channels)
-        self.activation = _create_act(hidden_act)
-
-    def forward(self, hidden_state):
-        """
-        Forward propagation logic.
-
-        Args:
-            hidden_state (FloatTensor): Input feature map with shape [B, C, H, W].
-
-        Returns:
-            FloatTensor: Output feature map with shape [B, out_channels, H', W'].
-        """
-        hidden_state = self.convolution(hidden_state)
-        hidden_state = self.normalization(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        return hidden_state
+        self.activation = create_activation(activation)
 
 
-class PPLCNetDepthwiseSeparable(nn.Module):
+class PPLCNetDepthwiseSeparableConvLayer(nn.Module):
     """
     Depthwise Separable Convolution Layer: Depthwise Conv -> SE Module (optional) -> Pointwise Conv
     Core component of lightweight models (e.g., MobileNet, PP-LCNet) that significantly reduces
@@ -325,10 +323,10 @@ class PPLCNetDepthwiseSeparable(nn.Module):
         reduction: int,
         kernel_size=3,
         use_squeeze_excitation=False,
-        hidden_act="hardswish",
+        activation="hardswish",
     ):
         """
-        Initialize the PPLCNetDepthwiseSeparable module.
+        Initialize the PPLCNetDepthwiseSeparableConvLayer module.
 
         Args:
             in_channels (int): Number of channels of the input feature map.
@@ -337,27 +335,27 @@ class PPLCNetDepthwiseSeparable(nn.Module):
             reduction (int): Reduction ratio for SE module.
             depthwise_size (int, optional): Kernel size of depthwise convolution. Defaults to 3.
             use_squeeze_excitation (bool, optional): Whether to use SE module. Defaults to False.
-            hidden_act (str, optional): Name of activation function. Defaults to "hardswish".
+            activation (str, optional): Name of activation function. Defaults to "hardswish".
         """
         super().__init__()
         self.use_squeeze_excitation = use_squeeze_excitation
-        self.depthwise_convolution = PPLCNetConvBNLayer(
+        self.depthwise_convolution = PPLCNetConvLayer(
             in_channels=in_channels,
             out_channels=in_channels,
             kernel_size=kernel_size,
             stride=stride,
             groups=in_channels,
-            hidden_act=hidden_act,
+            activation=activation,
         )
         self.squeeze_excitation_module = (
             PPLCNetSEModule(in_channels, reduction) if use_squeeze_excitation else nn.Identity()
         )
-        self.pointwise_convolution = PPLCNetConvBNLayer(
+        self.pointwise_convolution = PPLCNetConvLayer(
             in_channels=in_channels,
             kernel_size=1,
             out_channels=out_channels,
             stride=1,
-            hidden_act=hidden_act,
+            activation=activation,
         )
 
     def forward(self, hidden_state):
@@ -396,7 +394,6 @@ class PPLCNetSEModule(nn.Module):
         self.convolution1 = nn.Conv2d(in_channels=channel, out_channels=channel // reduction, **conv_kwargs)
         self.convolution2 = nn.Conv2d(in_channels=channel // reduction, out_channels=channel, **conv_kwargs)
         self.activation1 = nn.ReLU()
-
         self.activation2 = nn.Hardsigmoid()
 
     def forward(self, hidden_state):
@@ -418,24 +415,27 @@ class PPLCNetSEModule(nn.Module):
         hidden_state = identity * hidden_state
         return hidden_state
 
+
 class PPLCNetBlock(nn.Module):
-    def __init__(self, config, block_index):
+    def __init__(self, config, stage_index):
         super().__init__()
         self.config = config
 
+        blocks = config.block_configs[stage_index]
+
         self.layers = nn.ModuleList()
-        for kernel_size, in_channels, out_channels, stride, squeeze_excitation in config.backbone_config[block_index]:
+        for kernel_size, in_channels, out_channels, stride, use_se in blocks:
             scaled_in_channels = make_divisible(in_channels * config.scale, config.divisor)
             scaled_out_channels = make_divisible(out_channels * config.scale, config.divisor)
-            
-            depthwise_block = PPLCNetDepthwiseSeparable(
+
+            depthwise_block = PPLCNetDepthwiseSeparableConvLayer(
                 in_channels=scaled_in_channels,
                 out_channels=scaled_out_channels,
                 kernel_size=kernel_size,
                 stride=stride,
                 reduction=config.reduction,
-                use_squeeze_excitation=squeeze_excitation,
-                hidden_act=config.hidden_act,
+                use_squeeze_excitation=use_se,
+                activation=config.hidden_act,
             )
             self.layers.append(depthwise_block)
 
@@ -443,22 +443,6 @@ class PPLCNetBlock(nn.Module):
         for layer in self.layers:
             x = layer(x)
         return x
-
-
-@dataclass
-class PPLCNetModelOutput(ModelOutput):
-    """
-    Output class for PP-LCNet base model.
-
-    Args:
-        logits (Optional[FloatTensor]): Classification logits with shape [B, num_classes]. Defaults to None.
-        last_hidden_state (Optional[FloatTensor]): Final hidden state from backbone with shape [B, C, H, W]. Defaults to None.
-        hidden_states (Optional[Tuple[FloatTensor, ...]]): Tuple of hidden states at each layer. Defaults to None.
-    """
-
-    logits: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @auto_docstring(
@@ -475,128 +459,101 @@ class PPLCNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "pp_lcnet"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
+    _can_record_outputs = {
+        "hidden_states": PPLCNetBlock,
+    }
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        super()._init_weights(module)
-        if isinstance(module, PPLCNetConvBNLayer):
-            nn.init.kaiming_normal_(module.convolution.weight)
+
+class PPLCNetEmbeddings(nn.Module):
+    """
+    PPLCNet Embeddings (Stem): Initial convolutional layer for processing input images.
+    """
+
+    def __init__(self, config: PPLCNetConfig):
+        super().__init__()
+        self.convolution = PPLCNetConvLayer(
+            in_channels=3,
+            kernel_size=3,
+            out_channels=make_divisible(config.stem_channels * config.scale, config.divisor),
+            stride=config.stem_stride,
+            activation=config.hidden_act,
+        )
+        self.num_channels = 3
+
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        num_channels = pixel_values.shape[1]
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        embedding = self.convolution(pixel_values)
+        return embedding
+
+
+class PPLCNetEncoder(nn.Module):
+    def __init__(self, config: PPLCNetConfig):
+        super().__init__()
+        self.config = config
+        self.blocks = nn.ModuleList([])
+        for stage_index in range(len(config.block_configs)):
+            block = PPLCNetBlock(config, stage_index)
+            self.blocks.append(block)
+
+    def forward(self, hidden_state: torch.Tensor) -> BaseModelOutputWithNoAttention:
+        for block in self.blocks:
+            hidden_state = block(hidden_state)
+
+        return hidden_state
 
 
 @auto_docstring(
     custom_intro="""
+    PPLCNet backbone model for feature extraction.
     """
 )
-class PPLCNetModel(PPLCNetPreTrainedModel):
-    """
-    PP-LCNet base model: lightweight CNN backbone for image classification tasks.
-    """
+class PPLCNetBackbone(BackboneMixin, PPLCNetPreTrainedModel):
+    has_attentions = False
 
     def __init__(self, config: PPLCNetConfig):
         super().__init__(config)
-
-        if config.stride_list is None:
-            raise ValueError("stride_list cannot be None, please check your config.")
-
-        if len(config.stride_list) != 5:
-            raise ValueError(
-                f"stride_list length should be 5 but got {len(config.stride_list)}, please check your config."
-            )
-
-        self.dropout_prob = config.dropout_prob
-
-        for i, stride in enumerate(config.stride_list[1:]):
-            config.backbone_config[f"blocks{i + 3}"][0][3] = stride
-        self.convolution = PPLCNetConvBNLayer(
-            in_channels=3,
-            kernel_size=3,
-            out_channels=make_divisible(16 * config.scale, config.divisor),
-            stride=config.stride_list[0],
-            hidden_act=config.hidden_act,
-        )
-
-        self.blocks = nn.ModuleList([])
-        for block_index in config.backbone_config.keys():
-            block = PPLCNetBlock(config, block_index)
-            self.blocks.append(block)
-
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        if config.use_last_convolution:
-            self.last_convolution = nn.Conv2d(
-                in_channels=make_divisible(config.backbone_config["blocks6"][-1][2] * config.scale, config.divisor),
-                out_channels=config.class_expand,
-                kernel_size=1,
-                stride=1,
-                padding=0,
-                bias=False,
-            )
-            self.activation = _create_act(config.hidden_act)
-        else:
-            self.last_convolution = None
-        self.flatten = nn.Flatten(start_dim=1, end_dim=-1)
-
-        if config.use_last_convolution:
-            fc_in_channels = config.class_expand
-        else:
-            fc_in_channels = make_divisible(config.backbone_config["blocks6"][-1][2] * config.scale, config.divisor)
-        self.fc = nn.Linear(fc_in_channels, config.num_labels)
-        self.out_activation = nn.Softmax(dim=-1)
+        self.embedder = PPLCNetEmbeddings(config)
+        self.encoder = PPLCNetEncoder(config)
 
         self.post_init()
 
-    @capture_outputs
-    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
-        hidden_state: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs,
-    ) -> Union[tuple[torch.FloatTensor], PPLCNetModelOutput]:
-        """
-        Forward propagation of PP-LCNet base model.
+    ) -> BackboneOutput:
+        r"""
+        Examples:
 
-        Args:
-            hidden_state (FloatTensor): Input image tensor with shape [B, 3, H, W].
+        ```python
+        >>> from transformers import PPLCNetConfig, PPLCNetBackbone
+        >>> import torch
 
-        Returns:
-            Union[tuple[FloatTensor], PPLCNetModelOutput]: Model outputs.
-        """
-        hidden_state = self.convolution(hidden_state)
+        >>> config = PPLCNetConfig()
+        >>> model = PPLCNetBackbone(config)
 
-        for block in self.blocks:
-            hidden_state = block(hidden_state)
+        >>> pixel_values = torch.randn(1, 3, 224, 224)
 
-        last_hidden_state = hidden_state
+        >>> with torch.no_grad():
+        ...     outputs = model(pixel_values)
 
-        hidden_state = self.avg_pool(hidden_state)
-        if self.last_convolution is not None:
-            hidden_state = self.last_convolution(hidden_state)
-            hidden_state = self.activation(hidden_state)
-            hidden_state = hidden_state * (1 - self.dropout_prob)  # dropout
-        hidden_state = self.flatten(hidden_state)
-        hidden_state = self.fc(hidden_state)
+        >>> feature_maps = outputs.feature_maps
+        >>> list(feature_maps[-1].shape)
+        ```"""
+        embedding_output = self.embedder(pixel_values)
+        hidden_state = self.encoder(embedding_output)
 
-        hidden_state = self.out_activation(hidden_state)
+        feature_maps = ()
+        for idx, stage in enumerate(self.stage_names):
+            if stage in self.out_features:
+                feature_maps += (hidden_state[idx],)
 
-        return PPLCNetModelOutput(
-            logits=hidden_state,
-            last_hidden_state=last_hidden_state,
-        )
-
-
-@dataclass
-class PPLCNetForImageClassificationOutput(BaseModelOutputWithNoAttention):
-    """
-    Output class for PP-LCNet image classification model.
-
-    Args:
-        logits (Optional[FloatTensor]): Classification logits with shape [B, num_classes]. Defaults to None.
-        last_hidden_state (Optional[FloatTensor]): Final hidden state from backbone with shape [B, C, H, W]. Defaults to None.
-        hidden_states (Optional[Tuple[FloatTensor, ...]]): Tuple of hidden states at each layer. Defaults to None.
-    """
-
-    logits: Optional[torch.FloatTensor] = None
-    shape: Optional[torch.FloatTensor] = None
+        return BackboneOutput(feature_maps=feature_maps)
 
 
 @auto_docstring(
@@ -604,48 +561,87 @@ class PPLCNetForImageClassificationOutput(BaseModelOutputWithNoAttention):
     """
 )
 class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
-    """
-    PP-LCNet model for image classification tasks.
-    Wraps the base model with a classification head (compatible with Transformers pipeline).
-    """
-
     _keys_to_ignore_on_load_missing = ["num_batches_tracked"]
 
     def __init__(self, config: PPLCNetConfig):
         super().__init__(config)
-        self.model = PPLCNetModel(config)
+        self.embedder = PPLCNetEmbeddings(config)
+        self.encoder = PPLCNetEncoder(config)
+
+        self.config = config
+        self.num_labels = config.num_labels
+        last_block_out_channels = config.block_configs[-1][-1][2]
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        if config.use_last_convolution:
+            self.last_convolution = nn.Conv2d(
+                in_channels=make_divisible(last_block_out_channels * config.scale, config.divisor),
+                out_channels=config.class_expand,
+                kernel_size=1,
+                stride=1,
+                padding=0,
+                bias=False,
+            )
+            self.activation = create_activation(config.hidden_act)
+            fc_in_channels = config.class_expand
+            self.dropout_prob = config.dropout_prob
+        else:
+            self.last_convolution = None
+            fc_in_channels = make_divisible(last_block_out_channels * config.scale, config.divisor)
+
+        self.flatten = nn.Flatten(start_dim=1, end_dim=-1)
+        self.fc = nn.Linear(fc_in_channels, config.num_labels) if config.num_labels > 0 else nn.Identity()
+
         self.post_init()
 
     @can_return_tuple
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.FloatTensor | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.FloatTensor], PPLCNetForImageClassificationOutput]:
-        """
-        Forward propagation of PP-LCNet image classification model.
+    ) -> BaseModelOutputWithNoAttention:
+        r"""
+        Examples:
 
-        Args:
-            pixel_values (FloatTensor): Input image tensor with shape [B, 3, H, W].
-            labels (Optional[List[Dict[str, Any]]]): Ground truth labels for loss calculation. Defaults to None.
+        ```python
+        >>> import requests
+        >>> from PIL import Image
+        >>> from transformers import AutoModelForImageClassification, AutoImageProcessor
 
-        Returns:
-            Union[tuple[FloatTensor], PPLCNetForImageClassificationOutput]: Classification outputs.
-        """
+        >>> model_path = "PaddlePaddle/PP-LCNet_x1_0_table_cls_safetensors"
+        >>> model = AutoModelForImageClassification.from_pretrained(model_path)
+        >>> image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-        outputs = self.model(pixel_values)
+        >>> url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        return PPLCNetForImageClassificationOutput(
-            logits=outputs.logits,
-            last_hidden_state=outputs.last_hidden_state,
-        )
+        >>> inputs = image_processor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> predicted_label = outputs.last_hidden_state.argmax(-1).item()
+        >>> print(model.config.id2label[predicted_label])
+        wireless_table
+        ```"""
+        embedding_output = self.embedder(pixel_values)
+        hidden_state = self.encoder(embedding_output)
+
+        last_hidden_state = self.avg_pool(hidden_state)
+
+        if self.config.use_last_convolution:
+            last_hidden_state = self.last_convolution(last_hidden_state)
+            last_hidden_state = self.activation(last_hidden_state)
+            last_hidden_state = last_hidden_state * (1 - self.dropout_prob)
+
+        last_hidden_state = self.flatten(last_hidden_state)
+        last_hidden_state = self.fc(last_hidden_state)
+
+        return BaseModelOutputWithNoAttention(last_hidden_state=last_hidden_state)
 
 
 __all__ = [
+    "PPLCNetBackbone",
     "PPLCNetForImageClassification",
     "PPLCNetImageProcessorFast",
     "PPLCNetConfig",
-    "PPLCNetModel",
     "PPLCNetPreTrainedModel",
 ]

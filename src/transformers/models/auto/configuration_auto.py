@@ -865,7 +865,10 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("plbart", "PLBart"),
         ("poolformer", "PoolFormer"),
         ("pop2piano", "Pop2Piano"),
+<<<<<<< HEAD
         ("pp_ocrv5_mobile_det", "PPOCRV5MobileDet"),
+=======
+>>>>>>> 1b161f45af (refactor)
         ("pp_doclayout_v2", "PPDocLayoutV2"),
         ("pp_doclayout_v3", "PPDocLayoutV3"),
         ("pp_lcnet", "PPLCNet"),

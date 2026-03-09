@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_pp_lcnet.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-
+from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
@@ -13,7 +13,7 @@ from ...utils import auto_docstring
     custom_intro="""
     """
 )
-class PPLCNetConfig(PreTrainedConfig):
+class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PPLCNet`]. It is used to instantiate a
     PP-LCNet model according to the specified arguments, defining the model architecture.
@@ -22,12 +22,33 @@ class PPLCNetConfig(PreTrainedConfig):
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
     Args:
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
         scale (`float`, *optional*, defaults to 1.0):
             The scaling factor for the model's channel dimensions, used to adjust the model size and computational cost
             without changing the overall architecture (e.g., 0.25, 0.5, 1.0, 1.5).
-        stride_list (`List[int]`, *optional*, defaults to `[2, 2, 2, 2, 2]`):
-            The list of stride values for convolutional layers in the backbone network, controlling the downsampling
-            rate of feature maps at each stage to capture multi-scale visual information.
+        hidden_act (`str`, *optional*, defaults to `"hardswish"`):
+            The non-linear activation function used in the model's hidden layers. Supported functions include
+            `"hardswish"`, `"relu"`, `"silu"`, and `"gelu"`. `"hardswish"` is preferred for lightweight and efficient
+            inference on edge devices.
+        out_features (`list[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        out_indices (`list[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        stem_channels (`int`, *optional*, defaults to 16):
+            The number of output channels for the stem layer.
+        stem_stride (`int`, *optional*, defaults to 2):
+            The stride for the stem convolution layer.
+        block_configs (`list[list[tuple]]`, *optional*, defaults to `None`):
+            Configuration for each block in each stage. Each tuple contains:
+            (kernel_size, in_channels, out_channels, stride, use_squeeze_excitation).
+            If `None`, uses the default PP-LCNet configuration.
         reduction (`int`, *optional*, defaults to 4):
             The reduction factor for feature channel dimensions in the squeeze-and-excitation (SE) blocks, used to
             reduce the number of model parameters and computational complexity while maintaining feature representability.
@@ -40,13 +61,6 @@ class PPLCNetConfig(PreTrainedConfig):
         use_last_conv (`bool`, *optional*, defaults to `True`):
             Whether to use the final convolutional layer in the classification head. Setting this to `True` helps
             extract more discriminative features for the classification task.
-        hidden_act (`str`, *optional*, defaults to `"hardswish"`):
-            The non-linear activation function used in the model's hidden layers. Supported functions include
-            `"hardswish"`, `"relu"`, `"silu"`, and `"gelu"`. `"hardswish"` is preferred for lightweight and efficient
-            inference on edge devices.
-        backbone_config (`Union[dict, PreTrainedConfig]`, *optional*, defaults to `None`):
-            The configuration of the backbone model. If `None`, the default backbone configuration for PP-LCNet
-            will be used, which includes the standard block settings for feature extraction.
         divisor (`int`, *optional*, defaults to 8):
             The divisor used to ensure that various model parameters (e.g., channel dimensions, kernel sizes) are
             multiples of this value, promoting efficient model implementation and resource utilization.
@@ -66,28 +80,61 @@ class PPLCNetConfig(PreTrainedConfig):
 
     def __init__(
         self,
+        num_channels=3,
         scale=1.0,
-        stride_list=[2, 2, 2, 2, 2],
+        hidden_act="hardswish",
+        out_features=None,
+        out_indices=None,
+        stem_channels=16,
+        stem_stride=2,
+        block_configs=None,
         reduction=4,
         dropout_prob=0.2,
         class_expand=1280,
         use_last_convolution=True,
-        hidden_act="hardswish",
-        backbone_config=None,
         divisor=8,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
+        self.num_channels = num_channels
         self.scale = scale
-        self.stride_list = stride_list
+        self.hidden_act = hidden_act
+        self.stem_channels = stem_channels
+        self.stem_stride = stem_stride
         self.reduction = reduction
         self.dropout_prob = dropout_prob
         self.class_expand = class_expand
         self.use_last_convolution = use_last_convolution
-        self.hidden_act = hidden_act
-        self.backbone_config = backbone_config
         self.divisor = divisor
+
+        # Default block configs for PP-LCNet
+        # Each tuple: (kernel_size, in_channels, out_channels, stride, use_squeeze_excitation)
+        if block_configs is None:
+            block_configs = [
+                # Stage 1 (blocks2)
+                [(3, 16, 32, 1, False)],
+                # Stage 2 (blocks3)
+                [(3, 32, 64, 2, False), (3, 64, 64, 1, False)],
+                # Stage 3 (blocks4)
+                [(3, 64, 128, 2, False), (3, 128, 128, 1, False)],
+                # Stage 4 (blocks5)
+                [
+                    (3, 128, 256, 2, False),
+                    (5, 256, 256, 1, False),
+                    (5, 256, 256, 1, False),
+                    (5, 256, 256, 1, False),
+                    (5, 256, 256, 1, False),
+                    (5, 256, 256, 1, False),
+                ],
+                # Stage 5 (blocks6)
+                [(5, 256, 512, 2, True), (5, 512, 512, 1, True)],
+            ]
+        self.block_configs = block_configs
+
+        self.depths = [len(blocks) for blocks in block_configs]
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(block_configs) + 1)]
+
+        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
+        super().__init__(**kwargs)
 
 
 __all__ = ["PPLCNetConfig"]
