@@ -43,3 +43,6 @@ RUN git clone https://github.com/ROCm/flash-attention/ -b tridao && \
 # GPU_ARCHS builds for MI300, MI325 but not MI355: we would need to add `;gfx950` but it takes too long to build.
 
 RUN python3 -m pip install --no-cache-dir einops
+
+# timm is required for many vision models tests
+RUN python3 -m pip install --no-cache-dir timm

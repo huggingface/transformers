@@ -14,57 +14,21 @@
 """Pix2Struct model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="google/pix2struct-base")
 class Pix2StructTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Pix2StructTextModel`]. It is used to instantiate
-    a Pix2Struct text model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Pix2Struct text decoder used by
-    the [google/pix2struct-base](https://huggingface.co/google/pix2struct-base) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 50244):
-            Vocabulary size of the `Pix2Struct` text model. Defines the number of different tokens that can be
-            represented by the `inputs_ids` passed when calling [`Pix2StructTextModel`].
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        d_kv (`int`, *optional*, defaults to 64):
-            Dimensionality of the key, query, value projections in each attention head.
-        d_ff (`int`, *optional*, defaults to 2048):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        relative_attention_num_buckets (`int`, *optional*, defaults to 32):
-            The number of buckets to use for each attention layer.
-        relative_attention_max_distance (`int`, *optional*, defaults to 128):
-            The maximum distance of the longer sequences for the bucket separation.
-        dropout_rate (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        layer_norm_epsilon (`float`, *optional*, defaults to 1e-6):
-            The epsilon used by the layer normalization layers.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-        dense_act_fn (`Union[Callable, str]`, *optional*, defaults to `"gelu_new"`):
-            The non-linear activation function (function or string).
-        decoder_start_token_id (`int`, *optional*, defaults to 0):
-            The id of the `decoder_start_token_id` token.
-        use_cache (`bool`, *optional*, defaults to `False`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
-        pad_token_id (`int`, *optional*, defaults to 0):
-            The id of the `padding` token.
-        eos_token_id (`int`, *optional*, defaults to 1):
-            The id of the `end-of-sequence` token.
+    relative_attention_num_buckets (`int`, *optional*, defaults to 32):
+        The number of buckets to use for each attention layer.
+    relative_attention_max_distance (`int`, *optional*, defaults to 128):
+        The maximum distance of the longer sequences for the bucket separation.
+    dense_act_fn (`Union[Callable, str]`, *optional*, defaults to `"gelu_new"`):
+        The non-linear activation function (function or string).
 
     Example:
 
@@ -146,49 +110,25 @@ class Pix2StructTextConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="google/pix2struct-base")
 class Pix2StructVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Pix2StructVisionModel`]. It is used to
-    instantiate a Pix2Struct vision model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration defaults will yield a similar configuration to that of the Pix2Struct-base
-    [google/pix2struct-base](https://huggingface.co/google/pix2struct-base) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        patch_embed_hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the input patch_embedding layer in the Transformer encoder.
-        d_ff (`int`, *optional*, defaults to 2048):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        d_kv (`int`, *optional*, defaults to 64):
-            Dimensionality of the key, query, value projections per attention head.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        dense_act_fn (`str` or `function`, *optional*, defaults to `"gelu_new"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        dropout_rate (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 1e-10):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-        seq_len (`int`, *optional*, defaults to 4096):
-            Maximum sequence length (here number of patches) supported by the model.
-        relative_attention_num_buckets (`int`, *optional*, defaults to 32):
-            The number of buckets to use for each attention layer.
-        relative_attention_max_distance (`int`, *optional*, defaults to 128):
-            The maximum distance (in tokens) to use for each attention layer.
+    dense_act_fn (`Union[Callable, str]`, *optional*, defaults to `"gelu_new"`):
+        The non-linear activation function (function or string).
+    patch_embed_hidden_size (`int`, *optional*, defaults to 768):
+        Dimensionality of the input patch_embedding layer in the Transformer encoder.
+    d_ff (`int`, *optional*, defaults to 2048):
+        Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+    d_kv (`int`, *optional*, defaults to 64):
+        Dimensionality of the key, query, value projections per attention head.
+    The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+        `"relu"`, `"selu"` and `"gelu_new"` `"gelu"` are supported.
+    seq_len (`int`, *optional*, defaults to 4096):
+        Maximum sequence length (here number of patches) supported by the model.
+    relative_attention_num_buckets (`int`, *optional*, defaults to 32):
+        The number of buckets to use for each attention layer.
+    relative_attention_max_distance (`int`, *optional*, defaults to 128):
+        The maximum distance (in tokens) to use for each attention layer.
 
     Example:
 
@@ -245,30 +185,11 @@ class Pix2StructVisionConfig(PreTrainedConfig):
         self.d_kv = d_kv
 
 
+@auto_docstring(checkpoint="google/pix2struct-base")
 class Pix2StructConfig(PreTrainedConfig):
     r"""
-    [`Pix2StructConfig`] is the configuration class to store the configuration of a
-    [`Pix2StructForConditionalGeneration`]. It is used to instantiate a Pix2Struct model according to the specified
-    arguments, defining the text model and vision model configs. Instantiating a configuration with the defaults will
-    yield a similar configuration to that of the Pix2Struct-base
-    [google/pix2struct-base](https://huggingface.co/google/pix2struct-base) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`Pix2StructTextConfig`].
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`Pix2StructVisionConfig`].
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            Factor to multiply the initialization range with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        is_vqa (`bool`, *optional*, defaults to `False`):
-            Whether the model has been fine-tuned for VQA or not.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+    is_vqa (`bool`, *optional*, defaults to `False`):
+        Whether the model has been fine-tuned for VQA or not.
 
     Example:
 

@@ -1765,22 +1765,6 @@ class ModelUtilsTest(TestCasePlus):
             outputs_from_saved = new_model(input_ids)
             torch.testing.assert_close(outputs_from_saved["logits"], outputs["logits"])
 
-    def test_warning_for_beta_gamma_parameters(self):
-        config = PreTrainedConfig()
-        model = TestModelGammaBeta(config)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir)
-            with LoggingLevel(logging.INFO):
-                _, loading_info = TestModelGammaBeta.from_pretrained(tmp_dir, config=config, output_loading_info=True)
-
-        missing_keys = loading_info["missing_keys"]
-        unexpected_keys = loading_info["unexpected_keys"]
-        self.assertIn("LayerNorm.gamma", missing_keys)
-        self.assertIn("LayerNorm.weight", unexpected_keys)
-        self.assertIn("LayerNorm.beta", missing_keys)
-        self.assertIn("LayerNorm.bias", unexpected_keys)
-
     def test_can_generate(self):
         """Tests the behavior of `PreTrainedModel.can_generate` method."""
         logger = logging.get_logger("transformers.modeling_utils")

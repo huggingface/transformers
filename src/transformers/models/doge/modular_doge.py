@@ -33,7 +33,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import AttentionInterface, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, is_torch_flex_attn_available, logging
+from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
 from ...utils.output_capturing import OutputRecorder
 from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
@@ -54,80 +54,13 @@ if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
 
 
+@auto_docstring(checkpoint="SmallDoge/Doge-320M")
 class DogeConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DogeModel`]. It is used to instantiate an Doge
-    model according to the specified arguments, defining the model architecture like [SmallDoge/Doge-320M](https://huggingface.co/SmallDoge/Doge-320M).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 32768):
-            Vocabulary size of the Doge2 model. Defines the number of different tokens that can be represented by the `inputs_ids` passed when calling [`DogeModel`]
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer decoder.
-        hidden_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for each sequence transformation and state transformation module.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention.
-            If `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used.
-            When converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed by meanpooling all the original heads within that group.
-            For more details checkout [this paper](https://huggingface.co/papers/2305.13245).
-            If it is not specified, will default to `num_attention_heads`.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        mlp_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
-        sliding_window (`int`, *optional*):
-            Sliding window attention window size. If not specified, will default to `None`.
-        keep_window_size (`int`, *optional*, defaults to 2048):
-            The window size of tokens that are not dynamically masked, and dynamic masking is only performed when the sequence length exceeds this value.
-        is_moe (`bool`, *optional*, defaults to `False`):
-            Whether to use the Cross Domain Mixture of Experts, if `True`, the MoE will inherit the MLP to initialize.
-        num_experts (`int`, *optional*, defaults to 16384):
-            Number of routed experts in the model. This is only used when `is_moe=True`.
-        num_experts_per_tok (`int`, *optional*, defaults to 64):
-            Number of selected experts to route per-token.
-        norm_topk_prob (`bool`, *optional*, defaults to `False`):
-            Whether to normalize the topk probabilities.
-        output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabling this will also
-            allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
-            The aux loss factor for the total loss.
-        pad_token_id (`int`, *optional*):
-            Padding token id.
-        bos_token_id (`int`, *optional*):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*):
-            End of stream token id.
+    keep_window_size (`int`, *optional*, defaults to 2048):
+        The window size of tokens that are not dynamically masked, and dynamic masking is only performed when the sequence length exceeds this value.
+    is_moe (`bool`, *optional*, defaults to `False`):
+        Whether to use the Cross Domain Mixture of Experts, if `True`, the MoE will inherit the MLP to initialize.
 
     ```python
     >>> from transformers import DogeConfig, DogeModel
@@ -329,7 +262,6 @@ class DogeAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
@@ -343,9 +275,7 @@ class DogeAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         # calculate dynamic mask from value_states
         dt_states = self.dt_proj(
@@ -499,7 +429,6 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         # sequence transformation
@@ -512,7 +441,6 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = F.dropout(hidden_states, p=self.hidden_dropout, training=self.training)
@@ -676,7 +604,6 @@ class DogeForCausalLM(MixtralForCausalLM):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         output_router_logits: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -715,7 +642,6 @@ class DogeForCausalLM(MixtralForCausalLM):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 

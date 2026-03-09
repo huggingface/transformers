@@ -18,33 +18,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="Uminosachi/sam-hq")
 class SamHQPromptEncoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SamHQPromptEncoderModel`].The [`SamHQPromptEncoderModel`]
-    module is used to encode the input 2D points and bounding boxes. Instantiating a configuration defaults will yield a
-    similar configuration to that of the SAM_HQ model. The configuration is used to store the configuration of the model.
-    [Uminosachi/sam-hq](https://huggingface.co/Uminosachi/sam-hq) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model's output.Read the documentation from
-    [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the hidden states.
-        image_size (`int`, *optional*, defaults to 1024):
-            The expected output resolution of the image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        mask_input_channels (`int`, *optional*, defaults to 16):
-            The number of channels to be fed to the `MaskDecoder` module.
-        num_point_embeddings (`int`, *optional*, defaults to 4):
-            The number of point embeddings to be used.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the encoder and pooler.
+    mask_input_channels (`int`, *optional*, defaults to 16):
+        The number of channels to be fed to the `MaskDecoder` module.
+    num_point_embeddings (`int`, *optional*, defaults to 4):
+        The number of point embeddings to be used.
     """
 
     base_config_key = "prompt_encoder_config"
@@ -71,56 +55,22 @@ class SamHQPromptEncoderConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
 
 
+@auto_docstring(checkpoint="Uminosachi/sam-hq")
 class SamHQVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SamHQVisionModel`]. It is used to instantiate a SAM_HQ
-    vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
-    defaults will yield a similar configuration to that of the SAM_HQ ViT-h
-    [facebook/sam_hq-vit-huge](https://huggingface.co/facebook/sam_hq-vit-huge) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        output_channels (`int`, *optional*, defaults to 256):
-            Dimensionality of the output channels in the Patch Encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels in the input image.
-        image_size (`int`, *optional*, defaults to 1024):
-            Expected resolution. Target size of the resized input image.
-        patch_size (`int`, *optional*, defaults to 16):
-            Size of the patches to be extracted from the input image.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string)
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 1e-10):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to query, key, value projections.
-        mlp_ratio (`float`, *optional*, defaults to 4.0):
-            Ratio of mlp hidden dim to embedding dim.
-        use_abs_pos (`bool`, *optional*, defaults to `True`):
-            Whether to use absolute position embedding.
-        use_rel_pos (`bool`, *optional*, defaults to `True`):
-            Whether to use relative position embedding.
-        window_size (`int`, *optional*, defaults to 14):
-            Window size for relative position.
-        global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
-            The indexes of the global attention layers.
-        num_pos_feats (`int`, *optional*, defaults to 128):
-            The dimensionality of the position embedding.
-        mlp_dim (`int`, *optional*):
-            The dimensionality of the MLP layer in the Transformer encoder. If `None`, defaults to `mlp_ratio *
-            hidden_size`.
+    output_channels (`int`, *optional*, defaults to 256):
+        Dimensionality of the output channels in the Patch Encoder.
+    use_rel_pos (`bool`, *optional*, defaults to `True`):
+        Whether to use relative position embedding.
+    window_size (`int`, *optional*, defaults to 14):
+        Window size for relative position.
+    global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
+        The indexes of the global attention layers.
+    num_pos_feats (`int`, *optional*, defaults to 128):
+        The dimensionality of the position embedding.
+    mlp_dim (`int`, *optional*):
+        The dimensionality of the MLP layer in the Transformer encoder. If `None`, defaults to `mlp_ratio *
+        hidden_size`.
 
     Example:
 
@@ -190,39 +140,21 @@ class SamHQVisionConfig(PreTrainedConfig):
         self.scale = self.hidden_size // 2
 
 
+@auto_docstring(checkpoint="Uminosachi/sam-hq")
 class SamHQMaskDecoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SamHQMaskDecoder`]. It is used to instantiate a SAM_HQ
-    mask decoder to the specified arguments, defining the model architecture. Instantiating a configuration defaults
-    will yield a similar configuration to that of the SAM_HQ-vit-h
-    [facebook/sam_hq-vit-huge](https://huggingface.co/facebook/sam_hq-vit-huge) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the hidden states.
-        hidden_act (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function used inside the `SamHQMaskDecoder` module.
-        mlp_dim (`int`, *optional*, defaults to 2048):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 2):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        attention_downsample_rate (`int`, *optional*, defaults to 2):
-            The downsampling rate of the attention layer.
-        num_multimask_outputs (`int`, *optional*, defaults to 3):
-            The number of outputs from the `SamHQMaskDecoder` module. In the Segment Anything paper, this is set to 3.
-        iou_head_depth (`int`, *optional*, defaults to 3):
-            The number of layers in the IoU head module.
-        iou_head_hidden_dim (`int`, *optional*, defaults to 256):
-            The dimensionality of the hidden states in the IoU head module.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        vit_dim (`int`, *optional*, defaults to 768):
-            Dimensionality of the Vision Transformer (ViT) used in the `SamHQMaskDecoder` module.
+    vit_dim (`int`, *optional*, defaults to 768):
+        Dimensionality of the Vision Transformer (ViT) used in the `SamHQMaskDecoder` module.
+    mlp_dim (`int`, *optional*, defaults to 2048):
+        Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+    attention_downsample_rate (`int`, *optional*, defaults to 2):
+        The downsampling rate of the attention layer.
+    num_multimask_outputs (`int`, *optional*, defaults to 3):
+        The number of outputs from the `SamMaskDecoder` module. In the Segment Anything paper, this is set to 3.
+    iou_head_depth (`int`, *optional*, defaults to 3):
+        The number of layers in the IoU head module.
+    iou_head_hidden_dim (`int`, *optional*, defaults to 256):
+        The dimensionality of the hidden states in the IoU head module.
     """
 
     base_config_key = "mask_decoder_config"
@@ -256,25 +188,13 @@ class SamHQMaskDecoderConfig(PreTrainedConfig):
         self.vit_dim = vit_dim
 
 
+@auto_docstring(checkpoint="Uminosachi/sam-hq")
 class SamHQConfig(PreTrainedConfig):
     r"""
-    [`SamHQConfig`] is the configuration class to store the configuration of a [`SamHQModel`]. It is used to instantiate a
-    SAM-HQ model according to the specified arguments, defining the vision model, prompt-encoder model and mask decoder
-    configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    SAM-HQ-ViT-H [sushmanth/sam_hq_vit_h](https://huggingface.co/sushmanth/sam_hq_vit_h) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vision_config (Union[`dict`, `SamHQVisionConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`SamHQVisionConfig`].
-        prompt_encoder_config (Union[`dict`, `SamHQPromptEncoderConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`SamHQPromptEncoderConfig`].
-        mask_decoder_config (Union[`dict`, `SamHQMaskDecoderConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`SamHQMaskDecoderConfig`].
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+    prompt_encoder_config (Union[`dict`, `SamHQPromptEncoderConfig`], *optional*):
+        Dictionary of configuration options used to initialize [`SamHQPromptEncoderConfig`].
+    mask_decoder_config (Union[`dict`, `SamHQMaskDecoderConfig`], *optional*):
+        Dictionary of configuration options used to initialize [`SamHQMaskDecoderConfig`].
     """
 
     model_type = "sam_hq"

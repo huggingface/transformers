@@ -85,6 +85,7 @@ class PegasusTokenizer(TokenizersBackend):
         unk_token="<unk>",
         mask_token="<mask_2>",
         mask_token_sent="<mask_1>",
+        _spm_precompiled_charsmap=None,
         additional_special_tokens=None,
         offset=103,
         **kwargs,
@@ -100,9 +101,14 @@ class PegasusTokenizer(TokenizersBackend):
 
         self._vocab = vocab
         self._tokenizer = Tokenizer(Unigram(vocab=vocab, unk_id=self._vocab.index((str(unk_token), 0.0), 1)))
-        self._tokenizer.normalizer = normalizers.Sequence(
-            [normalizers.Replace(Regex(r"\n"), " "), normalizers.Replace(Regex(r" {2,}"), " ")]
-        )
+        if _spm_precompiled_charsmap is not None:
+            self._tokenizer.normalizer = normalizers.Sequence(
+                [normalizers.Precompiled(_spm_precompiled_charsmap), normalizers.Replace(Regex(r" {2,}"), " ")]
+            )
+        else:
+            self._tokenizer.normalizer = normalizers.Sequence(
+                [normalizers.Replace(Regex(r"\n"), " "), normalizers.Replace(Regex(r" {2,}"), " ")]
+            )
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
