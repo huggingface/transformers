@@ -441,73 +441,178 @@ def _extract_video_hf(
 ):
     num_frames = config.num_video_frames
 
-    def _legacy_uniform_indices(metadata, **kwargs):
-        total_num_frames = int(getattr(metadata, "total_num_frames", 0) or 0)
-        if total_num_frames <= 0:
-            return np.array([], dtype=int)
+    def _looks_like_video_metadata(meta) -> bool:
+        if meta is None:
+            return False
+        if isinstance(meta, dict):
+            return bool({"fps", "frames_indices", "total_num_frames", "video_path", "video_url"} & set(meta.keys()))
+        return any(
+            hasattr(meta, key) for key in ("fps", "frames_indices", "total_num_frames", "video_path", "video_url")
+        )
 
-        # Match legacy OmniVinci sampling by locating the last readable frame first.
-        last_valid_frame_count = total_num_frames
-        if isinstance(video_input, str):
-            import cv2
+    def _unpack_video_item(video_item):
+        frames_obj = video_item
+        item_metadata = None
 
-            video_capture = cv2.VideoCapture(video_input)
+        for _ in range(4):
+            if isinstance(frames_obj, np.ndarray) and frames_obj.ndim == 0:
+                frames_obj = frames_obj.item()
+                continue
+
+            if (
+                isinstance(frames_obj, (tuple, list))
+                and len(frames_obj) == 2
+                and _looks_like_video_metadata(frames_obj[1])
+            ):
+                item_metadata = frames_obj[1]
+                frames_obj = frames_obj[0]
+                continue
+
+            break
+
+        return frames_obj, item_metadata
+
+    def _resolve_video_source(
+        video_item,
+        video_metadata,
+    ) -> str | None:
+        if isinstance(video_item, str):
+            return video_item
+
+        metadata_candidates = []
+        if video_metadata is not None:
+            metadata_candidates.append(video_metadata)
+        _, packed_metadata = _unpack_video_item(video_item)
+        if packed_metadata is not None:
+            metadata_candidates.append(packed_metadata)
+
+        for metadata_obj in metadata_candidates:
+            if isinstance(metadata_obj, dict):
+                video_path = metadata_obj.get("video_path")
+                video_url = metadata_obj.get("video_url")
+            else:
+                video_path = getattr(metadata_obj, "video_path", None)
+                video_url = getattr(metadata_obj, "video_url", None)
+
+            if isinstance(video_path, str) and video_path:
+                return video_path
+
+            if isinstance(video_url, str) and video_url:
+                if video_url.startswith("file://"):
+                    from urllib.parse import urlparse
+                    from urllib.request import url2pathname
+
+                    parsed = urlparse(video_url)
+                    return url2pathname((parsed.netloc or "") + (parsed.path or ""))
+                return video_url
+
+        return None
+
+    def _meta_get(meta, key, default=None):
+        if isinstance(meta, dict):
+            return meta.get(key, default)
+        return getattr(meta, key, default)
+
+    def _make_legacy_uniform_indices(video_source_for_sampling):
+        def _legacy_uniform_indices(metadata, **kwargs):
+            total_num_frames = int(getattr(metadata, "total_num_frames", 0) or 0)
+            if total_num_frames <= 0:
+                return np.array([], dtype=int)
+
+            # Match legacy OmniVinci sampling by locating the last readable frame first.
+            last_valid_frame_count = total_num_frames
+            if isinstance(video_source_for_sampling, str):
+                import cv2
+
+                video_capture = cv2.VideoCapture(video_source_for_sampling)
+                try:
+                    while last_valid_frame_count > 0:
+                        video_capture.set(cv2.CAP_PROP_POS_FRAMES, last_valid_frame_count - 1)
+                        if video_capture.grab():
+                            break
+                        last_valid_frame_count -= 1
+                finally:
+                    video_capture.release()
+
+            if last_valid_frame_count <= 0:
+                return np.array([], dtype=int)
+            return np.round(np.linspace(0, last_valid_frame_count - 1, num_frames)).astype(int)
+
+        return _legacy_uniform_indices
+
+    unpacked_frames, unpacked_metadata = _unpack_video_item(video_input)
+    unpacked_source = _resolve_video_source(video_input, unpacked_metadata)
+    if unpacked_metadata is not None:
+        # Re-run OmniVinci's native frame sampling path when source is available.
+        # This keeps parity with string-path inputs and avoids downstream drift when
+        # upstream loaders return fewer frames due terminal-frame decode failures.
+        if isinstance(unpacked_source, str) and unpacked_source:
             try:
-                while last_valid_frame_count > 0:
-                    video_capture.set(cv2.CAP_PROP_POS_FRAMES, last_valid_frame_count - 1)
-                    if video_capture.grab():
-                        break
-                    last_valid_frame_count -= 1
-            finally:
-                video_capture.release()
-
-        if last_valid_frame_count <= 0:
-            return np.array([], dtype=int)
-        return np.round(np.linspace(0, last_valid_frame_count - 1, num_frames)).astype(int)
-
-    frames_array, metadata = load_video(
-        video_input,
-        backend="opencv",
-        sample_indices_fn=_legacy_uniform_indices,
-    )
-    if isinstance(metadata, list):
-        metadata = None
+                frames_array, metadata = load_video(
+                    unpacked_source,
+                    backend="opencv",
+                    sample_indices_fn=_make_legacy_uniform_indices(unpacked_source),
+                )
+                if isinstance(metadata, list):
+                    metadata = None
+            except Exception:
+                frames_array = np.asarray(unpacked_frames)
+                metadata = unpacked_metadata
+        else:
+            frames_array = np.asarray(unpacked_frames)
+            metadata = unpacked_metadata
+    else:
+        frames_array, metadata = load_video(
+            video_input,
+            backend="opencv",
+            sample_indices_fn=_make_legacy_uniform_indices(video_input if isinstance(video_input, str) else None),
+        )
+        if isinstance(metadata, list):
+            metadata = None
 
     frames_array = np.asarray(frames_array)
+    if frames_array.ndim == 0:
+        raise TypeError(
+            "Unsupported video payload for OmniVinci video extraction: "
+            f"video_input_type={type(video_input)!r}, "
+            f"unpacked_type={type(unpacked_frames)!r}, "
+            f"unpacked_metadata_type={type(unpacked_metadata)!r}, "
+            f"unpacked_repr={repr(unpacked_frames)[:200]}"
+        )
     output_frames = [PIL.Image.fromarray(frame).convert("RGB") for frame in frames_array]
 
-    fps = float(getattr(metadata, "fps", None) or 1.0)
-    sampled_frame_indices = getattr(metadata, "frames_indices", None) if metadata is not None else None
+    fps = float(_meta_get(metadata, "fps", None) or 1.0)
+    sampled_frame_indices = _meta_get(metadata, "frames_indices", None) if metadata is not None else None
     if sampled_frame_indices is None:
         frame_indices = list(range(len(output_frames)))
     else:
         frame_indices = list(np.asarray(sampled_frame_indices).tolist())
 
-    metadata_total_frames = getattr(metadata, "total_num_frames", None) if metadata is not None else None
+    metadata_total_frames = _meta_get(metadata, "total_num_frames", None) if metadata is not None else None
     frame_count = int(frame_indices[-1] + 1) if frame_indices else int(metadata_total_frames or len(output_frames))
     video_duration = float(frame_count / fps if fps > 0 else len(output_frames))
     # Keep np.float64 timestamps for parity with legacy timing dtype used by the original OmniVinci path.
     output_frame_times = list(np.asarray(frame_indices, dtype=np.float64) / np.float64(fps if fps > 0 else 1.0))
 
-    video_path = video_input if isinstance(video_input, str) else None
+    video_source = _resolve_video_source(video_input, metadata)
 
     aud_feature = None
     audio_info = None
-    if config.load_audio_in_video and isinstance(video_input, str):
+    if config.load_audio_in_video and video_source is not None:
         try:
-            aud_feature, audio_info = _load_audio_hf_with_info(video_input, config)
+            aud_feature, audio_info = _load_audio_hf_with_info(video_source, config)
         except Exception:
             aud_feature, audio_info = None, None
 
     video_info = {
-        "video_path": video_path,
+        "video_path": video_source,
         "has_audio": aud_feature is not None,
         "video_duration": video_duration,
         "audio_info": audio_info,
         "video_frame_times": output_frame_times,
     }
-    if audio_info is not None and video_path is not None:
-        audio_info["video_path"] = video_path
+    if audio_info is not None and video_source is not None:
+        audio_info["video_path"] = video_source
 
     if config.load_audio_in_video and config.interleaved_vis_aud_in_video and aud_feature is not None:
         segment_duration = config.interleaved_video_segment_duration
@@ -668,8 +773,23 @@ class OmniVinciProcessor(ProcessorMixin):
         return self._call_native(text=text, images=images, videos=videos, audio=audio, **kwargs)
 
     def _normalize_nested_media(self, values, batch_size: int) -> list[list]:
+        def _is_packed_media_item(item) -> bool:
+            if not isinstance(item, (tuple, list)) or len(item) != 2:
+                return False
+            meta = item[1]
+            if isinstance(meta, dict):
+                return bool(
+                    {"fps", "frames_indices", "total_num_frames", "video_path", "video_url"} & set(meta.keys())
+                )
+            return any(
+                hasattr(meta, key) for key in ("fps", "frames_indices", "total_num_frames", "video_path", "video_url")
+            )
+
         if values is None:
             return [[] for _ in range(batch_size)]
+
+        if batch_size == 1 and _is_packed_media_item(values):
+            return [[values]]
 
         if batch_size == 1 and (
             not isinstance(values, (list, tuple)) or (values and not isinstance(values[0], (list, tuple)))
@@ -685,6 +805,8 @@ class OmniVinciProcessor(ProcessorMixin):
         for item in values:
             if item is None:
                 normalized.append([])
+            elif _is_packed_media_item(item):
+                normalized.append([item])
             elif isinstance(item, (list, tuple)):
                 normalized.append(list(item))
             else:
