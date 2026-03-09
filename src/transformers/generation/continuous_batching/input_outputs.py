@@ -45,7 +45,8 @@ class PagedAttentionArgs:
         read_index: List of tensors indicating which cache positions to read from, one per attention group.
         logits_indices: Tensor indicating which positions in the output should be used for next-token prediction.
         cache: The [`PagedAttentionCache`] instance managing the KV cache.
-        block_table: Block table for paged KV cache. If provided, uses `flash_attn_with_kvcache` for fused attention + cache update.
+        block_table: Block table for paged KV cache. If provided, uses `flash_attn_with_kvcache` for fused attention +
+            cache update. More information in src/transformers/integrations/flash_paged.py
         use_cache: Whether to use caching (always `False` in continuous batching as the cache is managed externally).
     """
 

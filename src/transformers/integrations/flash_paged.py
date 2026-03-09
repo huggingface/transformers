@@ -33,7 +33,11 @@ def paged_attention_forward(
         max_seqlen_q: int. Maximum query sequence length in the batch.
         max_seqlen_k: int. Maximum key sequence length in the batch.
         block_table: (num_groups, batch_size, max_blocks_per_seq), dtype int32. Block table for paged KV cache.
-            If provided, uses flash_attn_with_kvcache for fused attention + cache update.
+            If provided, uses flash_attn_with_kvcache for fused attention + cache update. For each request, the block
+            table is a vector of size (max_blocks_per_seq,) with indices indicating the physical location of the cache
+            to read from and write to. The kernel, using the cache_seqlens for that request, knows how much cache to
+            read and dispatches the read using the block table. Same for the write. If a request has less  blocksthan
+            max_blocks_per_seq blocks, the block table is padded with -1s to indicate that this cache is not allocated.
     """
     # Retrieve the flash attention functions
     flash_attn_varlen_func, flash_attn_with_kvcache = lazy_import_paged_flash_attention(
@@ -98,7 +102,7 @@ def paged_attention_forward(
         if "s_aux" in kwargs:
             flash_kwargs["s_aux"] = kwargs["s_aux"]  # this is only available in VLLM's FA3
         # Call flash_attn_with_kvcache - this updates cache in-place and computes attention
-        attn_output = flash_attn_with_kvcache(
+        attn_output = flash_attn_with_kvcache(  # TODO: add more doc in a dedicated wrapper (coming in next PRs)
             q,
             k_cache,
             v_cache,

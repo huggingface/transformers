@@ -435,7 +435,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
             request_blocks[:num_blocks_needed], device=block_table.device, dtype=block_table.dtype
         )
         # TODO: this creates a lot of H2D transfers when not using async batching, but we will update to always using
-        # an IO pair in the future or a CPu-side block table
+        # an IO pair in the future or a CPU-side block table. This also entails a small memory allocation.
 
 
 class SlidingAttentionCacheAllocator(CacheAllocator):

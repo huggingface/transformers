@@ -397,7 +397,8 @@ class PagedAttentionCache:
 
     def get_block_table_key(self, flash_attn_with_kvcache_fn: Any) -> str:
         """A function to get the name of the block table key for the given flash_attn_with_kvcache_fn. The function's
-        signature is only inspected once."""
+        signature is only inspected once. This is necessary because different version of flash have different names for
+        the block table key."""
         if self._block_table_key is None:
             kwarg_names = inspect.signature(flash_attn_with_kvcache_fn).parameters.keys()
             if "block_table" in kwarg_names:
