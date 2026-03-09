@@ -30,6 +30,12 @@ class CudaGraphBuffer:
         self.max_size = max_size
         self._storage: OrderedDict[tuple[int, int], torch.cuda.CUDAGraph] = OrderedDict()
 
+    def __del__(self) -> None:
+        original_max_size = self.max_size
+        self.max_size = 1  # 0 would cause an infinite loop, 1 is enough to clear all graphs
+        self.plan_for_new_graph()
+        self.max_size = original_max_size
+
     def get_graph(self, q_len: int, kv_len: int) -> torch.cuda.CUDAGraph | None:
         graph = self._storage.get((q_len, kv_len))
         if graph is not None:
