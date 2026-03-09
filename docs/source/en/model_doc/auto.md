@@ -16,27 +16,18 @@ rendered properly in your Markdown viewer.
 
 # Auto Classes
 
-In many cases, the architecture you want to use can be guessed from the name or the path of the pretrained model you
-are supplying to the `from_pretrained()` method. AutoClasses are here to do this job for you so that you
-automatically retrieve the relevant model given the name/path to the pretrained weights/config/vocabulary.
-
-Instantiating one of [`AutoConfig`], [`AutoModel`], and
-[`AutoTokenizer`] will directly create a class of the relevant architecture. For instance
+In many cases, the architecture to use can be inferred from the name or path of the pretrained model provided to the `from_pretrained()` method.
+Instantiating [`AutoConfig`], [`AutoModel`], or [`AutoTokenizer`] automatically creates the appropriate architecture class. For example:
 
 ```python
 model = AutoModel.from_pretrained("google-bert/bert-base-cased")
 ```
 
-will create a model that is an instance of [`BertModel`].
-
-There is one class of `AutoModel` for each task.
-
+This creates a model instance of [`BertModel`].
+Each task has a corresponding `AutoModel` class.
 ## Extending the Auto Classes
 
-Each of the auto classes has a method to be extended with your custom classes. For instance, if you have defined a
-custom class of model `NewModel`, make sure you have a `NewModelConfig` then you can add those to the auto
-classes like this:
-
+Each auto class provides a method that allows it to be extended with custom classes.For example, if you define a custom model class `NewModel`, ensure that you also define a corresponding `NewModelConfig`. You can then register them with the auto classes as shown below:
 ```python
 from transformers import AutoConfig, AutoModel
 
@@ -44,8 +35,7 @@ AutoConfig.register("new-model", NewModelConfig)
 AutoModel.register(NewModelConfig, NewModel)
 ```
 
-You will then be able to use the auto classes like you would usually do!
-
+You can then use the auto classes as you normally would.
 <Tip warning={true}>
 
 If your `NewModelConfig` is a subclass of [`~transformers.PreTrainedConfig`], make sure its
