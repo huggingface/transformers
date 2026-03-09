@@ -19,8 +19,21 @@ jobs:
       languages: en
 
   # Satisfy required check in merge queue without actually building docs
-  build-merge-queue:
+  skip_merge_queue:
     if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     steps:
       - run: echo "Skipping doc build in merge queue"
+
+  doc_build_status_check:
+    needs: [build, skip_merge_queue]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          if [[ "${{ needs.build.result }}" == "success" || "${{ needs.build.result }}" == "skipped" ]] && \
+             [[ "${{ needs.skip_merge_queue.result }}" == "success" || "${{ needs.skip_merge_queue.result }}" == "skipped" ]]; then
+            echo "OK"
+          else
+            exit 1
+          fi

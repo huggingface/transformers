@@ -2941,9 +2941,6 @@ class TestTensorSharing(TestCasePlus):
 
 
 @require_torch
-@unittest.skip(
-    "These tests are currently failing and need to be fixed, but not sure we want to support this/not sure its even used! Fix this line:https://github.com/huggingface/transformers/blob/b750e6b9eeed5fb9adc2f8c7adb46639c8e41963/src/transformers/core_model_loading.py#L512"
-)
 class TestSaveAndLoadModelWithExtraState(TestCasePlus):
     """
     This test checks that a model can be saved and loaded that uses the torch extra state API.
@@ -2975,6 +2972,7 @@ class TestSaveAndLoadModelWithExtraState(TestCasePlus):
             def __init__(self, config: MyConfig):
                 super().__init__(config)
                 self.my_layer = MyModule()
+                self.post_init()
 
             def forward(self, hidden_states, attention_mask):
                 return self.my_layer(hidden_states, attention_mask)
@@ -2985,8 +2983,13 @@ class TestSaveAndLoadModelWithExtraState(TestCasePlus):
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
-            model = MyModel.from_pretrained(tmpdirname)
+            del model
+            model, loading_info = MyModel.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(model.my_layer.some_counter, 42)
+            self.assertEqual(len(loading_info["missing_keys"]), 0)
+            self.assertEqual(len(loading_info["unexpected_keys"]), 0)
+            self.assertEqual(len(loading_info["mismatched_keys"]), 0)
+            self.assertEqual(len(loading_info["error_msgs"]), 0)
 
     @mark.xfail(reason="save and from_pretrained currently only supports tensor extra_state")
     def test_save_and_load_model_with_dict_extra_state(self):
@@ -3022,8 +3025,13 @@ class TestSaveAndLoadModelWithExtraState(TestCasePlus):
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
-            model = MyModel.from_pretrained(tmpdirname)
+            del model
+            model, loading_info = MyModel.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(model.my_layer.some_counter, 42)
+            self.assertEqual(len(loading_info["missing_keys"]), 0)
+            self.assertEqual(len(loading_info["unexpected_keys"]), 0)
+            self.assertEqual(len(loading_info["mismatched_keys"]), 0)
+            self.assertEqual(len(loading_info["error_msgs"]), 0)
 
 
 class TestGetDecoder(unittest.TestCase):
