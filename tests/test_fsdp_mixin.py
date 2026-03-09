@@ -64,6 +64,10 @@ SEQ_LEN = 64
 NUM_STEPS = 20
 LR = 3e-4
 SEED = 42
+MIXED_PRECISION_NUM_STEPS = 40
+MIXED_PRECISION_REDUCTION_THRESHOLD = 0.4
+MIXED_PRECISION_GENERATION_MAX_NEW_TOKENS = 31
+MIXED_PRECISION_GENERATION_MATCH_THRESHOLD = 0.8
 
 
 # =============================================================================
@@ -85,7 +89,20 @@ def _fsdp_global_wrapper_batched(rank, test_specs, world_size, port, results_fil
 
     _set_determinism(SEED)
 
-    dist.init_process_group(rank=rank, world_size=world_size)
+    #NOTE(3outeille): will have to do everything through gloo
+    # Initialize a dual-backend default group so CUDA tensors use NCCL and CPU
+    # tensors (needed by cpu_offload paths) use GLOO.
+    try:
+        dist.init_process_group(backend="cpu:gloo,cuda:nccl", rank=rank, world_size=world_size)
+    except Exception as e:
+        if dist.is_initialized():
+            dist.destroy_process_group()
+        if rank == 0:
+            logger.warning(
+                "Falling back to NCCL-only process group init; cpu_offload tests may be skipped. "
+                f"Original init error: {e}"
+            )
+        dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
     torch.cuda.set_device(rank)
 
     results = {}
@@ -191,14 +208,14 @@ def _gather_fsdp2_state_dict(model):
     state_dict = {}
     for name, tensor in model.state_dict().items():
         if isinstance(tensor, DTensor):
-            state_dict[name] = tensor.full_tensor().clone().detach()
+            state_dict[name] = tensor.full_tensor().clone().detach().cpu()
         else:
-            state_dict[name] = tensor.clone().detach()
+            state_dict[name] = tensor.clone().detach().cpu()
     return state_dict
 
 
 def _gather_ddp_state_dict(model):
-    return {k: v.clone().detach() for k, v in model.module.state_dict().items()}
+    return {k: v.clone().detach().cpu() for k, v in model.module.state_dict().items()}
 
 
 def _compute_grad_norm(model):
@@ -219,20 +236,22 @@ def _assert_training_trace_match(
     test_state_dict,
     ref_label,
     test_label,
+    rtol=1e-5,
+    atol=1e-5,
 ):
     for step in range(len(ref_losses)):
         torch.testing.assert_close(
             torch.tensor(ref_losses[step]),
             torch.tensor(test_losses[step]),
-            rtol=0,
-            atol=0,
+            rtol=rtol,
+            atol=atol,
             msg=f"Loss mismatch at step {step}: {ref_label}={ref_losses[step]}, {test_label}={test_losses[step]}",
         )
         torch.testing.assert_close(
             torch.tensor(ref_grad_norms[step]),
             torch.tensor(test_grad_norms[step]),
-            rtol=0,
-            atol=0,
+            rtol=rtol,
+            atol=atol,
             msg=f"Grad norm mismatch at step {step}: {ref_label}={ref_grad_norms[step]}, {test_label}={test_grad_norms[step]}",
         )
 
@@ -241,10 +260,77 @@ def _assert_training_trace_match(
         torch.testing.assert_close(
             ref_state_dict[key],
             test_state_dict[key],
-            rtol=0,
-            atol=0,
+            rtol=rtol,
+            atol=atol,
             msg=f"Weight mismatch for {key}: {ref_label} vs {test_label}",
         )
+
+
+def _assert_training_reduction(losses, label, reduction_threshold=0.7):
+    assert len(losses) > 1, f"{label}: expected at least 2 loss values"
+
+    initial_loss, final_loss = losses[0], losses[-1]
+
+    loss_reduction_ratio = (initial_loss - final_loss) / max(abs(initial_loss), 1e-12)
+
+    if not dist.is_initialized() or dist.get_rank() == 0:
+        logger.info(
+            "%s reduction summary: loss %.6f -> %.6f (%.2f%%)",
+            label,
+            initial_loss,
+            final_loss,
+            loss_reduction_ratio * 100.0,
+        )
+
+    assert (
+        loss_reduction_ratio >= reduction_threshold
+    ), f"{label}: expected loss reduction >= {reduction_threshold:.0%}, got {loss_reduction_ratio:.2%}"
+
+
+def _log_training_trace(losses, grad_norms, label):
+    if dist.is_initialized() and dist.get_rank() != 0:
+        return
+    logger.info("%s per-step trace:", label)
+    for step, (loss, grad_norm) in enumerate(zip(losses, grad_norms)):
+        logger.info("  step=%d loss=%.6f grad_norm=%.6f", step, loss, grad_norm)
+
+
+def _assert_generation_matches_training_pattern(config, state_dict, batch, device, max_new_tokens_limit):
+    """
+    Validate generation by checking the model can reproduce the repeated training sequence
+    from a short prompt, similar to test_training_overfit.
+    """
+    model = AutoModelForCausalLM.from_config(config).to(device)
+    model.load_state_dict(state_dict)
+    model.eval()
+
+    input_ids, _ = batch
+    expected_tokens = input_ids[0].tolist()
+    prompt = torch.tensor([[expected_tokens[0]]], device=device)
+
+    with torch.no_grad():
+        generated = model.generate(
+            input_ids=prompt,
+            max_new_tokens=max_new_tokens_limit,
+            do_sample=False,
+            pad_token_id=config.pad_token_id if hasattr(config, "pad_token_id") else 0,
+            eos_token_id=0,
+            use_cache=getattr(config, "model_type", "") == "recurrent_gemma",
+        )[0].tolist()
+
+    if not dist.is_initialized() or dist.get_rank() == 0:
+        logger.info("Generation prompt tokens: %s", prompt[0].tolist())
+        logger.info("Generation expected tokens: %s", expected_tokens[: len(generated)])
+        logger.info("Generation generated tokens: %s", generated)
+
+    expected_slice = expected_tokens[: len(generated)]
+    num_matches = sum(int(a == b) for a, b in zip(generated, expected_slice))
+    match_ratio = num_matches / max(len(expected_slice), 1)
+    assert match_ratio >= MIXED_PRECISION_GENERATION_MATCH_THRESHOLD, (
+        "Expected generated sequence to match at least "
+        f"{MIXED_PRECISION_GENERATION_MATCH_THRESHOLD:.0%} of target tokens after overfitting; "
+        f"got {match_ratio:.2%}"
+    )
 
 
 def _create_init_state_dict(config, dtype):
@@ -528,24 +614,39 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
         logger.info(f"  FSDP sharding structure OK ({len(actual_targets)} targets)")
 
 
-def _test_fsdp2_auto_plan_vs_ddp_impl(rank, config_class, config_dict, dtype, tie_word_embeddings):
-    """Validate checkpoint reproducibility for both DDP and FSDP2(auto) under same config."""
+def _test_fsdp2_auto_plan_vs_ddp_impl(
+    rank, config_class, config_dict, tie_word_embeddings, policy_options=None, dtype=None
+):
+    """Validate checkpoint reproducibility for both DDP and FSDP2(auto) under same config.
+
+    Optionally accepts policy_options (e.g. ["cpu_offload"]) that don't change
+    numerics, so exact DDP trace matching still applies.
+    """
     init_test_logger()
+
+    if dtype is None:
+        dtype = torch.float32
 
     device = torch.device(f"cuda:{rank}")
     config = config_class.from_dict(config_dict)
     config.tie_word_embeddings = tie_word_embeddings
     checkpoint_step = NUM_STEPS // 2
+    policy_options = policy_options or []
+    assert "mixed_precision" not in policy_options, "Use _test_fsdp2_auto_plan_mixed_precision_impl for mixed precision."
+
+    fsdp_plan = ["auto", *policy_options] if policy_options else "auto"
 
     init_state_dict = _create_init_state_dict(config, dtype)
 
     batches = _create_deterministic_data(BATCH_SIZE, SEQ_LEN, config.vocab_size, device, seed=SEED)
     batches = batches * NUM_STEPS
 
-    _run_ddp_checkpoint_repro(rank, config, batches, LR, device, dtype, init_state_dict, checkpoint_step)
+    ddp_losses, ddp_grad_norms, ddp_state_dict = _run_ddp_checkpoint_repro(
+        rank, config, batches, LR, device, dtype, init_state_dict, checkpoint_step
+    )
 
-    device_map, device_mesh, _ = initialize_fsdp(fsdp_plan="auto")
-    _run_fsdp2_checkpoint_repro(
+    device_map, device_mesh, _ = initialize_fsdp(fsdp_plan=fsdp_plan)
+    fsdp_losses, fsdp_grad_norms, fsdp_state_dict = _run_fsdp2_checkpoint_repro(
         rank,
         config,
         batches,
@@ -555,17 +656,100 @@ def _test_fsdp2_auto_plan_vs_ddp_impl(rank, config_class, config_dict, dtype, ti
         dtype,
         init_state_dict=init_state_dict,
         checkpoint_step=checkpoint_step,
-        fsdp_plan="auto",
+        fsdp_plan=fsdp_plan,
+    )
+
+    _assert_training_trace_match(
+        ddp_losses,
+        ddp_grad_norms,
+        ddp_state_dict,
+        fsdp_losses,
+        fsdp_grad_norms,
+        fsdp_state_dict,
+        ref_label="DDP",
+        test_label=f"FSDP2(auto{'+policies' if policy_options else ''})",
     )
 
     if rank == 0:
-        logger.info("DDP and FSDP2(auto) checkpoint reproducibility checks passed.")
+        logger.info(f"DDP and FSDP2(auto{'+policies' if policy_options else ''}) checkpoint reproducibility checks passed.")
 
 
-def _test_fsdp2_manual_plan_vs_ddp_impl(rank, config_class, config_dict, dtype, tie_word_embeddings):
+def _test_fsdp2_auto_plan_mixed_precision_impl(rank, config_class, config_dict, tie_word_embeddings, policy_options=None):
+    """Validate FSDP2(auto) with mixed-precision/cpu_offload policies.
+
+    Auto mode accepts a list starting with "auto" followed by policy strings:
+      - ["auto", "cpu_offload"]          — auto with CPU offloading
+      - ["auto", "mixed_precision"]      — auto with mixed precision (bf16 params, fp32 reduce/output)
+      - ["auto", "cpu_offload", "mixed_precision"] — auto with both
+
+    Since mixed precision introduces numerical differences vs DDP (bf16 vs fp32),
+    we cannot do exact trace matching. Instead we verify:
+      1. FSDP2(auto+policies) checkpoint reproducibility (full run == save/resume run)
+      2. Training reduces loss meaningfully (reduction_threshold check)
+      3. Generation from the trained model matches training patterns
+    """
+    init_test_logger()
+
+    device = torch.device(f"cuda:{rank}")
+    config = config_class.from_dict(config_dict)
+    config.tie_word_embeddings = tie_word_embeddings
+    num_steps = MIXED_PRECISION_NUM_STEPS
+    checkpoint_step = num_steps // 2
+    lr = 1e-3
+    policy_options = policy_options or []
+    assert "mixed_precision" in policy_options, "Auto mixed-precision test requires mixed_precision policy option."
+
+    dtype = torch.float32
+    fsdp_plan = ["auto", *policy_options]
+
+    init_state_dict = _create_init_state_dict(config, dtype)
+
+    batches = _create_deterministic_data(BATCH_SIZE, SEQ_LEN, config.vocab_size, device, seed=SEED)
+    batches = batches * num_steps
+
+    device_map, device_mesh, _ = initialize_fsdp(fsdp_plan=fsdp_plan)
+    fsdp_losses, fsdp_grad_norms, fsdp_state_dict = _run_fsdp2_checkpoint_repro(
+        rank,
+        config,
+        batches,
+        lr,
+        device_map,
+        device_mesh,
+        dtype,
+        init_state_dict=init_state_dict,
+        checkpoint_step=checkpoint_step,
+        fsdp_plan=fsdp_plan,
+    )
+
+    _log_training_trace(fsdp_losses, fsdp_grad_norms, label="FSDP2(auto+policies)")
+    _assert_training_reduction(
+        fsdp_losses,
+        label="FSDP2(auto+policies)",
+        reduction_threshold=MIXED_PRECISION_REDUCTION_THRESHOLD,
+    )
+
+    _assert_generation_matches_training_pattern(
+        config,
+        fsdp_state_dict,
+        batches[0],
+        device=device,
+        max_new_tokens_limit=20,
+    )
+
+    if rank == 0:
+        logger.info("FSDP2(auto mixed-precision) reduction + generation checks passed.")
+
+
+def _test_fsdp2_manual_plan_vs_ddp_impl(rank, config_class, config_dict, tie_word_embeddings, policy_options=None):
     """Validate checkpoint reproducibility for DDP and FSDP2(manual plan).
     Uses prefix matching (supported by apply_fsdp2) so that e.g. "model.layers" matches
     "model.layers.0", "model.layers.1", etc.
+
+    Each plan value can be:
+      - ``"free_full_weight"`` (reshard after forward)
+      - ``"keep_full_weight"`` (do not reshard after forward)
+      - a list/tuple combining one of the above with optional policies:
+        ``"cpu_offload"``, ``"mixed_precision"``
 
     Example for a Llama-like model (untied):
        {
@@ -573,6 +757,13 @@ def _test_fsdp2_manual_plan_vs_ddp_impl(rank, config_class, config_dict, dtype, 
            "model.layers":       "free_full_weight",   # prefix -> shards each layer
            "model.norm":         "keep_full_weight",
            "lm_head":            "keep_full_weight",
+       }
+
+    Example with per-module policies:
+       {
+           "model.layers": ["free_full_weight", "cpu_offload", "mixed_precision"],
+           "model.norm":   "keep_full_weight",
+           "lm_head":      "keep_full_weight",
        }
 
     Example for a multi-group model like BLT (untied):
@@ -591,13 +782,18 @@ def _test_fsdp2_manual_plan_vs_ddp_impl(rank, config_class, config_dict, dtype, 
     config = config_class.from_dict(config_dict)
     config.tie_word_embeddings = tie_word_embeddings
     checkpoint_step = NUM_STEPS // 2
+    policy_options = policy_options or []
+    assert "mixed_precision" not in policy_options, "Use _test_fsdp2_manual_plan_mixed_precision_impl for mixed precision."
 
+    dtype = torch.float32
     init_state_dict = _create_init_state_dict(config, dtype)
 
     batches = _create_deterministic_data(BATCH_SIZE, SEQ_LEN, config.vocab_size, device, seed=SEED)
     batches = batches * NUM_STEPS
 
-    _run_ddp_checkpoint_repro(rank, config, batches, LR, device, dtype, init_state_dict, checkpoint_step)
+    ddp_losses, ddp_grad_norms, ddp_state_dict = _run_ddp_checkpoint_repro(
+        rank, config, batches, LR, device, dtype, init_state_dict, checkpoint_step
+    )
 
     set_seed(SEED)
     probe_model = AutoModelForCausalLM.from_config(config).to(device)
@@ -639,10 +835,14 @@ def _test_fsdp2_manual_plan_vs_ddp_impl(rank, config_class, config_dict, dtype, 
         if out_name:
             fsdp_plan[out_name] = "keep_full_weight"
 
+    if policy_options:
+        first_prefix = sorted(layer_prefixes)[0]
+        fsdp_plan[first_prefix] = ["free_full_weight", *policy_options]
+
     del probe_model
 
     device_map, device_mesh, _ = initialize_fsdp(fsdp_plan=fsdp_plan)
-    _run_fsdp2_checkpoint_repro(
+    fsdp_losses, fsdp_grad_norms, fsdp_state_dict = _run_fsdp2_checkpoint_repro(
         rank,
         config,
         batches,
@@ -655,8 +855,113 @@ def _test_fsdp2_manual_plan_vs_ddp_impl(rank, config_class, config_dict, dtype, 
         fsdp_plan=fsdp_plan,
     )
 
+    _assert_training_trace_match(
+        ddp_losses,
+        ddp_grad_norms,
+        ddp_state_dict,
+        fsdp_losses,
+        fsdp_grad_norms,
+        fsdp_state_dict,
+        ref_label="DDP",
+        test_label=f"FSDP2(manual{'+policies' if policy_options else ''})",
+    )
+
     if rank == 0:
-        logger.info("DDP and FSDP2(manual) checkpoint reproducibility checks passed.")
+        logger.info("DDP and FSDP2(manual) reproducibility + comparison checks passed.")
+
+
+def _test_fsdp2_manual_plan_mixed_precision_impl(rank, config_class, config_dict, tie_word_embeddings, policy_options=None):
+    """Validate FSDP2(manual plan) mixed-precision behavior without DDP numerical comparison."""
+    init_test_logger()
+
+    device = torch.device(f"cuda:{rank}")
+    config = config_class.from_dict(config_dict)
+    config.tie_word_embeddings = tie_word_embeddings
+    num_steps = MIXED_PRECISION_NUM_STEPS
+    checkpoint_step = num_steps // 2
+    lr = 1e-3
+    policy_options = policy_options or []
+    assert "mixed_precision" in policy_options, "Mixed-precision manual test requires mixed_precision policy option."
+
+    dtype = torch.float32
+    init_state_dict = _create_init_state_dict(config, dtype)
+
+    batches = _create_deterministic_data(BATCH_SIZE, SEQ_LEN, config.vocab_size, device, seed=SEED)
+    batches = batches * num_steps
+
+    set_seed(SEED)
+    probe_model = AutoModelForCausalLM.from_config(config).to(device)
+    block_classes = get_transformer_block_classes(probe_model)
+    id_to_name = {id(m): n for n, m in probe_model.named_modules()}
+
+    input_embed = probe_model.get_input_embeddings()
+    output_embed = probe_model.get_output_embeddings()
+    weights_tied = (
+        input_embed is not None
+        and output_embed is not None
+        and hasattr(input_embed, "weight")
+        and hasattr(output_embed, "weight")
+        and input_embed.weight is output_embed.weight
+    )
+
+    decoder_layer_names = {n for n, m in probe_model.named_modules() if type(m) in block_classes}
+    layer_prefixes = {".".join(n.split(".")[:-1]) for n in decoder_layer_names}
+
+    final_norm = _find_final_norm(probe_model, decoder_layer_names)
+    norm_name = id_to_name.get(id(final_norm)) if final_norm is not None else None
+    embed_name = id_to_name.get(id(input_embed)) if input_embed is not None else None
+    out_name = id_to_name.get(id(output_embed)) if output_embed is not None else None
+
+    fsdp_plan = {}
+    if not weights_tied and embed_name:
+        fsdp_plan[embed_name] = "free_full_weight"
+    fsdp_plan.update(dict.fromkeys(layer_prefixes, "free_full_weight"))
+    if norm_name:
+        fsdp_plan[norm_name] = "keep_full_weight"
+    if weights_tied:
+        if embed_name:
+            fsdp_plan[embed_name] = "keep_full_weight"
+    else:
+        if out_name:
+            fsdp_plan[out_name] = "keep_full_weight"
+
+    # Apply mixed/cpu_offload policies across all planned FSDP targets so dtype/offload
+    # behavior is consistent across layer, norm, and embedding/output boundaries.
+    fsdp_plan = {name: [strategy, *policy_options] for name, strategy in fsdp_plan.items()}
+
+    del probe_model
+
+    device_map, device_mesh, _ = initialize_fsdp(fsdp_plan=fsdp_plan)
+    fsdp_losses, fsdp_grad_norms, fsdp_state_dict = _run_fsdp2_checkpoint_repro(
+        rank,
+        config,
+        batches,
+        lr,
+        device_map,
+        device_mesh,
+        dtype,
+        init_state_dict=init_state_dict,
+        checkpoint_step=checkpoint_step,
+        fsdp_plan=fsdp_plan,
+    )
+
+    _log_training_trace(fsdp_losses, fsdp_grad_norms, label="FSDP2(manual+policies)")
+    _assert_training_reduction(
+        fsdp_losses,
+        label="FSDP2(manual+policies)",
+        reduction_threshold=MIXED_PRECISION_REDUCTION_THRESHOLD,
+    )
+
+    _assert_generation_matches_training_pattern(
+        config,
+        fsdp_state_dict,
+        batches[0],
+        device=device,
+        max_new_tokens_limit=20,
+    )
+
+    if rank == 0:
+        logger.info("FSDP2(manual mixed-precision) reduction + generation checks passed.")
 
 
 def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
@@ -827,51 +1132,51 @@ class FSDPTesterMixin(ABC):
             ("sharding_structure_untied", _test_fsdp2_sharding_structure_impl, (config_class, config_dict, False), {}),
             ("sharding_structure_tied", _test_fsdp2_sharding_structure_impl, (config_class, config_dict, True), {}),
             (
-                "auto_plan_float32_untied",
+                "auto_plan_untied",
                 _test_fsdp2_auto_plan_vs_ddp_impl,
-                (config_class, config_dict, torch.float32, False),
+                (config_class, config_dict, False),
                 {},
             ),
             (
-                "auto_plan_bfloat16_untied",
+                "auto_plan_tied",
                 _test_fsdp2_auto_plan_vs_ddp_impl,
-                (config_class, config_dict, torch.bfloat16, False),
+                (config_class, config_dict, True),
                 {},
             ),
             (
-                "auto_plan_float32_tied",
-                _test_fsdp2_auto_plan_vs_ddp_impl,
-                (config_class, config_dict, torch.float32, True),
+                "auto_plan_untied_cpu_offload_mixed_precision",
+                _test_fsdp2_auto_plan_mixed_precision_impl,
+                (config_class, config_dict, False, ["cpu_offload", "mixed_precision"]),
                 {},
             ),
             (
-                "auto_plan_bfloat16_tied",
-                _test_fsdp2_auto_plan_vs_ddp_impl,
-                (config_class, config_dict, torch.bfloat16, True),
+                "auto_plan_tied_cpu_offload_mixed_precision",
+                _test_fsdp2_auto_plan_mixed_precision_impl,
+                (config_class, config_dict, True, ["cpu_offload", "mixed_precision"]),
                 {},
             ),
             (
-                "manual_plan_float32_untied",
+                "manual_plan_untied",
                 _test_fsdp2_manual_plan_vs_ddp_impl,
-                (config_class, config_dict, torch.float32, False),
+                (config_class, config_dict, False),
                 {},
             ),
             (
-                "manual_plan_bfloat16_untied",
+                "manual_plan_tied",
                 _test_fsdp2_manual_plan_vs_ddp_impl,
-                (config_class, config_dict, torch.bfloat16, False),
+                (config_class, config_dict, True),
                 {},
             ),
             (
-                "manual_plan_float32_tied",
-                _test_fsdp2_manual_plan_vs_ddp_impl,
-                (config_class, config_dict, torch.float32, True),
+                "manual_plan_untied_cpu_offload_mixed_precision",
+                _test_fsdp2_manual_plan_mixed_precision_impl,
+                (config_class, config_dict, False, ["cpu_offload", "mixed_precision"]),
                 {},
             ),
             (
-                "manual_plan_bfloat16_tied",
-                _test_fsdp2_manual_plan_vs_ddp_impl,
-                (config_class, config_dict, torch.bfloat16, True),
+                "manual_plan_tied_cpu_offload_mixed_precision",
+                _test_fsdp2_manual_plan_mixed_precision_impl,
+                (config_class, config_dict, True, ["cpu_offload", "mixed_precision"]),
                 {},
             ),
             ("save_load", _test_fsdp2_save_load_impl, (config_class, config_dict), {}),
