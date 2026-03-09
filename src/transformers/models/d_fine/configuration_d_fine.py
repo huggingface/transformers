@@ -19,163 +19,121 @@
 # limitations under the License.
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
 # TODO: Attribute map assignment logic should be fixed in modular
 # as well as super() call parsing because otherwise we cannot re-write args after initialization
+@auto_docstring(checkpoint="ustc-community/dfine-xlarge-coco")
 class DFineConfig(PreTrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`DFineModel`]. It is used to instantiate a D-FINE
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of D-FINE-X-COCO "[ustc-community/dfine-xlarge-coco"](https://huggingface.co/ustc-community/dfine-xlarge-coco").
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        initializer_range (`float`, *optional*, defaults to 0.01):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_bias_prior_prob (`float`, *optional*):
-            The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
-            If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        batch_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the batch normalization layers.
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `HGNetV2Config()`):
-            The configuration of the backbone model.
-        freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
-            Whether to freeze the batch normalization layers in the backbone.
-        encoder_hidden_dim (`int`, *optional*, defaults to 256):
-            Dimension of the layers in hybrid encoder.
-        encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
-            Multi level features input for encoder.
-        feat_strides (`list[int]`, *optional*, defaults to `[8, 16, 32]`):
-            Strides used in each feature map.
-        encoder_layers (`int`, *optional*, defaults to 1):
-            Total of layers to be used by the encoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 1024):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        encoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The ratio for all dropout layers.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        encode_proj_layers (`list[int]`, *optional*, defaults to `[2]`):
-            Indexes of the projected layers to be used in the encoder.
-        positional_encoding_temperature (`int`, *optional*, defaults to 10000):
-            The temperature parameter used to create the positional encodings.
-        encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        activation_function (`str`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the general layer. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        eval_size (`tuple[int, int]`, *optional*):
-            Height and width used to computes the effective height and width of the position embeddings after taking
-            into account the stride.
-        normalize_before (`bool`, *optional*, defaults to `False`):
-            Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
-            feed-forward modules.
-        hidden_expansion (`float`, *optional*, defaults to 1.0):
-            Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
-        d_model (`int`, *optional*, defaults to 256):
-            Dimension of the layers exclude hybrid encoder.
-        num_queries (`int`, *optional*, defaults to 300):
-            Number of object queries.
-        decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
-            Multi level features dimension for decoder
-        decoder_ffn_dim (`int`, *optional*, defaults to 1024):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        num_feature_levels (`int`, *optional*, defaults to 3):
-            The number of input feature levels.
-        decoder_n_points (`int`, *optional*, defaults to 4):
-            The number of sampled keys in each feature level for each attention head in the decoder.
-        decoder_layers (`int`, *optional*, defaults to 6):
-            Number of decoder layers.
-        decoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function (function or string) in the decoder. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        num_denoising (`int`, *optional*, defaults to 100):
-            The total number of denoising tasks or queries to be used for contrastive denoising.
-        label_noise_ratio (`float`, *optional*, defaults to 0.5):
-            The fraction of denoising labels to which random noise should be added.
-        box_noise_scale (`float`, *optional*, defaults to 1.0):
-            Scale or magnitude of noise to be added to the bounding boxes.
-        learn_initial_query (`bool`, *optional*, defaults to `False`):
-            Indicates whether the initial query embeddings for the decoder should be learned during training
-        anchor_image_size (`tuple[int, int]`, *optional*):
-            Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
-        with_box_refine (`bool`, *optional*, defaults to `True`):
-            Whether to apply iterative bounding box refinement, where each decoder layer refines the bounding boxes
-            based on the predictions from the previous layer.
-        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
-            Whether the architecture has an encoder decoder structure.
-        matcher_alpha (`float`, *optional*, defaults to 0.25):
-            Parameter alpha used by the Hungarian Matcher.
-        matcher_gamma (`float`, *optional*, defaults to 2.0):
-            Parameter gamma used by the Hungarian Matcher.
-        matcher_class_cost (`float`, *optional*, defaults to 2.0):
-            The relative weight of the class loss used by the Hungarian Matcher.
-        matcher_bbox_cost (`float`, *optional*, defaults to 5.0):
-            The relative weight of the bounding box loss used by the Hungarian Matcher.
-        matcher_giou_cost (`float`, *optional*, defaults to 2.0):
-            The relative weight of the giou loss of used by the Hungarian Matcher.
-        use_focal_loss (`bool`, *optional*, defaults to `True`):
-            Parameter informing if focal focal should be used.
-        auxiliary_loss (`bool`, *optional*, defaults to `True`):
-            Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
-        focal_loss_alpha (`float`, *optional*, defaults to 0.75):
-            Parameter alpha used to compute the focal loss.
-        focal_loss_gamma (`float`, *optional*, defaults to 2.0):
-            Parameter gamma used to compute the focal loss.
-        weight_loss_vfl (`float`, *optional*, defaults to 1.0):
-            Relative weight of the varifocal loss in the object detection loss.
-        weight_loss_bbox (`float`, *optional*, defaults to 5.0):
-            Relative weight of the L1 bounding box loss in the object detection loss.
-        weight_loss_giou (`float`, *optional*, defaults to 2.0):
-            Relative weight of the generalized IoU loss in the object detection loss.
-        weight_loss_fgl (`float`, *optional*, defaults to 0.15):
-            Relative weight of the fine-grained localization loss in the object detection loss.
-        weight_loss_ddf (`float`, *optional*, defaults to 1.5):
-            Relative weight of the decoupled distillation focal loss in the object detection loss.
-        eos_coefficient (`float`, *optional*, defaults to 0.0001):
-            Relative classification weight of the 'no-object' class in the object detection loss.
-        eval_idx (`int`, *optional*, defaults to -1):
-            Index of the decoder layer to use for evaluation. If negative, counts from the end
-            (e.g., -1 means use the last layer). This allows for early prediction in the decoder
-            stack while still training later layers.
-        layer_scale (`float`, *optional*, defaults to `1.0`):
-            Scaling factor for the hidden dimension in later decoder layers. Used to adjust the
-            model capacity after the evaluation layer.
-        max_num_bins (`int`, *optional*, defaults to 32):
-            Maximum number of bins for the distribution-guided bounding box refinement.
-            Higher values allow for more fine-grained localization but increase computation.
-        reg_scale (`float`, *optional*, defaults to 4.0):
-            Scale factor for the regression distribution. Controls the range and granularity
-            of the bounding box refinement process.
-        depth_mult (`float`, *optional*, defaults to 1.0):
-            Multiplier for the number of blocks in RepNCSPELAN4 layers. Used to scale the model's
-            depth while maintaining its architecture.
-        top_prob_values (`int`, *optional*, defaults to 4):
-            Number of top probability values to consider from each corner's distribution.
-        lqe_hidden_dim (`int`, *optional*, defaults to 64):
-            Hidden dimension size for the Location Quality Estimator (LQE) network.
-        lqe_layers (`int`, *optional*, defaults to 2):
-            Number of layers in the Location Quality Estimator MLP.
-        decoder_offset_scale (`float`, *optional*, defaults to 0.5):
-            Offset scale used in deformable attention.
-        decoder_method (`str`, *optional*, defaults to `"default"`):
-            The method to use for the decoder: `"default"` or `"discrete"`.
-        up (`float`, *optional*, defaults to 0.5):
-            Controls the upper bounds of the Weighting Function.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
+    initializer_bias_prior_prob (`float`, *optional*):
+        The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
+        If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
+    freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
+        Whether to freeze the batch normalization layers in the backbone.
+    encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
+        Multi level features input for encoder.
+    encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+        `"relu"`, `"silu"` and `"gelu_new"` are supported.
+    eval_size (`tuple[int, int]`, *optional*):
+        Height and width used to computes the effective height and width of the position embeddings after taking
+        into account the stride.
+    decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
+        Multi level features dimension for decoder
+    decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
+        The non-linear activation function (function or string) in the decoder. If string, `"gelu"`,
+        `"relu"`, `"silu"` and `"gelu_new"` are supported.
+    use_focal_loss (`bool`, *optional*, defaults to `True`):
+        Parameter informing if focal focal should be used.
+    focal_loss_alpha (`float`, *optional*, defaults to 0.75):
+        Parameter alpha used to compute the focal loss.
+    focal_loss_gamma (`float`, *optional*, defaults to 2.0):
+        Parameter gamma used to compute the focal loss.
+    eval_idx (`int`, *optional*, defaults to -1):
+        Index of the decoder layer to use for evaluation. If negative, counts from the end
+        (e.g., -1 means use the last layer). This allows for early prediction in the decoder
+        stack while still training later layers.
+    batch_norm_eps (`float`, *optional*, defaults to 1e-05):
+        The epsilon used by the batch normalization layers.
+    feat_strides (`list[int]`, *optional*, defaults to `[8, 16, 32]`):
+        Strides used in each feature map.
+    encode_proj_layers (`list[int]`, *optional*, defaults to `[2]`):
+        Indexes of the projected layers to be used in the encoder.
+    positional_encoding_temperature (`int`, *optional*, defaults to 10000):
+        The temperature parameter used to create the positional encodings.
+    normalize_before (`bool`, *optional*, defaults to `False`):
+        Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
+        feed-forward modules.
+    hidden_expansion (`float`, *optional*, defaults to 1.0):
+        Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
+    num_queries (`int`, *optional*, defaults to 300):
+        Number of object queries.
+    num_feature_levels (`int`, *optional*, defaults to 3):
+        The number of input feature levels.
+    decoder_n_points (`int`, *optional*, defaults to 4):
+        The number of sampled keys in each feature level for each attention head in the decoder.
+    num_denoising (`int`, *optional*, defaults to 100):
+        The total number of denoising tasks or queries to be used for contrastive denoising.
+    label_noise_ratio (`float`, *optional*, defaults to 0.5):
+        The fraction of denoising labels to which random noise should be added.
+    box_noise_scale (`float`, *optional*, defaults to 1.0):
+        Scale or magnitude of noise to be added to the bounding boxes.
+    learn_initial_query (`bool`, *optional*, defaults to `False`):
+        Indicates whether the initial query embeddings for the decoder should be learned during training
+    anchor_image_size (`tuple[int, int]`, *optional*):
+        Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
+    with_box_refine (`bool`, *optional*, defaults to `True`):
+        Whether to apply iterative bounding box refinement, where each decoder layer refines the bounding boxes
+        based on the predictions from the previous layer.
+    matcher_alpha (`float`, *optional*, defaults to 0.25):
+        Parameter alpha used by the Hungarian Matcher.
+    matcher_gamma (`float`, *optional*, defaults to 2.0):
+        Parameter gamma used by the Hungarian Matcher.
+    matcher_class_cost (`float`, *optional*, defaults to 2.0):
+        The relative weight of the class loss used by the Hungarian Matcher.
+    matcher_bbox_cost (`float`, *optional*, defaults to 5.0):
+        The relative weight of the bounding box loss used by the Hungarian Matcher.
+    matcher_giou_cost (`float`, *optional*, defaults to 2.0):
+        The relative weight of the giou loss of used by the Hungarian Matcher.
+    weight_loss_vfl (`float`, *optional*, defaults to 1.0):
+        Relative weight of the varifocal loss in the object detection loss.
+    weight_loss_bbox (`float`, *optional*, defaults to 5.0):
+        Relative weight of the L1 bounding box loss in the object detection loss.
+    weight_loss_giou (`float`, *optional*, defaults to 2.0):
+        Relative weight of the generalized IoU loss in the object detection loss.
+    weight_loss_fgl (`float`, *optional*, defaults to 0.15):
+        Relative weight of the fine-grained localization loss in the object detection loss.
+    weight_loss_ddf (`float`, *optional*, defaults to 1.5):
+        Relative weight of the decoupled distillation focal loss in the object detection loss.
+    eos_coefficient (`float`, *optional*, defaults to 0.0001):
+        Relative classification weight of the 'no-object' class in the object detection loss.
+    layer_scale (`float`, *optional*, defaults to `1.0`):
+        Scaling factor for the hidden dimension in later decoder layers. Used to adjust the
+        model capacity after the evaluation layer.
+    max_num_bins (`int`, *optional*, defaults to 32):
+        Maximum number of bins for the distribution-guided bounding box refinement.
+        Higher values allow for more fine-grained localization but increase computation.
+    reg_scale (`float`, *optional*, defaults to 4.0):
+        Scale factor for the regression distribution. Controls the range and granularity
+        of the bounding box refinement process.
+    depth_mult (`float`, *optional*, defaults to 1.0):
+        Multiplier for the number of blocks in RepNCSPELAN4 layers. Used to scale the model's
+        depth while maintaining its architecture.
+    top_prob_values (`int`, *optional*, defaults to 4):
+        Number of top probability values to consider from each corner's distribution.
+    lqe_hidden_dim (`int`, *optional*, defaults to 64):
+        Hidden dimension size for the Location Quality Estimator (LQE) network.
+    lqe_layers (`int`, *optional*, defaults to 2):
+        Number of layers in the Location Quality Estimator MLP.
+    decoder_offset_scale (`float`, *optional*, defaults to 0.5):
+        Offset scale used in deformable attention.
+    decoder_method (`str`, *optional*, defaults to `"default"`):
+        The method to use for the decoder: `"default"` or `"discrete"`.
+    up (`float`, *optional*, defaults to 0.5):
+        Controls the upper bounds of the Weighting Function.
     """
 
     model_type = "d_fine"

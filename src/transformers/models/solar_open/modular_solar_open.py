@@ -16,7 +16,7 @@
 from torch import nn
 
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeForCausalLM,
@@ -31,72 +31,11 @@ from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="upstage/Solar-Open-100B")
 class SolarOpenConfig(Glm4MoeConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SolarOpenModel`]. It is used to instantiate a
-    SolarOpen model according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Instantiating a configuration defaults will yield a similar configuration to that of
-    [upstage/Solar-Open-100B](https://huggingface.co/upstage/Solar-Open-100B) architecture.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 196608):
-            Vocabulary size of the SolarOpen model.
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        moe_intermediate_size (`int`, *optional*, defaults to 1280):
-            Intermediate size of the routed expert.
-        num_hidden_layers (`int`, *optional*, defaults to 48):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 64):
-            Number of attention heads for each attention layer.
-        num_key_value_heads (`int`, *optional*, defaults to 8):
-            Number of key_value heads for Grouped Query Attention.
-        n_shared_experts (`int`, *optional*, defaults to 1):
-            Number of shared experts.
-        n_routed_experts (`int`, *optional*, defaults to 128):
-            Number of routed experts.
-        head_dim (`int`, *optional*, defaults to 128):
-            Dimension of each attention head.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 131072):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether to return the last key/values attentions.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the projection layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        num_experts_per_tok (`int`, *optional*, defaults to 8):
-            Number of experts per token.
-        routed_scaling_factor (`float`, *optional*, defaults to 1.0):
-            Scaling factor for routed experts.
-        n_group (`int`, *optional*, defaults to 1):
-            Number of groups for routed experts.
-        topk_group (`int`, *optional*, defaults to 1):
-            Number of selected groups for each token.
-        norm_topk_prob (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the topk probabilities.
-        bos_token_id (`int`, *optional*):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*):
-            End of stream token id.
-        pad_token_id (`int`, *optional*):
-            Padding token id.
+    n_group (`int`, *optional*, defaults to 1):
+        Number of groups for routed experts.
     """
 
     model_type = "solar_open"

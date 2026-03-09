@@ -14,54 +14,19 @@
 
 from ...configuration_utils import PreTrainedConfig, PretrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="facebook/pe-av-large")
 class PeAudioEncoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PeAudioEncoder`]. It is used to instantiate a
-    PeAudioEncoder model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of pe-av-large.
-    e.g. [facebook/pe-av-large](https://huggingface.co/facebook/pe-av-large)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        dac_config (`Union[PreTrainedConfig, dict]`, *optional*):
-            Configuration for the DAC audio encoder used to tokenize the raw audio inputs. If a dictionary is passed, it
-            will be used to instantiate a [`~transformers.DacConfig`] with default DAC hyperparameters.
-        hidden_size (`int`, *optional*, defaults to 1792):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 4800):
-            Dimension of the feedforward layers in the Transformer blocks.
-        num_hidden_layers (`int`, *optional*, defaults to 6):
-            Number of Transformer encoder blocks.
-        num_attention_heads (`int`, *optional*, defaults to 14):
-            Number of attention heads used in each attention layer.
-        num_key_value_heads (`int`, *optional*):
-            Number of key and value heads for grouped-query attention. If unset, this defaults to `num_attention_heads`.
-        head_dim (`int`, *optional*, defaults to 128):
-            Dimension of each attention head for query, key, and value projections.
-        hidden_act (`str`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the Transformer blocks.
-        max_position_embeddings (`int`, *optional*, defaults to 10000):
-            Maximum sequence length supported by the rotary position embeddings.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            Standard deviation of the truncated normal initializer for weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            Epsilon used by the RMS normalization layers.
-        rope_parameters (`Union[RopeParameters, dict]`, *optional*, defaults to `{'rope_theta': 20000}`):
-            Parameters for the rotary position embeddings, such as the base `rope_theta`.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias terms in the query, key, value, and output projections.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout ratio applied to attention probabilities.
+    dac_config (`Union[PreTrainedConfig, dict]`, *optional*):
+        Configuration for the DAC audio encoder used to tokenize the raw audio inputs. If a dictionary is passed, it
+        will be used to instantiate a [`~transformers.DacConfig`] with default DAC hyperparameters.
 
     ```python
     >>> from transformers import PeAudioEncoder, PeAudioEncoderConfig
@@ -134,22 +99,10 @@ class PeAudioEncoderConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="facebook/pe-av-large")
 class PeAudioConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PeAudioModel`]. It is used to instantiate a
-    PeAudioModel model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of pe-av-large.
-    e.g. [facebook/pe-av-large](https://huggingface.co/facebook/pe-av-large)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        text_config (`dict` or `PreTrainedConfig`, *optional*):
-            Configuration for the text model component.
-        audio_config (`dict` or `PreTrainedConfig`, *optional*):
-            Configuration for the audio encoder component.
+    Example:
 
     ```python
     >>> from transformers import PeAudioModel, PeAudioConfig
