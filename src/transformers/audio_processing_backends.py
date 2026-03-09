@@ -6,6 +6,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
+
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,9 +17,9 @@
 import numpy as np
 
 from .audio_processing_utils import BaseAudioProcessor
-from .audio_utils import SpectrogramConfig, NormalizationConfig
+from .audio_utils import SpectrogramConfig, mel_filter_bank
 from .feature_extraction_utils import BatchFeature
-from .utils import logging, is_torch_available
+from .utils import PaddingStrategy, TensorType, is_torch_available, is_torch_tensor, logging, to_numpy
 
 
 logger = logging.get_logger(__name__)
@@ -33,23 +34,29 @@ class NumpyAudioBackend(BaseAudioProcessor):
 
     @property
     def backend(self) -> str:
-        return "numpy"
+        return "numpy"    
 
-    def process_audio(self, audio_el):
+    def _process_audio(self, audio_el):
         """
         Process a single raw audio input into a np.ndarray.
 
-        Handles mono conversion (averaging channels) and ensures numpy format.
+        Handles mono conversion (averaging channels) and numpy conversion.
+        Closely mirrors the torch backend logic: expects channel-first.
         """
         if not isinstance(audio_el, np.ndarray):
             audio_el = np.asarray(audio_el)
 
-        if self.force_mono:
-            audio_el = audio_el.mean(axis=1) if audio_el.ndim > 1 else audio_el
-
+        if audio_el.ndim > 1:
+            # Expecting channel-first: (channels, samples)
+            if self.force_mono and audio_el.shape[0] > 1:
+                audio_el = audio_el.mean(axis=0)
+            elif audio_el.shape[0] == 1:
+                audio_el = np.squeeze(audio_el, axis=0)
+            else:
+                raise ValueError("Audio has more than one channel but force_mono is False")
         return audio_el
 
-    def pad(self, audio: np.ndarray, max_length: int) -> np.ndarray:
+    def _pad_single(self, audio: np.ndarray, max_length: int) -> np.ndarray:
         """Pad a single audio array to a target length using np.pad."""
         current_length = audio.shape[-1]
         if current_length >= max_length:
@@ -71,64 +78,19 @@ class NumpyAudioBackend(BaseAudioProcessor):
 
         return np.pad(audio, pad_width, mode="constant", constant_values=self.padding_value)
 
-    def pad_values(
-        self,
-        audio: list[np.ndarray],
-        *,
-        max_length: int | None = None,
-        truncation: bool = False,
-        pad_to_multiple_of: int | None = None,
-    ) -> list[np.ndarray]:
-        """Truncate and/or pad raw audio values (stage 3)."""
-        if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
-            max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
-
-        if truncation:
-            if max_length is None:
-                raise ValueError("When setting `truncation=True`, make sure that `max_length` is defined.")
-            audio = [a[..., :max_length] for a in audio]
-
-        if max_length is None:
-            max_length = max(a.shape[-1] for a in audio)
-
-        if pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
-            max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
-
-        audio = [self.pad(a, max_length) for a in audio]
-        return audio
-
-    def values_normalize(
-        self,
-        audio: list[np.ndarray],
-        *,
-        normalization_config: NormalizationConfig,
-    ) -> list[np.ndarray]:
-        """Normalize raw audio values (stage 4). Supports zero-mean-unit-var."""
-        if normalization_config.method == "zero_mean_unit_var":
-            return [
-                (a - np.mean(a)) / np.sqrt(np.var(a) + 1e-7)
-                for a in audio
-            ]
-        raise ValueError(f"Unknown normalization method: {normalization_config.method}")
-
-    def extract_spectrogram(
+    def _extract_spectrogram(
         self,
         audio: list[np.ndarray],
         *,
         spectrogram_config: SpectrogramConfig,
+        **kwargs,
     ) -> list[np.ndarray]:
-        """Extract log-mel spectrogram features using the numpy spectrogram() function."""
+        """Compute the (power) spectrogram via STFT using the numpy backend."""
         from .audio_utils import spectrogram as compute_spectrogram, window_function
-
-        if not hasattr(self, "mel_filters"):
-            raise NotImplementedError(
-                f"{self.__class__.__name__} does not have `mel_filters`. "
-                "Either set `mel_filters` or override `extract_spectrogram`."
-            )
 
         stft_cfg = spectrogram_config.stft_config
         n_fft = stft_cfg.n_fft
-        hop_length = stft_cfg.hop_length if stft_cfg.hop_length is not None else n_fft // 4
+        hop_length = stft_cfg.hop_length
         win_length = stft_cfg.win_length if stft_cfg.win_length is not None else n_fft
 
         # Build window — map torch names like "hann_window" to audio_utils names like "hann"
@@ -151,7 +113,7 @@ class NumpyAudioBackend(BaseAudioProcessor):
                 pad_mode=stft_cfg.pad_mode,
                 preemphasis=spectrogram_config.preemphasis,
                 remove_dc_offset=spectrogram_config.remove_dc_offset,
-                mel_filters=self.mel_filters,
+                mel_filters=None,
                 mel_floor=spectrogram_config.mel_floor,
                 log_mel=spectrogram_config.log_mode if spectrogram_config.log_mode != "log10" else "log10",
             )
@@ -159,47 +121,35 @@ class NumpyAudioBackend(BaseAudioProcessor):
 
         return features
 
-    def feature_normalize(
+    def _apply_mel_scale(
         self,
         features: list[np.ndarray],
         *,
-        feature_normalization_config: NormalizationConfig,
+        spectrogram_config: SpectrogramConfig,
+        **kwargs,
     ) -> list[np.ndarray]:
-        """Normalize extracted features (stage 6). Supports zero-mean-unit-var."""
-        if feature_normalization_config.method == "zero_mean_unit_var":
-            return [
-                (f - np.mean(f)) / np.sqrt(np.var(f) + 1e-7)
-                for f in features
-            ]
-        raise ValueError(f"Unknown normalization method: {feature_normalization_config.method}")
+        """Apply mel filterbank to spectrogram features using the numpy backend."""
+        if not hasattr(self, "mel_filters"):
+            raise ValueError(
+                f"{self.__class__.__name__} does not have `mel_filters`. "
+                "Either set `mel_filters` or override `_apply_mel_scale`."
+            )
 
-    def pad_features(
-        self,
-        features: list[np.ndarray],
-        *,
-        max_length: int | None = None,
-        pad_to_multiple_of: int | None = None,
-    ) -> list[np.ndarray]:
-        """Pad 2D features to a target length (stage 7)."""
-        if max_length is None:
-            max_length = max(f.shape[-1] for f in features)
+        mel_filters = self.mel_filters
+        return [mel_filters.T @ spec for spec in features]
 
-        if pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
-            max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
-
-        padded = []
-        for f in features:
-            current_length = f.shape[-1]
-            if current_length >= max_length:
-                padded.append(f[..., :max_length])
-            else:
-                pad_length = max_length - current_length
-                if f.ndim == 2:
-                    pad_width = [(0, 0), (0, pad_length)]
-                else:
-                    pad_width = [(0, 0)] * (f.ndim - 1) + [(0, pad_length)]
-                padded.append(np.pad(f, pad_width, mode="constant", constant_values=0.0))
-        return padded
+    def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):
+        stft_cfg = spectrogram_config.stft_config
+        mel_cfg = spectrogram_config.mel_scale_config
+        return mel_filter_bank(
+            num_frequency_bins=1 + stft_cfg.n_fft // 2,
+            num_mel_filters=mel_cfg.n_mels,
+            min_frequency=mel_cfg.f_min,
+            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
+            sampling_rate=self.sample_rate,
+            norm=mel_cfg.norm,
+            mel_scale=mel_cfg.mel_scale,
+        )
 
     def _preprocess(
         self,
@@ -209,80 +159,21 @@ class NumpyAudioBackend(BaseAudioProcessor):
         truncation,
         pad_to_multiple_of,
         return_tensors,
-        do_pad_values=None,
-        do_values_normalize=None,
-        normalization_config=None,
         spectrogram_config=None,
-        do_feature_normalize=None,
-        feature_normalization_config=None,
-        do_pad_features=None,
+        do_extract_spectrogram=None,
+        do_batch_spectrogram=True,
         **kwargs,
     ) -> BatchFeature:
-        """Preprocess using NumPy backend: 5-stage pipeline (stages 3-7)."""
-        # Default do_values_normalize to True if a normalization config is provided
-        if do_values_normalize is None:
-            do_values_normalize = normalization_config is not None
+        # pad and truncate
+        audio = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
 
-        # Determine normalize_before_pad for values
-        values_normalize_before_pad = (
-            normalization_config.normalize_before_pad if normalization_config is not None else True
-        )
-        feature_normalize_before_pad = (
-            feature_normalization_config.normalize_before_pad if feature_normalization_config is not None else True
-        )
-
-        # --- Stages 3 & 4: Values padding and normalization ---
-        if values_normalize_before_pad:
-            # Stage 4 before 3: normalize then pad
-            if do_values_normalize and normalization_config is not None:
-                audio = self.values_normalize(audio, normalization_config=normalization_config)
-            if do_pad_values or padding:
-                audio = self.pad_values(
-                    audio, max_length=max_length, truncation=truncation, pad_to_multiple_of=pad_to_multiple_of
-                )
+        if do_extract_spectrogram:
+            feature = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config, do_batch_spectrogram=do_batch_spectrogram)
+            output = BatchFeature({"audio_features": feature}, tensor_type=return_tensors)
         else:
-            # Stage 3 before 4: pad then normalize
-            if do_pad_values or padding:
-                audio = self.pad_values(
-                    audio, max_length=max_length, truncation=truncation, pad_to_multiple_of=pad_to_multiple_of
-                )
-            if do_values_normalize and normalization_config is not None:
-                audio = self.values_normalize(audio, normalization_config=normalization_config)
+            output = BatchFeature({"audio_values": audio}, tensor_type=return_tensors)
 
-        # --- Stage 5: Feature extraction ---
-        if spectrogram_config is not None:
-            features = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config)
-            if self.transpose_features:
-                features = [f.T for f in features]
-        else:
-            features = audio
-
-        # --- Stages 6 & 7: Feature normalization and padding ---
-        if feature_normalize_before_pad:
-            if do_feature_normalize and feature_normalization_config is not None:
-                features = self.feature_normalize(
-                    features, feature_normalization_config=feature_normalization_config
-                )
-            if do_pad_features:
-                features = self.pad_features(
-                    features, max_length=max_length, pad_to_multiple_of=pad_to_multiple_of
-                )
-        else:
-            if do_pad_features:
-                features = self.pad_features(
-                    features, max_length=max_length, pad_to_multiple_of=pad_to_multiple_of
-                )
-            if do_feature_normalize and feature_normalization_config is not None:
-                features = self.feature_normalize(
-                    features, feature_normalization_config=feature_normalization_config
-                )
-
-        # Stack into batch
-        output_key = self.model_input_names[0]
-        stacked = np.stack(features, axis=0) if return_tensors else features
-        if self.add_channel_dim and isinstance(stacked, np.ndarray):
-            stacked = stacked[:, np.newaxis, :]
-        return BatchFeature(data={output_key: stacked}, tensor_type=return_tensors)
+        return output
 
 
 class TorchAudioBackend(BaseAudioProcessor):
@@ -292,7 +183,7 @@ class TorchAudioBackend(BaseAudioProcessor):
     def backend(self) -> str:
         return "torch"
 
-    def process_audio(self, audio_el):
+    def _process_audio(self, audio_el):
         """
         Process a single raw audio input into a torch.Tensor.
 
@@ -300,15 +191,21 @@ class TorchAudioBackend(BaseAudioProcessor):
         """
         import torch
 
-        if self.force_mono:
-            audio_el = audio_el.mean(axis=1) if audio_el.ndim > 1 else audio_el
-
         if isinstance(audio_el, np.ndarray):
             audio_el = torch.from_numpy(audio_el)
 
+        if audio_el.ndim > 1:
+            # TODO: we would need to ensure somewhere audio is channel first
+            if self.force_mono and audio_el.shape[0] > 1:
+                audio_el = audio_el.mean(dim=0)
+            elif audio_el.shape[0] == 1:
+                audio_el = audio_el.squeeze(0)
+            else:
+                raise ValueError("Audio has more than one channel but force_mono is False")
+
         return audio_el
 
-    def pad(self, audio: "torch.Tensor", max_length: int) -> "torch.Tensor":
+    def _pad_single(self, audio: "torch.Tensor", max_length: int) -> "torch.Tensor":
         """Pad a single audio tensor to a target length using torch.nn.functional.pad."""
         import torch.nn.functional as F
 
@@ -331,132 +228,85 @@ class TorchAudioBackend(BaseAudioProcessor):
 
         return F.pad(audio, pad_args, "constant", self.padding_value)
 
-    def pad_values(
-        self,
-        audio: list["torch.Tensor"],
-        *,
-        max_length: int | None = None,
-        truncation: bool = False,
-        pad_to_multiple_of: int | None = None,
-    ) -> list["torch.Tensor"]:
-        """Truncate and/or pad raw audio values (stage 3)."""
-        if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
-            max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
-
-        if truncation:
-            if max_length is None:
-                raise ValueError("When setting `truncation=True`, make sure that `max_length` is defined.")
-            audio = [a[..., :max_length] for a in audio]
-
-        if max_length is None:
-            max_length = max(a.shape[-1] for a in audio)
-
-        if pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
-            max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
-
-        audio = [self.pad(a, max_length) for a in audio]
-        return audio
-
-    def values_normalize(
-        self,
-        audio: list["torch.Tensor"],
-        *,
-        normalization_config: NormalizationConfig,
-    ) -> list["torch.Tensor"]:
-        """Normalize raw audio values (stage 4). Supports zero-mean-unit-var."""
-        import torch
-
-        if normalization_config.method == "zero_mean_unit_var":
-            return [
-                (a - torch.mean(a)) / torch.sqrt(torch.var(a, correction=0) + 1e-7)
-                for a in audio
-            ]
-        raise ValueError(f"Unknown normalization method: {normalization_config.method}")
-
-    def extract_spectrogram(
+    def _extract_spectrogram(
         self,
         audio: list["torch.Tensor"],
         *,
         spectrogram_config: SpectrogramConfig,
+        **kwargs,
     ) -> list["torch.Tensor"]:
-        """Extract log-mel spectrogram features using the provided config and mel_filters."""
+        """Compute the (power) spectrogram via STFT using the torch backend."""
         import torch
-
-        if not hasattr(self, "mel_filters"):
-            raise NotImplementedError(
-                f"{self.__class__.__name__} does not have `mel_filters`. "
-                "Either set `mel_filters` or override `extract_spectrogram`."
-            )
 
         stft_cfg = spectrogram_config.stft_config
         n_fft = stft_cfg.n_fft
         hop_length = stft_cfg.hop_length
+        win_length = stft_cfg.win_length if stft_cfg.win_length is not None else n_fft
 
-        waveform = torch.stack(audio, dim=0)
+        # Stack list into batch for efficient batched STFT if not already batched
+        if isinstance(audio, torch.Tensor) and audio.dim() == 2:
+            waveform = audio
+        else:
+            waveform = torch.stack(audio)  # (batch, length)
         device = waveform.device
-        window = torch.hann_window(n_fft, device=device)
 
-        stft = torch.stft(waveform, n_fft, hop_length, window=window, return_complex=True)
+        if spectrogram_config.preemphasis is not None:
+            audio_ranges = kwargs.get("audio_ranges", None)
+            timemask = torch.arange(waveform.shape[1], device=device).unsqueeze(0)
+            timemask = timemask < audio_ranges.unsqueeze(1)
+            waveform = waveform.masked_fill(~timemask, 0.0)
+
+        window_fn = getattr(torch, stft_cfg.window_fn, torch.hann_window)
+        window = window_fn(win_length, periodic=stft_cfg.periodic, device=device)
+
+        stft = torch.stft(
+            waveform,
+            n_fft,
+            hop_length=hop_length,
+            win_length=win_length,
+            window=window,
+            center=stft_cfg.center,
+            pad_mode=stft_cfg.pad_mode,
+            normalized=stft_cfg.normalized,
+            onesided=stft_cfg.onesided,
+            return_complex=True,
+        )
         magnitudes = stft[..., :-1].abs() ** stft_cfg.power
 
-        mel_filters = torch.from_numpy(self.mel_filters).to(device, torch.float32)
-        mel_spec = mel_filters.T @ magnitudes
+        return [magnitudes[i] for i in range(magnitudes.shape[0])]
 
-        log_spec = torch.clamp(mel_spec, min=1e-10).log10()
-        if spectrogram_config.global_log_mel_max is not None:
-            max_val = torch.tensor(
-                spectrogram_config.global_log_mel_max, device=log_spec.device, dtype=log_spec.dtype
-            )
-        elif waveform.dim() == 2:
-            max_val = log_spec.max(dim=2, keepdim=True)[0].max(dim=1, keepdim=True)[0]
-        else:
-            max_val = log_spec.max()
-        log_spec = torch.maximum(log_spec, max_val - 8.0)
-        log_spec = (log_spec + 4.0) / 4.0
-
-        return [log_spec[i] for i in range(log_spec.shape[0])]
-
-    def feature_normalize(
+    def _apply_mel_scale(
         self,
         features: list["torch.Tensor"],
         *,
-        feature_normalization_config: NormalizationConfig,
+        spectrogram_config: SpectrogramConfig,
+        **kwargs,
     ) -> list["torch.Tensor"]:
-        """Normalize extracted features (stage 6). Supports zero-mean-unit-var."""
+        """Apply mel filterbank to spectrogram features using the torch backend."""
         import torch
 
-        if feature_normalization_config.method == "zero_mean_unit_var":
-            return [
-                (f - torch.mean(f)) / torch.sqrt(torch.var(f, correction=0) + 1e-7)
-                for f in features
-            ]
-        raise ValueError(f"Unknown normalization method: {feature_normalization_config.method}")
+        if not hasattr(self, "mel_filters"):
+            raise ValueError(
+                f"{self.__class__.__name__} does not have `mel_filters`. "
+                "Either set `mel_filters` or override `_apply_mel_scale`."
+            )
 
-    def pad_features(
-        self,
-        features: list["torch.Tensor"],
-        *,
-        max_length: int | None = None,
-        pad_to_multiple_of: int | None = None,
-    ) -> list["torch.Tensor"]:
-        """Pad 2D features to a target length (stage 7)."""
-        import torch.nn.functional as F
+        device = features[0].device
+        mel_filters = torch.from_numpy(self.mel_filters).to(device, torch.float32)
+        return [mel_filters.T @ spec for spec in features]
 
-        if max_length is None:
-            max_length = max(f.shape[-1] for f in features)
-
-        if pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
-            max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
-
-        padded = []
-        for f in features:
-            current_length = f.shape[-1]
-            if current_length >= max_length:
-                padded.append(f[..., :max_length])
-            else:
-                pad_length = max_length - current_length
-                padded.append(F.pad(f, (0, pad_length), "constant", 0.0))
-        return padded
+    def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):
+        stft_cfg = spectrogram_config.stft_config
+        mel_cfg = spectrogram_config.mel_scale_config
+        return mel_filter_bank(
+            num_frequency_bins=1 + stft_cfg.n_fft // 2,
+            num_mel_filters=mel_cfg.n_mels,
+            min_frequency=mel_cfg.f_min,
+            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
+            sampling_rate=self.sample_rate,
+            norm=mel_cfg.norm,
+            mel_scale=mel_cfg.mel_scale,
+        )
 
     def _preprocess(
         self,
@@ -466,79 +316,21 @@ class TorchAudioBackend(BaseAudioProcessor):
         truncation,
         pad_to_multiple_of,
         return_tensors,
-        do_pad_values=None,
-        do_values_normalize=None,
-        normalization_config=None,
         spectrogram_config=None,
-        do_feature_normalize=None,
-        feature_normalization_config=None,
-        do_pad_features=None,
+        do_extract_spectrogram=None,
+        do_batch_spectrogram=True,
         **kwargs,
     ) -> BatchFeature:
-        """Preprocess using Torch backend: 5-stage pipeline (stages 3-7)."""
         import torch
 
-        # Default do_values_normalize to True if a normalization config is provided
-        if do_values_normalize is None:
-            do_values_normalize = normalization_config is not None
+        # pad and truncate
+        audio = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
 
-        # Determine normalize_before_pad for values
-        values_normalize_before_pad = (
-            normalization_config.normalize_before_pad if normalization_config is not None else True
-        )
-        feature_normalize_before_pad = (
-            feature_normalization_config.normalize_before_pad if feature_normalization_config is not None else True
-        )
-
-        # --- Stages 3 & 4: Values padding and normalization ---
-        if values_normalize_before_pad:
-            # Stage 4 before 3: normalize then pad
-            if do_values_normalize and normalization_config is not None:
-                audio = self.values_normalize(audio, normalization_config=normalization_config)
-            if do_pad_values or padding:
-                audio = self.pad_values(
-                    audio, max_length=max_length, truncation=truncation, pad_to_multiple_of=pad_to_multiple_of
-                )
+        if do_extract_spectrogram:
+            audio = torch.stack(audio) if do_batch_spectrogram else audio
+            feature = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config, do_batch_spectrogram=do_batch_spectrogram)
+            output = BatchFeature({"audio_features": feature}, tensor_type=return_tensors)
         else:
-            # Stage 3 before 4: pad then normalize
-            if do_pad_values or padding:
-                audio = self.pad_values(
-                    audio, max_length=max_length, truncation=truncation, pad_to_multiple_of=pad_to_multiple_of
-                )
-            if do_values_normalize and normalization_config is not None:
-                audio = self.values_normalize(audio, normalization_config=normalization_config)
+            output = BatchFeature({"audio_values": audio}, tensor_type=return_tensors)
 
-        # --- Stage 5: Feature extraction ---
-        if spectrogram_config is not None:
-            features = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config)
-            if self.transpose_features:
-                features = [f.permute(*reversed(range(f.dim()))) for f in features]
-        else:
-            features = audio
-
-        # --- Stages 6 & 7: Feature normalization and padding ---
-        if feature_normalize_before_pad:
-            if do_feature_normalize and feature_normalization_config is not None:
-                features = self.feature_normalize(
-                    features, feature_normalization_config=feature_normalization_config
-                )
-            if do_pad_features:
-                features = self.pad_features(
-                    features, max_length=max_length, pad_to_multiple_of=pad_to_multiple_of
-                )
-        else:
-            if do_pad_features:
-                features = self.pad_features(
-                    features, max_length=max_length, pad_to_multiple_of=pad_to_multiple_of
-                )
-            if do_feature_normalize and feature_normalization_config is not None:
-                features = self.feature_normalize(
-                    features, feature_normalization_config=feature_normalization_config
-                )
-
-        # Stack into batch
-        output_key = self.model_input_names[0]
-        stacked = torch.stack(features, dim=0) if return_tensors else features
-        if self.add_channel_dim and isinstance(stacked, torch.Tensor):
-            stacked = stacked.unsqueeze(1)
-        return BatchFeature(data={output_key: stacked}, tensor_type=return_tensors)
+        return output

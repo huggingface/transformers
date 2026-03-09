@@ -12,15 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import torch
+
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import NormalizationConfig
 
 
 class Wav2Vec2AudioProcessor(TorchAudioBackend):
     sample_rate = 16000
     force_mono = True
-    do_values_normalize = True
-    normalization_config = NormalizationConfig(method="zero_mean_unit_var")
+    do_normalize = True
+
+    def _process_audio(self, audio_el):
+        audio_el = super()._process_audio(audio_el)
+
+        if self.do_normalize:
+            audio_el = (audio_el - audio_el.mean()) / torch.sqrt(audio_el.var(correction=0) + 1e-7)
+
+        return audio_el
 
 
 __all__ = ["Wav2Vec2AudioProcessor"]

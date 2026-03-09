@@ -13,11 +13,11 @@
 # limitations under the License.
 
 import math
-from collections.abc import Sequence
 
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 from ...feature_extraction_utils import BatchFeature
 
 
@@ -56,112 +56,136 @@ def _unfold(array, dimension, size, step):
 class Gemma3nAudioProcessor(NumpyAudioBackend):
     sample_rate = 16000
     force_mono = True
-    frame_length = 512  # 32ms at 16kHz
-    hop_length = 160  # 10ms at 16kHz
-    n_mels = 128
-    min_frequency = 125.0
-    max_frequency = 7600.0
-    preemphasis_coeff = 0.97
-    preemphasis_htk_flavor = True
-    fft_overdrive = True
-    mel_floor = 1e-5
     max_length = 480000  # 30 seconds
     truncation = True
     pad_to_multiple_of = 128
+    preemphasis_htk_flavor = True
+
+    # n_fft = 1024 (512 frame_length → next power of 2 → 512 → ×2 fft_overdrive)
+    spectrogram_config = SpectrogramConfig(
+        stft_config=StftConfig(
+            n_fft=1024,
+            win_length=512,
+            hop_length=160,
+            power=1.0,
+            center=False,
+        ),
+        mel_scale_config=MelScaleConfig(
+            n_mels=128,
+            f_min=125.0,
+            f_max=7600.0,
+            mel_scale="htk",
+        ),
+        mel_floor=1e-5,
+        log_mode="log",
+        preemphasis=0.97,
+    )
 
     def __init__(self, per_bin_mean=None, per_bin_stddev=None, **kwargs):
         super().__init__(**kwargs)
 
-        fft_length = 2 ** math.ceil(math.log2(self.frame_length))
-        if self.fft_overdrive:
-            fft_length *= 2
-        self.fft_length = fft_length
+        # Pre-compute window from stft_config
+        win_length = self.spectrogram_config.stft_config.win_length
+        hann_arange = np.arange(win_length, dtype=np.float32)
+        self.window = (0.5 * (1 - np.cos(2 * np.pi * hann_arange / win_length))).astype(np.float32)
 
-        hann_arange = np.arange(self.frame_length, dtype=np.float32)
-        self.window = (0.5 * (1 - np.cos(2 * np.pi * hann_arange / self.frame_length))).astype(np.float32)
-
-        self.mel_filters = _create_fb_matrix(
-            n_freqs=self.fft_length // 2 + 1,
-            f_min=self.min_frequency,
-            f_max=self.max_frequency,
-            n_mels=self.n_mels,
-            sample_rate=self.sample_rate,
-            fft_length=self.fft_length,
-            norm=None,
-        )
-
+        n_mels = self.spectrogram_config.mel_scale_config.n_mels
         if per_bin_mean is not None:
-            self.per_bin_mean = np.array(per_bin_mean).reshape(1, 1, self.n_mels)
+            self.per_bin_mean = np.array(per_bin_mean).reshape(1, n_mels)
         else:
             self.per_bin_mean = None
 
         if per_bin_stddev is not None:
-            self.per_bin_stddev = np.array(per_bin_stddev).reshape(1, 1, self.n_mels)
+            self.per_bin_stddev = np.array(per_bin_stddev).reshape(1, n_mels)
         else:
             self.per_bin_stddev = None
 
-    def _extract_spectrogram(self, waveform):
-        if waveform.ndim == 1:
-            waveform = np.expand_dims(waveform, axis=0)
+    def _mel_filter_bank(self, spectrogram_config):
+        """Custom HTK-style mel filterbank matching the original Gemma3n FE."""
+        sc = spectrogram_config
+        msc = sc.mel_scale_config
+        return _create_fb_matrix(
+            n_freqs=sc.stft_config.n_fft // 2 + 1,
+            f_min=msc.f_min,
+            f_max=msc.f_max,
+            n_mels=msc.n_mels,
+            sample_rate=self.sample_rate,
+            fft_length=sc.stft_config.n_fft,
+        )
 
-        frame_size_for_unfold = self.frame_length + 1
-        frames_to_process = _unfold(waveform, dimension=-1, size=frame_size_for_unfold, step=self.hop_length)
+    def _extract_spectrogram(self, audio, *, spectrogram_config, **kwargs):
+        """Custom STFT with HTK-flavor preemphasis."""
+        stft_cfg = spectrogram_config.stft_config
+        preemphasis = spectrogram_config.preemphasis
 
-        if self.preemphasis_coeff > 0.0:
-            if self.preemphasis_htk_flavor:
-                first_in_frame = frames_to_process[..., :1] * (1.0 - self.preemphasis_coeff)
-                rest_in_frame = (
-                    frames_to_process[..., 1:-1] - self.preemphasis_coeff * frames_to_process[..., :-2]
-                )
-                frames = np.concatenate([first_in_frame, rest_in_frame], axis=-1)
+        features = []
+        for waveform in audio:
+            if waveform.ndim == 1:
+                waveform = np.expand_dims(waveform, axis=0)
+
+            frame_size_for_unfold = stft_cfg.win_length + 1
+            frames_to_process = _unfold(waveform, dimension=-1, size=frame_size_for_unfold, step=stft_cfg.hop_length)
+
+            if preemphasis is not None and preemphasis > 0.0:
+                if self.preemphasis_htk_flavor:
+                    first_in_frame = frames_to_process[..., :1] * (1.0 - preemphasis)
+                    rest_in_frame = (
+                        frames_to_process[..., 1:-1] - preemphasis * frames_to_process[..., :-2]
+                    )
+                    frames = np.concatenate([first_in_frame, rest_in_frame], axis=-1)
+                else:
+                    frames = frames_to_process[..., 1:] - preemphasis * frames_to_process[..., :-1]
             else:
-                frames = frames_to_process[..., 1:] - self.preemphasis_coeff * frames_to_process[..., :-1]
-        else:
-            frames = frames_to_process[..., :-1]
+                frames = frames_to_process[..., :-1]
 
-        frames = frames * self.window
-        stft = np.fft.rfft(frames, n=self.fft_length, axis=-1)
-        magnitude_spec = np.abs(stft)
+            frames = frames * self.window
+            stft = np.fft.rfft(frames, n=stft_cfg.n_fft, axis=-1)
+            magnitude_spec = np.abs(stft)
+            features.append(magnitude_spec.squeeze(0))  # (frames, n_freqs)
 
-        mel_spec = np.matmul(magnitude_spec, self.mel_filters)
-        log_mel_spec = np.log(np.maximum(mel_spec, self.mel_floor))
+        return features
 
-        if self.per_bin_mean is not None:
-            log_mel_spec = log_mel_spec - self.per_bin_mean
-        if self.per_bin_stddev is not None:
-            log_mel_spec = log_mel_spec / self.per_bin_stddev
+    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
+        """Apply mel filterbank, log compression, and per-bin normalization."""
+        result = []
+        for mag_spec in features:
+            mel_spec = np.matmul(mag_spec, self.mel_filters)
+            log_mel_spec = np.log(np.maximum(mel_spec, spectrogram_config.mel_floor))
 
-        return log_mel_spec.squeeze(0)  # (frames, n_mels)
+            if self.per_bin_mean is not None:
+                log_mel_spec = log_mel_spec - self.per_bin_mean
+            if self.per_bin_stddev is not None:
+                log_mel_spec = log_mel_spec / self.per_bin_stddev
 
-    def extract_spectrogram(self, audio, *, spectrogram_config):
-        return [self._extract_spectrogram(waveform) for waveform in audio]
+            result.append(log_mel_spec.astype(np.float32))
+        return result
 
-    def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
-        # Use class defaults for max_length, truncation, pad_to_multiple_of if not overridden
+    def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors,
+                    spectrogram_config=None, do_extract_spectrogram=None, **kwargs):
         if max_length is None:
             max_length = self.max_length
         if truncation is None:
             truncation = self.truncation
         if pad_to_multiple_of is None:
             pad_to_multiple_of = self.pad_to_multiple_of
+        if spectrogram_config is None:
+            spectrogram_config = self.spectrogram_config
 
-        # Truncate first (separate from padding, matching FE behavior)
+        # Truncate then pad to longest in batch (matching FE "longest" padding strategy)
         if truncation and max_length is not None:
             audio = [a[..., :max_length] for a in audio]
 
-        # Pad to longest in batch (matching FE "longest" padding strategy)
         pad_length = max(a.shape[-1] for a in audio)
         if pad_to_multiple_of is not None and (pad_length % pad_to_multiple_of != 0):
             pad_length = ((pad_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
-        audio = [self.pad(a, pad_length) for a in audio]
+        audio = [self._pad_single(a, pad_length) for a in audio]
 
-        # Extract spectrogram
-        features = self.extract_spectrogram(audio, spectrogram_config=None)
+        # Extract spectrogram via orchestrator (_extract_spectrogram + _apply_mel_scale)
+        if do_extract_spectrogram is not False and spectrogram_config is not None:
+            features = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config)
+        else:
+            features = audio
 
-        # Cast to float32 to match FE output
-        features = [f.astype(np.float32) for f in features]
-
-        # Stack and return
         output_key = self.model_input_names[0]
         stacked = np.stack(features, axis=0)
         return BatchFeature(data={output_key: stacked}, tensor_type=return_tensors)

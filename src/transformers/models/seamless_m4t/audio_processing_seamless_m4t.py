@@ -48,7 +48,7 @@ class SeamlessM4tAudioProcessor(NumpyAudioBackend):
         waveform_scale=32768.0,
     )
 
-    def feature_normalize(self, features, *, feature_normalization_config):
+    def feature_normalize(self, features):
         # Per-mel-bin normalization with ddof=1 for variance
         normalized = []
         for f in features:
@@ -65,7 +65,7 @@ class SeamlessM4tAudioProcessor(NumpyAudioBackend):
         features = [f.T for f in features]
 
         # Per-mel-bin normalization
-        features = self.feature_normalize(features, feature_normalization_config=None)
+        features = self.feature_normalize(features)
 
         # Pad features to longest (pad_to_multiple_of=2 for stride)
         max_len = max(f.shape[0] for f in features)

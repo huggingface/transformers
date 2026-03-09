@@ -22,8 +22,10 @@ from ...feature_extraction_utils import BatchFeature
 class AudioSpectrogramTransformerAudioProcessor(NumpyAudioBackend):
     sample_rate = 16000
     force_mono = True
+    do_extract_spectrogram = True
+
     max_length_frames = 1024
-    transpose_features = True
+    do_normalize = True
 
     # AudioSet normalization constants
     ast_mean = -4.2677393
@@ -52,11 +54,10 @@ class AudioSpectrogramTransformerAudioProcessor(NumpyAudioBackend):
         mel_floor=1.192092955078125e-07,
     )
 
-    def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
-        # Extract spectrogram via generic config-based API
-        features = self.extract_spectrogram(audio, spectrogram_config=self.spectrogram_config)
+    def extract_spectrogram(self, audio, **kwargs):
+        features = super().extract_spectrogram(audio, **kwargs)
 
-        # Generic extract_spectrogram returns (n_mels, frames); transpose to (frames, n_mels)
+        # (n_mels, frames) -> (frames, n_mels)
         features = [f.T for f in features]
 
         # Pad or truncate to max_length_frames
@@ -71,12 +72,13 @@ class AudioSpectrogramTransformerAudioProcessor(NumpyAudioBackend):
             padded.append(fbank)
 
         # Normalize with AudioSet stats
-        normalized = [(f - self.ast_mean) / (self.ast_std * 2) for f in padded]
+        return [(f - self.ast_mean) / (self.ast_std * 2) for f in padded]
 
-        # Stack into batch
-        output_key = self.model_input_names[0]
-        stacked = np.stack(normalized, axis=0) if return_tensors else normalized
-        return BatchFeature(data={output_key: stacked}, tensor_type=return_tensors)
+    def _preprocess(self, audio, **kwargs):
+        output = super()._preprocess(audio, **kwargs)
+        # TODO: it is wrongly named input_values in the original feature extractor
+        return BatchFeature({"audio_values": output["audio_features"]})
+
 
 
 __all__ = ["AudioSpectrogramTransformerAudioProcessor"]
