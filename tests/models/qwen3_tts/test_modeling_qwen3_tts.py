@@ -19,32 +19,27 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import (cleanup, require_torch,
+                                        require_torch_accelerator, slow,
+                                        torch_device)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-    from transformers import (
-        Qwen3TTSConfig,
-        Qwen3TTSForConditionalGeneration,
-        Qwen3TTSProcessor,
-        Qwen3TTSSpeakerEncoderConfig,
-        Qwen3TTSTalkerCodePredictorConfig,
-        Qwen3TTSTalkerConfig,
-        Qwen3TTSTalkerForConditionalGeneration,
-        Qwen3TTSTalkerModel,
-        Qwen3TTSTokenizerV1Config,
-        Qwen3TTSTokenizerV2Config,
-    )
+
+    from transformers import (Qwen3TTSConfig, Qwen3TTSForConditionalGeneration,
+                              Qwen3TTSProcessor, Qwen3TTSSpeakerEncoderConfig,
+                              Qwen3TTSTalkerCodePredictorConfig,
+                              Qwen3TTSTalkerConfig,
+                              Qwen3TTSTalkerForConditionalGeneration,
+                              Qwen3TTSTalkerModel, Qwen3TTSTokenizerV1Config,
+                              Qwen3TTSTokenizerV2Config)
     from transformers.models.qwen3_tts.modeling_qwen3_tts import (
-        Qwen3TTSTokenizerV1Decoder,
-        Qwen3TTSTokenizerV1DecoderBigVGANModel,
-        Qwen3TTSTokenizerV1DecoderDiTModel,
-        Qwen3TTSTokenizerV2Model,
-        Qwen3TTSTokenizerV2TransformerModel,
-    )
+        Qwen3TTSTokenizerV1Decoder, Qwen3TTSTokenizerV1DecoderBigVGANModel,
+        Qwen3TTSTokenizerV1DecoderDiTModel, Qwen3TTSTokenizerV2Model,
+        Qwen3TTSTokenizerV2TransformerModel)
 
 
 class Qwen3TTSTalkerModelTester:
@@ -176,9 +171,7 @@ class Qwen3TTSTalkerModelTest(ModelTesterMixin, unittest.TestCase):
         config = self.model_tester.get_config()
         model = Qwen3TTSTalkerForConditionalGeneration(config).to(torch_device)
         model.eval()
-        inputs_embeds = floats_tensor(
-            [self.model_tester.batch_size, self.model_tester.seq_length, config.hidden_size]
-        )
+        inputs_embeds = floats_tensor([self.model_tester.batch_size, self.model_tester.seq_length, config.hidden_size])
         with torch.no_grad():
             outputs = model(inputs_embeds=inputs_embeds)
         self.assertEqual(
@@ -190,9 +183,7 @@ class Qwen3TTSTalkerModelTest(ModelTesterMixin, unittest.TestCase):
         config = self.model_tester.get_config()
         model = Qwen3TTSTalkerForConditionalGeneration(config)
         model.train()
-        inputs_embeds = floats_tensor(
-            [self.model_tester.batch_size, self.model_tester.seq_length, config.hidden_size]
-        )
+        inputs_embeds = floats_tensor([self.model_tester.batch_size, self.model_tester.seq_length, config.hidden_size])
         labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.vocab_size)
         outputs = model(inputs_embeds=inputs_embeds, labels=labels)
         self.assertIsNotNone(outputs.loss)
@@ -510,7 +501,6 @@ class Qwen3TTSTokenizerV2Test(unittest.TestCase):
         self.assertEqual(config.decoder_config.num_quantizers, loaded.decoder_config.num_quantizers)
         self.assertEqual(config.decode_upsample_rate, loaded.decode_upsample_rate)
         self.assertEqual(config.encoder_valid_num_quantizers, loaded.encoder_valid_num_quantizers)
-
 
 
 @require_torch
@@ -1011,10 +1001,7 @@ class Qwen3TTSIntegrationTest(unittest.TestCase):
         model, processor = self._load_model_and_processor()
 
         texts = ["Hello.", "The weather is nice today."]
-        inputs_list = [
-            processor(text=t, return_tensors="pt").to(torch_device)
-            for t in texts
-        ]
+        inputs_list = [processor(text=t, return_tensors="pt").to(torch_device) for t in texts]
 
         codes_list, _ = model.generate(
             input_ids=[inp["input_ids"] for inp in inputs_list],
