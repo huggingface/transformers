@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..utils import logging
 from ..utils.export_config import OnnxConfig
-from ..utils.import_utils import is_torch_available
+from ..utils.import_utils import is_onnxscript_available, is_torch_available
 from .exporter_dynamo import DynamoExporter
 from .utils import dedup_output_tensors, get_inputs_outputs_names, get_leaf_tensors, prepare_for_export
 
@@ -30,6 +30,9 @@ if is_torch_available():
     from torch.onnx import ONNXProgram
 
     from .. import masking_utils as _masking_utils_mod
+
+if is_onnxscript_available():
+    import onnxscript.ir as onnx_ir
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -126,7 +129,6 @@ def fix_onnx_for_ort(onnx_program: "ONNXProgram") -> None:
     Call this function after :meth:`OnnxExporter.export` and before running ORT
     inference (i.e. before ``onnx_program(...)``).
     """
-    import onnxscript.ir as onnx_ir
 
     def _fix_graph(graph_like: "onnx_ir.Graph") -> None:
         for ir_node in list(graph_like.all_nodes()):
