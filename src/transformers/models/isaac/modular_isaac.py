@@ -128,6 +128,10 @@ class IsaacVisionConfig(Siglip2VisionConfig):
         self.pixel_shuffle_scale_factor = pixel_shuffle_scale_factor
 
 
+class IsaacTextConfig(Qwen3Config):
+    model_type = "isaac_text"
+
+
 class IsaacImageProcessorFastKwargs(ImagesKwargs, total=False):
     """
     patch_size (`int`, *optional*):
@@ -610,12 +614,12 @@ class IsaacConfig(PretrainedConfig):
     """
 
     model_type = "isaac"
-    sub_configs = {"vision_config": IsaacVisionConfig, "text_config": Qwen3Config}
+    sub_configs = {"vision_config": IsaacVisionConfig, "text_config": IsaacTextConfig}
 
     def __init__(
         self,
         vision_config: IsaacVisionConfig | None = None,
-        text_config: Qwen3Config | dict | None = None,
+        text_config: IsaacTextConfig | dict | None = None,
         vision_rescale_factor: float = 1 / 255,
         max_sequence_length: int = 16384,
         vision_token: str = "<image>",
@@ -623,7 +627,7 @@ class IsaacConfig(PretrainedConfig):
     ):
         if isinstance(text_config, dict):
             self.text_config = self.sub_configs["text_config"](**text_config)
-        elif isinstance(text_config, Qwen3Config):
+        elif isinstance(text_config, IsaacTextConfig):
             self.text_config = text_config
         elif text_config is None:
             self.text_config = self.sub_configs["text_config"]()
@@ -1477,6 +1481,8 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
 
 __all__ = [
     "IsaacConfig",
+    "IsaacTextConfig",
+    "IsaacVisionConfig",
     "IsaacModel",
     "IsaacPreTrainedModel",  # noqa: F822
     "IsaacForConditionalGeneration",
