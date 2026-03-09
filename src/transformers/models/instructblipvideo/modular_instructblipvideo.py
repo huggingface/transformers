@@ -42,17 +42,17 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
+@auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
 class InstructBlipVideoVisionConfig(InstructBlipVisionConfig):
     pass
 
 
-@auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
+@auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
 class InstructBlipVideoQFormerConfig(InstructBlipQFormerConfig):
     pass
 
 
-@auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
+@auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
 class InstructBlipVideoConfig(PreTrainedConfig):
     r"""
     qformer_config (`dict`, *optional*):
@@ -71,10 +71,10 @@ class InstructBlipVideoConfig(PreTrainedConfig):
     ...     InstructBlipVideoForConditionalGeneration,
     ... )
 
-    >>> # Initializing a InstructBlipVideoConfig with Salesforce/instruct-blip-flan-t5 style configuration
+    >>> # Initializing a InstructBlipVideoConfig with Salesforce/instructblip-flan-t5-xl style configuration
     >>> configuration = InstructBlipVideoConfig()
 
-    >>> # Initializing a InstructBlipVideoForConditionalGeneration (with random weights) from the Salesforce/instruct-blip-flan-t5 style configuration
+    >>> # Initializing a InstructBlipVideoForConditionalGeneration (with random weights) from the Salesforce/instructblip-flan-t5-xl style configuration
     >>> model = InstructBlipVideoForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
