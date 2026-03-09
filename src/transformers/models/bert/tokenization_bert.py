@@ -15,8 +15,8 @@
 
 import collections
 import os
-
 from pathlib import Path
+
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import WordPiece
 
