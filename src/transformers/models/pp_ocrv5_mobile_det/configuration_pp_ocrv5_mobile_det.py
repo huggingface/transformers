@@ -11,7 +11,12 @@ from ...utils import auto_docstring
 
 @auto_docstring(
     custom_intro="""
-    """
+    This is the configuration class to store the configuration of a [`PPOCRV5MobileDet`]. It is used to instantiate a
+    PPOCRV5 Mobile text detection model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the PPOCRV5 Mobile Det
+    [PaddlePaddle/PP-OCRv5-mobile-det](https://huggingface.co/PaddlePaddle/PP-OCRv5-mobile-det) architecture.
+    """,
+    checkpoint="PaddlePaddle/PP-OCRv5-mobile-det",
 )
 class PPOCRV5MobileDetConfig(PreTrainedConfig):
     r"""
