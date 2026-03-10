@@ -52,6 +52,7 @@ class CudaGraphBuffer:
     def set_graph(self, q_len: int, kv_len: int, graph: torch.cuda.CUDAGraph) -> None:
         # In our use case, this should not have any effect because we plan for a new graph before it is captured
         self.plan_for_new_graph()
+        logger.info(f"Setting graph for {q_len = }, {kv_len = }")
         self._storage[(q_len, kv_len)] = graph
 
 

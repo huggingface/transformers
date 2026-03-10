@@ -472,23 +472,6 @@ class ContinuousBatchProcessor:
         # In any case, we transfer the outputs to the host
         self.inputs_and_outputs.retrieve_device_outputs()
 
-    def _forward_static_wrapper(
-        self,
-        model: nn.Module,
-        batch_data: dict,
-        logit_processor: LogitsProcessorList,
-        do_sample: bool,
-        carry_over_ids: torch.Tensor,
-        prev_output_ids: torch.Tensor,
-        output_ids: torch.Tensor,
-    ) -> None:
-        """Wrapper for static compilation (block table path). This separate function is needed because dynamo treats
-        different function objects distinctly, preventing recompilation between the compiled block table path and the
-        uncompiled varlen path."""
-        self._forward_process_and_sample(
-            model, batch_data, logit_processor, do_sample, carry_over_ids, prev_output_ids, output_ids
-        )
-
     @traced
     def _forward_process_and_sample(
         self,
