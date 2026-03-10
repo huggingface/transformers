@@ -265,7 +265,9 @@ def blockwise_bidirectional_mask(block_boundaries: torch.Tensor) -> Callable:
         q_block = torch.bucketize(q_idx, block_boundaries)
         kv_block = torch.bucketize(kv_idx, block_boundaries)
         return kv_block <= q_block
+
     return inner_mask
+
 
 class PI0TimestepEmbeddings(nn.Module):
     def __init__(self, config):
@@ -316,6 +318,7 @@ class PI0ActionTimeEmbedding(nn.Module):
 class PI0PreTrainedModel(PreTrainedModel):
     config: PI0Config
     base_model_prefix = "model"
+    main_input_name = "state"
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -399,10 +402,12 @@ class PI0Model(PI0PreTrainedModel):
                 inputs_embeds = self.embed_prefix(input_ids, pixel_values, pixel_attention_mask)
                 inputs_embeds = inputs_embeds / math.sqrt(2048)
 
+            token_type_ids = torch.ones_like(inputs_embeds)[:, :, 0]
             past_key_values = self.vlm(
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
+                token_type_ids=token_type_ids,
                 use_cache=True,
             ).past_key_values
 
@@ -422,7 +427,7 @@ class PI0Model(PI0PreTrainedModel):
             dit_position_ids = (torch.cumsum(dit_attention_mask, dim=1) - 1)[:, -action_embeds.shape[1] :]
 
         # We have three blocks: vlm-inputss, state and actions from which only 1 token is `state`
-        # The mask should be bidirectional within each block and to prev blocks, but not to next blocks 
+        # The mask should be bidirectional within each block and to prev blocks, but not to next blocks
         vlm_input_length = past_key_values.get_seq_length()
         block_sizes = torch.tensor([vlm_input_length + 1, action_embeds.shape[1] - 1], device=action_embeds.device)
         block_boundaries = torch.cumsum(block_sizes, dim=0) - 1
@@ -449,6 +454,7 @@ class PI0Model(PI0PreTrainedModel):
 
 class PI0ForConditionalGeneration(PI0PreTrainedModel):
     """PI0 model with action projection heads and flow matching."""
+
     _tp_plan = {"action_out_proj": "colwise_gather_output"}
 
     def __init__(self, config: PI0Config):
@@ -527,7 +533,6 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             **kwargs,
         )
         last_hidden_states = outputs.last_hidden_state[:, -self.config.chunk_size :]
-        last_hidden_states = last_hidden_states.to(dtype=torch.float32)
         predicted_velocity = self.action_out_proj(last_hidden_states)
 
         loss = None

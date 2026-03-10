@@ -79,7 +79,7 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(source_patterns=r"^paligemma_with_expert.paligemma.model", target_patterns="model.vlm"),
             WeightRenaming(source_patterns=r"^paligemma_with_expert.gemma_expert.model", target_patterns="model.dit"),
-            # FIXME: use `tie-word-embeddings` correctly!
+            # Weight on the hub have only `lm_head` saved, but PI0 doesn't create any lm-head initialized!
             WeightRenaming(
                 source_patterns=r"^paligemma_with_expert.gemma_expert.lm_head",
                 target_patterns="model.dit.embed_tokens",

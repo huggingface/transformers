@@ -85,6 +85,7 @@ class PI0ActionTimeEmbedding(nn.Module):
 class PI0PreTrainedModel(PreTrainedModel):
     config: PI0Config
     base_model_prefix = "model"
+    main_input_name = "state"
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -177,10 +178,12 @@ class PI0Model(PI0PreTrainedModel):
                 inputs_embeds = self.embed_prefix(input_ids, pixel_values, pixel_attention_mask)
                 inputs_embeds = inputs_embeds / math.sqrt(2048)
 
+            token_type_ids = torch.ones_like(inputs_embeds)[:, :, 0]
             past_key_values = self.vlm(
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
+                token_type_ids=token_type_ids,
                 use_cache=True,
             ).past_key_values
 
@@ -306,7 +309,6 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             **kwargs,
         )
         last_hidden_states = outputs.last_hidden_state[:, -self.config.chunk_size :]
-        last_hidden_states = last_hidden_states.to(dtype=torch.float32)
         predicted_velocity = self.action_out_proj(last_hidden_states)
 
         loss = None

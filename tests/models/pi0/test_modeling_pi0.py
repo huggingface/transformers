@@ -15,12 +15,23 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from transformers import PI0Config, PI0Processor, is_torch_available
 from transformers.image_utils import load_image
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    slow,
+    torch_device,
+)
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    ModelTesterMixin,
+    floats_tensor,
+    ids_tensor,
+)
 
 
 if is_torch_available():
@@ -33,7 +44,7 @@ class PI0ModelTester:
     def __init__(self, parent):
         self.parent = parent
         self.is_training = True
-        self.batch_size = 2
+        self.batch_size = 4
         self.num_cameras = 2
         self.image_size = 8
         self.patch_size = 4
@@ -107,19 +118,21 @@ class PI0ModelTester:
         pixel_values = floats_tensor(
             [self.batch_size, self.num_cameras, self.num_channels, self.image_size, self.image_size]
         )
-        pixel_attention_mask = torch.tensor([[True, True], [True, False]], dtype=torch.bool, device=torch_device)
+        pixel_attention_mask = torch.tensor(
+            [[True, True], [True, True], [True, False], [True, False]], dtype=torch.bool, device=torch_device
+        )
 
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size - 1)
         attention_mask = torch.ones(self.batch_size, self.seq_length, dtype=torch.long, device=torch_device)
         input_ids[input_ids == config.vlm_config.image_token_id] = self.pad_token_id
         # Pixel attention mask is not completely-unmasked, so we create different input ids
-        input_ids[0, : self.num_image_tokens] = config.vlm_config.image_token_id
-        input_ids[1, : self.num_image_tokens // 2] = config.vlm_config.image_token_id
+        input_ids[:2, : self.num_image_tokens] = config.vlm_config.image_token_id
+        input_ids[2:4, : self.num_image_tokens // 2] = config.vlm_config.image_token_id
 
         state = floats_tensor([self.batch_size, self.max_state_dim])
         actions = floats_tensor([self.batch_size, self.chunk_size, self.max_action_dim])
         noise = floats_tensor([self.batch_size, self.chunk_size, self.max_action_dim])
-        timestep = torch.tensor([0.5, 0.8], dtype=torch.float32, device=torch_device)
+        timestep = torch.tensor([0.3, 0.5, 0.8, 0.9], dtype=torch.float32, device=torch_device)
 
         inputs_dict = {
             "pixel_values": pixel_values,
@@ -140,6 +153,7 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_head_masking = False
     test_torchscript = False
+    test_resize_embeddings = False
     test_torch_exportable = False
     test_all_params_have_gradient = False
     has_attentions = True
@@ -151,10 +165,7 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester = ConfigTester(self, config_class=PI0Config, has_text_modality=False)
 
     def test_config(self):
-        config = self.model_tester.get_config()
-        self.assertIsInstance(config, PI0Config)
-        self.assertEqual(config.model_type, "pi0")
-        self.assertEqual(config.expert_config.hidden_size, self.model_tester.hidden_size)
+        self.config_tester.run_common_tests()
 
     def test_model_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -163,6 +174,44 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
             outputs = model(**inputs_dict)
         self.assertEqual(outputs.loss.shape, (2, config.chunk_size, config.max_action_dim))
 
+    def test_training(self):
+        # Overwrite becasue PI0 returns loss per sample. Needs to apply avg reduction before backward
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.mean().backward()
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip("Model architecture is special and requires much higher `tols`")
+    def test_eager_matches_sdpa_inference(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        pass
+
+    @unittest.skip(
+        "Skip until the official weights add `embed_tokens`. Currently weights have only `lm_head` saved but"
+        " PI0 doesn't create any lm-head. So we added it in conversion mapping"
+    )
+    def test_reverse_loading_mapping(self):
+        pass
+
+    @unittest.skip("Prefix tuning doesn't work with GC and the model uses prefix tuning to fuse VLM outputs")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip("Prefix tuning doesn't work with GC and the model uses prefix tuning to fuse VLM outputs")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip("Prefix tuning doesn't work with GC and the model uses prefix tuning to fuse VLM outputs")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        pass
+
 
 @require_torch
 class PI0ModelSmokeTest(unittest.TestCase):
@@ -170,24 +219,16 @@ class PI0ModelSmokeTest(unittest.TestCase):
         torch.manual_seed(0)
         tester = PI0ModelTester(self)
         config, inputs_dict = tester.prepare_config_and_inputs_for_common()
-        model = PI0ForConditionalGeneration(config).eval()
+        model = PI0ForConditionalGeneration(config).to(device=torch_device).eval()
 
         with torch.no_grad():
             outputs = model(**inputs_dict)
         self.assertIsNotNone(outputs.loss)
-        self.assertEqual(outputs.loss.ndim, 0)
+        self.assertEqual(outputs.loss.ndim, 3)
 
-        sample_inputs = {k: v for k, v in inputs_dict.items() if k != "actions"}
+        sample_inputs = {k: v for k, v in inputs_dict.items() if k not in ["actions", "timestep"]}
         with torch.no_grad():
-            sampled_actions = model.sample_actions(
-                pixel_values=sample_inputs["pixel_values"],
-                image_masks=sample_inputs["image_masks"],
-                input_ids=sample_inputs["input_ids"],
-                attention_mask=sample_inputs["attention_mask"],
-                state=sample_inputs["state"],
-                noise=sample_inputs["noise"].clone(),
-                num_steps=2,
-            )
+            sampled_actions = model.sample_actions(**sample_inputs, num_steps=2)
         self.assertEqual(sampled_actions.shape, (2, config.chunk_size, config.max_action_dim))
         self.assertTrue(torch.isfinite(sampled_actions).all())
 
@@ -201,7 +242,9 @@ class PI0ModelIntegrationTest(unittest.TestCase):
 
         inputs = processor(
             text=["Pick up the object"],
-            images=load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/vla_pi0.jpg"),
+            images=load_image(
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/vla_pi0.jpg"
+            ),
             padding="max_length",
             padding_side="right",
             truncation=True,
@@ -222,7 +265,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         self.assertAlmostEqual(suffix_embs.mean().item(), -0.10177, delta=0.002)
         print(suffix_embs.shape, suffix_embs[0, 0, :4], suffix_embs[0, -1, :4])
         torch.testing.assert_close(
-            suffix_embs[0, 0, :4], torch.tensor([-0.0460,  0.8858,  0.7172, -0.7538]), atol=1e-3, rtol=1e-3
+            suffix_embs[0, 0, :4], torch.tensor([-0.0460, 0.8858, 0.7172, -0.7538]), atol=1e-3, rtol=1e-3
         )
         torch.testing.assert_close(
             suffix_embs[0, -1, :4], torch.tensor([0.7107, -1.3107, -4.8396, -6.9446]), atol=1e-3, rtol=1e-3
@@ -235,7 +278,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         self.assertAlmostEqual(prefix_embs.mean().item(), 0.0224, places=3)
         print(prefix_embs.shape, prefix_embs[0, 0, :4], prefix_embs[0, -1, :4])
         torch.testing.assert_close(
-            prefix_embs[0, 0, :4], torch.tensor([1.1781,  0.1176, -0.2231, -0.3662]), atol=1e-3, rtol=1e-3
+            prefix_embs[0, 0, :4], torch.tensor([1.1781, 0.1176, -0.2231, -0.3662]), atol=1e-3, rtol=1e-3
         )
         torch.testing.assert_close(
             prefix_embs[0, -1, :4], torch.tensor([23.8649, -1.4916, 4.2868, 4.3973]), atol=1e-3, rtol=1e-3
@@ -252,7 +295,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.loss.shape, (1, 50, 32))
         self.assertAlmostEqual(outputs.loss.mean().item(), 3.950, places=3)
 
-        torch.manual_seed(99) # different seed to sample random noise
+        torch.manual_seed(99)  # different seed to sample random noise
         model.model.dit.config._attn_implementation = "eager"
         with torch.no_grad():
             sampled = model.sample_actions(**inputs, state=state, num_steps=3)
@@ -264,5 +307,5 @@ class PI0ModelIntegrationTest(unittest.TestCase):
             sampled[0, 0, :4], torch.tensor([0.0602, -0.1177, -0.5010, -0.0028]), atol=1e-3, rtol=1e-3
         )
         torch.testing.assert_close(
-            sampled[0, -1, :4], torch.tensor([0.0615,  0.0161, -0.3112, -0.9186]), atol=1e-3, rtol=1e-3
+            sampled[0, -1, :4], torch.tensor([0.0615, 0.0161, -0.3112, -0.9186]), atol=1e-3, rtol=1e-3
         )
