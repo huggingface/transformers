@@ -1753,13 +1753,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if tokenizer_config_file is not None:
             with open(tokenizer_config_file, encoding="utf-8") as tokenizer_config_handle:
                 init_kwargs = json.load(tokenizer_config_handle)
-            # used in the past to check if the tokenizer class matches the class in the repo
-            init_kwargs.pop("tokenizer_class", None)
+            # Preserve the original tokenizer_class from config for save_pretrained
+            original_tokenizer_class = init_kwargs.pop("tokenizer_class", None)
             saved_init_inputs = init_kwargs.pop("init_inputs", ())
             if not init_inputs:
                 init_inputs = saved_init_inputs
         else:
             init_kwargs = init_configuration
+            original_tokenizer_class = None
 
         if resolved_vocab_files.get("tokenizer_file", None) is not None:
             init_kwargs.pop("add_bos_token", None)
@@ -1926,6 +1927,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 "Unable to load vocabulary from file. "
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
+
+        # Store original tokenizer_class from config for use in save_pretrained
+        tokenizer._original_tokenizer_class = original_tokenizer_class
+
         return tokenizer
 
     @classmethod
@@ -2054,16 +2059,19 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         tokenizer_config["added_tokens_decoder"] = added_tokens
 
         # Add tokenizer class to the tokenizer config to be able to reload it with from_pretrained
-        tokenizer_class = self.__class__.__name__
+        # Preserve the original tokenizer_class from loaded config if available (fixes #44297)
+        tokenizer_class = getattr(self, "_original_tokenizer_class", None)
+        if tokenizer_class is None:
+            tokenizer_class = self.__class__.__name__
+            # Remove the Fast at the end if we can save the slow tokenizer
+            if tokenizer_class.endswith("Fast") and getattr(self, "can_save_slow_tokenizer", False):
+                tokenizer_class = tokenizer_class[:-4]
 
         # tokenizers backend don't need to save added_tokens_decoder and additional_special_tokens
         if any(base.__name__ == "TokenizersBackend" for base in self.__class__.__mro__):
             tokenizer_config.pop("added_tokens_decoder", None)
             tokenizer_config.pop("additional_special_tokens", None)
 
-        # Remove the Fast at the end if we can save the slow tokenizer
-        if tokenizer_class.endswith("Fast") and getattr(self, "can_save_slow_tokenizer", False):
-            tokenizer_class = tokenizer_class[:-4]
         tokenizer_config["tokenizer_class"] = tokenizer_class
         if getattr(self, "_auto_map", None) is not None:
             tokenizer_config["auto_map"] = self._auto_map
