@@ -26,11 +26,9 @@ from .configuration_videoprism import VideoPrismConfig, VideoPrismTextConfig, Vi
 
 
 @dataclass
-@auto_docstring
+@auto_docstring(custom_intro="""Base class for model outputs that include spatial and temporal states.""")
 class BaseModelOutputWithSpatialAndTemporalStates(ModelOutput):
     r"""
-    Base class for model outputs that include spatial and temporal states.
-
     temporal_hidden_state (`torch.FloatTensor`, *optional*):
         The last hidden state of the temporal encoder, typically of shape
         `(batch_size * num_patches, num_frames, hidden_size)`.
@@ -46,11 +44,9 @@ class BaseModelOutputWithSpatialAndTemporalStates(ModelOutput):
 
 
 @dataclass
-@auto_docstring
+@auto_docstring(custom_intro="""Base class for VideoPrismVideoModel outputs.""")
 class VideoPrismVideoOutput(ModelOutput):
     r"""
-    Base class for VideoPrismVideo model outputs.
-
     video_last_hidden_state (`torch.FloatTensor`):
         The pooled video embeddings after the attention pooling head, typically of shape
         `(batch_size, 1, hidden_size)`.
@@ -69,10 +65,11 @@ class VideoPrismVideoOutput(ModelOutput):
 
 
 @dataclass
-@auto_docstring
+@auto_docstring(
+    custom_intro="""Base class for VideoPrismClipModel outputs.""",
+)
 class VideoPrismClipOutput(ModelOutput):
     r"""
-    Base class for VideoPrismClip model outputs.
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
         Contrastive loss for video-text similarity.
     logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
@@ -505,7 +502,7 @@ class VideoPrismAuxiliaryEncoder(nn.Module):
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([VideoPrismLayer(self.config) for _ in range(config.num_auxiliary_layers)])
+        self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_auxiliary_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -613,13 +610,12 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
 
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__(config)
-        self.config = config
-        self.layernorm1 = VideoPrismLayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps)
-        self.layernorm2 = VideoPrismLayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps)
-        self.spatial_embeddings = VideoPrismSpatialEmbeddings(self.config)
-        self.temporal_embeddings = VideoPrismTemporalEmbeddings(self.config)
-        self.spatial_encoder = VideoPrismSpatialEncoder(self.config)
-        self.temporal_encoder = VideoPrismTemporalEncoder(self.config)
+        self.layernorm1 = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm2 = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.spatial_embeddings = VideoPrismSpatialEmbeddings(config)
+        self.temporal_embeddings = VideoPrismTemporalEmbeddings(config)
+        self.spatial_encoder = VideoPrismSpatialEncoder(config)
+        self.temporal_encoder = VideoPrismTemporalEncoder(config)
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
@@ -834,11 +830,10 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
 
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__(config)
-        self.config = config
-        self.backbone = VideoPrismVisionModel._from_config(self.config)
-        self.auxiliary_encoder = VideoPrismAuxiliaryEncoder(self.config)
-        self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(self.config)
-        self.normalize = self.config.apply_l2_norm
+        self.backbone = VideoPrismVisionModel._from_config(config)
+        self.auxiliary_encoder = VideoPrismAuxiliaryEncoder(config)
+        self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(config)
+        self.normalize = config.apply_l2_norm
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:

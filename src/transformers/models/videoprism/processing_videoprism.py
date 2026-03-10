@@ -22,14 +22,7 @@ class VideoPrismProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-@auto_docstring(
-    custom_intro="""
-    Constructs a VideoPrism processor which wraps a VideoPrism video processor and a VideoPrism tokenizer into a single processor.
-
-    [`VideoPrismProcessor`] offers all the functionalities of [`VideoPrismVideoProcessor`] and [`VideoPrismTokenizer`]. See the
-    [`~VideoPrismProcessor.__call__`] for more information.
-    """
-)
+@auto_docstring
 class VideoPrismProcessor(ProcessorMixin):
     valid_processor_kwargs = VideoPrismProcessorKwargs
 

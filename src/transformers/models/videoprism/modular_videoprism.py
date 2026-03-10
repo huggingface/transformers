@@ -32,9 +32,9 @@ from ..vivit.modeling_vivit import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="google/videoprism-base-f16r288")
-class VideoPrismVisionConfig(VivitConfig):
-    r"""
+@auto_docstring(
+    checkpoint="google/videoprism-base-f16r288",
+    custom_intro="""
     This is the configuration class to store the configuration of a [`VideoPrismVisionModel`]. It is used to instantiate a
     VideoPrism vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the VideoPrism
@@ -42,22 +42,24 @@ class VideoPrismVisionConfig(VivitConfig):
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        num_frames (`int`, *optional*, defaults to 16):
-            The number of frames in the input video.
-        tubelet_size (`List[int]`, *optional*, defaults to `[1, 18, 18]`):
-            The size of the tubelet patch.
-        num_spatial_layers (`int`, *optional*, defaults to 12):
-            Number of spatial transformer blocks.
-        num_temporal_layers (`int`, *optional*, defaults to 4):
-            Number of temporal transformer blocks.
-        attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
-            Softcapping constant for attention logits.
-        num_auxiliary_layers (`int`, *optional*, defaults to 2):
-            Number of auxiliary layers. This is used in the VideoPrismVideoModel that is a part of VideoPrismClipModel.
-        apply_l2_norm (`bool`, *optional*, defaults to `True`):
-            Whether to apply L2 normalization to the output. This is used in the VideoPrismVideoModel that is a part of VideoPrismClipModel.
+    """,
+)
+class VideoPrismVisionConfig(VivitConfig):
+    r"""
+    num_frames (`int`, *optional*, defaults to 16):
+        The number of frames in the input video.
+    tubelet_size (`List[int]`, *optional*, defaults to `[1, 18, 18]`):
+        The size of the tubelet patch.
+    num_spatial_layers (`int`, *optional*, defaults to 12):
+        Number of spatial transformer blocks.
+    num_temporal_layers (`int`, *optional*, defaults to 4):
+        Number of temporal transformer blocks.
+    attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
+        Softcapping constant for attention logits.
+    num_auxiliary_layers (`int`, *optional*, defaults to 2):
+        Number of auxiliary layers. This is used in the VideoPrismVideoModel that is a part of VideoPrismClipModel.
+    apply_l2_norm (`bool`, *optional*, defaults to `True`):
+        Whether to apply L2 normalization to the output. This is used in the VideoPrismVideoModel that is a part of VideoPrismClipModel.
     """
 
     model_type = "videoprism_vision_model"
@@ -162,6 +164,7 @@ class VideoPrismTextConfig(SiglipTextConfig):
 
 
 @auto_docstring(
+    checkpoint="google/videoprism-lvt-base-f16r288",
     custom_intro="""
     This is the configuration class to store the configuration of a [`VideoPrismClipModel`]. It is used to instantiate a
     VideoPrismClipModel according to the specified arguments, defining the model architecture. Instantiating a
@@ -170,7 +173,7 @@ class VideoPrismTextConfig(SiglipTextConfig):
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-    """
+    """,
 )
 class VideoPrismConfig(SiglipConfig):
     r"""
@@ -255,14 +258,7 @@ class VideoPrismProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-@auto_docstring(
-    custom_intro="""
-    Constructs a VideoPrism processor which wraps a VideoPrism video processor and a VideoPrism tokenizer into a single processor.
-
-    [`VideoPrismProcessor`] offers all the functionalities of [`VideoPrismVideoProcessor`] and [`VideoPrismTokenizer`]. See the
-    [`~VideoPrismProcessor.__call__`] for more information.
-    """
-)
+@auto_docstring
 class VideoPrismProcessor(ProcessorMixin):
     valid_processor_kwargs = VideoPrismProcessorKwargs
 
@@ -271,11 +267,9 @@ class VideoPrismProcessor(ProcessorMixin):
 
 
 @dataclass
-@auto_docstring
+@auto_docstring(custom_intro="""Base class for model outputs that include spatial and temporal states.""")
 class BaseModelOutputWithSpatialAndTemporalStates(ModelOutput):
     r"""
-    Base class for model outputs that include spatial and temporal states.
-
     temporal_hidden_state (`torch.FloatTensor`, *optional*):
         The last hidden state of the temporal encoder, typically of shape
         `(batch_size * num_patches, num_frames, hidden_size)`.
@@ -291,11 +285,9 @@ class BaseModelOutputWithSpatialAndTemporalStates(ModelOutput):
 
 
 @dataclass
-@auto_docstring
+@auto_docstring(custom_intro="""Base class for VideoPrismVideoModel outputs.""")
 class VideoPrismVideoOutput(ModelOutput):
     r"""
-    Base class for VideoPrismVideo model outputs.
-
     video_last_hidden_state (`torch.FloatTensor`):
         The pooled video embeddings after the attention pooling head, typically of shape
         `(batch_size, 1, hidden_size)`.
@@ -314,10 +306,11 @@ class VideoPrismVideoOutput(ModelOutput):
 
 
 @dataclass
-@auto_docstring
+@auto_docstring(
+    custom_intro="""Base class for VideoPrismClipModel outputs.""",
+)
 class VideoPrismClipOutput(ModelOutput):
     r"""
-    Base class for VideoPrismClip model outputs.
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
         Contrastive loss for video-text similarity.
     logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
@@ -636,8 +629,7 @@ class VideoPrismTemporalEncoder(VivitEncoder):
 class VideoPrismAuxiliaryEncoder(VivitEncoder):
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__(config)
-        self.config = config
-        self.layer = nn.ModuleList([VideoPrismLayer(self.config) for _ in range(config.num_auxiliary_layers)])
+        self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_auxiliary_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -744,13 +736,12 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
 
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__(config)
-        self.config = config
-        self.layernorm1 = VideoPrismLayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps)
-        self.layernorm2 = VideoPrismLayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps)
-        self.spatial_embeddings = VideoPrismSpatialEmbeddings(self.config)
-        self.temporal_embeddings = VideoPrismTemporalEmbeddings(self.config)
-        self.spatial_encoder = VideoPrismSpatialEncoder(self.config)
-        self.temporal_encoder = VideoPrismTemporalEncoder(self.config)
+        self.layernorm1 = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm2 = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.spatial_embeddings = VideoPrismSpatialEmbeddings(config)
+        self.temporal_embeddings = VideoPrismTemporalEmbeddings(config)
+        self.spatial_encoder = VideoPrismSpatialEncoder(config)
+        self.temporal_encoder = VideoPrismTemporalEncoder(config)
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
@@ -959,11 +950,10 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
 
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__(config)
-        self.config = config
-        self.backbone = VideoPrismVisionModel._from_config(self.config)
-        self.auxiliary_encoder = VideoPrismAuxiliaryEncoder(self.config)
-        self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(self.config)
-        self.normalize = self.config.apply_l2_norm
+        self.backbone = VideoPrismVisionModel._from_config(config)
+        self.auxiliary_encoder = VideoPrismAuxiliaryEncoder(config)
+        self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(config)
+        self.normalize = config.apply_l2_norm
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
