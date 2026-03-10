@@ -35,6 +35,7 @@ from transformers import (
     TrainingArguments,
     logging,
 )
+from transformers.integrations.peft import IS_PEFT_GE_019
 from transformers.testing_utils import (
     CaptureLogger,
     require_bitsandbytes,
@@ -936,6 +937,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 assert not torch.allclose(output_base, output_peft, atol=atol, rtol=rtol)
 
     def test_mixtral_lora_conversion(self):
+        if not IS_PEFT_GE_019:
+            self.skipTest("For this test to pass, PEFT 0.19 is required.")
+
         inputs = torch.arange(10).view(1, -1).to(0)
         model_name = "hf-internal-testing/Mixtral-tiny"
         adapter_name = "peft-internal-testing/mixtral-pre-v5-lora"
