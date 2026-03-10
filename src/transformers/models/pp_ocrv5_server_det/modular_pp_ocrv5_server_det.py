@@ -155,175 +155,22 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-def polygon_area(box: np.ndarray) -> float:
-    x = box[:, 0]
-    y = box[:, 1]
 
-    return 0.5 * np.abs(np.sum(x[:-1] * y[1:] - x[1:] * y[:-1]))
-
-
-def polygon_arc_length(box: np.ndarray, closed: bool = True) -> float:
-    diffs = box[1:] - box[:-1]
-    segment_lengths = np.sqrt(np.sum(diffs**2, axis=1))
-    total_length = np.sum(segment_lengths)
-
-    if closed:
-        last_to_first = box[0] - box[-1]
-        total_length += np.sqrt(np.sum(last_to_first**2))
-
-    return total_length
-
-
-def convex_hull(points: np.ndarray) -> np.ndarray:
-    points = np.unique(points.astype(np.float64), axis=0)
-    if len(points) <= 1:
-        return points
-
-    pivot_idx = np.lexsort((points[:, 0], points[:, 1]))[0]
-    pivot = points[pivot_idx]
-
-    def polar_angle(p):
-        return np.arctan2(p[1] - pivot[1], p[0] - pivot[0])
-
-    sorted_points = sorted(points, key=polar_angle)
-
-    hull = []
-    for p in sorted_points:
-        while len(hull) >= 2:
-            a = hull[-2]
-            b = hull[-1]
-            cross = (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])
-            if cross <= 1e-8:
-                hull.pop()
-            else:
-                break
-        hull.append(p)
-
-    return np.array(hull, dtype=np.float64)
-
-
-def min_area_rect(contour: np.ndarray) -> tuple[tuple[float, float], tuple[float, float], float]:
-    contour = contour.reshape(-1, 2).astype(np.float64)
-    hull = convex_hull(contour)
-    n = len(hull)
-
-    if n == 1:
-        return (float(hull[0][0]), float(hull[0][1])), (0.0, 0.0), 0.0
-    if n == 2:
-        dx, dy = hull[1] - hull[0]
-        length = np.hypot(dx, dy)
-        center = ((hull[0][0] + hull[1][0]) / 2, (hull[0][1] + hull[1][1]) / 2)
-        angle = np.arctan2(dy, dx) * 180 / np.pi
-        angle = angle - 90 if angle >= 0 else angle
-        return (float(center[0]), float(center[1])), (float(length), 0.0), float(angle)
-
-    min_area = float("inf")
-    best_rect = None
-    j = 1
-
-    for i in range(n):
-        p1, p2 = hull[i], hull[(i + 1) % n]
-        edge = p2 - p1
-        edge_len = np.hypot(edge[0], edge[1])
-
-        if edge_len < 1e-8:
-            continue
-
-        edge_normal = np.array([-edge[1], edge[0]]) / edge_len
-
-        while True:
-            curr_dot = np.dot(hull[j] - p1, edge_normal)
-            next_dot = np.dot(hull[(j + 1) % n] - p1, edge_normal)
-            if next_dot > curr_dot + 1e-8:
-                j = (j + 1) % n
-            else:
-                break
-
-        proj = np.dot(hull - p1, edge) / edge_len
-        min_proj, max_proj = np.min(proj), np.max(proj)
-        width = max_proj - min_proj
-
-        proj_n = np.dot(hull - p1, edge_normal)
-        min_proj_n, max_proj_n = np.min(proj_n), np.max(proj_n)
-        height = max_proj_n - min_proj_n
-
-        area = width * height
-        if area < min_area - 1e-8:
-            min_area = area
-            center_x = (
-                p1[0]
-                + edge[0] * (min_proj + max_proj) / (2 * edge_len)
-                + edge_normal[0] * (min_proj_n + max_proj_n) / 2
-            )
-            center_y = (
-                p1[1]
-                + edge[1] * (min_proj + max_proj) / (2 * edge_len)
-                + edge_normal[1] * (min_proj_n + max_proj_n) / 2
-            )
-            center = (float(center_x), float(center_y))
-
-            angle = np.arctan2(edge[1], edge[0]) * 180 / np.pi
-            if angle >= 90:
-                angle -= 180
-            elif angle >= 0:
-                angle -= 90
-            angle = float(angle)
-
-            if width < height:
-                width, height = height, width
-                angle -= 90
-
-            best_rect = (center, (float(width), float(height)), angle)
-
-    return best_rect if best_rect else ((0.0, 0.0), (0.0, 0.0), 0.0)
-
-
-def box_points(rect: tuple) -> np.ndarray:
-    center, size, angle = rect
-    cx, cy = center
-    width, height = size
-    angle_rad = angle * np.pi / 180.0
-
-    half_w = width / 2.0
-    half_h = height / 2.0
-
-    cos_a = np.cos(angle_rad)
-    sin_a = np.sin(angle_rad)
-
-    pts = [
-        (cx - half_w * cos_a - half_h * sin_a, cy - half_w * sin_a + half_h * cos_a),
-        (cx + half_w * cos_a - half_h * sin_a, cy + half_w * sin_a + half_h * cos_a),
-        (cx + half_w * cos_a + half_h * sin_a, cy + half_w * sin_a - half_h * cos_a),
-        (cx - half_w * cos_a + half_h * sin_a, cy - half_w * sin_a - half_h * cos_a),
-    ]
-    return np.array(pts, dtype=np.float32)
-
-
-def masked_mean(roi: np.ndarray, mask: np.ndarray) -> float:
-    mask = mask.astype(np.uint8)
-    roi = roi.astype(np.float64)
-
-    valid_pixels = roi[mask == 1]
-
-    if len(valid_pixels) == 0:
-        return 0.0
-
-    return float(np.mean(valid_pixels))
-
-
-def unclip(box: np.ndarray, unclip_ratio: float) -> np.ndarray:
+def unclip(box, unclip_ratio):
     """
     Expands (dilates) a detected text bounding box to recover the full text region.
+
     Args:
         box (np.ndarray): Input contour of shape (N, 2), where N is the number of points.
         unclip_ratio (float): Expansion ratio, typically greater than 1.0.
+
     Returns:
         np.ndarray: Expanded contour of shape (M, 2).
     """
     box = np.array(box).reshape(-1, 2)
 
-    area = polygon_area(box)
-    length = polygon_arc_length(box, True)
+    area = cv2.contourArea(box)
+    length = cv2.arcLength(box, True)
     if length == 0:
         return box
     distance = area * unclip_ratio / length
@@ -360,7 +207,7 @@ def unclip(box: np.ndarray, unclip_ratio: float) -> np.ndarray:
     return np.array(new_points, dtype=np.float32)
 
 
-def get_mini_boxes(contour: np.ndarray) -> tuple[list[list[float]], float]:
+def get_mini_boxes(contour):
     """
     Computes the minimum-area bounding rectangle for a given contour and returns
     its four corners in a consistent order (top-left, bottom-left, bottom-right, top-right).
@@ -373,8 +220,8 @@ def get_mini_boxes(contour: np.ndarray) -> tuple[list[list[float]], float]:
             - box (list): List of four corner points in order.
             - sside (float): Length of the shorter side of the bounding rectangle.
     """
-    bounding_box = min_area_rect(contour)
-    points = sorted(box_points(bounding_box), key=lambda x: x[0])
+    bounding_box = cv2.minAreaRect(contour)
+    points = sorted(cv2.boxPoints(bounding_box), key=lambda x: x[0])
 
     index_1, index_2, index_3, index_4 = 0, 1, 2, 3
     if points[1][1] > points[0][1]:
@@ -406,18 +253,18 @@ def get_box_score(bitmap: np.ndarray, _box: np.ndarray) -> float:
     Returns:
         float: Mean score within the bounding box region.
     """
-    height, width = bitmap.shape[:2]
+    h, w = bitmap.shape[:2]
     box = _box.copy()
-    xmin = max(0, min(math.floor(box[:, 0].min()), width - 1))
-    xmax = max(0, min(math.ceil(box[:, 0].max()), width - 1))
-    ymin = max(0, min(math.floor(box[:, 1].min()), height - 1))
-    ymax = max(0, min(math.ceil(box[:, 1].max()), height - 1))
+    xmin = max(0, min(math.floor(box[:, 0].min()), w - 1))
+    xmax = max(0, min(math.ceil(box[:, 0].max()), w - 1))
+    ymin = max(0, min(math.floor(box[:, 1].min()), h - 1))
+    ymax = max(0, min(math.ceil(box[:, 1].max()), h - 1))
 
     mask = np.zeros((ymax - ymin + 1, xmax - xmin + 1), dtype=np.uint8)
     box[:, 0] = box[:, 0] - xmin
     box[:, 1] = box[:, 1] - ymin
     cv2.fillPoly(mask, box.reshape(1, -1, 2).astype(np.int32), 1)
-    return masked_mean(bitmap[ymin : ymax + 1, xmin : xmax + 1], mask)
+    return cv2.mean(bitmap[ymin : ymax + 1, xmin : xmax + 1], mask)[0]
 
 
 def boxes_from_bitmap(
@@ -429,7 +276,7 @@ def boxes_from_bitmap(
     unclip_ratio: float,
     min_size: int,
     max_candidates: int,
-) -> tuple[np.ndarray, list[float]]:
+) -> tuple[list[np.ndarray] | np.ndarray, list[float]]:
     """
     Extracts axis-aligned or rotated bounding boxes from a binary segmentation map.
 
