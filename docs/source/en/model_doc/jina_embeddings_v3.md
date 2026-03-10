@@ -43,7 +43,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="feature-extraction",
     model="jinaai/jina-embeddings-v3",
-    device="cuda" if torch.cuda.is_available() else "cpu",
     revision="refs/pr/137",
 )
 # Returns a list of lists containing the embeddings for each token
@@ -122,7 +121,7 @@ encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tenso
 # Set up the adapter mask for your specific task
 task = 'retrieval_query'  # Can be any of (retrieval_passage, separation, classification, text_matching) depending on the use-case.
 
-model.load_adapter("jinaai/jina-embeddings-v3", revision="refs/pr/137", adapter_name=task, adapter_kwargs={"subfolder": task})
+model.load_adapter("jinaai/jina-embeddings-v3", adapter_name=task, adapter_kwargs={"subfolder": task, "revision": "refs/pr/137"})
 
 model.set_adapter(task)
 
