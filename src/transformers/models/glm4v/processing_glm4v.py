@@ -171,7 +171,7 @@ class Glm4vProcessor(ProcessorMixin):
             text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
-    def create_mm_token_type_ids(self, input_ids: np.ndarray) -> list[list[int]]:
+    def create_mm_token_type_ids(self, input_ids: list) -> list[list[int]]:
         # We have to iterate for each list separately because inputs
         # might be non-padded lists and we can't cast numpy on that!
         # Then cast numpy as each input for faster indexing
