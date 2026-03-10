@@ -89,6 +89,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "HiggsAudioV2TokenizerConfig": ["downsample_factor"],
     "CsmConfig": ["tie_codebooks_embeddings"],
     "DeepseekV2Config": ["norm_topk_prob"],
+    "DeepseekV32Config": ["ep_size", "moe_layer_freq", "num_nextn_predict_layers", "scoring_func", "topk_method"],
     "SeamlessM4TConfig": True,
     "SeamlessM4Tv2Config": True,
     "ConditionalDetrConfig": True,

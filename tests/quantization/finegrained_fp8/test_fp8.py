@@ -73,6 +73,35 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
         self.assertEqual(dict["quant_method"], quantization_config.quant_method)
 
 
+@require_accelerate
+class FineGrainedFP8HfQuantizerTest(unittest.TestCase):
+    def test_quantizer_validation_no_accelerator(self):
+        """Test quantizer validation when CUDA/XPU is not available"""
+        with _patch_no_accelerator():
+            config = FineGrainedFP8Config()
+            quantizer = FineGrainedFP8HfQuantizer(config)
+            quantizer.pre_quantized = False
+
+            with self.assertRaises(RuntimeError):
+                quantizer.validate_environment()
+
+    def test_dequantization_no_accelerator(self):
+        """Test dequantization when CUDA/XPU is not available"""
+        with _patch_no_accelerator():
+            config = FineGrainedFP8Config()
+            quantizer = FineGrainedFP8HfQuantizer(config)
+            quantizer.pre_quantized = True
+            quantizer.validate_environment()
+            self.assertTrue(quantizer.quantization_config.dequantize)
+
+    def test_prequantized_model_allows_disk_offload(self):
+        config = FineGrainedFP8Config()
+        quantizer = FineGrainedFP8HfQuantizer(config)
+        quantizer.pre_quantized = True
+
+        quantizer.validate_environment(device_map={"model.embed_tokens": 0, "model.layers.0": "disk"})
+
+
 @slow
 @require_accelerate
 @require_torch_accelerator
@@ -182,25 +211,6 @@ class FP8QuantizerTest(unittest.TestCase):
             if isinstance(module, FP8Linear):
                 nb_fp8_linear += 1
         self.assertEqual(nb_linears - 24, nb_fp8_linear)
-
-    def test_quantizer_validation_no_accelerator(self):
-        """Test quantizer validation when CUDA/XPU is not available"""
-        with _patch_no_accelerator():
-            config = FineGrainedFP8Config()
-            quantizer = FineGrainedFP8HfQuantizer(config)
-            quantizer.pre_quantized = False
-
-            with self.assertRaises(RuntimeError):
-                quantizer.validate_environment()
-
-    def test_dequantization_no_accelerator(self):
-        """Test dequantization when CUDA/XPU is not available"""
-        with _patch_no_accelerator():
-            config = FineGrainedFP8Config()
-            quantizer = FineGrainedFP8HfQuantizer(config)
-            quantizer.pre_quantized = True
-            quantizer.validate_environment()
-            self.assertTrue(quantizer.quantization_config.dequantize)
 
     def test_quantized_model(self):
         """
