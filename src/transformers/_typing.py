@@ -17,7 +17,8 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping, MutableMapping
-from typing import TYPE_CHECKING, Any, ModuleType, Protocol, TypeAlias, TypeGuard
+from types import ModuleType
+from typing import TYPE_CHECKING, Any, Protocol, TypeAlias, TypeGuard
 
 
 if TYPE_CHECKING:
@@ -46,7 +47,7 @@ class TransformersLogger(Protocol):
     handlers: list[logging.Handler]
 
     # Exists on Logger; default is True. (Not heavily used, but is part of API.)
-    raiseExceptions: bool  # type: ignore[assignment]
+    raiseExceptions: bool
 
     # ---- Standard methods ----
     def setLevel(self, level: Level) -> None: ...
@@ -172,9 +173,29 @@ class WhisperGenerationConfigLike(Protocol):
     no_timestamps_token_id: int
 
 
-class _TorchWithHPU(ModuleType, Protocol):
-    hpu: Any
-
-
-def has_torch_hpu(mod: ModuleType) -> TypeGuard[_TorchWithHPU]:
+def has_torch_hpu(mod: ModuleType) -> TypeGuard[Any]:
     return hasattr(mod, "hpu") and mod.hpu.is_available()
+
+
+def has_torch_npu(mod: ModuleType) -> TypeGuard[Any]:
+    return hasattr(mod, "npu") and mod.npu.is_available()
+
+
+def has_torch_xpu(mod: ModuleType) -> TypeGuard[Any]:
+    return hasattr(mod, "xpu") and mod.xpu.is_available()
+
+
+def has_torch_neuron(mod: ModuleType) -> TypeGuard[Any]:
+    return hasattr(mod, "neuron") and mod.neuron.is_available()
+
+
+def has_torch_musa(mod: ModuleType) -> TypeGuard[Any]:
+    return hasattr(mod, "musa") and mod.musa.is_available()
+
+
+def has_torch_mlu(mod: ModuleType) -> TypeGuard[Any]:
+    return hasattr(mod, "mlu") and mod.mlu.is_available()
+
+
+def has_torch_compiler(mod: ModuleType) -> TypeGuard[Any]:
+    return hasattr(mod, "compiler")
