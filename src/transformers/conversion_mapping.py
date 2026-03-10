@@ -352,7 +352,6 @@ def _build_checkpoint_conversion_mapping():
                 ],
                 operations=[Chunk(dim=0)],
             ),
-            # WeightRenaming(source_patterns="mixer.Wqkv", target_patterns="attention.attention_class.Wqkv"),
             WeightRenaming(source_patterns="mixer.out_proj", target_patterns="self_attn.o_proj"),
             WeightRenaming(source_patterns="norm1", target_patterns="post_attention_layernorm"),
             WeightRenaming(source_patterns="norm2", target_patterns="post_mlp_layernorm"),
