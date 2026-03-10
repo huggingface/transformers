@@ -1339,7 +1339,12 @@ class Zamba2Model(Zamba2PreTrainedModel):
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
-        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
+
+        # create position embeddings to be shared across the decoder layers
+        if self.config.use_mem_rope:
+            position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
+        else:
+            position_embeddings = None
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None

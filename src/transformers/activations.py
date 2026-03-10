@@ -267,9 +267,8 @@ class XIELUActivation(nn.Module):
             logger.warning_once(msg)
         except Exception as err:
             logger.warning_once(
-                "CUDA-fused xIELU not available (%s) – falling back to a Python version.\n"
-                "For CUDA xIELU (experimental), `pip install git+https://github.com/nickjbrowning/XIELU`",
-                str(err),
+                f"CUDA-fused xIELU not available ({err}) – falling back to a Python version.\n"
+                "For CUDA xIELU (experimental), `pip install git+https://github.com/nickjbrowning/XIELU`"
             )
 
     def _xielu_python(self, x: Tensor) -> Tensor:
