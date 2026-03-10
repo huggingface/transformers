@@ -59,7 +59,7 @@ class VideoPrismVisionConfig(PreTrainedConfig):
             Number of auxiliary layers. This is used in the VideoPrismVideoModel that is a part of VideoPrismClipModel.
         apply_l2_norm (`bool`, *optional*, defaults to `True`):
             Whether to apply L2 normalization to the output. This is used in the VideoPrismVideoModel that is a part of VideoPrismClipModel.
-    ```"""
+    """
 
     model_type = "videoprism_vision_model"
     base_config_key = "vision_config"
@@ -111,11 +111,10 @@ class VideoPrismVisionConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="google/videoprism-lvt-base-f16r288")
 class VideoPrismTextConfig(PreTrainedConfig):
     r"""
-    Args:
-        apply_l2_norm (`bool`, *optional*, defaults to `True`):
-            Whether to apply L2 normalization to the output of VideoPrismTextEncoder.
-        attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
-            Softcapping constant for attention logits.
+    apply_l2_norm (`bool`, *optional*, defaults to `True`):
+        Whether to apply L2 normalization to the output of VideoPrismTextEncoder.
+    attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
+        Softcapping constant for attention logits.
     """
 
     model_type = "videoprism_text_model"

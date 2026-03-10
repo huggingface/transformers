@@ -672,10 +672,12 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
         model.eval()
         with torch.inference_mode():
             outputs = model(input_vids).last_hidden_state
+            print(outputs.shape)
 
-        (
-            self.assertListEqual(outputs[0], outputs[1]),
-            ("Outputs of the batches are not identical for identical input batches"),
+        self.assertListEqual(
+            outputs[0].cpu().tolist(),
+            outputs[1].cpu().tolist(),
+            "Outputs of the batches are not identical for identical input batches",
         )
         expectations = torch.tensor(
             [

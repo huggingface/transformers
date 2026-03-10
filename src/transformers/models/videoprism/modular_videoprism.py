@@ -80,7 +80,7 @@ class VideoPrismVisionConfig(VivitConfig):
             Number of auxiliary layers. This is used in the VideoPrismVideoModel that is a part of VideoPrismClipModel.
         apply_l2_norm (`bool`, *optional*, defaults to `True`):
             Whether to apply L2 normalization to the output. This is used in the VideoPrismVideoModel that is a part of VideoPrismClipModel.
-    ```"""
+    """
 
     model_type = "videoprism_vision_model"
     base_config_key = "vision_config"
@@ -134,11 +134,10 @@ class VideoPrismVisionConfig(VivitConfig):
 @auto_docstring(checkpoint="google/videoprism-lvt-base-f16r288")
 class VideoPrismTextConfig(SiglipTextConfig):
     r"""
-    Args:
-        apply_l2_norm (`bool`, *optional*, defaults to `True`):
-            Whether to apply L2 normalization to the output of VideoPrismTextEncoder.
-        attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
-            Softcapping constant for attention logits.
+    apply_l2_norm (`bool`, *optional*, defaults to `True`):
+        Whether to apply L2 normalization to the output of VideoPrismTextEncoder.
+    attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
+        Softcapping constant for attention logits.
     """
 
     def __init__(
@@ -277,6 +276,7 @@ class VideoPrismTokenizer(T5Tokenizer):
         self._tokenizer.post_processor = None
 
 
+@auto_docstring(checkpoint="google/videoprism-base-f16r288")
 class VideoPrismVideoProcessor(LlavaOnevisionVideoProcessor):
     r"""
     Constructs a VideoPrism video processor.
@@ -386,23 +386,22 @@ class VideoPrismVideoOutput(ModelOutput):
 class VideoPrismClipOutput(ModelOutput):
     r"""
     Base class for VideoPrismClip model outputs.
-    Args:
-        logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
-            The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
-            similarity scores.
-        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, video_batch_size)`):
-            The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-image
-            similarity scores.
-        video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismVideoModel`].
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismTextModel`].
-        video_model_output (`VideoPrismVideoOutput`):
-            The output of the [`VideoPrismVideoModel`].
-        text_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`VideoPrismTextModel`].
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for image-text similarity.
+    logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
+        The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
+        similarity scores.
+    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, video_batch_size)`):
+        The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-image
+        similarity scores.
+    video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The image embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismVideoModel`].
+    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The text embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismTextModel`].
+    video_model_output (`VideoPrismVideoOutput`):
+        The output of the [`VideoPrismVideoModel`].
+    text_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`VideoPrismTextModel`].
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        Contrastive loss for image-text similarity.
     """
 
     logits_per_video: torch.FloatTensor | None = None
@@ -837,11 +836,10 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithSpatialAndTemporalStates:
         r"""
-        Args:
-            pixel_values_videos (`torch.FloatTensor`):
-                Pixel values of the video frames of shape (batch_size, num_frames, num_channels, height, width).
-            interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-                Whether to interpolate positional encodings to match input size.
+        pixel_values_videos (`torch.FloatTensor`):
+            Pixel values of the video frames of shape (batch_size, num_frames, num_channels, height, width).
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+            Whether to interpolate positional encodings to match input size.
 
         Example:
 
