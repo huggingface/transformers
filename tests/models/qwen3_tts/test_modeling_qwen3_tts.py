@@ -346,18 +346,12 @@ class Qwen3TTSTokenizerModelTest(unittest.TestCase):
         ).decoder_config
         model = Qwen3TTSTokenizerV1Decoder(config).to(torch_device)
         model.eval()
-        codes = torch.randint(0, 512, (1, 50), device=torch_device)
-        conditioning = torch.randn(1, 192, device=torch_device)
-        reference_mel = torch.randn(1, 300, 80, device=torch_device)
-        with torch.no_grad():
-            output_before = model(codes, conditioning, reference_mel, num_steps=2)
         with tempfile.TemporaryDirectory() as tmpdir:
             model.save_pretrained(tmpdir)
             loaded = Qwen3TTSTokenizerV1Decoder.from_pretrained(tmpdir).to(torch_device)
         loaded.eval()
-        with torch.no_grad():
-            output_after = loaded(codes, conditioning, reference_mel, num_steps=2)
-        self.assertTrue(torch.allclose(output_before, output_after))
+        for (name, p1), (_, p2) in zip(model.named_parameters(), loaded.named_parameters()):
+            self.assertTrue(torch.equal(p1, p2), f"Parameter {name} differs after save/load")
 
     def test_v2_batch_decode(self):
         """V2 tokenizer decodes a batch of two items producing one waveform per item."""
