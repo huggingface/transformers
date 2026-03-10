@@ -183,8 +183,8 @@ class Glm4vProcessor(ProcessorMixin):
             # Replace 0 -> 2 only inside video segments because GLM4v
             # uses the same special token to denote images and video
             # Otherwise replace 0 -> 1 for image modality
-            starts = np.cumsum(array_ids == self.video_start_id, axis=1)
-            ends = np.cumsum(array_ids == self.video_end_id, axis=1)
+            starts = np.cumsum(array_ids == self.video_start_id, axis=0)
+            ends = np.cumsum(array_ids == self.video_end_id, axis=0)
             is_video_modality = starts > ends
 
             mm_token_types[(array_ids == self.image_token_id) & is_video_modality] = 2
