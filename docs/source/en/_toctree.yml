@@ -170,13 +170,13 @@
     - local: fsdp
       title: FullyShardedDataParallel
     - local: deepspeed
-      title: DeepSpeed
-    - local: debugging
-      title: Multi-GPU debugging
-    - local: perf_train_cpu_many
-      title: Distributed CPUs
+      title: DeepSpeed ZeRO
+    - local: deepspeed_alst
+      title: DeepSpeed ALST
     - local: perf_train_gpu_many
-      title: Parallelism methods
+      title: N-D parallelism
+    - local: debugging
+      title: Debugging
     title: Distributed training
   - isExpanded: false
     sections:
@@ -184,6 +184,8 @@
       title: GPU
     - local: perf_train_cpu
       title: CPU
+    - local: perf_train_cpu_many
+      title: Distributed CPUs
     - local: perf_train_special
       title: Apple Silicon
     - local: perf_train_gaudi
