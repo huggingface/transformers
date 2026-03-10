@@ -1658,6 +1658,8 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("dinov3_vit", "DINOv3ViTBackbone"),
         ("focalnet", "FocalNetBackbone"),
         ("hgnet_v2", "HGNetV2Backbone"),
+        ("pp_lcnet", "PPLCNetBackbone"),
+        ("pp_lcnet_v3", "PPLCNetV3Backbone"),
         ("hiera", "HieraBackbone"),
         ("lw_detr_vit", "LwDetrViTBackbone"),
         ("maskformer-swin", "MaskFormerSwinBackbone"),

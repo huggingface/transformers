@@ -1,3 +1,17 @@
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import math
 from typing import Optional
 
@@ -5,7 +19,7 @@ import torch
 import torch.nn as nn
 import torchvision.transforms.v2.functional as tvF
 
-from ...activations import get_activation
+from ...activations import ACT2FN
 from ...backbone_utils import BackboneConfigMixin, BackboneMixin
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
@@ -127,30 +141,28 @@ class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
 
         # Default block configs for PP-LCNet
         # Each tuple: (kernel_size, in_channels, out_channels, stride, use_squeeze_excitation)
-        if block_configs is None:
-            block_configs = [
-                # Stage 1 (blocks2)
-                [(3, 16, 32, 1, False)],
-                # Stage 2 (blocks3)
-                [(3, 32, 64, 2, False), (3, 64, 64, 1, False)],
-                # Stage 3 (blocks4)
-                [(3, 64, 128, 2, False), (3, 128, 128, 1, False)],
-                # Stage 4 (blocks5)
-                [
-                    (3, 128, 256, 2, False),
-                    (5, 256, 256, 1, False),
-                    (5, 256, 256, 1, False),
-                    (5, 256, 256, 1, False),
-                    (5, 256, 256, 1, False),
-                    (5, 256, 256, 1, False),
-                ],
-                # Stage 5 (blocks6)
-                [(5, 256, 512, 2, True), (5, 512, 512, 1, True)],
-            ]
-        self.block_configs = block_configs
+        self.block_configs = [
+            # Stage 1 (blocks2)
+            [[3, 16, 32, 1, False]],
+            # Stage 2 (blocks3)
+            [[3, 32, 64, 2, False], [3, 64, 64, 1, False]],
+            # Stage 3 (blocks4)
+            [[3, 64, 128, 2, False], [3, 128, 128, 1, False]],
+            # Stage 4 (blocks5)
+            [
+                [3, 128, 256, 2, False],
+                [5, 256, 256, 1, False],
+                [5, 256, 256, 1, False],
+                [5, 256, 256, 1, False],
+                [5, 256, 256, 1, False],
+                [5, 256, 256, 1, False],
+            ],
+            # Stage 5 (blocks6)
+            [[5, 256, 512, 2, True], [5, 512, 512, 1, True]],
+        ] if block_configs is None else block_configs
 
-        self.depths = [len(blocks) for blocks in block_configs]
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(block_configs) + 1)]
+        self.depths = [len(blocks) for blocks in self.block_configs]
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.block_configs) + 1)]
 
         self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
         super().__init__(**kwargs)
@@ -279,12 +291,6 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
         return SizeDict(height=resized_height, width=resized_width)
 
 
-def create_activation(hidden_act):
-    if hidden_act == "hardswish":
-        return nn.Hardswish()
-    return get_activation(hidden_act)
-
-
 class PPLCNetConvLayer(ResNetConvLayer):
     def __init__(
         self,
@@ -305,7 +311,6 @@ class PPLCNetConvLayer(ResNetConvLayer):
             bias=False,
             groups=groups,
         )
-        self.activation = create_activation(activation)
 
 
 class PPLCNetDepthwiseSeparableConvLayer(nn.Module):
@@ -581,7 +586,7 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
                 padding=0,
                 bias=False,
             )
-            self.activation = create_activation(config.hidden_act)
+            self.activation = ACT2FN[config.hidden_act]
             fc_in_channels = config.class_expand
             self.dropout_prob = config.dropout_prob
         else:
@@ -643,5 +648,6 @@ __all__ = [
     "PPLCNetForImageClassification",
     "PPLCNetImageProcessorFast",
     "PPLCNetConfig",
+    "PPLCNetConvLayer",
     "PPLCNetPreTrainedModel",
 ]

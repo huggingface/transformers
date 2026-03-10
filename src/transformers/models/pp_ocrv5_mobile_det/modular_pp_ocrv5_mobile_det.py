@@ -20,18 +20,18 @@ from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import (
     SizeDict,
 )
-from ...processing_utils import Unpack
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     is_cv2_available,
     logging,
-    TransformersKwargs,
 )
-from ...utils.output_capturing import capture_outputs
 from ...utils.generic import TensorType
+from ...utils.output_capturing import capture_outputs
 
 
 if is_cv2_available():
@@ -544,9 +544,9 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
         if do_resize:
             for image in images:
                 size, shape = self.get_image_size(
-                    image=image, 
-                    limit_side_len=self.limit_side_len, 
-                    limit_type=self.limit_type, 
+                    image=image,
+                    limit_side_len=self.limit_side_len,
+                    limit_type=self.limit_type,
                     max_side_limit=self.max_side_limit
                 )
                 image = self.resize(image, size=size, interpolation=interpolation)
@@ -1342,7 +1342,7 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
         hidden_state: torch.FloatTensor,
         **kwargs,
     ) -> tuple[torch.FloatTensor] | PPOCRV5MobileDetModelOutput:
-        
+
         hidden_state = self.backbone(hidden_state)
         hidden_state = self.neck(hidden_state)
 
@@ -1390,7 +1390,7 @@ class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs,
     ) -> tuple[torch.FloatTensor] | PPOCRV5MobileDetForObjectDetectionOutput:
-        
+
         outputs = self.model(pixel_values, **kwargs)
         logits = self.head(outputs.logits)
 

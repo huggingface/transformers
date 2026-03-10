@@ -172,7 +172,7 @@ else:
             ("pp_ocrv5_mobile_det", ("PPOCRV5MobileDetImageProcessor", "PPOCRV5MobileDetImageProcessorFast")),
             ("pp_doclayout_v2", (None, "PPDocLayoutV2ImageProcessorFast")),
             ("pp_doclayout_v3", (None, "PPDocLayoutV3ImageProcessorFast")),
-            ("pp_lcnet", ("PPLCNetImageProcessor", "PPLCNetImageProcessorFast")),
+            ("pp_lcnet", (None, "PPLCNetImageProcessorFast")),
             ("prompt_depth_anything", ("PromptDepthAnythingImageProcessor", "PromptDepthAnythingImageProcessorFast")),
             ("pvt", ("PvtImageProcessor", "PvtImageProcessorFast")),
             ("pvt_v2", ("PvtImageProcessor", "PvtImageProcessorFast")),

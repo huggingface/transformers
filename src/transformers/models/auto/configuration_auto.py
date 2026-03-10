@@ -358,6 +358,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("pp_doclayout_v2", "PPDocLayoutV2Config"),
         ("pp_doclayout_v3", "PPDocLayoutV3Config"),
         ("pp_lcnet", "PPLCNetConfig"),
+        ("pp_lcnet_v3", "PPLCNetV3Config"),
         ("prompt_depth_anything", "PromptDepthAnythingConfig"),
         ("prophetnet", "ProphetNetConfig"),
         ("pvt", "PvtConfig"),
@@ -865,13 +866,11 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("plbart", "PLBart"),
         ("poolformer", "PoolFormer"),
         ("pop2piano", "Pop2Piano"),
-<<<<<<< HEAD
         ("pp_ocrv5_mobile_det", "PPOCRV5MobileDet"),
-=======
->>>>>>> 1b161f45af (refactor)
         ("pp_doclayout_v2", "PPDocLayoutV2"),
         ("pp_doclayout_v3", "PPDocLayoutV3"),
         ("pp_lcnet", "PPLCNet"),
+        ("pp_lcnet_v3", "PPLCNetV3"),
         ("prompt_depth_anything", "PromptDepthAnything"),
         ("prophetnet", "ProphetNet"),
         ("pvt", "PVT"),
