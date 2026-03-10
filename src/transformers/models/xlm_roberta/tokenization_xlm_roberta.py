@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License
 """Tokenization classes for XLM-RoBERTa model (Tokenizers backend)."""
-
-from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -56,7 +53,7 @@ class XLMRobertaTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
+        vocab: str | list[tuple[str, float]] | None = None,
         add_prefix_space: bool = True,
         bos_token: str = "<s>",
         eos_token: str = "</s>",
@@ -65,6 +62,7 @@ class XLMRobertaTokenizer(TokenizersBackend):
         unk_token: str = "<unk>",
         pad_token: str = "<pad>",
         mask_token: str = "<mask>",
+        _spm_precompiled_charsmap: str | None = None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space
@@ -82,12 +80,8 @@ class XLMRobertaTokenizer(TokenizersBackend):
 
         self._tokenizer = Tokenizer(Unigram(vocab=self._vocab, unk_id=3, byte_fallback=False))
 
-        self._tokenizer.normalizer = normalizers.Sequence(
-            [
-                normalizers.Strip(left=False, right=True),
-                normalizers.Replace(" {2,}", "▁"),
-            ]
-        )
+        if _spm_precompiled_charsmap is not None:
+            self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
 
         prepend_scheme = "always" if add_prefix_space else "never"
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
@@ -111,7 +105,7 @@ class XLMRobertaTokenizer(TokenizersBackend):
 
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=[str(bos_token), "$A", str(eos_token)],
-            pair=[str(bos_token), "$A", str(eos_token), "$B", str(eos_token)],
+            pair=[str(bos_token), "$A", str(eos_token), str(eos_token), "$B", str(eos_token)],
             special_tokens=[
                 (str(bos_token), self.bos_token_id),
                 (str(eos_token), self.eos_token_id),

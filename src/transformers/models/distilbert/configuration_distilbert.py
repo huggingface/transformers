@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019-present, the HuggingFace Inc. team, The Google AI Language Team and Facebook, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,53 +14,24 @@
 """DistilBERT model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="google/distilbert-base-uncased")
 class DistilBertConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DistilBertModel`]. It
-    is used to instantiate a DistilBERT model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the DistilBERT
-    [distilbert-base-uncased](https://huggingface.co/distilbert-base-uncased) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the DistilBERT model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`DistilBertModel`].
-        max_position_embeddings (`int`, *optional*, defaults to 512):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        sinusoidal_pos_embds (`boolean`, *optional*, defaults to `False`):
-            Whether to use sinusoidal positional embeddings.
-        n_layers (`int`, *optional*, defaults to 6):
-            Number of hidden layers in the Transformer encoder.
-        n_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        dim (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        hidden_dim (`int`, *optional*, defaults to 3072):
-            The size of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-        activation (`str` or `Callable`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        qa_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probabilities used in the question answering model [`DistilBertForQuestionAnswering`].
-        seq_classif_dropout (`float`, *optional*, defaults to 0.2):
-            The dropout probabilities used in the sequence classification and the multiple choice model
-            [`DistilBertForSequenceClassification`].
+    sinusoidal_pos_embds (`boolean`, *optional*, defaults to `False`):
+        Whether to use sinusoidal positional embeddings.
+    dim (`int`, *optional*, defaults to 768):
+        Dimensionality of the encoder layers and the pooler layer.
+    qa_dropout (`float`, *optional*, defaults to 0.1):
+        The dropout probabilities used in the question answering model [`DistilBertForQuestionAnswering`].
+    seq_classif_dropout (`float`, *optional*, defaults to 0.2):
+        The dropout probabilities used in the sequence classification and the multiple choice model
+        [`DistilBertForSequenceClassification`].
 
     Examples:
 
@@ -101,6 +71,9 @@ class DistilBertConfig(PreTrainedConfig):
         qa_dropout=0.1,
         seq_classif_dropout=0.2,
         pad_token_id=0,
+        eos_token_id=None,
+        bos_token_id=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -116,7 +89,11 @@ class DistilBertConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.qa_dropout = qa_dropout
         self.seq_classif_dropout = seq_classif_dropout
-        super().__init__(**kwargs, pad_token_id=pad_token_id)
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["DistilBertConfig"]

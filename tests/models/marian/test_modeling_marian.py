@@ -17,6 +17,8 @@ import tempfile
 import unittest
 from functools import cached_property
 
+import pytest
+
 from transformers import MarianConfig, is_torch_available
 from transformers.testing_utils import (
     require_sentencepiece,
@@ -38,11 +40,9 @@ if is_torch_available():
 
     from transformers import (
         AutoConfig,
-        AutoModelWithLMHead,
         AutoTokenizer,
         MarianModel,
         MarianMTModel,
-        TranslationPipeline,
     )
     from transformers.models.marian.modeling_marian import (
         MarianDecoder,
@@ -220,10 +220,7 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     pipeline_model_mapping = (
         {
             "feature-extraction": MarianModel,
-            "summarization": MarianMTModel,
             "text-generation": MarianForCausalLM,
-            "text2text-generation": MarianMTModel,
-            "translation": MarianMTModel,
         }
         if is_torch_available()
         else {}
@@ -330,23 +327,17 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_tie_word_embeddings_decoder(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
@@ -411,10 +402,11 @@ class MarianIntegrationTest(unittest.TestCase):
 
     @cached_property
     def model(self):
-        model: MarianMTModel = AutoModelWithLMHead.from_pretrained(self.model_name).to(torch_device)
+        model: MarianMTModel = MarianMTModel.from_pretrained(self.model_name).to(torch_device)
         c = model.config
-        self.assertListEqual(c.bad_words_ids, [[c.pad_token_id]])
-        self.assertEqual(c.max_length, 512)
+        generation_config = model.generation_config
+        self.assertListEqual(generation_config.bad_words_ids, [[c.pad_token_id]])
+        self.assertEqual(generation_config.max_length, 512)
         self.assertEqual(c.decoder_start_token_id, c.pad_token_id)
 
         if torch_device == "cuda":
@@ -591,13 +583,6 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
     @slow
     def test_batch_generation_en_ROMANCE_multi(self):
         self._assert_generated_batch_equal_expected()
-
-    @slow
-    @require_torch
-    def test_pipeline(self):
-        pipeline = TranslationPipeline(self.model, self.tokenizer, device=torch_device)
-        output = pipeline(self.src_text)
-        self.assertEqual(self.expected_text, [x["translation_text"] for x in output])
 
 
 @require_sentencepiece

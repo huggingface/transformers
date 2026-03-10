@@ -32,6 +32,7 @@ from transformers.core_model_loading import (
     rename_source_key,
     revert_weight_conversion,
 )
+from transformers.modeling_utils import LoadStateDictConfig
 from transformers.utils.import_utils import is_triton_available
 
 from ..test_modeling_common import compare_state_dicts
@@ -205,6 +206,7 @@ class DummyMLP(nn.Module):
 
 class DummyRoot(nn.Module):
     base_model_prefix = "model"
+    config: PretrainedConfig
 
     def __init__(self, add_extra_moe=False):
         super().__init__()
@@ -258,21 +260,28 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             ),
             WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight"),
         ]
-        missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=None
+
+        load_config = LoadStateDictConfig(
+            weight_mapping=weight_mapping,
+        )
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            state_dict,
+            load_config,
+            tp_plan=None,
         )
 
         self.assertEqual(
-            missing,
+            loading_info.missing_keys,
             {
                 "model.layers.1.self_attn.k_proj.weight",
                 "model.layers.1.self_attn.v_proj.weight",
                 "model.layers.1.self_attn.q_proj.weight",
             },
         )
-        self.assertEqual(unexpected, {"model.layers.1.self_attn.qkv_proj.weight"})
-        self.assertEqual(mismatch, set())
-        self.assertEqual(misc, {})
+        self.assertEqual(loading_info.unexpected_keys, {"model.layers.1.self_attn.qkv_proj.weight"})
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
 
         model_state = model.state_dict()
 
@@ -370,13 +379,19 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         ]
 
         # Use the mapping to load
-        missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=None
+        load_config = LoadStateDictConfig(
+            weight_mapping=weight_mapping,
         )
-        self.assertTrue(len(missing) == 0)
-        self.assertTrue(len(unexpected) == 0)
-        self.assertTrue(len(mismatch) == 0)
-        self.assertTrue(len(misc) == 0)
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            state_dict,
+            load_config,
+            tp_plan=None,
+        )
+        self.assertTrue(len(loading_info.missing_keys) == 0)
+        self.assertTrue(len(loading_info.unexpected_keys) == 0)
+        self.assertTrue(len(loading_info.mismatched_keys) == 0)
+        self.assertTrue(len(loading_info.conversion_errors) == 0)
 
         # Try to revert the mapping
         reversed_state_dict = revert_weight_conversion(model, model.state_dict())
@@ -468,15 +483,13 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                 operations=[Chunk(dim=0), PermuteForRope()],
             )
         ]
+        load_config = LoadStateDictConfig(weight_mapping=weight_mapping, hf_quantizer=quantizer)
+        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict, load_config, tp_plan=None)
 
-        missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=quantizer
-        )
-
-        self.assertEqual(missing, set())
-        self.assertEqual(unexpected, set())
-        self.assertEqual(mismatch, set())
-        self.assertEqual(misc, {})
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
 
         permute_op = PermuteForRope()
         permute_op.config = model.config
@@ -565,14 +578,14 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             ),
             WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight"),
         ]
-        missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=None
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping), tp_plan=None
         )
 
-        self.assertEqual(missing, set())
-        self.assertEqual(unexpected, set())
-        self.assertEqual(mismatch, set())
-        self.assertEqual(misc, {})
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
 
         model_state = model.state_dict()
 
@@ -689,13 +702,13 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         ]
 
         # Use the mapping to load
-        missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=None
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping), tp_plan=None
         )
-        self.assertTrue(len(missing) == 0)
-        self.assertTrue(len(unexpected) == 0)
-        self.assertTrue(len(mismatch) == 0)
-        self.assertTrue(len(misc) == 0)
+        self.assertTrue(len(loading_info.missing_keys) == 0)
+        self.assertTrue(len(loading_info.unexpected_keys) == 0)
+        self.assertTrue(len(loading_info.mismatched_keys) == 0)
+        self.assertTrue(len(loading_info.conversion_errors) == 0)
 
         # Try to revert the mapping
         reversed_state_dict = revert_weight_conversion(model, model.state_dict())

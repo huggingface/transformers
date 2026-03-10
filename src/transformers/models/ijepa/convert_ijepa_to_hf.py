@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,10 +19,10 @@ URL: https://github.com/facebookresearch/ijepa
 import argparse
 import gc
 import re
+from io import BytesIO
 from pathlib import Path
-from typing import Optional
 
-import requests
+import httpx
 import torch
 from PIL import Image
 
@@ -64,7 +63,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 # fmt: on
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     """
     Converts old keys to new keys using the mapping and dynamically removes the 'ijepa.' prefix if necessary.
 
@@ -118,8 +117,9 @@ def rename_key(dct, old, new):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 def get_ijepa_config(model_name):

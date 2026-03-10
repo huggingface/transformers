@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Microsoft Research & University of Wisconsin-Madison and the HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,45 +13,16 @@
 """Llava model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="llava-hf/llava-9b")
 class LlavaConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LlavaForConditionalGeneration`]. It is used to instantiate an
-    Llava model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Llava-9B.
-
-    e.g. [llava-hf/llava-9b](https://huggingface.co/llava-hf/llava-9b)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
-            The config object or dictionary of the text backbone.
-        image_token_index (`int`, *optional*, defaults to 32000):
-            The image token index to encode the image prompt.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`.
-        vision_feature_layer (`Union[int, list[int]]`, *optional*, defaults to -2):
-            The index of the layer to select the vision feature. If multiple indices are provided,
-            the vision feature of the corresponding indices will be concatenated to form the
-            vision features.
-        image_seq_length (`int`, *optional*, defaults to 576):
-            Sequence length of one image embedding.
-        multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in the multimodal projector.
-
     Example:
 
     ```python
@@ -90,11 +60,13 @@ class LlavaConfig(PreTrainedConfig):
         vision_feature_layer=-2,
         image_seq_length=576,
         multimodal_projector_bias=True,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
         self.image_seq_length = image_seq_length
+        self.tie_word_embeddings = tie_word_embeddings
 
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(
@@ -130,6 +102,12 @@ class LlavaConfig(PreTrainedConfig):
 
         self.text_config = text_config
         self.multimodal_projector_bias = multimodal_projector_bias
+
+        # The default value is `False` but this config is used with many model types
+        # Attr `tie_word_embeddings` was saved in text config for those models, so we
+        # need an ugly workaround and forward-pass the attr from text config
+        if not tie_word_embeddings and self.text_config.tie_word_embeddings:
+            self.tie_word_embeddings = self.text_config.tie_word_embeddings
 
         super().__init__(**kwargs)
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,51 +12,17 @@
 # limitations under the License.
 """Pixtral model configuration"""
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="pixtral-hf/pixtral-9b")
 class PixtralVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PixtralVisionModel`]. It is used to instantiate an
-    Pixtral vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to the vision encoder used by Pixtral-12B.
-
-    e.g. [pixtral-hf/pixtral-9b](https://huggingface.co/pixtral-hf/pixtral-9b)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 4096):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of input channels in the input images.
-        image_size (`int`, *optional*, defaults to 1024):
-            Max dimension of the input images.
-        patch_size (`int`, *optional*, defaults to 16):
-            Size of the image patches.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            Activation function used in the hidden layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for the attention layers.
-        rope_parameters (`RopeParameters`, *optional*):
-            The RopeParameters
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
     Example:
 
     ```python
@@ -77,17 +42,17 @@ class PixtralVisionConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        hidden_size: Optional[int] = 1024,
-        intermediate_size: Optional[int] = 4096,
-        num_hidden_layers: Optional[int] = 24,
-        num_attention_heads: Optional[int] = 16,
-        num_channels: Optional[int] = 3,
-        image_size: Optional[int] = 1024,
-        patch_size: Optional[int] = 16,
-        hidden_act: Optional[str] = "gelu",
-        attention_dropout: Optional[float] = 0.0,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        initializer_range: Optional[float] = 0.02,
+        hidden_size: int | None = 1024,
+        intermediate_size: int | None = 4096,
+        num_hidden_layers: int | None = 24,
+        num_attention_heads: int | None = 16,
+        num_channels: int | None = 3,
+        image_size: int | None = 1024,
+        patch_size: int | None = 16,
+        hidden_act: str | None = "gelu",
+        attention_dropout: float | None = 0.0,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        initializer_range: float | None = 0.02,
         **kwargs,
     ):
         self.hidden_size = hidden_size

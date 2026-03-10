@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -202,6 +201,7 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ColQwen2ForRetrieval,) if is_torch_available() else ()
 
     test_resize_embeddings = True
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = ColQwen2ForRetrievalModelTester(self)

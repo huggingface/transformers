@@ -13,7 +13,6 @@
 # limitations under the License.
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -42,49 +41,21 @@ from ..superpoint import SuperPointConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="ETH-CVG/lightglue_superpoint")
 class LightGlueConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LightGlueForKeypointMatching`]. It is used to
-    instantiate a LightGlue model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the LightGlue
-    [ETH-CVG/lightglue_superpoint](https://huggingface.co/ETH-CVG/lightglue_superpoint) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        keypoint_detector_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SuperPointConfig`):
-            The config object or dictionary of the keypoint detector.
-        descriptor_dim (`int`, *optional*, defaults to 256):
-            The dimension of the descriptors.
-        num_hidden_layers (`int`, *optional*, defaults to 9):
-            The number of self and cross attention layers.
-        num_attention_heads (`int`, *optional*, defaults to 4):
-            The number of heads in the multi-head attention.
-        num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
-            `num_attention_heads`.
-        depth_confidence (`float`, *optional*, defaults to 0.95):
-            The confidence threshold used to perform early stopping
-        width_confidence (`float`, *optional*, defaults to 0.99):
-            The confidence threshold used to prune points
-        filter_threshold (`float`, *optional*, defaults to 0.1):
-            The confidence threshold used to filter matches
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function to be used in the hidden layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        attention_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        trust_remote_code (`bool`, *optional*, defaults to `False`):
-            Whether to trust remote code when using other models than SuperPoint as keypoint detector.
+    keypoint_detector_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SuperPointConfig`):
+        The config object or dictionary of the keypoint detector.
+    descriptor_dim (`int`, *optional*, defaults to 256):
+        The dimension of the descriptors.
+    depth_confidence (`float`, *optional*, defaults to 0.95):
+        The confidence threshold used to perform early stopping
+    width_confidence (`float`, *optional*, defaults to 0.99):
+        The confidence threshold used to prune points
+    filter_threshold (`float`, *optional*, defaults to 0.1):
+        The confidence threshold used to filter matches
+    trust_remote_code (`bool`, *optional*, defaults to `False`):
+        Whether to trust remote code when using other models than SuperPoint as keypoint detector.
 
     Examples:
         ```python
@@ -205,14 +176,14 @@ class LightGlueKeypointMatchingOutput(ModelOutput):
         `config.output_attentions=True`
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    matches: Optional[torch.FloatTensor] = None
-    matching_scores: Optional[torch.FloatTensor] = None
-    keypoints: Optional[torch.FloatTensor] = None
-    prune: Optional[torch.IntTensor] = None
-    mask: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    matches: torch.FloatTensor | None = None
+    matching_scores: torch.FloatTensor | None = None
+    keypoints: torch.FloatTensor | None = None
+    prune: torch.IntTensor | None = None
+    mask: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 class LightGlueImageProcessorKwargs(SuperGlueImageProcessorKwargs):
@@ -223,7 +194,7 @@ class LightGlueImageProcessor(SuperGlueImageProcessor):
     def post_process_keypoint_matching(
         self,
         outputs: "LightGlueKeypointMatchingOutput",
-        target_sizes: Union[TensorType, list[tuple]],
+        target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
     ) -> list[dict[str, torch.Tensor]]:
         return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
@@ -233,7 +204,7 @@ class LightGlueImageProcessorFast(SuperGlueImageProcessorFast):
     def post_process_keypoint_matching(
         self,
         outputs: "LightGlueKeypointMatchingOutput",
-        target_sizes: Union[TensorType, list[tuple]],
+        target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
     ) -> list[dict[str, torch.Tensor]]:
         return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
@@ -245,8 +216,8 @@ class LightGluePositionalEncoder(nn.Module):
         self.projector = nn.Linear(2, config.descriptor_dim // config.num_attention_heads // 2, bias=False)
 
     def forward(
-        self, keypoints: torch.Tensor, output_hidden_states: Optional[bool] = False
-    ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
+        self, keypoints: torch.Tensor, output_hidden_states: bool | None = False
+    ) -> tuple[torch.Tensor] | tuple[torch.Tensor, torch.Tensor]:
         projected_keypoints = self.projector(keypoints)
         embeddings = projected_keypoints.repeat_interleave(2, dim=-1)
         cosines = torch.cos(embeddings)
@@ -264,12 +235,12 @@ class LightGlueAttention(LlamaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -286,9 +257,9 @@ class LightGlueAttention(LlamaAttention):
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -333,9 +304,9 @@ class LightGlueTransformerLayer(nn.Module):
         descriptors: torch.Tensor,
         keypoints: torch.Tensor,
         attention_mask: torch.Tensor,
-        output_hidden_states: Optional[bool] = False,
-        output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor]], Optional[tuple[torch.Tensor]]]:
+        output_hidden_states: bool | None = False,
+        output_attentions: bool | None = False,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor] | None, tuple[torch.Tensor] | None]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -599,7 +570,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         return np.clip(threshold, 0, 1)
 
     def _keypoint_processing(
-        self, descriptors: torch.Tensor, keypoints: torch.Tensor, output_hidden_states: Optional[bool] = False
+        self, descriptors: torch.Tensor, keypoints: torch.Tensor, output_hidden_states: bool | None = False
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         descriptors = descriptors.detach().contiguous()
         projected_descriptors = self.input_projection(descriptors)
@@ -752,9 +723,9 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         descriptors: torch.Tensor,
         height: int,
         width: int,
-        mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, tuple, tuple]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -924,11 +895,11 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, "LightGlueKeypointMatchingOutput"]:
+    ) -> tuple | LightGlueKeypointMatchingOutput:
         loss = None
         if labels is not None:
             raise ValueError("LightGlue is not trainable, no labels should be provided.")

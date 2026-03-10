@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 import numpy as np
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ...video_utils import VideoMetadata
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor
@@ -27,33 +26,17 @@ from ..glm4v.processing_glm4v import Glm4vProcessor
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
 
 
+@auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
 class Glm46VConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
-    GLM-4.6V model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of
-    GLM-4.1V-9B-Thinking [zai-org/GLM-4.1V-9B-Thinking](https://huggingface.co/zai-org/GLM-4.1V-9B-Thinking).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Glm4vTextConfig`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Glm4vVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to 151343):
-            The image token index to encode the image prompt.
-        video_token_id (`int`, *optional*, defaults to 151344):
-            The video token index to encode the image prompt.
-        image_start_token_id (`int`, *optional*, defaults to 151339):
-            The image start token index to encode the start of image.
-        image_end_token_id (`int`, *optional*, defaults to 151340):
-            The image end token index to encode the end of image.
-        video_start_token_id (`int`, *optional*, defaults to 151361):
-            The video start token index to encode the start of video.
-        video_end_token_id (`int`, *optional*, defaults to 151362):
-            The video end token index to encode the end of video.
+    image_start_token_id (`int`, *optional*, defaults to 151339):
+        The image start token index to encode the start of image.
+    image_end_token_id (`int`, *optional*, defaults to 151340):
+        The image end token index to encode the end of image.
+    video_start_token_id (`int`, *optional*, defaults to 151361):
+        The video start token index to encode the start of video.
+    video_end_token_id (`int`, *optional*, defaults to 151362):
+        The video end token index to encode the end of video.
 
     ```python
     >>> from transformers import Glm46VForConditionalGeneration, Glm46VConfig
@@ -82,6 +65,7 @@ class Glm46VConfig(PreTrainedConfig):
         image_end_token_id=151340,
         video_start_token_id=151361,
         video_end_token_id=151362,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -102,6 +86,7 @@ class Glm46VConfig(PreTrainedConfig):
         self.video_end_token_id = video_end_token_id
         self.image_start_token_id = image_start_token_id
         self.image_end_token_id = image_end_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 
@@ -144,7 +129,7 @@ class Glm46VVideoProcessor(Glm4vVideoProcessor):
     def sample_frames(
         self,
         metadata: VideoMetadata,
-        fps: Optional[Union[int, float]] = None,
+        fps: int | float | None = None,
         **kwargs,
     ):
         if metadata is None or getattr(metadata, "fps", None) is None:

@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_llava_next_video.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,50 +19,20 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="llava-hf/LLaVA-NeXT-Video-7B-hf")
 class LlavaNextVideoConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LlavaNextVideoForConditionalGeneration`]. It is used to instantiate an
-    Llava-NeXT model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the [llava-hf/LLaVA-NeXT-Video-7B-hf](https://huggingface.co/llava-hf/LLaVA-NeXT-Video-7B-hf)
-    model.
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
-            The config object or dictionary of the text backbone.
-        image_token_index (`int`, *optional*, defaults to 32001):
-            The image token index to encode the image prompt.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
-        multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in the multimodal projector.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
-            If `"full"`, the full vision features are used.
-        vision_feature_layer (`Union[int, list[int]]`, *optional*, defaults to -2):
-            The index of the layer to select the vision feature. If multiple indices are provided,
-            the vision feature of the corresponding indices will be concatenated to form the
-            vision features.
-        image_grid_pinpoints (`List`, *optional*, defaults to `[[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]`):
-            A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
-            of the form `(height, width)`.
-        video_token_index (`int`, *optional*, defaults to 32000):
-            The video token index to encode the image prompt.
-        spatial_pool_mode (`str`, *optional*, defaults to `"average"`):
-            Pooling mode to use for videos. Can be "average", "max" or "conv".
-        spatial_pool_stride (`int`, *optional*, defaults to 2):
-            Stride used in the pooling layer for videos.
-        image_seq_length (`int`, *optional*, defaults to 576):
-            Sequence length of one image embedding.
-        video_seq_length (`int`, *optional*, defaults to 288):
-            Sequence length of one video embedding.
+    image_grid_pinpoints (`List`, *optional*, defaults to `[[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]`):
+        A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
+        of the form `(height, width)`.
+    spatial_pool_mode (`str`, *optional*, defaults to `"average"`):
+        Pooling mode to use for videos. Can be "average", "max" or "conv".
+    spatial_pool_stride (`int`, *optional*, defaults to 2):
+        Stride used in the pooling layer for videos.
 
     Example:
 
@@ -106,6 +75,7 @@ class LlavaNextVideoConfig(PreTrainedConfig):
         spatial_pool_stride=2,
         image_seq_length=576,
         video_seq_length=288,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.video_token_index = video_token_index
@@ -116,6 +86,7 @@ class LlavaNextVideoConfig(PreTrainedConfig):
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
         self.multimodal_projector_bias = multimodal_projector_bias
+        self.tie_word_embeddings = tie_word_embeddings
 
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(
@@ -157,13 +128,13 @@ class LlavaNextVideoConfig(PreTrainedConfig):
 
         self.text_config = text_config
 
-        super().__init__(**kwargs)
+        # The default value is `False` but this config is used with many model types
+        # Attr `tie_word_embeddings` was saved in text config for those models, so we
+        # need an ugly workaround and forward-pass the attr from text config
+        if not tie_word_embeddings and self.text_config.tie_word_embeddings:
+            self.tie_word_embeddings = self.text_config.tie_word_embeddings
 
-        # Due to a mismatch at model addition-time, the `tie_word_embeddings` was saved in the text config, even
-        # though it concerns the main model, while it was set to False by default in the main model... So we hardcode a fix here
-        if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
-            self.tie_word_embeddings = True
-            self.text_config.tie_word_embeddings = False
+        super().__init__(**kwargs)
 
 
 __all__ = ["LlavaNextVideoConfig"]

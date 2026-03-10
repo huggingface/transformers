@@ -23,7 +23,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Union
+
+import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -35,6 +36,7 @@ class PaddleOCRVLProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_mm_token_type_ids": True,
         },
     }
 
@@ -57,12 +59,13 @@ class PaddleOCRVLProcessor(ProcessorMixin):
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token
+        self.image_token_id = tokenizer.image_token_id
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[PaddleOCRVLProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -127,9 +130,17 @@ class PaddleOCRVLProcessor(ProcessorMixin):
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
 
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
 
 __all__ = ["PaddleOCRVLProcessor"]

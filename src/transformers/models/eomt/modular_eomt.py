@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Mobile Perception Systems Lab at TU/e and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -34,7 +32,8 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..dinov2.modeling_dinov2 import (
     Dinov2Embeddings,
     Dinov2Layer,
@@ -49,70 +48,33 @@ from ..vit.configuration_vit import ViTConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="tue-mps/coco_panoptic_eomt_large_640")
 class EomtConfig(ViTConfig):
     r"""
-    This is the configuration class to store the configuration of a [`EomtForUniversalSegmentation`]. It is used to instantiate an EoMT model
-    according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the EoMT
-    [tue-mps/coco_panoptic_eomt_large_640](https://huggingface.co/tue-mps/coco_panoptic_eomt_large_640)
-    architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimensionality of the hidden representations.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads in each attention layer.
-        mlp_ratio (`int`, *optional*, defaults to 4):
-            Ratio of the MLP hidden dimensionality to the hidden size.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings and encoder.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to 640):
-            The size (resolution) of each input image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        layerscale_value (`float`, *optional*, defaults to 1.0):
-            Initial value for the LayerScale parameter.
-        drop_path_rate (`float`, *optional*, defaults to 0.0):
-            The stochastic depth rate (drop path) used during training.
-        num_upscale_blocks (`int`, *optional*, defaults to 2):
-            Number of upsampling blocks used in the decoder or segmentation head.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability applied after attention projection.
-        use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
-            Whether to use the SwiGLU feedforward neural network.
-        num_blocks (`int`, *optional*, defaults to 4):
-            Number of feature blocks or stages in the architecture.
-        no_object_weight (`float`, *optional*, defaults to 0.1):
-            Loss weight for the 'no object' class in panoptic/instance segmentation.
-        class_weight (`float`, *optional*, defaults to 2.0):
-            Loss weight for classification targets.
-        mask_weight (`float`, *optional*, defaults to 5.0):
-            Loss weight for mask prediction.
-        dice_weight (`float`, *optional*, defaults to 5.0):
-            Loss weight for the dice loss component.
-        train_num_points (`int`, *optional*, defaults to 12544):
-            Number of points to sample for mask loss computation during training.
-        oversample_ratio (`float`, *optional*, defaults to 3.0):
-            Oversampling ratio used in point sampling for mask training.
-        importance_sample_ratio (`float`, *optional*, defaults to 0.75):
-            Ratio of points to sample based on importance during training.
-        num_queries (`int`, *optional*, defaults to 200):
-            Number of object queries in the Transformer.
-        num_register_tokens (`int`, *optional*, defaults to 4):
-            Number of learnable register tokens added to the transformer input.
+    num_upscale_blocks (`int`, *optional*, defaults to 2):
+        Number of upsampling blocks used in the decoder or segmentation head.
+    layerscale_value (`float`, *optional*, defaults to 1.0):
+        Initial value for the LayerScale parameter.
+    use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
+        Whether to use the SwiGLU feedforward neural network.
+    num_blocks (`int`, *optional*, defaults to 4):
+        Number of feature blocks or stages in the architecture.
+    no_object_weight (`float`, *optional*, defaults to 0.1):
+        Loss weight for the 'no object' class in panoptic/instance segmentation.
+    class_weight (`float`, *optional*, defaults to 2.0):
+        Loss weight for classification targets.
+    mask_weight (`float`, *optional*, defaults to 5.0):
+        Loss weight for mask prediction.
+    train_num_points (`int`, *optional*, defaults to 12544):
+        Number of points to sample for mask loss computation during training.
+    oversample_ratio (`float`, *optional*, defaults to 3.0):
+        Oversampling ratio used in point sampling for mask training.
+    importance_sample_ratio (`float`, *optional*, defaults to 0.75):
+        Ratio of points to sample based on importance during training.
+    num_queries (`int`, *optional*, defaults to 200):
+        Number of object queries in the Transformer.
+    num_register_tokens (`int`, *optional*, defaults to 4):
+        Number of learnable register tokens added to the transformer input.
 
     Example:
 
@@ -161,6 +123,23 @@ class EomtConfig(ViTConfig):
         num_register_tokens=4,
         **kwargs,
     ):
+        self.mlp_ratio = mlp_ratio
+        self.attention_dropout = attention_dropout
+        self.layerscale_value = layerscale_value
+        self.drop_path_rate = drop_path_rate
+        self.num_upscale_blocks = num_upscale_blocks
+        self.use_swiglu_ffn = use_swiglu_ffn
+        self.num_blocks = num_blocks
+        self.no_object_weight = no_object_weight
+        self.class_weight = class_weight
+        self.mask_weight = mask_weight
+        self.dice_weight = dice_weight
+        self.train_num_points = train_num_points
+        self.oversample_ratio = oversample_ratio
+        self.importance_sample_ratio = importance_sample_ratio
+        self.num_queries = num_queries
+        self.num_register_tokens = num_register_tokens
+
         super().__init__(
             hidden_size=hidden_size,
             num_hidden_layers=num_hidden_layers,
@@ -181,23 +160,6 @@ class EomtConfig(ViTConfig):
         del self.pooler_output_size
         del self.encoder_stride
         del self.attention_probs_dropout_prob
-
-        self.mlp_ratio = mlp_ratio
-        self.attention_dropout = attention_dropout
-        self.layerscale_value = layerscale_value
-        self.drop_path_rate = drop_path_rate
-        self.num_upscale_blocks = num_upscale_blocks
-        self.use_swiglu_ffn = use_swiglu_ffn
-        self.num_blocks = num_blocks
-        self.no_object_weight = no_object_weight
-        self.class_weight = class_weight
-        self.mask_weight = mask_weight
-        self.dice_weight = dice_weight
-        self.train_num_points = train_num_points
-        self.oversample_ratio = oversample_ratio
-        self.importance_sample_ratio = importance_sample_ratio
-        self.num_queries = num_queries
-        self.num_register_tokens = num_register_tokens
 
 
 @dataclass
@@ -233,13 +195,13 @@ class EomtForUniversalSegmentationOutput(ModelOutput):
         list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    class_queries_logits: Optional[torch.FloatTensor] = None
-    masks_queries_logits: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    patch_offsets: Optional[list[torch.Tensor]] = None
+    loss: torch.FloatTensor | None = None
+    class_queries_logits: torch.FloatTensor | None = None
+    masks_queries_logits: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    patch_offsets: list[torch.Tensor] | None = None
 
 
 class EomtLoss(Mask2FormerLoss):
@@ -298,7 +260,7 @@ class EomtLayer(Dinov2Layer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         hidden_states_norm = self.norm1(hidden_states)
         self_attention_output, _ = self.attention(hidden_states_norm, attention_mask)
@@ -501,14 +463,15 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation):
 
         return attn_mask
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
         pixel_values: Tensor,
-        mask_labels: Optional[list[Tensor]] = None,
-        class_labels: Optional[list[Tensor]] = None,
-        patch_offsets: Optional[list[Tensor]] = None,
+        mask_labels: list[Tensor] | None = None,
+        class_labels: list[Tensor] | None = None,
+        patch_offsets: list[Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> EomtForUniversalSegmentationOutput:
         r"""

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Intel Labs, OpenMMLab and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,6 @@ https://github.com/open-mmlab/mmsegmentation/blob/master/mmseg/models/decode_hea
 import collections.abc
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 from torch import nn
@@ -30,13 +28,14 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import load_backbone
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
-from ...utils.backbone_utils import load_backbone
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_dpt import DPTConfig
 
 
@@ -58,8 +57,8 @@ class BaseModelOutputWithIntermediateActivations(ModelOutput):
         Intermediate activations that can be used to compute hidden states of the model at various layers.
     """
 
-    last_hidden_states: Optional[torch.FloatTensor] = None
-    intermediate_activations: Optional[tuple[torch.FloatTensor, ...]] = None
+    last_hidden_states: torch.FloatTensor | None = None
+    intermediate_activations: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -80,11 +79,11 @@ class BaseModelOutputWithPoolingAndIntermediateActivations(ModelOutput):
         Intermediate activations that can be used to compute hidden states of the model at various layers.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    intermediate_activations: Optional[tuple[torch.FloatTensor, ...]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    pooler_output: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+    intermediate_activations: tuple[torch.FloatTensor, ...] | None = None
 
 
 class DPTViTHybridEmbeddings(nn.Module):
@@ -94,7 +93,7 @@ class DPTViTHybridEmbeddings(nn.Module):
     Transformer.
     """
 
-    def __init__(self, config: DPTConfig, feature_size: Optional[tuple[int, int]] = None):
+    def __init__(self, config: DPTConfig, feature_size: tuple[int, int] | None = None):
         super().__init__()
         image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
@@ -275,8 +274,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -287,7 +286,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -329,9 +327,9 @@ class DPTSelfAttention(nn.Module):
         value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
         query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         context_layer, attention_probs = attention_interface(
             self,
@@ -568,7 +566,7 @@ class DPTReassembleStage(nn.Module):
 
 
 def _get_backbone_hidden_size(config):
-    if config.backbone_config is not None and config.is_hybrid is False:
+    if config.backbone_config is not None and hasattr(config.backbone_config, "hidden_size"):
         return config.backbone_config.hidden_size
     else:
         return config.hidden_size
@@ -701,7 +699,7 @@ class DPTFeatureFusionLayer(nn.Module):
         self.residual_layer1 = DPTPreActResidualLayer(config)
         self.residual_layer2 = DPTPreActResidualLayer(config)
 
-    def forward(self, hidden_state: torch.Tensor, residual: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, hidden_state: torch.Tensor, residual: torch.Tensor | None = None) -> torch.Tensor:
         if residual is not None:
             if hidden_state.shape != residual.shape:
                 residual = nn.functional.interpolate(
@@ -771,12 +769,13 @@ class DPTModel(DPTPreTrainedModel):
         else:
             return self.embeddings.patch_embeddings
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPoolingAndIntermediateActivations:
         if output_hidden_states is None:
@@ -849,8 +848,8 @@ class DPTNeck(nn.Module):
     def forward(
         self,
         hidden_states: list[torch.Tensor],
-        patch_height: Optional[int] = None,
-        patch_width: Optional[int] = None,
+        patch_height: int | None = None,
+        patch_width: int | None = None,
     ) -> list[torch.Tensor]:
         """
         Args:
@@ -925,7 +924,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         super().__init__(config)
 
         self.backbone = None
-        if config.is_hybrid is False and (config.backbone_config is not None or config.backbone is not None):
+        if config.is_hybrid is False and config.backbone_config is not None:
             self.backbone = load_backbone(config)
         else:
             self.dpt = DPTModel(config, add_pooling_layer=False)
@@ -944,8 +943,8 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> DepthEstimatorOutput:
         r"""
@@ -958,10 +957,12 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("Intel/dpt-large")
         >>> model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large")
@@ -992,11 +993,12 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
+        kwargs["output_hidden_states"] = True
         if self.backbone is not None:
-            outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, output_hidden_states=True, **kwargs)
+            outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
             hidden_states = outputs.feature_maps
         else:
-            outputs = self.dpt(pixel_values, output_hidden_states=True, **kwargs)
+            outputs = self.dpt(pixel_values, **kwargs)
             hidden_states = outputs.hidden_states
             # only keep certain features based on config.backbone_out_indices
             # note that the hidden_states also include the initial embeddings
@@ -1092,9 +1094,9 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> SemanticSegmenterOutput:
         r"""
@@ -1106,10 +1108,12 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, DPTForSemanticSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("Intel/dpt-large-ade")
         >>> model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade")
@@ -1125,9 +1129,8 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
-        outputs: BaseModelOutputWithPoolingAndIntermediateActivations = self.dpt(
-            pixel_values, output_hidden_states=True, **kwargs
-        )
+        kwargs["output_hidden_states"] = True
+        outputs: BaseModelOutputWithPoolingAndIntermediateActivations = self.dpt(pixel_values, **kwargs)
         hidden_states = outputs.hidden_states
 
         # only keep certain features based on config.backbone_out_indices

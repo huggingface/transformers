@@ -124,7 +124,7 @@ class GenerationConfigTest(unittest.TestCase):
         """Tests that we can overwrite attributes at `from_pretrained` time."""
         default_config = GenerationConfig()
         self.assertEqual(default_config.temperature, None)
-        self.assertEqual(default_config.do_sample, False)
+        self.assertEqual(default_config.do_sample, None)
         self.assertEqual(default_config.num_beams, None)
 
         config = GenerationConfig(

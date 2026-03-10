@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020, The T5 Authors and HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,57 +14,22 @@
 """T5 model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="google-t5/t5-small")
 class T5Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`T5Model`]. It is used to
-    instantiate a T5 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the T5
-    [google-t5/t5-small](https://huggingface.co/google-t5/t5-small) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Arguments:
-        vocab_size (`int`, *optional*, defaults to 32128):
-            Vocabulary size of the T5 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`T5Model`].
-        d_model (`int`, *optional*, defaults to 512):
-            Size of the encoder layers and the pooler layer.
-        d_kv (`int`, *optional*, defaults to 64):
-            Size of the key, query, value projections per attention head. The `inner_dim` of the projection layer will
-            be defined as `num_heads * d_kv`.
-        d_ff (`int`, *optional*, defaults to 2048):
-            Size of the intermediate feed forward layer in each `T5Block`.
-        num_layers (`int`, *optional*, defaults to 6):
-            Number of hidden layers in the Transformer encoder.
-        num_decoder_layers (`int`, *optional*):
-            Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
-        num_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        relative_attention_num_buckets (`int`, *optional*, defaults to 32):
-            The number of buckets to use for each attention layer.
-        relative_attention_max_distance (`int`, *optional*, defaults to 128):
-            The maximum distance of the longer sequences for the bucket separation.
-        dropout_rate (`float`, *optional*, defaults to 0.1):
-            The ratio for all dropout layers.
-        classifier_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for classifier.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
-            The epsilon used by the layer normalization layers.
-        initializer_factor (`float`, *optional*, defaults to 1):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-        feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
-            Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. T5v1.1 uses the
-            `"gated-gelu"` feed forward projection. Original T5 uses `"relu"`.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
+    relative_attention_num_buckets (`int`, *optional*, defaults to 32):
+        The number of buckets to use for each attention layer.
+    relative_attention_max_distance (`int`, *optional*, defaults to 128):
+        The maximum distance of the longer sequences for the bucket separation.
+    feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
+        Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. T5v1.1 uses the
+        `"gated-gelu"` feed forward projection. Original T5 uses `"relu"`.
     """
 
     model_type = "t5"
@@ -97,8 +61,11 @@ class T5Config(PreTrainedConfig):
         pad_token_id=0,
         eos_token_id=1,
         classifier_dropout=0.0,
+        tie_word_embeddings=True,
+        is_decoder=False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
@@ -116,6 +83,8 @@ class T5Config(PreTrainedConfig):
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
 
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
@@ -136,14 +105,10 @@ class T5Config(PreTrainedConfig):
         # The model code was relying on saved configs where `tie_word_embeddings` is
         # set to `False` in 1.1v and using it as indicator of whether to scale or not
         # But in fact we tie weights always and force it to be `True`
-        self.scale_decoder_outputs = kwargs.get("tie_word_embeddings") is not False
-        kwargs["tie_word_embeddings"] = True
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+        self.scale_decoder_outputs = tie_word_embeddings is True
+        self.tie_word_embeddings = True
+
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["T5Config"]

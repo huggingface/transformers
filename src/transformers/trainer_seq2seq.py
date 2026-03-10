@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
 from torch import nn
-from torch.distributed.fsdp import FullyShardedDataParallel
 from torch.utils.data import Dataset
 
 from .generation.configuration_utils import GenerationConfig
@@ -29,6 +28,9 @@ from .integrations.fsdp import is_fsdp_managed_module
 from .trainer import Trainer
 from .utils import is_datasets_available, logging
 
+
+if torch.distributed.is_available():
+    from torch.distributed.fsdp import FullyShardedDataParallel
 
 if is_datasets_available():
     import datasets
@@ -319,7 +321,7 @@ class Seq2SeqTrainer(Trainer):
 
         summon_full_params_context = (
             FullyShardedDataParallel.summon_full_params(self.model)
-            if isinstance(self.model, FullyShardedDataParallel)
+            if torch.distributed.is_available() and isinstance(self.model, FullyShardedDataParallel)
             else contextlib.nullcontext()
         )
 
@@ -333,7 +335,7 @@ class Seq2SeqTrainer(Trainer):
             self.model.generation_config._from_model_config = False
 
         # Retrieves GenerationConfig from model.generation_config
-        # Update with defaults because earlier the generation config used ot be init
+        # Update with defaults because earlier the generation config used to be init
         # with default values. Now we init it with `None` and keep defaults for BC
         gen_config = self.model.generation_config
         default_gen_config = gen_config._get_default_generation_params()
@@ -378,7 +380,7 @@ class Seq2SeqTrainer(Trainer):
                 else self.processing_class.eos_token_id
             )
         else:
-            if self.model.config.pad_token_id is not None:
+            if getattr(self.model.config, "pad_token_id", None) is not None:
                 pad_token_id = self.model.config.pad_token_id
             else:
                 raise ValueError("Pad_token_id must be set in the configuration of the model, in order to pad tensors")

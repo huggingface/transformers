@@ -25,12 +25,24 @@
     title: 分享您的模型
   - local: llm_tutorial
     title: 使用LLMs进行生成
+  - local: generation_strategies
+    title: 生成策略
   title: 教程
 - sections:
   - isExpanded: false
     sections:
     - local: tasks/asr
       title: 自动语音识别
+    - local: tasks/sequence_classification
+      title: 文本分类
+    - local: tasks/token_classification
+      title: 词元分类
+    - local: tasks/question_answering
+      title: 问答
+    - local: tasks/translation
+      title: 翻译
+    - local: tasks/summarization
+      title: 摘要
 - sections:
   - local: fast_tokenizers
     title: 使用 🤗 Tokenizers 中的分词器

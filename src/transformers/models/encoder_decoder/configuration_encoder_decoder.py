@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -16,31 +15,16 @@
 
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="")
 class EncoderDecoderConfig(PreTrainedConfig):
     r"""
-    [`EncoderDecoderConfig`] is the configuration class to store the configuration of a [`EncoderDecoderModel`]. It is
-    used to instantiate an Encoder Decoder model according to the specified arguments, defining the encoder and decoder
-    configs.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        kwargs (*optional*):
-            Dictionary of keyword arguments. Notably:
-
-                - **encoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
-                  the encoder config.
-                - **decoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
-                  the decoder config.
-
     Examples:
 
     ```python
@@ -74,7 +58,12 @@ class EncoderDecoderConfig(PreTrainedConfig):
     sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
     has_no_defaults_at_init = True
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        pad_token_id=None,
+        decoder_start_token_id=None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         if "encoder" not in kwargs or "decoder" not in kwargs:
             raise ValueError(
@@ -89,6 +78,8 @@ class EncoderDecoderConfig(PreTrainedConfig):
         self.encoder = AutoConfig.for_model(encoder_model_type, **encoder_config)
         self.decoder = AutoConfig.for_model(decoder_model_type, **decoder_config)
         self.is_encoder_decoder = True
+        self.pad_token_id = pad_token_id
+        self.decoder_start_token_id = decoder_start_token_id
 
     @classmethod
     def from_encoder_decoder_configs(

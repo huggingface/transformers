@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 
 import torch
 
@@ -43,31 +41,15 @@ from ..sam2.modeling_sam2 import (
 from ..sam2.processing_sam2 import Sam2Processor
 
 
+@auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
 class Sam3TrackerPromptEncoderConfig(Sam2PromptEncoderConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Sam3TrackerPromptEncoder`]. The [`Sam3TrackerPromptEncoder`]
-    module is used to encode the input 2D points and bounding boxes.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the hidden states.
-        image_size (`int`, *optional*, defaults to 1008):
-            The expected output resolution of the image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        mask_input_channels (`int`, *optional*, defaults to 16):
-            The number of channels to be fed to the `MaskDecoder` module.
-        num_point_embeddings (`int`, *optional*, defaults to 4):
-            The number of point embeddings to be used.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the encoder and pooler.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        scale (`float`, *optional*, defaults to 1):
-            The scale factor for the prompt encoder.
+    mask_input_channels (`int`, *optional*, defaults to 16):
+        The number of channels to be fed to the `MaskDecoder` module.
+    num_point_embeddings (`int`, *optional*, defaults to 4):
+        The number of point embeddings to be used.
+    scale (`float`, *optional*, defaults to 1):
+        The scale factor for the prompt encoder.
     """
 
     base_config_key = "prompt_encoder_config"
@@ -87,15 +69,53 @@ class Sam3TrackerPromptEncoderConfig(Sam2PromptEncoderConfig):
         super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
 class Sam3TrackerProcessor(Sam2Processor):
     pass
 
 
+@auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
 class Sam3TrackerMaskDecoderConfig(Sam2MaskDecoderConfig):
     pass
 
 
+@auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
 class Sam3TrackerConfig(Sam2Config):
+    r"""
+    prompt_encoder_config (Union[`dict`, `Sam3TrackerPromptEncoderConfig`], *optional*):
+        Dictionary of configuration options used to initialize [`Sam3TrackerPromptEncoderConfig`].
+    mask_decoder_config (Union[`dict`, `Sam3TrackerMaskDecoderConfig`], *optional*):
+        Dictionary of configuration options used to initialize [`Sam3TrackerMaskDecoderConfig`].
+
+    Example:
+
+    ```python
+    >>> from transformers import (
+    ...     Sam3TrackerVisionConfig,
+    ...     Sam3TrackerPromptEncoderConfig,
+    ...     Sam3TrackerMaskDecoderConfig,
+    ...     Sam3TrackerModel,
+    ... )
+
+    >>> # Initializing a Sam3TrackerConfig with `"facebook/sam3_tracker.1_hiera_tiny"` style configuration
+    >>> configuration = Sam3TrackerConfig()
+
+    >>> # Initializing a Sam3TrackerModel (with random weights) from the `"facebook/sam3_tracker.1_hiera_tiny"` style configuration
+    >>> model = Sam3TrackerModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+
+    >>> # We can also initialize a Sam3TrackerConfig from a Sam3TrackerVisionConfig, Sam3TrackerPromptEncoderConfig, and Sam3TrackerMaskDecoderConfig
+    >>> # Initializing SAM3_TRACKER vision encoder, memory attention, and memory encoder configurations
+    >>> vision_config = Sam3TrackerVisionConfig()
+    >>> prompt_encoder_config = Sam3TrackerPromptEncoderConfig()
+    >>> mask_decoder_config = Sam3TrackerMaskDecoderConfig()
+
+    >>> config = Sam3TrackerConfig(vision_config, prompt_encoder_config, mask_decoder_config)
+    ```
+    """
+
     def __init__(
         self,
         vision_config=None,
