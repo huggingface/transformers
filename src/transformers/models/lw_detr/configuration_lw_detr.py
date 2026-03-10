@@ -179,7 +179,7 @@ class LwDetrConfig(PreTrainedConfig):
         batch_norm_eps=1e-5,
         # decoder
         d_model=256,
-        dropout=0.1,
+        dropout=0.0,
         decoder_ffn_dim=2048,
         decoder_n_points=4,
         decoder_layers: int = 3,

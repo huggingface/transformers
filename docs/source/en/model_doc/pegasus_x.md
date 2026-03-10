@@ -36,25 +36,6 @@ You can find all the original PEGASUS-X checkpoints under the [Google](https://h
 The example below demonstrates how to summarize text with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```py
-import torch
-from transformers import pipeline
-
-pipeline = pipeline(
-    task="summarization",
-    model="google/pegasus-x-large",
-    dtype=torch.bfloat16,
-    device=0
-)
-pipeline("""Plants are among the most remarkable and essential life forms on Earth, possessing a unique ability to produce their own food through a process known as photosynthesis. This complex biochemical process is fundamental not only to plant life but to virtually all life on the planet.
-Through photosynthesis, plants capture energy from sunlight using a green pigment called chlorophyll, which is located in specialized cell structures called chloroplasts. In the presence of light, plants absorb carbon dioxide from the atmosphere through small pores in their leaves called stomata, and take in water from the soil through their root systems.
-These ingredients are then transformed into glucose, a type of sugar that serves as a source of chemical energy, and oxygen, which is released as a byproduct into the atmosphere. The glucose produced during photosynthesis is not just used immediately; plants also store it as starch or convert it into other organic compounds like cellulose, which is essential for building their cellular structure.
-This energy reserve allows them to grow, develop leaves, produce flowers, bear fruit, and carry out various physiological processes throughout their lifecycle.""")
-```
-
-</hfoption>
 <hfoption id="AutoModel">
 
 ```py
@@ -78,13 +59,6 @@ input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
-
-</hfoption>
-<hfoption id="transformers">
-
-```bash
-echo -e "Plants are among the most remarkable and essential life forms on Earth, possessing a unique ability to produce their own food through a process known as photosynthesis. This complex biochemical process is fundamental not only to plant life but to virtually all life on the planet. Through photosynthesis, plants capture energy from sunlight using a green pigment called chlorophyll, which is located in specialized cell structures called chloroplasts." | transformers run --task summarization --model google/pegasus-x-large --device 0
 ```
 
 </hfoption>
