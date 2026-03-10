@@ -78,6 +78,26 @@ LLM_CFG_KEYS_TO_STRIP = {
     "model_max_length",
     "tokenizer_model_max_length",
     "tokenizer_padding_side",
+    "_name_or_path",
+    "transformers_version",
+}
+
+# Keys stripped from every component sub-config (vision tower, projectors, etc.).
+COMPONENT_CFG_KEYS_TO_STRIP = {
+    "_name_or_path",
+    "transformers_version",
+    "torch_dtype",
+}
+
+# Additional keys stripped from the sound tower config.  The source Qwen2AudioConfig
+# embeds a redundant nested ``audio_config`` (duplicate of top-level fields) and a
+# ``text_config`` for its unused text decoder.
+SOUND_TOWER_EXTRA_KEYS_TO_STRIP = {
+    "audio_config",
+    "text_config",
+    "vocab_size",
+    "audio_token_index",
+    "ignore_index",
 }
 
 # AudioVisualFlamingoConfig.__init__ explicit parameters that we extract from
@@ -226,10 +246,18 @@ def _build_config(src_root: Path, tokenizer) -> AudioVisualFlamingoConfig:
     if llm_cfg:
         llm_cfg = {k: v for k, v in llm_cfg.items() if k not in LLM_CFG_KEYS_TO_STRIP}
 
-    vision_tower_cfg = _read_component("vision_tower")
-    mm_projector_cfg = _read_component("mm_projector")
-    sound_tower_cfg = _read_component("sound_tower")
-    sound_mm_projector_cfg = _read_component("sound_mm_projector")
+    def _clean_component(cfg, extra_strip=None):
+        if cfg is None:
+            return None
+        cfg = {k: v for k, v in cfg.items() if k not in COMPONENT_CFG_KEYS_TO_STRIP}
+        if extra_strip:
+            cfg = {k: v for k, v in cfg.items() if k not in extra_strip}
+        return cfg
+
+    vision_tower_cfg = _clean_component(_read_component("vision_tower"))
+    mm_projector_cfg = _clean_component(_read_component("mm_projector"))
+    sound_tower_cfg = _clean_component(_read_component("sound_tower"), extra_strip=SOUND_TOWER_EXTRA_KEYS_TO_STRIP)
+    sound_mm_projector_cfg = _clean_component(_read_component("sound_mm_projector"))
 
     # Extract only the fields AudioVisualFlamingoConfig cares about.
     avf_kwargs = {k: top_cfg[k] for k in AVF_CONFIG_FIELDS if k in top_cfg}

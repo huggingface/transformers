@@ -59,7 +59,6 @@ class AudioVisualFlamingoConfig(PretrainedConfig):
         sound_tower_cfg=None,
         sound_mm_projector_cfg=None,
         architectures=None,
-        resume_path=None,
         hidden_size=None,
         mm_hidden_size=None,
         image_aspect_ratio=None,
@@ -69,8 +68,6 @@ class AudioVisualFlamingoConfig(PretrainedConfig):
         mm_vision_select_feature=None,
         mm_use_im_start_end=False,
         mm_use_im_patch_token=False,
-        mm_projector_lr=None,
-        vision_tower_lr=None,
         vision_resolution=None,
         interpolate_mode=None,
         s2=None,
@@ -95,11 +92,9 @@ class AudioVisualFlamingoConfig(PretrainedConfig):
         mm_bos_eos_tokens=None,
         **kwargs,
     ):
-        text_config = kwargs.pop("text_config", None)
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "qwen2")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        self.text_config = text_config
+        # text_config is derived from llm_cfg at runtime (via post_config / get_text_config)
+        # so we pop it to avoid serialising a near-duplicate of llm_cfg in config.json.
+        kwargs.pop("text_config", None)
 
         self.architectures = architectures
         self.llm_cfg = llm_cfg
@@ -107,7 +102,6 @@ class AudioVisualFlamingoConfig(PretrainedConfig):
         self.mm_projector_cfg = mm_projector_cfg
         self.sound_tower_cfg = sound_tower_cfg
         self.sound_mm_projector_cfg = sound_mm_projector_cfg
-        self.resume_path = resume_path
 
         self.hidden_size = hidden_size
         self.mm_hidden_size = mm_hidden_size
@@ -118,8 +112,6 @@ class AudioVisualFlamingoConfig(PretrainedConfig):
         self.mm_vision_select_feature = mm_vision_select_feature
         self.mm_use_im_start_end = mm_use_im_start_end
         self.mm_use_im_patch_token = mm_use_im_patch_token
-        self.mm_projector_lr = mm_projector_lr
-        self.vision_tower_lr = vision_tower_lr
         self.vision_resolution = vision_resolution
         self.interpolate_mode = interpolate_mode
         self.s2 = s2
@@ -152,6 +144,26 @@ class AudioVisualFlamingoConfig(PretrainedConfig):
         self.mm_bos_eos_tokens = deepcopy(MM_BOS_EOS_TOKENS if mm_bos_eos_tokens is None else mm_bos_eos_tokens)
 
         super().__init__(**kwargs)
+
+    def get_text_config(self, decoder=None, encoder=None):
+        # At runtime post_config() sets text_config from the instantiated LLM.
+        # Before that (or during deserialization) fall back to llm_cfg.
+        if hasattr(self, "text_config") and self.text_config is not None:
+            return self.text_config
+        if isinstance(self.llm_cfg, PretrainedConfig):
+            return self.llm_cfg
+        if isinstance(self.llm_cfg, dict):
+            model_type = self.llm_cfg.get("model_type", "qwen2")
+            if model_type in CONFIG_MAPPING:
+                cfg_cls = CONFIG_MAPPING[model_type]
+                return cfg_cls(**{k: v for k, v in self.llm_cfg.items() if k != "model_type"})
+        return self
+
+    def to_dict(self):
+        output = super().to_dict()
+        # text_config is always derivable from llm_cfg; exclude to avoid duplication.
+        output.pop("text_config", None)
+        return output
 
 
 __all__ = [
