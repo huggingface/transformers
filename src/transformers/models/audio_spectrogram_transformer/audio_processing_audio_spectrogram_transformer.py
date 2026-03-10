@@ -22,7 +22,6 @@ from ...feature_extraction_utils import BatchFeature
 class AudioSpectrogramTransformerAudioProcessor(NumpyAudioBackend):
     sample_rate = 16000
     force_mono = True
-    do_extract_spectrogram = True
 
     max_length_frames = 1024
     do_normalize = True
@@ -54,8 +53,9 @@ class AudioSpectrogramTransformerAudioProcessor(NumpyAudioBackend):
         mel_floor=1.192092955078125e-07,
     )
 
-    def extract_spectrogram(self, audio, **kwargs):
-        features = super().extract_spectrogram(audio, **kwargs)
+    def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
+        # Compute spectrogram per-sample (no audio padding beforehand)
+        features = self.extract_spectrogram(audio, spectrogram_config=self.spectrogram_config)
 
         # (n_mels, frames) -> (frames, n_mels)
         features = [f.T for f in features]
@@ -72,13 +72,11 @@ class AudioSpectrogramTransformerAudioProcessor(NumpyAudioBackend):
             padded.append(fbank)
 
         # Normalize with AudioSet stats
-        return [(f - self.ast_mean) / (self.ast_std * 2) for f in padded]
+        if self.do_normalize:
+            padded = [(f - self.ast_mean) / (self.ast_std * 2) for f in padded]
 
-    def _preprocess(self, audio, **kwargs):
-        output = super()._preprocess(audio, **kwargs)
-        # TODO: it is wrongly named input_values in the original feature extractor
-        return BatchFeature({"audio_values": output["audio_features"]})
-
+        stacked = np.stack(padded, axis=0)
+        return BatchFeature({"audio_values": stacked}, tensor_type=return_tensors)
 
 
 __all__ = ["AudioSpectrogramTransformerAudioProcessor"]

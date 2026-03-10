@@ -17,7 +17,7 @@
 import numpy as np
 
 from .audio_processing_utils import BaseAudioProcessor
-from .audio_utils import SpectrogramConfig, mel_filter_bank
+from .audio_utils import SpectrogramConfig, amplitude_to_db, mel_filter_bank, power_to_db
 from .feature_extraction_utils import BatchFeature
 from .utils import PaddingStrategy, TensorType, is_torch_available, is_torch_tensor, logging, to_numpy
 
@@ -115,7 +115,7 @@ class NumpyAudioBackend(BaseAudioProcessor):
                 remove_dc_offset=spectrogram_config.remove_dc_offset,
                 mel_filters=None,
                 mel_floor=spectrogram_config.mel_floor,
-                log_mel=spectrogram_config.log_mode if spectrogram_config.log_mode != "log10" else "log10",
+                log_mel=None,
             )
             features.append(spec)
 
@@ -137,6 +137,47 @@ class NumpyAudioBackend(BaseAudioProcessor):
 
         mel_filters = self.mel_filters
         return [mel_filters.T @ spec for spec in features]
+
+    def _normalize_magnitude(
+        self,
+        features: list[np.ndarray],
+        *,
+        spectrogram_config: SpectrogramConfig,
+        reference: float = 1.0,
+        min_value: float = 1e-10,
+        db_range: float | None = None,
+        dtype: np.dtype = np.float32,
+        **kwargs,
+    ) -> list[np.ndarray]:
+        """Apply magnitude normalization (log, log10, or dB scaling) to spectrogram features.
+
+        Mirrors the normalization logic in `audio_utils.spectrogram()`.
+        """
+        log_mel = spectrogram_config.log_mode
+        mel_floor = spectrogram_config.mel_floor
+        power = spectrogram_config.stft_config.power
+
+        if log_mel is None:
+            return features
+
+        # Clamp to mel_floor before taking log
+        result = [np.maximum(mel_floor, spec) for spec in features]
+
+        if log_mel == "log":
+            result = [np.log(spec).astype(dtype) for spec in result]
+        elif log_mel == "log10":
+            result = [np.log10(spec).astype(dtype) for spec in result]
+        elif log_mel == "dB":
+            if power == 1.0:
+                result = [amplitude_to_db(spec, reference, min_value, db_range).astype(dtype) for spec in result]
+            elif power == 2.0:
+                result = [power_to_db(spec, reference, min_value, db_range).astype(dtype) for spec in result]
+            else:
+                raise ValueError(f"Cannot use log_mel option 'dB' with power {power}")
+        else:
+            raise ValueError(f"Unknown log_mel option: {log_mel}")
+
+        return result
 
     def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):
         stft_cfg = spectrogram_config.stft_config
@@ -252,9 +293,10 @@ class TorchAudioBackend(BaseAudioProcessor):
 
         if spectrogram_config.preemphasis is not None:
             audio_ranges = kwargs.get("audio_ranges", None)
-            timemask = torch.arange(waveform.shape[1], device=device).unsqueeze(0)
-            timemask = timemask < audio_ranges.unsqueeze(1)
-            waveform = waveform.masked_fill(~timemask, 0.0)
+            if audio_ranges is not None:
+                timemask = torch.arange(waveform.shape[1], device=device).unsqueeze(0)
+                timemask = timemask < audio_ranges.unsqueeze(1)
+                waveform = waveform.masked_fill(~timemask, 0.0)
 
         window_fn = getattr(torch, stft_cfg.window_fn, torch.hann_window)
         window = window_fn(win_length, periodic=stft_cfg.periodic, device=device)
@@ -294,6 +336,65 @@ class TorchAudioBackend(BaseAudioProcessor):
         device = features[0].device
         mel_filters = torch.from_numpy(self.mel_filters).to(device, torch.float32)
         return [mel_filters.T @ spec for spec in features]
+
+    def _normalize_magnitude(
+        self,
+        features: list["torch.Tensor"],
+        *,
+        spectrogram_config: SpectrogramConfig,
+        reference: float = 1.0,
+        min_value: float = 1e-10,
+        db_range: float | None = None,
+        dtype: "torch.dtype | None" = None,
+        **kwargs,
+    ) -> list["torch.Tensor"]:
+        """Apply magnitude normalization (log, log10, or dB scaling) to spectrogram features.
+
+        Mirrors the normalization logic in `audio_utils.spectrogram()`.
+        """
+        import torch
+
+        log_mel = spectrogram_config.log_mode
+        mel_floor = spectrogram_config.mel_floor
+        power = spectrogram_config.stft_config.power
+
+        if dtype is None:
+            dtype = torch.float32
+
+        if log_mel is None:
+            return features
+
+        # Clamp to mel_floor before taking log
+        result = [torch.clamp(spec, min=mel_floor) for spec in features]
+
+        if log_mel == "log":
+            result = [torch.log(spec).to(dtype) for spec in result]
+        elif log_mel == "log10":
+            result = [torch.log10(spec).to(dtype) for spec in result]
+        elif log_mel == "dB":
+            if reference <= 0.0:
+                raise ValueError("reference must be greater than zero")
+            if min_value <= 0.0:
+                raise ValueError("min_value must be greater than zero")
+            reference = max(min_value, reference)
+            multiplier = 10.0 if power == 2.0 else 20.0 if power == 1.0 else None
+            if multiplier is None:
+                raise ValueError(f"Cannot use log_mel option 'dB' with power {power}")
+            log_ref = np.log10(reference)
+            processed = []
+            for spec in result:
+                spec = torch.clamp(spec, min=min_value)
+                spec = multiplier * (torch.log10(spec) - log_ref)
+                if db_range is not None:
+                    if db_range <= 0.0:
+                        raise ValueError("db_range must be greater than zero")
+                    spec = torch.clamp(spec, min=spec.max() - db_range)
+                processed.append(spec.to(dtype))
+            result = processed
+        else:
+            raise ValueError(f"Unknown log_mel option: {log_mel}")
+
+        return result
 
     def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):
         stft_cfg = spectrogram_config.stft_config

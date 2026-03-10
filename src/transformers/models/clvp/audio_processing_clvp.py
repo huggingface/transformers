@@ -72,7 +72,7 @@ class ClvpAudioProcessor(NumpyAudioBackend):
             pad_length = max(a.shape[-1] for a in audio)
         else:
             pad_length = max_length
-        audio = self.pad_values(audio, max_length=pad_length, truncation=False, pad_to_multiple_of=pad_to_multiple_of)
+        audio = self.pad(audio, padding=True, max_length=pad_length)
 
         # Extract spectrogram via config-based API (with mel_norms applied)
         features = self.extract_spectrogram(audio, spectrogram_config=self.spectrogram_config)
@@ -80,7 +80,7 @@ class ClvpAudioProcessor(NumpyAudioBackend):
         # Cast to float32 to match the legacy FeatureExtractor
         features = [f.astype(np.float32) for f in features]
 
-        output_key = self.model_input_names[0]
+        output_key = "audio_features"
         stacked = np.stack(features, axis=0)
         return BatchFeature(data={output_key: stacked}, tensor_type=return_tensors)
 

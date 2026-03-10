@@ -29,7 +29,7 @@ class ClapAudioProcessor(NumpyAudioBackend):
     f_min = 0
     f_max = 14000
     max_length_s = 10
-    truncation_mode = "fusion"  # "fusion" or "rand_trunc"
+    truncation_mode = "rand_trunc"  # "fusion" or "rand_trunc"
     padding_mode = "repeatpad"  # "repeatpad", "repeat", or "pad"
 
     def __init__(self, **kwargs):
@@ -150,7 +150,7 @@ class ClapAudioProcessor(NumpyAudioBackend):
 
         is_longer = [[longer] for longer in is_longer]
 
-        input_features = {"input_features": input_mel, "is_longer": is_longer}
+        input_features = {"audio_features": input_mel, "is_longer": is_longer}
         input_features = BatchFeature(input_features)
 
         if return_tensors is not None:

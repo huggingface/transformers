@@ -12,33 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import torch
+
 from ...audio_processing_backends import TorchAudioBackend
+from ...feature_extraction_utils import BatchFeature
 
 
 class VibevoiceAcousticTokenizerAudioProcessor(TorchAudioBackend):
     sample_rate = 24000
     force_mono = True
     add_channel_dim = True
-    do_values_normalize = True
-    normalize_before_pad = True
+    
+    target_dB_FS = -25
+    eps = 1e-6
 
-    def __init__(self, target_dB_FS=-25, eps=1e-6, **kwargs):
-        self.target_dB_FS = target_dB_FS
-        self.eps = eps
-        super().__init__(**kwargs)
-
-    def values_normalize(self, audio):
-        import torch
-
-        normalized = []
-        for a in audio:
-            rms = torch.sqrt(torch.mean(a**2))
-            a = a * (10 ** (self.target_dB_FS / 20) / (rms + self.eps))
-            max_val = torch.max(torch.abs(a))
-            if max_val > 1.0:
-                a = a / (max_val + self.eps)
-            normalized.append(a)
-        return normalized
+    def _process_audio(self, audio_el):
+        audio_el = super()._process_audio(audio_el)
+        rms = torch.sqrt(torch.mean(audio_el**2))
+        audio_el = audio_el * (10 ** (self.target_dB_FS / 20) / (rms + self.eps))
+        max_val = torch.max(torch.abs(audio_el))
+        if max_val > 1.0:
+            audio_el = audio_el / (max_val + self.eps)
+        return audio_el
 
 
 __all__ = ["VibevoiceAcousticTokenizerAudioProcessor"]
