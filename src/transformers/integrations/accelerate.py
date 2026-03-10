@@ -43,7 +43,7 @@ if is_torch_available():
 
 if is_accelerate_available():
     from accelerate import dispatch_model
-    from accelerate.utils import get_max_memory
+    from accelerate.utils import get_max_memory as accelerate_max_memory
     from accelerate.utils.modeling import clean_device_map, get_max_layer_size
 
 if TYPE_CHECKING:
@@ -194,6 +194,30 @@ def compute_module_total_buffer_size(model: nn.Module, hf_quantizer: "HfQuantize
     """
     module_sizes, _ = compute_module_sizes(model, hf_quantizer, buffers_only=True)
     return module_sizes.get("", 0)
+
+
+def get_max_memory(max_memory: dict[int | str, int | str] | None = None):
+    """
+    Get the maximum memory available if nothing is passed, converts string to int otherwise.
+    Note: we need to overwrite this as accelerate does not take into account torch allocated but unused device memory...
+    """
+    # Get the max memory (it only uses free gpu memory, not torch allocated but free memory...)
+    final_max_memory = accelerate_max_memory(max_memory)
+
+    # Adjust for allocated but free memory
+    for device_name in max_memory:
+        if isinstance(device_name, int):  # it's a GPU device
+            if is_torch_xpu_available():
+                unused_memory = torch.xpu.memory_reserved(device_name) - torch.xpu.memory_allocated(device_name)
+            else:
+                unused_memory = torch.cuda.memory_reserved(device_name) - torch.cuda.memory_allocated(device_name)
+            # Add the pre-allocated but unused device memory
+            final_max_memory[device_name] += unused_memory
+        # Still respect the `max_memory` passed by the user if any
+        if max_memory is not None and device_name in max_memory:
+            final_max_memory[device_name] = min(max_memory[device_name], final_max_memory[device_name])
+
+    return final_max_memory
 
 
 def get_balanced_memory(
