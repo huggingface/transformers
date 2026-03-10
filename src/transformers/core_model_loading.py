@@ -18,6 +18,7 @@ from __future__ import annotations
 import math
 import os
 import re
+import threading
 import traceback
 from abc import abstractmethod
 from collections import defaultdict
@@ -528,6 +529,7 @@ class WeightTransform:
 
     distributed_operation: TensorParallelLayer | None = None
     quantization_operation: ConversionOps | None = None
+    _gpu_semaphore: threading.Semaphore | None = None
 
     collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
     layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
@@ -655,6 +657,10 @@ class WeightTransform:
             # Sync loading
             elif callable(tensors[0]):
                 tensors = [func() for func in tensors]
+            # Release the semaphore slots so worker threads can load more tensors to GPU.
+            if self._gpu_semaphore is not None:
+                for _ in tensors:
+                    self._gpu_semaphore.release()
             # Add them to the new dictionary
             collected_tensors[key] = tensors
 
@@ -791,12 +797,18 @@ def _materialize_copy(tensor: torch.Tensor, device=None, dtype=None) -> torch.Te
 
 
 def spawn_materialize(
-    thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, device=None, dtype=None
+    thread_pool: ThreadPoolExecutor | None,
+    tensor: torch.Tensor,
+    device=None,
+    dtype=None,
+    semaphore: threading.Semaphore | None = None,
 ) -> Future | Callable:
     """Materialize a tensor from file asynchronously if `thread_pool` is provided, or return a Callable that will
     load the tensor synchronously when called."""
 
     def _job():
+        if semaphore is not None:
+            semaphore.acquire()
         return _materialize_copy(tensor, device, dtype)
 
     if thread_pool is not None:
@@ -1116,6 +1128,13 @@ def convert_and_load_state_dict_in_model(
     else:
         thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
 
+    # When doing on-the-fly quantization with async loading, use a semaphore to limit how many
+    # full-precision tensors can be on GPU at once. Without this, worker threads load tensors to
+    # GPU faster than the main thread can quantize them, causing a large spike in reserved memory.
+    gpu_semaphore = None
+    if thread_pool is not None and hf_quantizer is not None and not hf_quantizer.pre_quantized:
+        gpu_semaphore = threading.Semaphore(GLOBAL_WORKERS)
+
     renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
     param_name_to_load: dict[str, WeightRenaming | WeightConverter] = {}
@@ -1153,12 +1172,14 @@ def convert_and_load_state_dict_in_model(
                 source_pattern = original_key
 
             # 3. Handle dtype casting
-            if (
+            needs_quantization = (
                 hf_quantizer
                 and not hf_quantizer.pre_quantized
                 and hf_quantizer.param_needs_quantization(model, renamed_key)
-            ):
+            )
+            if needs_quantization:
                 mapping.quantization_operation = hf_quantizer.get_quantize_ops()
+                mapping._gpu_semaphore = gpu_semaphore
 
             _dtype = dtype
             if (
@@ -1203,7 +1224,8 @@ def convert_and_load_state_dict_in_model(
 
             if future_or_tensor is None:
                 param_device = get_device(device_map, renamed_key, valid_torch_device=True)
-                future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
+                _semaphore = gpu_semaphore if needs_quantization else None
+                future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype, _semaphore)
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
         elif source_pattern is not None:  # add all target keys as unexpected
