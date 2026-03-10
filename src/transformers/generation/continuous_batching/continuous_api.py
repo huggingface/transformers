@@ -87,17 +87,13 @@ class ContinuousBatchProcessor:
         cache: PagedAttentionCache,
         config: PretrainedConfig,
         generation_config: GenerationConfig,
+        continuous_batching_config: ContinuousBatchingConfig,
         input_queue: queue.Queue,
         output_queue: queue.Queue,
         stop_event: threading.Event,
         model_device: torch.device,
         model_dtype: torch.dtype,
         scheduler: Scheduler,
-        use_cuda_graph: bool,
-        q_padding_interval_size: int,
-        kv_padding_interval_size: int,
-        max_cached_graphs: int,
-        use_async_batching: bool,
     ) -> None:
         """Initialize the continuous batch processor.
 
@@ -111,15 +107,11 @@ class ContinuousBatchProcessor:
             model_device: Device for model inputs/outputs
             model_dtype: Data type for model inputs/outputs
             scheduler: The [`Scheduler`] to use
-            use_cuda_graph: Whether to use cuda graphs or not during CB. Check the docstring at the top of the file for
-                more details.
-            q_padding_interval_size: Padding granularity for queries in tokens.
-            kv_padding_interval_size: Padding granularity for KV cache in tokens.
-            max_cached_graphs: Maximum number of CUDA graphs to cache. Uses LRU eviction when full.
         """
         self.cache = cache
         self.config = config
         self.generation_config = generation_config
+        self.cb_config = continuous_batching_config
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.stop_event = stop_event
@@ -130,14 +122,14 @@ class ContinuousBatchProcessor:
         # Retrieve the size of the sliding window if there is one
         self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
         # Cuda graphs for the generation step
-        self.q_padding_interval_size = q_padding_interval_size
-        self.kv_padding_interval_size = kv_padding_interval_size
-        self.max_cached_graphs = max_cached_graphs
-        self.use_cuda_graph = use_cuda_graph
+        self.q_padding_interval_size = self.cb_config.q_padding_interval_size
+        self.kv_padding_interval_size = self.cb_config.kv_padding_interval_size
+        self.max_cached_graphs = self.cb_config.max_cached_graphs
+        self.use_cuda_graph = self.cb_config.use_cuda_graph
         # Compile-related arguments
         self.compile_config: CompileConfig | None = getattr(generation_config, "compile_config", None)
 
-        self._pad_inputs = use_cuda_graph or (self.compile_config is not None and not self.compile_config.dynamic)
+        self._pad_inputs = self.use_cuda_graph or (self.compile_config is not None and not self.compile_config.dynamic)
 
         # Set up metrics collector
         self.max_batch_tokens = cache.max_batch_tokens
@@ -145,25 +137,23 @@ class ContinuousBatchProcessor:
 
         # If the user turned on the decode fast path (ie. using a block table), check if it is available
         self._ensure_decode_fast_path_is_available()  # this needs to happen before self.inputs_and_outputs is created
-        # If block table is available and compile is on, compile the static wrapper around the block table path.
-        # When max_blocks_per_request <= 0, the block table path is never used, so no compilation is needed.
-        if self.cache.max_blocks_per_request > 0 and self.compile_config is not None:
+
+        # Now resolve the behavior of compile
+        self.compile_config = self.cb_config.process_compile_config(
+            compile_config=self.compile_config, decode_fast_path_available=self.cache.max_blocks_per_request > 0
+        )
+        if self.compile_config is not None:
             self._compiled_static_forward = torch.compile(
-                self._forward_static_wrapper,
-                fullgraph=False,  # flash_attn_with_kvcache cannot be traced, so fullgraph needs to be False
-                mode=self.compile_config.mode,
-                dynamic=False,
-                backend=self.compile_config.backend,
-                options=self.compile_config.options,
+                self._forward_process_and_sample, **self.compile_config.to_dict()
             )
         else:
             self._compiled_static_forward = None
 
         # Setup inputs and outputs
-        self.use_async_batching = use_async_batching
+        self.use_async_batching = self.cb_config.use_async_batching
         if self.use_async_batching:
             # Since in async there are 2 IO pairs, there are also 2 graph buffers: we divide the max_cached_graphs by 2
-            max_cached_graphs = ceil(max_cached_graphs / 2)
+            max_cached_graphs = ceil(self.max_cached_graphs / 2)
             self.inputs_and_outputs = ContinuousBatchingAsyncIOs(
                 cache, config, model_device, model_dtype, max_cached_graphs
             )
@@ -198,7 +188,6 @@ class ContinuousBatchProcessor:
                     self.cache.num_sliding_attention_groups == 0,  # TODO: add support for sliding window layers
                     torch.cuda.is_available(),  # Block table is only supported on CUDA
                     flash_attn_with_kvcache is not None,  # The `flash_attn_with_kvcache` fn is needed
-                    # self.compile_config is None,  # TODO: add support for the decode fast path with compile
                 ]
                 if not all(conditions):
                     logger.warning(
@@ -438,8 +427,12 @@ class ContinuousBatchProcessor:
         carry_over_ids, prev_output_ids, output_ids = self.inputs_and_outputs.get_cb_kwargs()
         compute_stream = self.inputs_and_outputs.compute_stream
 
-        # Get the appropriate forward function (compiled or not, based on block table usage)
-        if self.inputs_and_outputs.use_block_table and self._compiled_static_forward is not None:
+        # Get the appropriate forward function (compiled or not, based on config)
+        if self._compiled_static_forward is None:
+            forward_fn = self._forward_process_and_sample
+        elif self.inputs_and_outputs.use_block_table and self.cb_config.compile_decode_fast_path:
+            forward_fn = self._compiled_static_forward
+        elif not self.inputs_and_outputs.use_block_table and self.cb_config.compile_varlen_path:
             forward_fn = self._compiled_static_forward
         else:
             forward_fn = self._forward_process_and_sample
@@ -834,17 +827,13 @@ class ContinuousBatchingManager:
                 cache=paged_attention_cache,
                 config=self.model.config,
                 generation_config=self.generation_config,
+                continuous_batching_config=self.cb_config,
                 input_queue=self.input_queue,
                 output_queue=self.output_queue,
                 stop_event=self.stop_event,
                 model_device=self.model.device,
                 model_dtype=self.model.dtype,
                 scheduler=scheduler(paged_attention_cache),
-                use_cuda_graph=self.use_cuda_graph,
-                q_padding_interval_size=self.q_padding_interval_size,
-                kv_padding_interval_size=self.kv_padding_interval_size,
-                max_cached_graphs=self.max_cached_graphs,
-                use_async_batching=self.use_async_batching,
             )
             self.batch_processor = batch_processor
             self.current_batch = 0
