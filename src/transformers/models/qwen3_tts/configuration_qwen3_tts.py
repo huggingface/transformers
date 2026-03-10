@@ -15,7 +15,7 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..mimi.configuration_mimi import MimiConfig
 
 
@@ -364,6 +364,7 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
         self.spk_is_dialect = spk_is_dialect
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-TTS-12Hz-0.6B-Base")
 class Qwen3TTSConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3TTSForConditionalGeneration`].
