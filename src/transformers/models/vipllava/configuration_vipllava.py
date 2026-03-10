@@ -13,41 +13,20 @@
 """VipLlava model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="llava-hf/vip-llava-7b-hf")
 class VipLlavaConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VipLlavaForConditionalGeneration`]. It is used to instantiate an
-    VipLlava model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the VipLlava-9B.
-
-    e.g. [ybelkada/vip-llava-7b-hf](https://huggingface.co/ybelkada/vip-llava-7b-hf)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vision_config (`VipLlavaVisionConfig`,  *optional*):
-            Custom vision config or dict
-        text_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
-        image_token_index (`int`, *optional*, defaults to 32000):
-            The image token index to encode the image prompt.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
-        projector_layernorm_eps (`float`, *optional*, defaults to 1e-05):
-            The layer norm epsilon of the projector layernorm
-        vision_feature_layers (`Union[int, list[int]]`, *optional*, defaults to `[-2, -5, -8, -11, 6]`):
-            The vision feature layer, or list of layers to select the vision features from.
-        image_seq_length (`int`, *optional*, defaults to 576):
-            Sequence length of one image embedding.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
+    projector_layernorm_eps (`float`, *optional*, defaults to 1e-05):
+        The layer norm epsilon of the projector layernorm
+    vision_feature_layers (`Union[int, list[int]]`, *optional*, defaults to `[-2, -5, -8, -11, 6]`):
+        The vision feature layer, or list of layers to select the vision features from.
 
     Example:
 

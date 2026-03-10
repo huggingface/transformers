@@ -95,13 +95,6 @@ print(tokenizer.decode(generated_tokens, skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e '{"role": "user", "content": "What is the capital of France?"}' | transformers run --task text-generation --model karpathy/nanochat-d32 --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 ## NanoChatConfig

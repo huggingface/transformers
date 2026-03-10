@@ -51,31 +51,15 @@ from ..sam2_video.modeling_sam2_video import (
 from ..sam2_video.processing_sam2_video import Sam2VideoProcessor
 
 
+@auto_docstring(checkpoint="facebook/sam3")
 class Sam3TrackerVideoPromptEncoderConfig(Sam2VideoPromptEncoderConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Sam3TrackerVideoPromptEncoder`]. The [`Sam3TrackerVideoPromptEncoder`]
-    module is used to encode the input 2D points and bounding boxes.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the hidden states.
-        image_size (`int`, *optional*, defaults to 1008):
-            The expected output resolution of the image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        mask_input_channels (`int`, *optional*, defaults to 16):
-            The number of channels to be fed to the `MaskDecoder` module.
-        num_point_embeddings (`int`, *optional*, defaults to 4):
-            The number of point embeddings to be used.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the encoder and pooler.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        scale (`float`, *optional*, defaults to 1):
-            The scale factor for the prompt encoder.
+    mask_input_channels (`int`, *optional*, defaults to 16):
+        The number of channels to be fed to the `MaskDecoder` module.
+    num_point_embeddings (`int`, *optional*, defaults to 4):
+        The number of point embeddings to be used.
+    scale (`float`, *optional*, defaults to 1):
+        The scale factor for the prompt encoder.
     """
 
     base_config_key = "prompt_encoder_config"
@@ -95,109 +79,97 @@ class Sam3TrackerVideoPromptEncoderConfig(Sam2VideoPromptEncoderConfig):
         super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="facebook/sam3")
 class Sam3TrackerVideoProcessor(Sam2VideoProcessor):
     pass
 
 
+@auto_docstring(checkpoint="facebook/sam3")
 class Sam3TrackerVideoMaskDecoderConfig(Sam2VideoMaskDecoderConfig):
     pass
 
 
+@auto_docstring(checkpoint="facebook/sam3")
 class Sam3TrackerVideoConfig(PreTrainedConfig):
     r"""
-    [`Sam3TrackerVideoConfig`] is the configuration class to store the configuration of a [`Sam3TrackerVideoModel`]. It is used to instantiate a
-    SAM3 tracker video model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
-    configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 3
-    [facebook/sam3](https://huggingface.co/facebook/sam3) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vision_config (Union[`dict`, `Sam3TrackerVideoVisionConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`Sam3TrackerVideoVisionConfig`].
-        prompt_encoder_config (Union[`dict`, `Sam3TrackerVideoPromptEncoderConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`Sam3TrackerVideoPromptEncoderConfig`].
-        mask_decoder_config (Union[`dict`, `Sam3TrackerVideoMaskDecoderConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`Sam3TrackerVideoMaskDecoderConfig`].
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            Standard deviation for parameter initialization.
-        num_maskmem (`int`, *optional*, defaults to 7):
-            The number of memory slots for the mask memory.
-        image_size (`int`, *optional*, defaults to 1008):
-            The size of the input images.
-        sigmoid_scale_for_mem_enc (`float`, *optional*, defaults to 20.0):
-            Scale factor for the sigmoid function in the memory encoder.
-        sigmoid_bias_for_mem_enc (`float`, *optional*, defaults to -10.0):
-            Bias for the sigmoid function in the memory encoder.
-        enable_occlusion_spatial_embedding (`bool`, *optional*, defaults to `True`):
-            Whether to enable spatial embedding for occlusions.
-        multimask_output_in_sam (`bool`, *optional*, defaults to `True`):
-            Whether to output multiple masks from the SAM head.
-        multimask_min_pt_num (`int`, *optional*, defaults to 0):
-            The minimum number of points to trigger multimask output.
-        multimask_max_pt_num (`int`, *optional*, defaults to 1):
-            The maximum number of points to trigger multimask output.
-        multimask_output_for_tracking (`bool`, *optional*, defaults to `True`):
-            Whether to use multimask output for tracking.
-        max_object_pointers_in_encoder (`int`, *optional*, defaults to 16):
-            The maximum number of object pointers in the encoder.
-        max_cond_frame_num (`int`, *optional*, defaults to 4):
-            Maximum number of conditioning frames to use in memory attention.
-        enable_temporal_pos_encoding_for_object_pointers (`bool`, *optional*, defaults to `True`):
-            Whether to enable temporal positional encoding for object pointers.
-        memory_attention_hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the memory attention hidden states.
-        memory_attention_num_layers (`int`, *optional*, defaults to 4):
-            The number of layers in the memory attention module.
-        memory_attention_num_attention_heads (`int`, *optional*, defaults to 1):
-            Number of attention heads for each attention layer in the memory attention.
-        memory_attention_downsample_rate (`int`, *optional*, defaults to 1):
-            The downsample rate for the attention layers.
-        memory_attention_feed_forward_hidden_size (`int`, *optional*, defaults to 2048):
-            The dimension of the feedforward network in the memory attention module.
-        memory_attention_feed_forward_hidden_act (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function in the feedforward network in the memory attention module.
-        memory_attention_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout rate for the memory attention module.
-        memory_attention_rope_theta (`float`, *optional*, defaults to 10000):
-            The Rope theta parameter.
-        memory_attention_rope_feat_sizes (`list[int]`, *optional*, defaults to `[72, 72]`):
-            The feature sizes for the Rope positional encoding.
-        memory_attention_rope_dropout (`float`, *optional*, defaults to 0.1):
-                The dropout rate for the Rope positional encoding.
-        memory_encoder_hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the memory encoder hidden states.
-        memory_encoder_output_channels (`int`, *optional*, defaults to 64):
-            The number of output channels for the memory encoder.
-        mask_downsampler_embed_dim (`int`, *optional*, defaults to 256):
-            The dimension of the mask downsampler embedding.
-        mask_downsampler_kernel_size (`int`, *optional*, defaults to 3):
-            The kernel size for the mask downsampler.
-        mask_downsampler_stride (`int`, *optional*, defaults to 2):
-            The stride for the mask downsampler.
-        mask_downsampler_padding (`int`, *optional*, defaults to 1):
-            The padding for the mask downsampler.
-        mask_downsampler_total_stride (`int`, *optional*, defaults to 16):
-            The total stride for the mask downsampler.
-        mask_downsampler_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the mask downsampler.
-        memory_fuser_num_layers (`int`, *optional*, defaults to 2):
-            The number of layers in the memory fuser.
-        memory_fuser_embed_dim (`int`, *optional*, defaults to 256):
-            The dimension of the embedding layer in the memory fuser.
-        memory_fuser_intermediate_dim (`int`, *optional*, defaults to 1024):
-            The dimension of the intermediate layer in the memory fuser.
-        memory_fuser_kernel_size (`int`, *optional*, defaults to 7):
-            The kernel size for the memory fuser.
-        memory_fuser_padding (`int`, *optional*, defaults to 3):
-            The padding for the memory fuser.
-        memory_fuser_layer_scale_init_value (`float`, *optional*, defaults to 1e-06):
-            The initial value for the layer scale in the memory fuser.
-        memory_fuser_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the memory fuser.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+    prompt_encoder_config (Union[`dict`, `Sam3TrackerVideoPromptEncoderConfig`], *optional*):
+        Dictionary of configuration options used to initialize [`Sam3TrackerVideoPromptEncoderConfig`].
+    mask_decoder_config (Union[`dict`, `Sam3TrackerVideoMaskDecoderConfig`], *optional*):
+        Dictionary of configuration options used to initialize [`Sam3TrackerVideoMaskDecoderConfig`].
+    initializer_range (`float`, *optional*, defaults to 0.02):
+        Standard deviation for parameter initialization.
+    num_maskmem (`int`, *optional*, defaults to 7):
+        The number of memory slots for the mask memory.
+    sigmoid_scale_for_mem_enc (`float`, *optional*, defaults to 20.0):
+        Scale factor for the sigmoid function in the memory encoder.
+    sigmoid_bias_for_mem_enc (`float`, *optional*, defaults to -10.0):
+        Bias for the sigmoid function in the memory encoder.
+    enable_occlusion_spatial_embedding (`bool`, *optional*, defaults to `True`):
+        Whether to enable spatial embedding for occlusions.
+    multimask_output_in_sam (`bool`, *optional*, defaults to `True`):
+        Whether to output multiple masks from the SAM head.
+    multimask_min_pt_num (`int`, *optional*, defaults to 0):
+        The minimum number of points to trigger multimask output.
+    multimask_max_pt_num (`int`, *optional*, defaults to 1):
+        The maximum number of points to trigger multimask output.
+    multimask_output_for_tracking (`bool`, *optional*, defaults to `True`):
+        Whether to use multimask output for tracking.
+    max_object_pointers_in_encoder (`int`, *optional*, defaults to 16):
+        The maximum number of object pointers in the encoder.
+    max_cond_frame_num (`int`, *optional*, defaults to 4):
+        Maximum number of conditioning frames to use in memory attention.
+    enable_temporal_pos_encoding_for_object_pointers (`bool`, *optional*, defaults to `True`):
+        Whether to enable temporal positional encoding for object pointers.
+    memory_attention_hidden_size (`int`, *optional*, defaults to 256):
+        Dimensionality of the memory attention hidden states.
+    memory_attention_num_layers (`int`, *optional*, defaults to 4):
+        The number of layers in the memory attention module.
+    memory_attention_num_attention_heads (`int`, *optional*, defaults to 1):
+        Number of attention heads for each attention layer in the memory attention.
+    memory_attention_downsample_rate (`int`, *optional*, defaults to 1):
+        The downsample rate for the attention layers.
+    memory_attention_feed_forward_hidden_size (`int`, *optional*, defaults to 2048):
+        The dimension of the feedforward network in the memory attention module.
+    memory_attention_feed_forward_hidden_act (`str`, *optional*, defaults to `"relu"`):
+        The non-linear activation function in the feedforward network in the memory attention module.
+    memory_attention_dropout (`float`, *optional*, defaults to 0.1):
+        The dropout rate for the memory attention module.
+    memory_attention_rope_theta (`float`, *optional*, defaults to 10000):
+        The Rope theta parameter.
+    memory_attention_rope_feat_sizes (`list[int]`, *optional*, defaults to `[72, 72]`):
+        The feature sizes for the Rope positional encoding.
+    memory_attention_rope_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout rate for the Rope positional encoding.
+    memory_encoder_hidden_size (`int`, *optional*, defaults to 256):
+        Dimensionality of the memory encoder hidden states.
+    memory_encoder_output_channels (`int`, *optional*, defaults to 64):
+        The number of output channels for the memory encoder.
+    mask_downsampler_embed_dim (`int`, *optional*, defaults to 256):
+        The dimension of the mask downsampler embedding.
+    mask_downsampler_kernel_size (`int`, *optional*, defaults to 3):
+        The kernel size for the mask downsampler.
+    mask_downsampler_stride (`int`, *optional*, defaults to 2):
+        The stride for the mask downsampler.
+    mask_downsampler_padding (`int`, *optional*, defaults to 1):
+        The padding for the mask downsampler.
+    mask_downsampler_total_stride (`int`, *optional*, defaults to 16):
+        The total stride for the mask downsampler.
+    mask_downsampler_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function in the mask downsampler.
+    memory_fuser_num_layers (`int`, *optional*, defaults to 2):
+        The number of layers in the memory fuser.
+    memory_fuser_embed_dim (`int`, *optional*, defaults to 256):
+        The dimension of the embedding layer in the memory fuser.
+    memory_fuser_intermediate_dim (`int`, *optional*, defaults to 1024):
+        The dimension of the intermediate layer in the memory fuser.
+    memory_fuser_kernel_size (`int`, *optional*, defaults to 7):
+        The kernel size for the memory fuser.
+    memory_fuser_padding (`int`, *optional*, defaults to 3):
+        The padding for the memory fuser.
+    memory_fuser_layer_scale_init_value (`float`, *optional*, defaults to 1e-06):
+        The initial value for the layer scale in the memory fuser.
+    memory_fuser_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function in the memory fuser.
 
     Example:
 

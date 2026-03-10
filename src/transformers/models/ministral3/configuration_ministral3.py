@@ -15,70 +15,15 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="mistralai/Ministral-3-8B-Base-2512")
 class Ministral3Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Ministral3Model`]. It is used to instantiate an
-    Mistral model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the mistralai/Ministral-3-8B-Base-2512, mistralai/Ministral-3-8B-Instruct-2512 or mistralai/Ministral-3-8B-Reasoning-2512.
-
-    [mistralai/Ministral-3-8B-Base-2512](https://huggingface.co/mistralai/Ministral-3-8B-Base-2512)
-    [mistralai/Ministral-3-8B-Instruct-2512](https://huggingface.co/mistralai/Ministral-3-8B-Instruct-2512)
-    [mistralai/Ministral-3-8B-Reasoning-2512](https://huggingface.co/mistralai/Ministral-3-8B-Reasoning-2512)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`Optional`, *optional*, defaults to 131072):
-            Vocabulary size of the Ministral3 model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`Ministral3Model`].
-        hidden_size (`Optional`, *optional*, defaults to 4096):
-            Dimensionality of the embeddings and hidden states.
-        intermediate_size (`Optional`, *optional*, defaults to 14336):
-            Dimensionality of the intermediate (feed-forward) layer.
-        num_hidden_layers (`Optional`, *optional*, defaults to 34):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`Optional`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`Optional`, *optional*, defaults to 8):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA); if
-            `num_key_value_heads=1`, the model will use Multi Query Attention (MQA); otherwise GQA is used.
-        head_dim (`Optional`, *optional*, defaults to 128):
-            The attention head dimension. If not specified, will default to `hidden_size // num_attention_heads`.
-        hidden_act (`Optional`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`Optional`, *optional*, defaults to 262144):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`Optional`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`Optional`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        use_cache (`Optional`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        pad_token_id (`Optional`, *optional*, defaults to 11):
-            The id of the padding token.
-        bos_token_id (`Optional`, *optional*, defaults to 1):
-            The id of the "beginning-of-sequence" token.
-        eos_token_id (`Optional`, *optional*, defaults to 2):
-            The id of the "end-of-sequence" token.
-        tie_word_embeddings (`Optional`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
-        rope_parameters (`Union`, *optional*, defaults to `{'type': 'yarn', 'rope_theta': 1000000.0, 'factor': 16.0, 'original_max_position_embeddings': 16384, 'beta_fast': 32.0, 'beta_slow': 1.0, 'mscale_all_dim': 1.0, 'mscale': 1.0, 'llama_4_scaling_beta': 0.1}`):
-            Dictionary containing the configuration parameters for the RoPE embeddings, including optional Yarn scaling
-            settings such as `factor`, `original_max_position_embeddings`, `mscale`, and `llama_4_scaling_beta`.
-        sliding_window (`Optional`, *optional*):
-            Sliding window attention window size. If `None`, full attention is used.
-        attention_dropout (`Optional`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-
     Example:
 
     ```python
