@@ -1720,9 +1720,7 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
                 batched_outputs = model(batched_inputs.to(torch_device))
 
             self.assertEqual(
-                batched_inputs.shape[0],
-                batched_outputs.last_hidden_state.shape[0],
-                msg="Got different batch dims for input and output",
+                batched_inputs.shape[0], batched_outputs.shape[0], msg="Got different batch dims for input and output"
             )
 
     def test_unbatched_inputs_outputs(self):
