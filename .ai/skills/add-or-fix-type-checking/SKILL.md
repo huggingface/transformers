@@ -42,26 +42,75 @@ Use this skill when:
 3. **Triage errors by category** before fixing anything:
    - Wrong/missing type annotations on signatures
    - Attribute access on union types (for example `X | None`)
+   - Functions returning broad unions (for example `str | list | BatchEncoding`)
    - Mixin/protocol self-type issues
-   - Genuinely untyped dynamic access
+   - Dynamic attributes on objects or modules
+   - Third-party stub gaps (missing kwargs, missing `__version__`, etc.)
 
 4. **Apply fixes using this priority order** (simplest first):
 
-   a. **Fix incorrect type hints at the source**. If a parameter is typed `X | None`
-      but can never be `None` when actually called, remove `None` from the hint.
-      Do not add defensive `if x is not None` guards for impossible cases.
+   a. **Narrow unions with `isinstance()` / `if x is None` / `hasattr()`**.
+      This is the primary tool for resolving union-type errors. `ty` narrows
+      through all of these patterns, including the negative forms:
+      ```python
+      # Narrow X | None
+      if x is None:
+          raise ValueError("x must not be None")
+      x.method()  # ty knows x is X here
 
-   b. **Annotate untyped attributes**. Add type annotations to instance variables
+      # Narrow str | UploadFile
+      if isinstance(field, str):
+          raise TypeError("Expected file upload, got string")
+      await field.read()  # ty knows field is UploadFile here
+
+      # Narrow union from function return (e.g. apply_chat_template -> str | BatchEncoding)
+      result = func(return_dict=True)
+      if not hasattr(result, "to"):
+          raise TypeError("Expected BatchEncoding")
+      result.to(device)  # ty treats result as having .to() here
+      ```
+      **Key**: always use `if ...: raise` (not `assert`) for narrowing. Asserts
+      are stripped in optimized mode (`python -O`) and should never be used for
+      type narrowing or input validation.
+
+   b. **Use local variables to help ty track narrowing across closures**.
+      When `self.x` is `X | None` and you need to pass it to nested functions
+      or closures, `ty` cannot track that `self.x` stays non-None. Copy to a
+      local variable and narrow the local:
+      ```python
+      manager = self.batching_manager
+      if manager is None:
+          raise RuntimeError("Manager not initialized")
+      # Use `manager` (not `self.batching_manager`) in nested functions
+      ```
+
+   c. **Split chained calls when the intermediate type is a broad union**.
+      If `func().method()` fails because `func()` returns a union, split it:
+      ```python
+      # BAD: ty can't narrow through chained calls
+      result = func(return_dict=True).to(device)["input_ids"]
+
+      # GOOD: split, narrow, then chain
+      result = func(return_dict=True)
+      if not hasattr(result, "to"):
+          raise TypeError("Expected dict-like result")
+      inputs = result.to(device)["input_ids"]
+      ```
+
+   d. **Fix incorrect type hints at the source**. If a parameter is typed `X | None`
+      but can never be `None` when actually called, remove `None` from the hint.
+
+   e. **Annotate untyped attributes**. Add type annotations to instance variables
       set in `__init__` or elsewhere (for example `self.foo: list[int] = []`).
       Declare class-level attributes that are set dynamically later
       (for example `_cache: Cache`, `_token_tensor: torch.Tensor | None`).
 
-   c. **Use `self: "ProtocolType"` for mixins**. When a mixin accesses attributes
+   f. **Use `self: "ProtocolType"` for mixins**. When a mixin accesses attributes
       from its host class, define a Protocol in `src/transformers/_typing.py` and
       annotate `self` on methods that need it. Apply this consistently to all methods
       in the mixin. Import under `TYPE_CHECKING` to avoid circular imports.
 
-   d. **Use `TypeGuard` functions for dynamic module attributes** (for example
+   g. **Use `TypeGuard` functions for dynamic module attributes** (for example
       `torch.npu`, `torch.xpu`, `torch.compiler`). Instead of `getattr(torch, "npu")`
       or `hasattr(torch, "npu") and torch.npu.is_available()`, define a type guard
       function in `src/transformers/_typing.py`:
@@ -82,20 +131,38 @@ Use this skill when:
         attribute `_typing.has_torch_xxx`) — `ty` only resolves `TypeGuard` from
         direct imports.
 
-   e. **Use `getattr()` / `setattr()` for dynamic model/config attributes**.
+   h. **Use `getattr()` / `setattr()` for dynamic model/config attributes**.
       For runtime-injected fields (for example config/model flags), use
       `getattr(obj, "field", default)` for reads and `setattr(obj, "field", value)`
-      for writes. Avoid `getattr(torch, "npu")` style — use type guards instead (see above).
+      for writes. Also use `getattr()` for third-party packages missing type stubs
+      (for example `getattr(safetensors, "__version__", "unknown")`).
+      Avoid `getattr(torch, "npu")` style — use type guards instead (see above).
 
-   f. **Use `cast()` sparingly and locally**. Only use it when the type checker
-      cannot narrow a type that is known to be correct at runtime. Prefer `isinstance()`
-      narrowing when the runtime type is checkable. Do not use `cast()` for
-      dynamic module attributes — use type guards instead.
+   i. **Use `cast()` for pattern-matched types after structural validation**.
+      When a library like `libcst` validates node structure via pattern matching
+      but returns a base type, use `cast()` to tell the checker what the actual
+      type is:
+      ```python
+      # After m.matches(node, pattern) confirms structure:
+      stmt = cast(cst.Assign, node.body[0])
+      name = cast(cst.Name, stmt.targets[0].target).value
+      ```
+      Do not use `cast()` for module attribute narrowing — use type guards.
 
-   g. **Use `# type: ignore` as a last resort**. Use this for cases where the checker
-      cannot prove correctness (for example dynamic dispatch, C extensions, third-party stubs).
+   j. **Use `# type: ignore` only for third-party stub defects**. This means
+      cases where the third-party package's type stubs are wrong or incomplete
+      and there is no way to narrow or cast around it. Examples:
+      - A kwarg that exists at runtime but is missing from the stubs
+      - A method that exists but isn't declared in the stubs
+      Always add the specific error code: `# type: ignore[call-arg]`, not bare
+      `# type: ignore`.
 
 5. **Things to never do**:
+   - **Never use `assert` for type narrowing.** Asserts are stripped by `python -O`
+     and must not be relied on for correctness. Use `if ...: raise` instead.
+   - **Never use `# type: ignore` as a first resort.** Before adding one, try
+     every approach above (isinstance, hasattr, local variable, getattr, cast).
+     If you find yourself adding more than 2-3 ignores, stop and reconsider.
    - Do not use `getattr(torch, "backend")` to access dynamic device backends
      (`npu`, `xpu`, `hpu`, `musa`, `mlu`, `neuron`, `compiler`) — use type guards
    - Do not use `cast()` for module attribute narrowing — use type guards
@@ -119,4 +186,3 @@ Use this skill when:
 
 8. **Update CI coverage when adding new typed areas**:
    - Update `ty_check_dirs` in `Makefile` to include newly type-checked directories.
-
