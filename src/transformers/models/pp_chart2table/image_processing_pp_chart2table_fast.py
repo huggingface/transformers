@@ -4,13 +4,14 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_pp_chart2table.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from typing import Optional, Union
+from typing import Optional
 
 import torch
-from torchvision.transforms.v2.functional import InterpolationMode
+import torchvision.transforms.v2.functional as tvF
 
 from transformers.feature_extraction_utils import BatchFeature
-from transformers.image_processing_utils_fast import BaseImageProcessorFast
+from transformers.image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
+from transformers.image_utils import SizeDict
 from transformers.processing_utils import TensorType
 from transformers.utils import auto_docstring
 
@@ -65,37 +66,43 @@ class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: list[torch.Tensor],
-        size: Optional[list[dict[str, int]]],
+        images: list["torch.Tensor"],
         do_resize: bool,
+        size: SizeDict,
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        return_tensors: Optional[Union[str, TensorType]],
-        interpolation: Optional[InterpolationMode] = None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        data = {}
-        resize_images = []
-        if do_resize:
-            for image in images:
-                image = self.resize(image, size=size, interpolation=interpolation)
-                resize_images.append(image)
-            images = resize_images
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-        processed_images = []
-        for image in images:
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
-            processed_images.append(image)
-        images = processed_images
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            # BGR to RGB conversion
+            stacked_images = stacked_images[:, [2, 1, 0], :, :]
+            processed_images_grouped[shape] = stacked_images
 
-        images = [image[[2, 1, 0], :, :] for image in images]
-        data.update({"pixel_values": torch.stack(images, dim=0)})
-        encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
+        pixel_values = reorder_images(processed_images_grouped, grouped_images_index)
 
-        return encoded_inputs
+        return BatchFeature(
+            data={"pixel_values": pixel_values},
+            tensor_type=return_tensors,
+        )
 
 
 __all__ = ["PPChart2TableImageProcessorFast"]

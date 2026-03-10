@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_pp_chart2table.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from typing import Optional
 
 from transformers.configuration_utils import PreTrainedConfig, layer_type_validation
 from transformers.modeling_rope_utils import RopeParameters
@@ -80,7 +79,7 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
         patch_size: int = 16,
         qkv_bias: bool = True,
         use_rel_pos: bool = True,
-        global_attn_indexes: Optional[list[int]] = None,
+        global_attn_indexes: list[int] | None = None,
         window_size: int = 14,
         output_channels: int = 256,
         net_channels: int = 512,
@@ -128,6 +127,8 @@ class PPChart2TableTextConfig(PreTrainedConfig):
             The token ID representing the beginning of a sequence (BOS) for text generation.
         eos_token_id (`int`, *optional*, defaults to 151643):
             The token ID representing the end of a sequence (EOS) for text generation.
+        pad_token_id (Optional[int], optional, *optional*, defaults to -1):
+            The index of the padding token. Defaults to -1.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the feed-forward and attention layers of the decoder.
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -207,6 +208,7 @@ class PPChart2TableTextConfig(PreTrainedConfig):
         attention_dropout: float = 0.0,
         bos_token_id: int = 151643,
         eos_token_id: int = 151643,
+        pad_token_id: int = -1,
         hidden_act: str = "silu",
         hidden_size: int = 1024,
         initializer_range: float = 0.02,
@@ -217,12 +219,12 @@ class PPChart2TableTextConfig(PreTrainedConfig):
         num_key_value_heads: int = 16,
         rms_norm_eps: float = 1e-06,
         rope_theta: float = 1000000.0,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         sliding_window: int = 32768,
         tie_word_embeddings: bool = True,
         use_cache: bool = True,
         vocab_size: int = 151860,
-        layer_types: Optional[list[str]] = None,
+        layer_types: list[str] | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -257,6 +259,7 @@ class PPChart2TableTextConfig(PreTrainedConfig):
         self.rope_theta = rope_theta
         self.tie_word_embeddings = tie_word_embeddings
         super().__init__(
+            pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
@@ -330,9 +333,9 @@ class PPChart2TableConfig(PreTrainedConfig):
         self,
         vision_config: dict | None = None,
         text_config: dict | None = None,
-        image_token_index: Optional[int] = 151859,
-        image_seq_length: Optional[int] = 576,
-        pad_token_id: Optional[int] = -1,
+        image_token_index: int | None = 151859,
+        image_seq_length: int | None = 576,
+        pad_token_id: int | None = -1,
         **kwargs,
     ):
         self.image_token_index = image_token_index
