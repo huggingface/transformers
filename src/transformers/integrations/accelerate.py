@@ -205,7 +205,7 @@ def get_max_memory(max_memory: dict[int | str, int | str] | None = None):
     final_max_memory = accelerate_max_memory(max_memory)
 
     # Adjust for allocated but free memory
-    for device_name in max_memory:
+    for device_name in final_max_memory:
         if isinstance(device_name, int):  # it's a GPU device
             if is_torch_xpu_available():
                 unused_memory = torch.xpu.memory_reserved(device_name) - torch.xpu.memory_allocated(device_name)
