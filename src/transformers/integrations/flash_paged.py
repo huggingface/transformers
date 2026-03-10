@@ -1,7 +1,7 @@
 import torch
 
 from ..generation.continuous_batching import PagedAttentionCache
-from ..modeling_flash_attention_utils import lazy_import_paged_flash_attention
+from ..modeling_flash_attention_utils import _flash_attention_forward
 
 
 def paged_attention_forward(
@@ -16,6 +16,8 @@ def paged_attention_forward(
     max_seqlen_q: int,
     max_seqlen_k: int | dict[str, int],
     block_table: torch.Tensor | None,
+    sliding_window: int | None = None,
+    is_causal: bool | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     """Performs the forward pass of attention with paged key-value cache. This function handles the cache updates and
@@ -39,20 +41,18 @@ def paged_attention_forward(
             read and dispatches the read using the block table. Same for the write. If a request has less  blocksthan
             max_blocks_per_seq blocks, the block table is padded with -1s to indicate that this cache is not allocated.
     """
-    # Retrieve the flash attention functions
-    flash_attn_varlen_func, flash_attn_with_kvcache = lazy_import_paged_flash_attention(
-        module.config._attn_implementation
-    )
+    # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
+    is_causal = is_causal if is_causal is not None else module.is_causal
 
     # Retrieve the cumulative sequence lengths for the current layer
-    sliding_window = (-1, -1) if not getattr(module, "sliding_window", False) else (module.sliding_window - 1, 0)
-    layer_type = "full_attention" if sliding_window == (-1, -1) else "sliding_attention"
+    layer_type = "full_attention" if sliding_window is None else "sliding_attention"
     if isinstance(cu_seq_lens_k, dict):
         cu_seq_lens_k = cu_seq_lens_k[layer_type]
         max_seqlen_k = max_seqlen_k[layer_type]
 
-    # If no block table is provided, use flash_attn_varlen_func with read/write indices
     if block_table is None:
+        # If no block table is provided, use flash_attn_varlen_func with read/write indices
+
         # .update changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
         k, v = cache.update(
             key_states=k,
@@ -61,25 +61,19 @@ def paged_attention_forward(
             read_index=kwargs["read_index"],
             write_index=kwargs["write_index"],
         )
-        custom_kwargs = {"s_aux": kwargs.get("s_aux")} if "s_aux" in kwargs else {}
-        attn_output = flash_attn_varlen_func(
-            q.transpose(1, 2).squeeze(0).contiguous(),
-            k.contiguous(),
-            v.contiguous(),
-            cu_seq_lens_q.to(torch.int32),
-            cu_seq_lens_k.to(torch.int32).clone(),
-            max_seqlen_q,
-            max_seqlen_k,
-            softmax_scale=module.scaling,
-            causal=True,  # kind of a must, it automatically aligns the mask for q < k
-            window_size=sliding_window,  # -1 means infinite context window
-            **custom_kwargs,
-        )
-        if isinstance(attn_output, tuple):
-            attn_output = attn_output[0]
+        # [1, num_q_heads, seqlen_q, head_dim] to [1, seqlen_q, num_q_heads, head_dim] (we reshape during the base fa forward)
+        q = q.transpose(1, 2).contiguous()
 
-    # Otherwise, use flash_attn_with_kvcache which updates the cache in-place and computes attention
+        # Prepare relevant kwargs
+        flash_kwargs = {
+            "cu_seq_lens_q": cu_seq_lens_q.to(torch.int32),
+            "cu_seq_lens_k": cu_seq_lens_k.to(torch.int32),
+            "max_length_q": max_seqlen_q,
+            "max_length_k": max_seqlen_k,
+        }
     else:
+        # Otherwise, use flash_attn_with_kvcache which updates the cache in-place and computes attention
+
         # Get layer group index for this layer
         group_idx, layer_idx_in_group = cache.layer_index_to_group_indices[module.layer_idx]
         # KV cache shape: [num_pages, num_kv_heads, head_dim] -> [num_blocks, block_size, num_kv_heads, head_dim]
@@ -96,26 +90,32 @@ def paged_attention_forward(
         # Compute cache_seqlens from cu_seq_lens_k (current cache length BEFORE adding new tokens)
         # cu_seq_lens_k is cumulative, so seqlens[i] = cu_seq_lens_k[i+1] - cu_seq_lens_k[i] - 1 (subtract 1 for the new token)
         batch_size = k.size(0)
-        cache_seqlens = (cu_seq_lens_k[1 : batch_size + 1] - cu_seq_lens_k[:batch_size] - 1).to(torch.int32)
-        # The arg name for the block table is not the same in VLLM's kernel and Tri Dao's kernel, so we need to parse it
-        flash_kwargs = {cache.get_block_table_key(flash_attn_with_kvcache): block_table[group_idx]}
-        if "s_aux" in kwargs:
-            flash_kwargs["s_aux"] = kwargs["s_aux"]  # this is only available in VLLM's FA3
-        # Call flash_attn_with_kvcache - this updates cache in-place and computes attention
-        attn_output = flash_attn_with_kvcache(  # TODO: add more doc in a dedicated wrapper (coming in next PRs)
-            q,
-            k_cache,
-            v_cache,
-            k=k,
-            v=v,
-            cache_seqlens=cache_seqlens,
-            softmax_scale=module.scaling,
-            causal=True,
-            window_size=sliding_window,
-            **flash_kwargs,
-        )
-        if isinstance(attn_output, tuple):
-            attn_output = attn_output[0]
+        cache_seq_lens = cu_seq_lens_k[1 : batch_size + 1] - cu_seq_lens_k[:batch_size] - 1
+
+        # Prepare relevant kwargs
+        flash_kwargs = {
+            "block_table": block_table[group_idx],
+            "cache_seq_lens": cache_seq_lens.to(torch.int32),
+            "cached_key_states": k_cache,
+            "cached_value_states": v_cache,
+        }
+
+    # Filter base kwargs just in case
+    kwargs = {k: v for k, v in kwargs.items() if k not in flash_kwargs}
+
+    attn_output = _flash_attention_forward(
+        q,
+        k,
+        v,
+        attention_mask=None,  # unused as we force varlen
+        query_length=None,  # unused as we force varlen
+        is_causal=is_causal,
+        **flash_kwargs,
+        **kwargs,
+    )
+
+    if block_table is not None:
         # Reshape output from [batch_size, 1, num_heads, head_dim] to [batch_size, num_heads, head_dim]
         attn_output = attn_output.squeeze(1)
+
     return attn_output, None

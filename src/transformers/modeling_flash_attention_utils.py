@@ -70,6 +70,11 @@ _hf_api_to_flash_mapping = {
     "dropout": "dropout_p",
     "sliding_window": "window_size",
 }
+# alternative names within the different flash attention APIs, e.g. for attention sinks
+_flash_api_alternative_names = {
+    "s_aux": "learnable_sink",
+    "block_table": "page_table",
+}
 
 
 def _lazy_imports(
@@ -139,7 +144,7 @@ def _lazy_imports(
     return flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache, pad_input, unpad_input
 
 
-def _lazy_define_process_function(flash_function):
+def _lazy_define_process_function(flash_varlen_fn, flash_function_with_kv_cache = None):
     """
     Depending on the version and kernel some features are not supported. Due to limitations in
     `torch.compile`, we opt to statically type which (optional) kwarg parameters are supported
@@ -149,13 +154,24 @@ def _lazy_define_process_function(flash_function):
           This might be confusing for kwargs that we use in any case, e.g. `is_causal`.
     """
 
-    flash_parameters = inspect.signature(flash_function).parameters
     process_parameters = inspect.signature(_process_flash_attention_kwargs).parameters
-
-    supports_mapping = {}
+    function_to_signature_mapping = {
+        "flash_varlen_fn": inspect.signature(flash_varlen_fn).parameters,
+        "flash_with_kvcache_fn": inspect.signature(flash_function_with_kv_cache).parameters if flash_function_with_kv_cache is not None else {},
+    }
+    supports_mapping = {
+        "flash_varlen_fn": {},
+        "flash_with_kvcache_fn": {},
+    }
     for param in process_parameters:
         fa_param = _hf_api_to_flash_mapping.get(param, param)
-        supports_mapping[fa_param] = fa_param in flash_parameters
+        fa_alternative_param_name = _flash_api_alternative_names.get(param, param)
+
+        for function_name in supports_mapping.keys():
+            supports_mapping[function_name][fa_param] = fa_param in function_to_signature_mapping[function_name]
+
+            if fa_alternative_param_name != fa_param:
+                supports_mapping[function_name][fa_alternative_param_name] = fa_alternative_param_name in function_to_signature_mapping[function_name]
 
     return partial(_process_flash_attention_kwargs, supports_mapping=supports_mapping)
 
@@ -180,7 +196,7 @@ def lazy_import_flash_attention(
         _flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn = _lazy_imports(
             implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
         )
-        _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn)
+        _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn, _flash_with_kvcache_fn)
 
     return (_flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn), _process_flash_kwargs_fn
 
@@ -516,6 +532,8 @@ def _process_flash_attention_kwargs(
     softcap: float | None = None,
     deterministic: bool | None = None,
     s_aux: torch.Tensor | None = None,
+    block_table = None,
+    flash_fn_name = None,
     supports_mapping: dict[str, bool] | None = None,
     **kwargs,
 ):
@@ -555,27 +573,41 @@ def _process_flash_attention_kwargs(
         "softmax_scale": softmax_scale,
     }
 
-    if supports_mapping["dropout_p"]:
+    supported_signature = supports_mapping[flash_fn_name]
+
+    if supported_signature["dropout_p"]:
         flash_kwargs["dropout_p"] = dropout
 
-    if supports_mapping["window_size"] and sliding_window is not None and key_length > sliding_window:
+    if supported_signature["window_size"] and sliding_window is not None and key_length > sliding_window:
         # The flash attention API sets inclusive boundaries, i.e. (4, 0) would take 4 tokens to the left
         # and the current token for a total size of 5. However, we usually define our window sizes by
         # their total window size (when causal). Encoder models as of now seldom use SWA and when they
         # do, they must align with this symmetric logic, i.e. for a total of `2*sliding_window + 1`.
         flash_kwargs["window_size"] = (sliding_window - 1, sliding_window - 1)
 
-    if supports_mapping["deterministic"]:
+    if supported_signature["deterministic"]:
         flash_kwargs["deterministic"] = (
             deterministic if deterministic is not None else os.getenv("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
         )
 
-    if supports_mapping["softcap"] and softcap is not None:
+    if supported_signature["softcap"] and softcap is not None:
         flash_kwargs["softcap"] = softcap
 
     # Only within kernel implementation atm
-    if supports_mapping["s_aux"] and s_aux is not None:
+    if supported_signature["s_aux"] and s_aux is not None:
         flash_kwargs["s_aux"] = s_aux
+
+    if ((legacy_sink_param := supported_signature["s_aux"]) or supported_signature["learnable_sink"]) and s_aux is not None:
+        if legacy_sink_param:
+            flash_kwargs["s_aux"] = s_aux  # e.g. FA3 (vllm)
+        else:
+            flash_kwargs["learnable_sink"] = s_aux  # FA4
+
+    if ((legacy_block_table_param := supported_signature["block_table"]) or supported_signature["page_table"]) and block_table is not None:
+        if legacy_block_table_param:
+            flash_kwargs["block_table"] = block_table  # e.g. FA2
+        else:
+            flash_kwargs["page_table"] = block_table  # FA3
 
     return flash_kwargs
 
@@ -598,6 +630,10 @@ def _flash_attention_forward(
     cu_seq_lens_k: torch.LongTensor | None = None,
     max_length_q: int | None = None,
     max_length_k: int | None = None,
+    block_table = None,
+    cache_seq_lens = None,
+    cached_key_states = None,
+    cached_value_states = None,
     target_dtype: torch.dtype | None = None,
     attn_implementation: str | None = None,
     **kwargs,
@@ -621,13 +657,30 @@ def _flash_attention_forward(
         attn_implementation (`str`, *optional*):
             The attention implementation to use. If None, will default to the one based on the environment.
     """
-    (flash_fn, flash_varlen_fn, _, pad_fn, unpad_fn), process_flash_kwargs_fn = lazy_import_flash_attention(
+    (flash_fn, flash_varlen_fn, flash_with_kvcache_fn, pad_fn, unpad_fn), process_flash_kwargs_fn = lazy_import_flash_attention(
         attn_implementation
     )
 
     # PEFT possibly silently casts tensors to fp32, this potentially reconverts to correct dtype or is a no op
     query_states, key_states, value_states = fa_peft_integration_check(
         query_states, key_states, value_states, target_dtype
+    )
+
+    # TODO
+    is_fa_with_cache_kwargs = all(
+        kwarg is not None for kwarg in (block_table, cache_seq_lens, cached_key_states, cached_value_states)
+    )
+
+    # We will use `flash_varlen_fn` to prevent cross-example attention and also allow padding free approach under two cases:
+    # Case 1. If position ids is provided and the position ids indicate packed sequences, see `_is_packed_sequence`.
+    # Case 2. Some models pass directly pre-computed `cu_seqlens` so we don't need to infer it from position ids. It is safe to
+    # use `flash_varlen_fn` knowing we already have all necessary the kwargs.
+    #
+    # NOTE: it is user's responsibility to take care of flattening `position_ids` if that's needed by the model.
+    # See #39121 for more information.
+    is_fa_with_position_ids = _is_packed_sequence(position_ids, batch_size=query_states.size(0))
+    is_fa_with_varlen_kwargs = all(
+        kwarg is not None for kwarg in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k)
     )
 
     # Extract the flash attention kwargs that have been requested (and are supported by the implementation)
@@ -641,19 +694,9 @@ def _flash_attention_forward(
         use_top_left_mask=use_top_left_mask,
         softcap=softcap,
         deterministic=deterministic,
+        block_table=block_table,
+        flash_fn_name="flash_varlen_fn" if not is_fa_with_cache_kwargs else "flash_with_kvcache_fn",
         **kwargs,
-    )
-
-    # We will use `flash_varlen_fn` to prevent cross-example attention and also allow padding free approach under two cases:
-    # Case 1. If position ids is provided and the position ids indicate packed sequences, see `_is_packed_sequence`.
-    # Case 2. Some models pass directly pre-computed `cu_seqlens` so we don't need to infer it from position ids. It is safe to
-    # use `flash_varlen_fn` knowing we already have all necessary the kwargs.
-    #
-    # NOTE: it is user's responsibility to take care of flattening `position_ids` if that's needed by the model.
-    # See #39121 for more information.
-    is_fa_with_position_ids = _is_packed_sequence(position_ids, batch_size=query_states.size(0))
-    is_fa_with_varlen_kwargs = all(
-        kwarg is not None for kwarg in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k)
     )
 
     # Contains at least one padding token in the sequence
@@ -681,6 +724,20 @@ def _flash_attention_forward(
             out_unpad = out_unpad[0]
 
         out = pad_fn(out_unpad, indices_q, query_states.size(0), query_length)
+
+    elif is_fa_with_cache_kwargs:
+        out = flash_with_kvcache_fn(
+            q=query_states,
+            k=key_states,
+            v=value_states,
+            k_cache=cached_key_states,
+            v_cache=cached_value_states,
+            cache_seqlens=cache_seq_lens,
+            **flash_kwargs,
+        )
+
+        if isinstance(out, tuple):
+            out = out[0]
 
     # Padding free, i.e. sequences flattened into one total sequence
     elif is_fa_with_varlen_kwargs or is_fa_with_position_ids:
