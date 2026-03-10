@@ -110,8 +110,6 @@ class MusicFlamingoEncoderConfig(AudioFlamingo3EncoderConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "musicflamingo_encoder"
-
     def __init__(
         self,
         num_mel_bins=128,
@@ -149,16 +147,11 @@ class MusicFlamingoEncoderConfig(AudioFlamingo3EncoderConfig):
             **kwargs,
         )
 
-        rope_parameters = {} if rope_parameters is None else dict(rope_parameters)
-
         self.head_dim = head_dim
         self.max_position_embeddings = max_position_embeddings
-
+        rope_parameters = {} if rope_parameters is None else dict(rope_parameters)
         rope_parameters.setdefault("rope_type", "default")
-        rope_parameters.setdefault(
-            "rope_theta",
-            self.max_position_embeddings / (2 * pi) if self.max_position_embeddings is not None else 50000,
-        )
+        rope_parameters.setdefault("rope_theta",self.max_position_embeddings / (2 * pi))
         self.rope_parameters = rope_parameters
 
 
@@ -208,8 +201,6 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
     >>> configuration = model.config
     ```"""
 
-    model_type = "musicflamingo"
-
     def __init__(
         self,
         audio_config=None,
@@ -221,13 +212,6 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
         projector_bias=True,
         **kwargs,
     ):
-        if isinstance(audio_config, dict):
-            audio_config["model_type"] = audio_config.get("model_type", "musicflamingo_encoder")
-        elif audio_config is None:
-            audio_config = {
-                "model_type": "musicflamingo_encoder",
-            }
-
         super().__init__(
             audio_config=audio_config,
             text_config=text_config,
@@ -236,7 +220,6 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
             projector_bias=projector_bias,
             **kwargs,
         )
-
         self.audio_bos_token_id = audio_bos_token_id
         self.audio_eos_token_id = audio_eos_token_id
 
@@ -530,7 +513,7 @@ class MusicFlamingoEncoder(AudioFlamingo3Encoder):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=input_features_mask,
         )
 

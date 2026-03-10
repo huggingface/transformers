@@ -137,16 +137,11 @@ class MusicFlamingoEncoderConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding
         self.max_source_positions = max_source_positions
 
-        rope_parameters = {} if rope_parameters is None else dict(rope_parameters)
-
         self.head_dim = head_dim
         self.max_position_embeddings = max_position_embeddings
-
+        rope_parameters = {} if rope_parameters is None else dict(rope_parameters)
         rope_parameters.setdefault("rope_type", "default")
-        rope_parameters.setdefault(
-            "rope_theta",
-            self.max_position_embeddings / (2 * pi) if self.max_position_embeddings is not None else 50000,
-        )
+        rope_parameters.setdefault("rope_theta", self.max_position_embeddings / (2 * pi))
         self.rope_parameters = rope_parameters
 
 
@@ -210,12 +205,6 @@ class MusicFlamingoConfig(PretrainedConfig):
         projector_bias=True,
         **kwargs,
     ):
-        if isinstance(audio_config, dict):
-            audio_config["model_type"] = audio_config.get("model_type", "musicflamingo_encoder")
-        elif audio_config is None:
-            audio_config = {
-                "model_type": "musicflamingo_encoder",
-            }
         self.audio_token_id = audio_token_id
 
         if isinstance(audio_config, dict):
@@ -237,7 +226,6 @@ class MusicFlamingoConfig(PretrainedConfig):
         self.projector_bias = projector_bias
 
         super().__init__(**kwargs)
-
         self.audio_bos_token_id = audio_bos_token_id
         self.audio_eos_token_id = audio_eos_token_id
 
