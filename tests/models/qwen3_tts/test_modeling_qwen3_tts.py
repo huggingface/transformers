@@ -19,27 +19,34 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import (cleanup, require_torch,
-                                        require_torch_accelerator, slow,
-                                        torch_device)
+from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
+
 if is_torch_available():
     import torch
 
-    from transformers import (Qwen3TTSConfig, Qwen3TTSForConditionalGeneration,
-                              Qwen3TTSProcessor, Qwen3TTSSpeakerEncoderConfig,
-                              Qwen3TTSTalkerCodePredictorConfig,
-                              Qwen3TTSTalkerConfig,
-                              Qwen3TTSTalkerForConditionalGeneration,
-                              Qwen3TTSTalkerModel, Qwen3TTSTokenizerV1Config,
-                              Qwen3TTSTokenizerV2Config)
+    from transformers import (
+        Qwen3TTSConfig,
+        Qwen3TTSForConditionalGeneration,
+        Qwen3TTSProcessor,
+        Qwen3TTSSpeakerEncoderConfig,
+        Qwen3TTSTalkerCodePredictorConfig,
+        Qwen3TTSTalkerConfig,
+        Qwen3TTSTalkerForConditionalGeneration,
+        Qwen3TTSTalkerModel,
+        Qwen3TTSTokenizerV1Config,
+        Qwen3TTSTokenizerV2Config,
+    )
     from transformers.models.qwen3_tts.modeling_qwen3_tts import (
-        Qwen3TTSTokenizerV1Decoder, Qwen3TTSTokenizerV1DecoderBigVGANModel,
-        Qwen3TTSTokenizerV1DecoderDiTModel, Qwen3TTSTokenizerV2Model,
-        Qwen3TTSTokenizerV2TransformerModel)
+        Qwen3TTSTokenizerV1Decoder,
+        Qwen3TTSTokenizerV1DecoderBigVGANModel,
+        Qwen3TTSTokenizerV1DecoderDiTModel,
+        Qwen3TTSTokenizerV2Model,
+        Qwen3TTSTokenizerV2TransformerModel,
+    )
 
 
 class Qwen3TTSTalkerModelTester:

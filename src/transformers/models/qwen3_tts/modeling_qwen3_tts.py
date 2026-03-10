@@ -3582,7 +3582,7 @@ class Qwen3TTSTokenizerV2Decoder(Qwen3TTSTokenizerV2DecoderPreTrainedModel):
         self.decoder = nn.ModuleList(decoder)
         self.post_init()
 
-    def forward(self, codes):
+    def forward(self, codes, **kwargs):
         if codes.shape[1] != self.config.num_quantizers:
             raise ValueError(f"Expected {self.config.num_quantizers} layer of codes, got {codes.shape[1]}")
         hidden = self.quantizer.decode(codes)
@@ -5635,6 +5635,7 @@ class Qwen3TTSTokenizerV1DecoderDiTModel(Qwen3TTSPreTrainedModel):
         drop_audio_conditioning=False,
         drop_code=False,
         apply_cfg=True,
+        **kwargs,
     ):
         # V1: batch_size accounts for CFG doubling that happens inside input_embed
         batch_size = hidden_states.shape[0] * 2
@@ -5773,6 +5774,7 @@ class Qwen3TTSTokenizerV1Decoder(Qwen3TTSPreTrainedModel):
         num_steps=10,
         guidance_scale=0.5,
         sway_coefficient=-1.0,
+        **kwargs,
     ):
         """Generates a waveform from input code and conditioning parameters."""
         mel_spectrogram = self.dit.sample(
@@ -6626,20 +6628,26 @@ class Qwen3TTSTokenizerV1Model(Qwen3TTSTokenizerV1PreTrainedModel):
 
 
 __all__ = [
+    "Qwen3TTSBasePreTrainedModel",
     "Qwen3TTSPreTrainedModel",
     "Qwen3TTSSpeakerEncoder",
     "Qwen3TTSTalkerModel",
+    "Qwen3TTSTalkerTextPreTrainedModel",
     "Qwen3TTSTalkerCodePredictorModel",
     "Qwen3TTSTalkerCodePredictorModelForConditionalGeneration",
     "Qwen3TTSTalkerForConditionalGeneration",
     "Qwen3TTSForConditionalGeneration",
     "Qwen3TTSTokenizerV1DecoderPreTrainedModel",
     "Qwen3TTSTokenizerV1DecoderDiTModel",
+    "Qwen3TTSTokenizerV1DecoderBigVGANModel",
     "Qwen3TTSTokenizerV1Decoder",
     "Qwen3TTSTokenizerV1EncoderPreTrainedModel",
     "Qwen3TTSTokenizerV1Encoder",
     "Qwen3TTSTokenizerV1Model",
     "Qwen3TTSTokenizerV1PreTrainedModel",
+    "Qwen3TTSTokenizerV2DecoderBlock",
+    "Qwen3TTSTokenizerV2DecoderPreTrainedModel",
+    "Qwen3TTSTokenizerV2TransformerModel",
     "Qwen3TTSTokenizerV2Model",
     "Qwen3TTSTokenizerV2PreTrainedModel",
 ]
