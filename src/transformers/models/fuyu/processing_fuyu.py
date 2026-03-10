@@ -532,7 +532,6 @@ class FuyuProcessor(ProcessorMixin):
         # --- Preprocess images using self.image_processor ---
 
         # FIXME - We hard code "pt" here because the rest of the processing assumes torch tensors
-        return_tensors = output_kwargs["images_kwargs"]["return_tensors"]
         output_kwargs["images_kwargs"]["return_tensors"] = "pt"
         image_encoding = self.image_processor.preprocess(images, **output_kwargs["images_kwargs"])
         batch_images = image_encoding["images"]
@@ -569,7 +568,7 @@ class FuyuProcessor(ProcessorMixin):
         if return_mm_token_type_ids:
             batch_encoding["mm_token_type_ids"] = self.create_mm_token_type_ids(batch_encoding["input_ids"])
             batch_encoding["mm_token_type_ids"] = torch.tensor(batch_encoding["mm_token_type_ids"])
-        return FuyuBatchFeature(data=batch_encoding, tensor_type=return_tensors)
+        return FuyuBatchFeature(data=batch_encoding)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
