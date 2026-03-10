@@ -282,9 +282,7 @@ class Idefics3Processor(ProcessorMixin):
             inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(inputs["input_ids"], batch_image_seq_lengths)
         return BatchFeature(data=inputs, tensor_type=return_tensors)
 
-    def create_mm_token_type_ids(
-        self, input_ids: list | np.array, batch_image_seq_lengths: list[int]
-    ) -> list[list[int]]:
+    def create_mm_token_type_ids(self, input_ids: np.ndarray, batch_image_seq_lengths: list[int]) -> list[list[int]]:
         # We have to iterate for each list separately because inputs
         # might be non-padded lists and we can't cast numpy on that!
         # Then cast numpy as each input for faster indexing

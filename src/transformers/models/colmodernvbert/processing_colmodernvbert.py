@@ -318,7 +318,7 @@ class ColModernVBertProcessor(ProcessorMixin):
         return BatchFeature(data=inputs, tensor_type=return_tensors)
 
     def create_mm_token_type_ids(
-        self, input_ids: list | np.array | "torch.Tensor", batch_image_seq_lengths: list[int]
+        self, input_ids: list | np.ndarray | "torch.Tensor", batch_image_seq_lengths: list[int]
     ) -> list[list[int]]:
         # We have to iterate for each list separately because inputs
         # might be non-padded lists and we can't cast numpy on that!
