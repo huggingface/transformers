@@ -212,7 +212,7 @@ def is_cuda_platform() -> bool:
     if is_torch_available():
         import torch
 
-        return torch.version.cuda is not None
+        return getattr(torch, "version").cuda is not None
     return False
 
 
@@ -221,7 +221,7 @@ def is_rocm_platform() -> bool:
     if is_torch_available():
         import torch
 
-        return torch.version.hip is not None
+        return getattr(torch, "version").hip is not None
     return False
 
 
@@ -465,6 +465,26 @@ def is_torch_hpu_available() -> bool:
 
 
 @lru_cache
+def is_torch_neuron_available(check_device: bool = False) -> bool:
+    import torch
+
+    if importlib.util.find_spec("torch_neuronx") is None:
+        return False
+
+    if check_device:
+        try:
+            import torch_neuronx  # noqa: F401
+
+            # Will raise a RuntimeError if no Neuron is found, or AttributeError if torch.neuron is not available
+            _ = getattr(torch, "neuron").device_count()
+            return getattr(torch, "neuron").is_available()
+        except (AttributeError, RuntimeError):
+            return False
+
+    return hasattr(torch, "neuron") and torch.neuron.is_available()
+
+
+@lru_cache
 def is_torch_bf16_gpu_available() -> bool:
     if not is_torch_available():
         return False
@@ -483,7 +503,11 @@ def is_torch_bf16_gpu_available() -> bool:
         # Note: Emulated in software by Metal using fp32 for hardware without native support (like M1/M2)
         return torch.backends.mps.is_macos_or_newer(14, 0)
     if is_torch_musa_available():
-        return torch.musa.is_bf16_supported() if hasattr(torch, "musa") else False
+        return getattr(torch, "musa").is_bf16_supported()
+    if is_torch_mlu_available():
+        return getattr(torch, "mlu").is_bf16_supported()
+    if is_torch_neuron_available():
+        return getattr(torch, "neuron").is_bf16_supported()
     return False
 
 
@@ -548,7 +572,8 @@ def is_torch_tf32_available() -> bool:
             if f"{device_info.major}{device_info.minor}" >= "22":
                 return True
         return False
-    if not torch.cuda.is_available() or torch.version.cuda is None:
+    torch_version = getattr(torch, "version")
+    if not torch.cuda.is_available() or torch_version.cuda is None:
         return False
     if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
         return False
@@ -896,9 +921,10 @@ def is_flash_attn_2_available() -> bool:
     import torch
 
     try:
-        if torch.version.cuda:
+        torch_version = getattr(torch, "version")
+        if torch_version.cuda:
             return version.parse(flash_attn_version) >= version.parse("2.1.0")
-        elif torch.version.hip:
+        elif torch_version.hip:
             # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
             return version.parse(flash_attn_version) >= version.parse("2.0.4")
         elif is_torch_mlu_available():
@@ -1315,7 +1341,7 @@ def is_torchdynamo_compiling() -> bool:
     try:
         import torch
 
-        return torch.compiler.is_compiling()
+        return getattr(torch, "compiler").is_compiling()
     except Exception:
         return False
 
@@ -1324,7 +1350,7 @@ def is_torchdynamo_exporting() -> bool:
     try:
         import torch
 
-        return torch.compiler.is_exporting()
+        return getattr(torch, "compiler").is_exporting()
     except Exception:
         return False
 
@@ -1342,7 +1368,7 @@ def is_fake_tensor(x) -> bool:
     try:
         import torch
 
-        return isinstance(x, torch._subclasses.FakeTensor)
+        return isinstance(x, getattr(torch, "_subclasses").FakeTensor)
     except Exception:
         return False
 
@@ -1370,7 +1396,7 @@ def is_jax_jitting(x):
     try:
         import jax
 
-        return isinstance(x.jax(), jax.core.Tracer)
+        return isinstance(x.jax(), getattr(jax, "core").Tracer)
     except Exception:
         return False
 

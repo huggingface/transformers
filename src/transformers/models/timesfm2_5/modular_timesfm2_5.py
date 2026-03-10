@@ -50,63 +50,29 @@ from ..timesfm.modeling_timesfm import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="google/timesfm-2.5-200m-transformers")
 class TimesFm2_5Config(TimesFmConfig):
     r"""
-    This is the configuration class to store the configuration of a [`TimesFm2_5ModelForPrediction`]. It is used to
-    instantiate a TimesFM 2.5 model according to the specified arguments, defining the model architecture. Instantiating
-    a configuration with the defaults will yield a similar configuration to that of the TimesFM 2.5
-    [google/timesfm-2.5-200m-transformers](https://huggingface.co/google/timesfm-2.5-200m-transformers) architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        patch_length (`int`, *optional*, defaults to 32):
-            The length of one patch in the input sequence.
-        context_length (`int`, *optional*, defaults to 16384):
-            The length of the input context.
-        horizon_length (`int`, *optional*, defaults to 128):
-            The length of the prediction horizon.
-        quantiles (`list[float]`, *optional*, defaults to `[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]`):
-            The quantiles to predict.
-        hidden_size (`int`, *optional*, defaults to 1280):
-            Size of the hidden layers.
-        intermediate_size (`int`, *optional*, defaults to 1280):
-            Dimension of the MLP representations.
-        head_dim (`int`, *optional*, defaults to 80):
-            Size of the key, query, value projections per attention head.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer.
-        num_key_value_heads (`int`, *optional*, defaults to 16):
-            Number of key-value heads. Set equal to `num_attention_heads` for full (non-grouped) attention.
-        num_hidden_layers (`int`, *optional*, defaults to 20):
-            Number of Transformer layers.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the RMS normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for the attention scores.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in the attention linear projections.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        output_quantile_len (`int`, *optional*, defaults to 1024):
-            Length of the quantile output projection dimension.
-        decode_index (`int`, *optional*, defaults to 5):
-            Index into the quantile dimension used to extract the point (median) forecast.
-        use_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in MLP and transformer linear layers.
-        activation (`str`, *optional*, defaults to `"swish"`):
-            Activation function used in MLP and residual block layers (any key from `ACT2FN`).
-        use_continuous_quantile_head (`bool`, *optional*, defaults to `True`):
-            Whether to use the continuous quantile head for non-median quantile predictions.
-        force_flip_invariance (`bool`, *optional*, defaults to `True`):
-            Whether to apply flip-invariance averaging during forecasting.
-        infer_is_positive (`bool`, *optional*, defaults to `True`):
-            Whether to clamp forecasts to non-negative values when the input minimum is non-negative.
-        max_position_embeddings (`int`, *optional*, defaults to 16384):
-            Maximum sequence length supported by the rotary position encoding.
-        rope_parameters (`RopeParameters` or `dict[str, RopeParameters]`, *optional*):
-            Dictionary containing the RoPE configuration. Uses default rope type with theta=10000.0 when not set.
+    patch_length (`int`, *optional*, defaults to 32):
+        The length of one patch in the input sequence.
+    context_length (`int`, *optional*, defaults to 16384):
+        The length of the input context.
+    horizon_length (`int`, *optional*, defaults to 128):
+        The length of the prediction horizon.
+    quantiles (`list[float]`, *optional*, defaults to `[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]`):
+        The quantiles to predict.
+    output_quantile_len (`int`, *optional*, defaults to 1024):
+        Length of the quantile output projection dimension.
+    decode_index (`int`, *optional*, defaults to 5):
+        Index into the quantile dimension used to extract the point (median) forecast.
+    use_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use bias in MLP and transformer linear layers.
+    use_continuous_quantile_head (`bool`, *optional*, defaults to `True`):
+        Whether to use the continuous quantile head for non-median quantile predictions.
+    force_flip_invariance (`bool`, *optional*, defaults to `True`):
+        Whether to apply flip-invariance averaging during forecasting.
+    infer_is_positive (`bool`, *optional*, defaults to `True`):
+        Whether to clamp forecasts to non-negative values when the input minimum is non-negative.
 
     Example:
 
@@ -711,14 +677,17 @@ class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
         loss = None
         if future_values is not None:
             target_len = future_values.shape[1]
-            valid_mean_predictions = mean_predictions[:, :target_len]
-            valid_full_predictions = full_predictions[:, :target_len]
-            mse_loss = F.mse_loss(valid_mean_predictions, future_values)
-            quantile_indices = [i for i in range(valid_full_predictions.shape[-1]) if i != decode_index]
+            # Compute loss in normalized space for scale-invariant training.
+            # full_forecast is already in normalized space (before denormalization).
+            normalized_preds = full_forecast[:, :target_len]
+            normalized_targets = self.model._revin(future_values, mu_global, sigma_global, reverse=False)
+            normalized_mean_preds = normalized_preds[:, :, decode_index]
+            mse_loss = F.mse_loss(normalized_mean_preds, normalized_targets)
+            quantile_indices = [i for i in range(normalized_preds.shape[-1]) if i != decode_index]
             if quantile_indices:
-                index_tensor = torch.tensor(quantile_indices, device=valid_full_predictions.device, dtype=torch.long)
-                quantile_tensor = torch.index_select(valid_full_predictions, dim=-1, index=index_tensor)
-                quantile_loss = self._quantile_loss(quantile_tensor, future_values)
+                index_tensor = torch.tensor(quantile_indices, device=normalized_preds.device, dtype=torch.long)
+                quantile_tensor = torch.index_select(normalized_preds, dim=-1, index=index_tensor)
+                quantile_loss = self._quantile_loss(quantile_tensor, normalized_targets)
                 loss = mse_loss + quantile_loss
             else:
                 loss = mse_loss

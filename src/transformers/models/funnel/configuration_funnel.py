@@ -14,73 +14,33 @@
 """Funnel Transformer model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="funnel-transformer/small")
 class FunnelConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FunnelModel`]. It is used to
-    instantiate a Funnel Transformer model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the Funnel
-    Transformer [funnel-transformer/small](https://huggingface.co/funnel-transformer/small) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the Funnel transformer. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`FunnelModel`].
-        block_sizes (`list[int]`, *optional*, defaults to `[4, 4, 4]`):
-            The sizes of the blocks used in the model.
-        block_repeats (`list[int]`, *optional*):
-            If passed along, each layer of each block is repeated the number of times indicated.
-        num_decoder_layers (`int`, *optional*, defaults to 2):
-            The number of layers in the decoder (when not using the base model).
-        d_model (`int`, *optional*, defaults to 768):
-            Dimensionality of the model's hidden states.
-        n_head (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        d_head (`int`, *optional*, defaults to 64):
-            Dimensionality of the model's heads.
-        d_inner (`int`, *optional*, defaults to 3072):
-            Inner dimension in the feed-forward blocks.
-        hidden_act (`str` or `callable`, *optional*, defaults to `"gelu_new"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        hidden_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for the attention probabilities.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability used between the two layers of the feed-forward blocks.
-        initializer_range (`float`, *optional*, defaults to 0.1):
-            The upper bound of the *uniform initializer* for initializing all weight matrices in attention layers.
-        initializer_std (`float`, *optional*):
-            The standard deviation of the *normal initializer* for initializing the embedding matrix and the weight of
-            linear layers. Will default to 1 for the embedding matrix and the value given by Xavier initialization for
-            linear layers.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-09):
-            The epsilon used by the layer normalization layers.
-        pooling_type (`str`, *optional*, defaults to `"mean"`):
-            Possible values are `"mean"` or `"max"`. The way pooling is performed at the beginning of each block.
-        attention_type (`str`, *optional*, defaults to `"relative_shift"`):
-            Possible values are `"relative_shift"` or `"factorized"`. The former is faster on CPU/GPU while the latter
-            is faster on TPU.
-        separate_cls (`bool`, *optional*, defaults to `True`):
-            Whether or not to separate the cls token when applying pooling.
-        truncate_seq (`bool`, *optional*, defaults to `True`):
-            When using `separate_cls`, whether or not to truncate the last token when pooling, to avoid getting a
-            sequence length that is not a multiple of 2.
-        pool_q_only (`bool`, *optional*, defaults to `True`):
-            Whether or not to apply the pooling only to the query or to query, key and values for the attention layers.
-        pad_token_id (`int`, *optional*):
-            Padding token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
+    block_sizes (`list[int]`, *optional*, defaults to `[4, 4, 4]`):
+        The sizes of the blocks used in the model.
+    block_repeats (`list[int]`, *optional*):
+        If passed along, each layer of each block is repeated the number of times indicated.
+    num_decoder_layers (`int`, *optional*, defaults to 2):
+        The number of layers in the decoder (when not using the base model).
+    pooling_type (`str`, *optional*, defaults to `"mean"`):
+        Possible values are `"mean"` or `"max"`. The way pooling is performed at the beginning of each block.
+    attention_type (`str`, *optional*, defaults to `"relative_shift"`):
+        Possible values are `"relative_shift"` or `"factorized"`. The former is faster on CPU/GPU while the latter
+        is faster on TPU.
+    separate_cls (`bool`, *optional*, defaults to `True`):
+        Whether or not to separate the cls token when applying pooling.
+    truncate_seq (`bool`, *optional*, defaults to `True`):
+        When using `separate_cls`, whether or not to truncate the last token when pooling, to avoid getting a
+        sequence length that is not a multiple of 2.
+    pool_q_only (`bool`, *optional*, defaults to `True`):
+        Whether or not to apply the pooling only to the query or to query, key and values for the attention layers.
     """
 
     model_type = "funnel"

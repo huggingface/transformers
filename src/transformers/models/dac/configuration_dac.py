@@ -18,43 +18,24 @@ import math
 import numpy as np
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="descript/dac_16khz")
 class DacConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of an [`DacModel`]. It is used to instantiate a
-    Dac model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the
-    [descript/dac_16khz](https://huggingface.co/descript/dac_16khz) architecture.
+    downsampling_ratios (`list[int]`, *optional*, defaults to `[2, 4, 8, 8]`):
+        Ratios for downsampling in the encoder. These are used in reverse order for upsampling in the decoder.
+    quantizer_dropout (`bool`, *optional*, defaults to 0):
+        Whether to apply dropout to the quantizer.
+    commitment_loss_weight (float, *optional*, defaults to 0.25):
+        Weight of the commitment loss term in the VQVAE loss function.
+    codebook_loss_weight (float, *optional*, defaults to 1.0):
+        Weight of the codebook loss term in the VQVAE loss function.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        encoder_hidden_size (`int`, *optional*, defaults to 64):
-            Intermediate representation dimension for the encoder.
-        downsampling_ratios (`list[int]`, *optional*, defaults to `[2, 4, 8, 8]`):
-            Ratios for downsampling in the encoder. These are used in reverse order for upsampling in the decoder.
-        decoder_hidden_size (`int`, *optional*, defaults to 1536):
-            Intermediate representation dimension for the decoder.
-        n_codebooks (`int`, *optional*, defaults to 9):
-            Number of codebooks in the VQVAE.
-        codebook_size (`int`, *optional*, defaults to 1024):
-            Number of discrete codes in each codebook.
-        codebook_dim (`int`, *optional*, defaults to 8):
-            Dimension of the codebook vectors. If not defined, uses `encoder_hidden_size`.
-        quantizer_dropout (`bool`, *optional*, defaults to 0):
-            Whether to apply dropout to the quantizer.
-        commitment_loss_weight (float, *optional*, defaults to 0.25):
-            Weight of the commitment loss term in the VQVAE loss function.
-        codebook_loss_weight (float, *optional*, defaults to 1.0):
-            Weight of the codebook loss term in the VQVAE loss function.
-        sampling_rate (`int`, *optional*, defaults to 16000):
-            The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
     Example:
 
     ```python

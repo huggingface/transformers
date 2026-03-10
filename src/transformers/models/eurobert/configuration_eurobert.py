@@ -20,76 +20,17 @@
 # limitations under the License.
 
 from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 from ..llama import LlamaConfig
 
 
+@auto_docstring(checkpoint="EuroBERT/EuroBERT-210m")
 class EuroBertConfig(LlamaConfig):
     r"""
-    This is the configuration class to store the configuration of a [`EuroBertModel`]. It is used to instantiate an EuroBert
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of [EuroBERT/EuroBERT-210m](https://huggingface.co/EuroBERT/EuroBERT-210m).
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 128256):
-            Vocabulary size of the EuroBert model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`EuroBertModel`]
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
-            `num_attention_heads`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-        max_position_embeddings (`int`, *optional*, defaults to 8192):
-            The maximum sequence length that this model might ever be used with. EuroBert supports up to 8192 tokens,
-            EuroBert-pretrained up to 2048.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        bos_token_id (`int`, *optional*, defaults to 128000):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 128001):
-            End of stream token id.
-        pad_token_id (`int`, *optional*, defaults to 128001):
-            Padding token id.
-        mask_token_id (`int`, *optional*, defaults to 128002):
-            Mask token id.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
-            document](https://huggingface.co/docs/transformers/main/perf_train_gpu_many#tensor-parallelism) to
-            understand more about it. This value is necessary to ensure exact reproducibility of the pretraining
-            results. Please refer to [this issue](https://github.com/pytorch/pytorch/issues/76232).
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        mlp_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
-        head_dim (`int`, *optional*):
-            The attention head dimension. If None, it will default to hidden_size // num_attention_heads
-        classifier_pooling (`str`, *optional*, defaults to `"late"`):
-            The pooling strategy to use for the classifier. Can be one of ['bos', 'mean', 'late'].
+    mask_token_id (`int`, *optional*, defaults to 128002):
+        Mask token id.
+    classifier_pooling (`str`, *optional*, defaults to `"late"`):
+        The pooling strategy to use for the classifier. Can be one of ['bos', 'mean', 'late'].
 
     ```python
     >>> from transformers import EuroBertModel, EuroBertConfig

@@ -14,58 +14,33 @@
 """MobileNetV2 model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="google/mobilenet_v2_1.0_224")
 class MobileNetV2Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MobileNetV2Model`]. It is used to instantiate a
-    MobileNetV2 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the MobileNetV2
-    [google/mobilenet_v2_1.0_224](https://huggingface.co/google/mobilenet_v2_1.0_224) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        depth_multiplier (`float`, *optional*, defaults to 1.0):
-            Shrinks or expands the number of channels in each layer. Default is 1.0, which starts the network with 32
-            channels. This is sometimes also called "alpha" or "width multiplier".
-        depth_divisible_by (`int`, *optional*, defaults to 8):
-            The number of channels in each layer will always be a multiple of this number.
-        min_depth (`int`, *optional*, defaults to 8):
-            All layers will have at least this many channels.
-        expand_ratio (`float`, *optional*, defaults to 6.0):
-            The number of output channels of the first layer in each block is input channels times expansion ratio.
-        output_stride (`int`, *optional*, defaults to 32):
-            The ratio between the spatial resolution of the input and output feature maps. By default the model reduces
-            the input dimensions by a factor of 32. If `output_stride` is 8 or 16, the model uses dilated convolutions
-            on the depthwise layers instead of regular convolutions, so that the feature maps never become more than 8x
-            or 16x smaller than the input image.
-        first_layer_is_expansion (`bool`, *optional*, defaults to `True`):
-            True if the very first convolution layer is also the expansion layer for the first expansion block.
-        finegrained_output (`bool`, *optional*, defaults to `True`):
-            If true, the number of output channels in the final convolution layer will stay large (1280) even if
-            `depth_multiplier` is less than 1.
-        hidden_act (`str` or `function`, *optional*, defaults to `"relu6"`):
-            The non-linear activation function (function or string) in the Transformer encoder and convolution layers.
-        tf_padding (`bool`, *optional*, defaults to `True`):
-            Whether to use TensorFlow padding rules on the convolution layers.
-        classifier_dropout_prob (`float`, *optional*, defaults to 0.8):
-            The dropout ratio for attached classifiers.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 0.001):
-            The epsilon used by the layer normalization layers.
-        semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
-            The index that is ignored by the loss function of the semantic segmentation model.
+    depth_divisible_by (`int`, *optional*, defaults to 8):
+        The number of channels in each layer will always be a multiple of this number.
+    min_depth (`int`, *optional*, defaults to 8):
+        All layers will have at least this many channels.
+    expand_ratio (`float`, *optional*, defaults to 6.0):
+        The number of output channels of the first layer in each block is input channels times expansion ratio.
+    output_stride (`int`, *optional*, defaults to 32):
+        The ratio between the spatial resolution of the input and output feature maps. By default the model reduces
+        the input dimensions by a factor of 32. If `output_stride` is 8 or 16, the model uses dilated convolutions
+        on the depthwise layers instead of regular convolutions, so that the feature maps never become more than 8x
+        or 16x smaller than the input image.
+    first_layer_is_expansion (`bool`, *optional*, defaults to `True`):
+        True if the very first convolution layer is also the expansion layer for the first expansion block.
+    finegrained_output (`bool`, *optional*, defaults to `True`):
+        If true, the number of output channels in the final convolution layer will stay large (1280) even if
+        `depth_multiplier` is less than 1.
+    tf_padding (`bool`, *optional*, defaults to `True`):
+        Whether to use TensorFlow padding rules on the convolution layers.
 
     Example:
 
