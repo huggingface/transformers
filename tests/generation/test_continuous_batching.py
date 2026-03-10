@@ -583,6 +583,75 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             max_new_tokens=80,
         )
 
+    def test_continuous_batching_with_default_compile_configs(self) -> None:
+        """Test continuous batching with use_default_compile_configs=True in ContinuousBatchingConfig.
+
+        This test verifies that:
+        1. Default compile configs are created for both varlen and decode paths
+        2. Generation completes successfully with compiled functions
+        3. Output matches expectations
+        """
+        # Skip if Flash Attention 2 is not available
+        if not (is_flash_attn_2_available() or is_kernels_available()):
+            self.skipTest("Flash Attention 2 is not available and neither is the kernels library. Skipping test.")
+        # Skip if not on CUDA (compile works best on CUDA)
+        if torch_device != "cuda":
+            self.skipTest("This test is designed for CUDA devices. Skipping test.")
+
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+
+        try:
+            # Prepare inputs
+            tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+            if hasattr(tokenizer, "eos_token"):
+                tokenizer.pad_token = tokenizer.eos_token
+            user_messages = [
+                "What is 2+2?",
+                "What is the capital of France?",
+            ]
+            chats = [[{"role": "user", "content": user_message}] for user_message in user_messages]
+            tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
+            input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
+
+            # Load model
+            model = AutoModelForCausalLM.from_pretrained(
+                model_id, attn_implementation="flash_attention_2", torch_dtype="auto"
+            )
+            model = model.to(torch_device).eval()
+
+            # Create ContinuousBatchingConfig with use_default_compile_configs=True
+            cb_config = ContinuousBatchingConfig(use_default_compile_configs=True)
+
+            # Verify the config will create default compile configs
+            varlen_cfg, decode_cfg = cb_config.process_compile_config(
+                fallback_compile_config=None, decode_fast_path_available=False
+            )
+            self.assertIsNotNone(varlen_cfg, "Varlen compile config should be created with use_default_compile_configs=True")
+            self.assertEqual(varlen_cfg.mode, "max-autotune-no-cudagraphs", "Default varlen config should use max-autotune-no-cudagraphs mode")
+            self.assertTrue(varlen_cfg.dynamic, "Default varlen config should have dynamic=True")
+
+            # Create GenerationConfig
+            gen_config = GenerationConfig(max_new_tokens=20, do_sample=False)
+
+            # Test that generation works with default compile configs
+            outputs = model.generate_batch(
+                inputs=input_ids,
+                generation_config=gen_config,
+                continuous_batching_config=cb_config,
+            )
+
+            # Verify we got outputs for all requests
+            self.assertEqual(len(outputs), len(user_messages), "Should have outputs for all input requests")
+
+            # Verify outputs are valid
+            for req_id, output in outputs.items():
+                self.assertIsNotNone(output.generated_tokens, f"Output for {req_id} should have generated_tokens")
+                self.assertGreater(len(output.generated_tokens), 0, f"Output for {req_id} should have at least one token")
+                self.assertEqual(output.status.name, "FINISHED", f"Output for {req_id} should be FINISHED")
+
+        finally:
+            flush_memory(flush_compile=True)
+
     def test_continuous_batching_few_blocks(self) -> None:
         """This test verifies that generation works with a very small number of blocks, ie. small enough that we need to
         offload a request at some point. To add more complexity, we repeat the same prompt 4 times and enable prefix
