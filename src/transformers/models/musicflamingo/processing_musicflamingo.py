@@ -61,19 +61,21 @@ class MusicFlamingoProcessor(ProcessorMixin):
     [`Qwen2TokenizerFast`]. See the [`~MusicFlamingoProcessor.__call__`] for more information.
 
     Args:
-            feature_extractor ([`WhisperFeatureExtractor`]):
-                The feature extractor is a required input.
-            tokenizer ([`Qwen2TokenizerFast`]):
-                The tokenizer is a required input.
-            chat_template (`Optional[str]`, *optional*):
-                The Jinja template to use for formatting the conversation. If not provided, the tokenizer's default chat
-                template will be used.
-            audio_token (`Optional[str]`, *optional*, defaults to `"<sound>"`):
-                Special token used to represent audio inputs in the chat template.
-            default_transcription_prompt (`str`, *optional*, defaults to `"Transcribe the input speech."`):
-                Default prompt to use for transcription tasks when applying transcription requests.
-            max_audio_len (`int`, *optional*, defaults to 600):
-                Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
+        feature_extractor ([`WhisperFeatureExtractor`]):
+            The feature extractor is a required input.
+        tokenizer ([`Qwen2TokenizerFast`]):
+            The tokenizer is a required input.
+        chat_template (`Optional[str]`, *optional*):
+            The Jinja template to use for formatting the conversation. If not provided, the tokenizer's default chat
+            template will be used.
+        audio_token (`Optional[str]`, *optional*, defaults to `"<sound>"`):
+            Special token used to represent audio inputs in the chat template.
+        audio_bos_token (`Optional[str]`, *optional*, defaults to `"<|sound_bos|>"`):
+            Special token used to represent the beginning of audio.
+        audio_eos_token (`Optional[str]`, *optional*, defaults to `"<|sound_eos|>"`):
+            Special token used to represent the end of audio.
+        max_audio_len (`int`, *optional*, defaults to 1200):
+            Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
     """
 
     def __init__(

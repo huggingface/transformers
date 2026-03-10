@@ -45,55 +45,21 @@ from ..llama.modeling_llama import LlamaRotaryEmbedding
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="nvidia/music-flamingo-2601-hf")
 class MusicFlamingoEncoderConfig(AudioFlamingo3EncoderConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MusicFlamingoEncoder`].
-
-    e.g. [nvidia/music-flamingo-hf](https://huggingface.co/nvidia/music-flamingo-hf)
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        num_mel_bins (`int`, *optional*, defaults to 128):
-            Number of mel features used per input features. Should correspond to the value used in the
-            `MusicFlamingoProcessor` class.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of encoder layers.
-        num_attention_heads (`int`, *optional*, defaults to 20):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 5120):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in encoder.
-        layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](https://huggingface.co/papers/1909.11556)
-            for more details.
-        activation_function (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        hidden_size (`int`, *optional*, defaults to 1280):
-            Dimensionality of the layers.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        scale_embedding (`bool`, *optional*, defaults to `False`):
-            Scale embeddings by dividing by sqrt(hidden_size).
-        max_source_positions (`int`, *optional*, defaults to 1500):
-            The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
-        head_dim (`int`, *optional*, defaults to 256):
-            Rotary embedding dimension used per axis in [`MusicFlamingoRotaryEmbedding`]. Since the rotary embedding is
-            applied on two axes (batch and time), the rotated hidden size is `2 * head_dim`, which must be less than
-            or equal to `hidden_size`.
-        max_position_embeddings (`int`, *optional*, defaults to 1200):
-            Maximum cached positions used by the MusicFlamingo time rotary embedding. This should match the processor
-            `max_audio_len`.
-        rope_parameters (`dict`, *optional*):
-            RoPE parameters for [`MusicFlamingoRotaryEmbedding`]. Supports the standard keys `"rope_type"` (defaults to
-            `"default"`) and `"rope_theta"`. By default, `"rope_theta"` is derived from `max_position_embeddings / (2 * pi)`.
+    max_source_positions (`int`, *optional*, defaults to 1500):
+        The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
+    head_dim (`int`, *optional*, defaults to 256):
+        Rotary embedding dimension used per axis in [`MusicFlamingoRotaryEmbedding`]. Since the rotary embedding is
+        applied on two axes (batch and time), the rotated hidden size is `2 * head_dim`, which must be less than
+        or equal to `hidden_size`.
+    max_position_embeddings (`int`, *optional*, defaults to 1200):
+        Maximum cached positions used by the MusicFlamingo time rotary embedding. This should match the processor
+        `max_audio_len`.
+    rope_parameters (`dict`, *optional*):
+        RoPE parameters for [`MusicFlamingoRotaryEmbedding`]. Supports the standard keys `"rope_type"` (defaults to
+        `"default"`) and `"rope_theta"`. By default, `"rope_theta"` is derived from `max_position_embeddings / (2 * pi)`.
 
     Example:
 
@@ -155,30 +121,13 @@ class MusicFlamingoEncoderConfig(AudioFlamingo3EncoderConfig):
         self.rope_parameters = rope_parameters
 
 
+@auto_docstring(checkpoint="nvidia/music-flamingo-2601-hf")
 class MusicFlamingoConfig(AudioFlamingo3Config):
     r"""
-    This is the configuration class to store the configuration of a [`MusicFlamingoForConditionalGeneration`].
-
-    e.g. [nvidia/music-flamingo-hf](https://huggingface.co/nvidia/music-flamingo-hf)
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        audio_config (`Union[MusicFlamingoEncoderConfig, dict]`, *optional*, defaults to `MusicFlamingoEncoderConfig`):
-            The config object or dictionary of the audio backbone.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `Qwen2Config`):
-            The config object or dictionary of the text backbone.
-        audio_token_id (`int`, *optional*, defaults to 151669):
-            The audio token index to encode the audio prompt.
-        audio_bos_token_id (`int`, *optional*, defaults to 151670):
+    audio_bos_token_id (`int`, *optional*, defaults to 151670):
             The beginning-of-audio token index used to mark the start of audio spans.
-        audio_eos_token_id (`int`, *optional*, defaults to 151671):
-            The end-of-audio token index used to mark the end of audio spans.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            Activation function used in the projector.
-        projector_bias (`bool`, *optional*, defaults to `True`):
-            Whether to include bias terms in the projector.
+    audio_eos_token_id (`int`, *optional*, defaults to 151671):
+        The end-of-audio token index used to mark the end of audio spans.
 
     Example:
 
@@ -228,6 +177,30 @@ class MusicFlamingoProcessorKwargs(AudioFlamingo3ProcessorKwargs): ...
 
 
 class MusicFlamingoProcessor(AudioFlamingo3Processor):
+    r"""
+    Constructs an MusicFlamingo processor which wraps an MusicFlamingo feature extractor and an MusicFlamingo
+    tokenizer into a single processor.
+
+    [`MusicFlamingoProcessor`] offers all the functionalities of [`WhisperFeatureExtractor`] and
+    [`Qwen2TokenizerFast`]. See the [`~MusicFlamingoProcessor.__call__`] for more information.
+
+    Args:
+        feature_extractor ([`WhisperFeatureExtractor`]):
+            The feature extractor is a required input.
+        tokenizer ([`Qwen2TokenizerFast`]):
+            The tokenizer is a required input.
+        chat_template (`Optional[str]`, *optional*):
+            The Jinja template to use for formatting the conversation. If not provided, the tokenizer's default chat
+            template will be used.
+        audio_token (`Optional[str]`, *optional*, defaults to `"<sound>"`):
+            Special token used to represent audio inputs in the chat template.
+        audio_bos_token (`Optional[str]`, *optional*, defaults to `"<|sound_bos|>"`):
+            Special token used to represent the beginning of audio.
+        audio_eos_token (`Optional[str]`, *optional*, defaults to `"<|sound_eos|>"`):
+            Special token used to represent the end of audio.
+        max_audio_len (`int`, *optional*, defaults to 1200):
+            Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
+    """
     def __init__(
         self,
         feature_extractor,
@@ -557,6 +530,12 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         input_features_mask: torch.Tensor,
         audio_times: torch.Tensor | None = None,
     ) -> torch.FloatTensor:
+        r"""
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+            Mask to avoid performing attention on padded feature indices.
+        audio_times (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+            The start time of the audio segments in seconds. This is used to compute the rotary time embeddings.
+        """
         encoder_output = self.audio_tower(
             input_features, input_features_mask=input_features_mask, audio_times=audio_times
         )
