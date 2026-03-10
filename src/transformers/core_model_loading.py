@@ -657,10 +657,9 @@ class WeightTransform:
             # Sync loading
             elif callable(tensors[0]):
                 tensors = [func() for func in tensors]
-            # Release the semaphore slots so worker threads can load more tensors to GPU.
+            # Release the semaphore so the next worker thread can load a tensor to GPU.
             if self._gpu_semaphore is not None:
-                for _ in tensors:
-                    self._gpu_semaphore.release()
+                self._gpu_semaphore.release()
             # Add them to the new dictionary
             collected_tensors[key] = tensors
 
