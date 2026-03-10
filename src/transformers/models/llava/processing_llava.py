@@ -15,6 +15,8 @@
 Processor class for Llava.
 """
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...processing_utils import (

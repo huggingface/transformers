@@ -1613,20 +1613,6 @@ class ProcessorMixin(PushToHubMixin):
             raise ValueError(f"Cannot decode text: {self.__class__.__name__} has no tokenizer.")
         return self.tokenizer.decode(*args, **kwargs)
 
-    def create_mm_token_type_ids(self, input_ids: list) -> list[list[int]]:
-        # We have to iterate for each list separately because inputs
-        # might be non-padded lists and we can't cast numpy on that!
-        # Then cast numpy as each input for faster indexing
-        mm_token_type_ids = []
-        for input in input_ids:
-            input = np.array(input)
-            mm_token_types = np.zeros_like(input)
-            mm_token_types[np.isin(input, self.image_ids)] = 1
-            mm_token_types[np.isin(input, self.video_ids)] = 2
-            mm_token_types[np.isin(input, self.audio_ids)] = 3
-            mm_token_type_ids.append(mm_token_types.tolist())
-        return mm_token_type_ids
-
     def replace_image_token(
         self, text: str, image_inputs: dict | None = None, batch_idx: int = 0, image_index: int = 0
     ) -> str:
