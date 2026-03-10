@@ -286,7 +286,11 @@ def inject_cache_into_inputs(
 
     is_encoder_decoder = getattr(model.config, "is_encoder_decoder", False)
     cache_in_inputs = next((inputs[n] for n in ALL_CACHE_NAMES if inputs.get(n) is not None), None)
-    cache_in_outputs = next((outputs[n] for n in ALL_CACHE_NAMES if outputs.get(n) is not None), None)
+    cache_in_outputs = (
+        next((outputs[n] for n in ALL_CACHE_NAMES if outputs.get(n) is not None), None)
+        if isinstance(outputs, dict)
+        else None
+    )
     seq_len_tied_keys = (
         "cache_position",
         "token_type_ids",
@@ -330,6 +334,10 @@ def get_inputs_outputs_names(inputs: dict[str, Any], outputs: dict[str, Any]) ->
     for name in set(inputs_names).intersection(set(outputs_names)):
         inputs_names[inputs_names.index(name)] = f"input.{name}"
         outputs_names[outputs_names.index(name)] = f"output.{name}"
+
+    if outputs_names == [""]:
+        outputs_names = ["output"]
+
     return inputs_names, outputs_names
 
 

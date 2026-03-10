@@ -185,7 +185,7 @@ class GraniteSpeechConformerAttention(nn.Module):
             out = F.scaled_dot_product_attention(
                 query_states, key_states, value_states, attn_mask=pos_attn, scale=self.scale
             )
-        out = out.transpose(2, 3).clone(memory_format=torch.contiguous_format).reshape(bsz, hidden_states.shape[1], -1)
+        out = out.transpose(2, 3).reshape(bsz, hidden_states.shape[1], -1)
         out = self.to_out(out[:, :num_features, :])
         return self.dropout(out)
 

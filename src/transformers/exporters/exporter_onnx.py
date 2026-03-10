@@ -254,22 +254,25 @@ def sanitize_fx_graph_for_onnx_export(graph_module: "torch.fx.GraphModule") -> N
 
 @contextmanager
 def patch_for_onnx_export(model):
-    # ONNX export patcher context
-    # This context manager monkey-patches PyTorch ops that are unsupported or buggy in ONNX export.
-    # The following ops are patched with fallback implementations or workarounds:
-    #   - torch.where / torch.Tensor.where: handles dtype mismatches and scalar operands
-    #   - torch.unsqueeze: supports complex tensors
-    #   - torch.nn.RMSNorm.forward: bypasses aten._fused_rms_norm when elementwise_affine=False
-    #   - torch.nn.functional.scaled_dot_product_attention: supports 5D blocked attention; disables GQA for standard MHA
-    #   - torch.randperm: replaced with argsort(rand(n)) using only ONNX-supported ops
-    #   - torch.bucketize: replaced with vectorized (boundaries <= x).sum(-1) to avoid scalar constant tensors
-    #     that functionalize() wraps with alias+detach_ during step-2 re-tracing, failing assert_functional_graph
-    #   - torch.cummax / torch.cummin: decomposed via upper-triangular masked max/min (no native ONNX op)
-    #   - torch.Tensor.masked_scatter: replaced with cumsum-gather-where (aten.masked_scatter has no ONNX op and
-    #     its flattened source layout produces Where shape mismatches identical to index_put with boolean masks)
-    #   - masking_utils._vmap_expansion_sdpa: replaced with broadcast-based expansion (vmap higher-order ops fail in step-2 AOT re-tracing)
-    #   - model.forward: clones any tensor that appears more than once in the output structure (deduplication)
-    # These patches are only active during export and are reverted afterwards.
+    """Context manager that applies temporary patches for ONNX export.
+
+    During ONNX export some PyTorch ops have unsupported patterns or buggy
+    decompositions that either fail export or produce incorrect ONNX graphs.
+    This context manager monkey-patches those ops with safe fallback
+    implementations for the duration of the export and restores the
+    originals on exit.
+
+    Patched behaviors include handling dtype/scalar mismatches for
+    ``where``, complex support for ``unsqueeze``, a non-fused RMSNorm
+    path when ``elementwise_affine=False``, a guarded SDPA implementation
+    for blocked attention shapes, a randperm fallback using ONNX-friendly
+    ops, vectorized ``bucketize``, decompositions for ``cummax``/``cummin``,
+    a masked-scatter replacement, broadcast-based mask expansion, and
+    deduplication of model outputs so ONNX export only tracks tensors.
+
+    Args:
+        model: The model whose ``forward`` will be temporarily patched.
+    """
 
     original_forward = model.forward
 
@@ -291,6 +294,12 @@ def patch_for_onnx_export(model):
     original_vmap_expansion_sdpa = _masking_utils_mod._vmap_expansion_sdpa
 
     def _torch_where(condition, x=None, y=None):
+        """Safe replacement for ``torch.where`` that normalizes dtypes and scalars.
+
+        Ensures that tensor operands have matching dtypes and converts scalar
+        operands to tensors on the correct device/dtype so ONNX export sees
+        consistent tensor arguments.
+        """
         if isinstance(x, torch.Tensor) and isinstance(y, torch.Tensor) and x.dtype != y.dtype:
             y = y.to(x.dtype)
         elif isinstance(x, torch.Tensor) and isinstance(y, (int, float, bool)):
@@ -305,9 +314,20 @@ def patch_for_onnx_export(model):
             return original_torch_where(condition, x, y)
 
     def _tensor_where(self, condition, other):
+        """Tensor method wrapper delegating to the safe ``_torch_where``.
+
+        Matches the signature of ``Tensor.where`` but funnels through the
+        unified implementation above to avoid dtype/scalar issues.
+        """
         return _torch_where(condition, self, other)
 
     def _unsqueeze(self_or_input, dim):
+        """Unsqueeze that supports complex tensors by unsqueezing real/imag.
+
+        ONNX unsqueeze paths may not handle complex tensors; this helper
+        expands complex tensors by unsqueezing their real and imaginary
+        parts and recombining them.
+        """
         if torch.is_complex(self_or_input):
             real = original_torch_unsqueeze(self_or_input.real, dim)
             imag = original_torch_unsqueeze(self_or_input.imag, dim)
@@ -316,12 +336,24 @@ def patch_for_onnx_export(model):
             return original_torch_unsqueeze(self_or_input, dim)
 
     def _rms_norm_forward(self, x):
+        """Fallback RMSNorm forward that avoids fused aten path when not affine.
+
+        When ``elementwise_affine`` is False the fused aten path can cause
+        issues during export; compute a simple non-fused RMS-normalization
+        in float32 and cast back to the input dtype for numerical safety.
+        """
         if not self.elementwise_affine:
             variance = x.to(torch.float32).pow(2).mean(-1, keepdim=True)
             return (x * torch.rsqrt(variance + self.eps)).to(x.dtype)
         return original_rms_norm_forward(self, x)
 
     def _scaled_dot_product_attention(query, key, *args, enable_gqa: bool = False, **kwargs):
+        """Scaled-dot-product attention patched for ONNX export edge cases.
+
+        - Treats equal q/kv head counts as standard MHA (disables GQA).
+        - Flattens 5D blocked-attention tensors into 4D for ONNX, then
+            unflattens the output back to the blocked shape.
+        """
         # When enable_gqa=True but q_num_heads == kv_num_heads, it is standard MHA, not GQA.
         # The upstream ONNX SDPA function incorrectly asserts q_num_heads > kv_num_heads when
         # enable_gqa=True, which fails for MHA models. Treat equal heads as MHA (enable_gqa=False).
@@ -344,14 +376,20 @@ def patch_for_onnx_export(model):
         return original_scaled_dot_product_attention(query, key, *args, enable_gqa=enable_gqa, **kwargs)
 
     def _randperm(n, *, dtype=torch.int64, layout=torch.strided, device=None, pin_memory=False, generator=None):
-        # aten.randperm has no ONNX translation. Replace with argsort(rand(n)) which uses
-        # only ONNX-supported ops (RandomUniform + TopK/Sort).
+        """ONNX-friendly replacement for ``torch.randperm`` using argsort(rand).
+
+        ``aten.randperm`` lacks an ONNX decomposition; using ``argsort(rand(n))``
+        produces a permutation via only ONNX-supported ops.
+        """
         return torch.argsort(torch.rand(n, device=device)).to(dtype)
 
     def _cummax_or_cummin(input, dim, *, mode):
-        # aten.cummax / aten.cummin have no ONNX translations. Decompose via upper-triangular
-        # masked reduction: for each output position i, include only input positions j <= i.
-        # This uses only ONNX-supported ops (expand, where, max/min) at O(n²) memory cost.
+        """Decompose ``cummax``/``cummin`` using a masked triangular reduction.
+
+        Since ONNX lacks native cumulative max/min, create an expanded grid
+        masked by a lower-triangular boolean matrix and apply a reduce max/min
+        across the last dimension. Note: this approach is O(n²) memory.
+        """
         n = input.shape[dim]
         x = input.movedim(dim, -1)  # (..., n)
         x_grid = x.unsqueeze(-2).expand(*x.shape[:-1], n, n)  # (..., n, n)
@@ -370,14 +408,13 @@ def patch_for_onnx_export(model):
         return out.values.movedim(-1, dim), out.indices.movedim(-1, dim)
 
     def _bucketize(input, boundaries, *, out_int32=False, right=False):
-        # Vectorized replacement for torch.bucketize. The original decomposes via
-        # torch.where(cond, mid, 0) in step 2, creating scalar-constant tensors
-        # (_tensor_constant0/1) that functionalize() wraps with alias+detach_,
-        # causing assert_functional_graph to fail.
-        # This implementation avoids any constant tensors.
-        # Edge case: empty boundaries → all inputs fall in bucket 0.
-        # Without this guard, mask has shape (*input.shape, 0) and mask.sum(-1)
-        # translates to ReduceSum over a 0-dim tensor, which ORT CUDA rejects.
+        """Vectorized ``bucketize`` replacement that avoids scalar constants.
+
+        The original decomposition creates scalar-constant tensors that can
+        induce problematic alias/detach patterns during functionalization.
+        This implementation uses pure tensor ops and guards the empty
+        boundaries case to avoid invalid ReduceSum shapes.
+        """
         if boundaries.numel() == 0:
             result = torch.zeros_like(input, dtype=torch.int64)
             return result.to(torch.int32) if out_int32 else result
@@ -389,10 +426,13 @@ def patch_for_onnx_export(model):
         return result.to(torch.int32) if out_int32 else result
 
     def _masked_scatter(self, mask, source):
-        # aten.masked_scatter has no ONNX op, and its flattened-source layout causes the same
-        # Where shape mismatch as boolean-mask index_put. Replace with cumsum-gather-where:
-        # broadcast mask to self's shape, use a flat cumsum to map each True position to its
-        # sequential index in source, gather unconditionally, then select with where.
+        """Replacement for ``Tensor.masked_scatter`` using cumsum-gather-where.
+
+        The flattened-source layout of the aten implementation leads to ONNX
+        Where shape mismatches; this approach computes positions via a
+        cumulative sum over the flattened mask, gathers from the source and
+        then selects into the original tensor shape.
+        """
         mask = mask.expand_as(self)
         flat_mask = mask.reshape(-1)
         positions = (flat_mask.to(torch.int64).cumsum(0) - 1).clamp(min=0)
@@ -400,18 +440,22 @@ def patch_for_onnx_export(model):
         return torch.where(flat_mask, gathered, self.reshape(-1)).reshape(self.shape)
 
     def _cummax(input, dim):
+        """Wrapper for cumulative max using the generic decomposer."""
         return _cummax_or_cummin(input, dim, mode="max")
 
     def _cummin(input, dim):
+        """Wrapper for cumulative min using the generic decomposer."""
         return _cummax_or_cummin(input, dim, mode="min")
 
     def _broadcast_mask_expansion(mask_function):
-        # Replace torch.vmap-based mask expansion with broadcast-based expansion.
-        # torch.vmap higher-order ops in the step-1 FX graph cause AOT autograd in step-2
-        # to fail: vmapped tensors (_add_batch_dim_*) appear as direct operands in le/ge/sub
-        # nodes, triggering "tensor escaped from vmapped function".
-        # The broadcast-based path (_non_vmap_expansion_sdpa) is semantically equivalent for
-        # all index-based mask functions and works correctly under AOT autograd re-tracing.
+        """Convert vmap-based mask expansion into a broadcast-based version.
+
+        Using vmap in the FX graph causes AOT autograd re-tracing failures
+        where vmapped tensors escape; the broadcast-based alternative is
+        semantically equivalent for index-based mask functions and is safe
+        under AOT.
+        """
+
         def _expanded(batch_arange, head_arange, q_arange, kv_arange):
             result = mask_function(
                 *_masking_utils_mod._non_vmap_expansion_sdpa(batch_arange, head_arange, q_arange, kv_arange)
@@ -422,6 +466,12 @@ def patch_for_onnx_export(model):
 
     @wraps(original_forward)
     def _forward(*args, **kwargs):
+        """Patched model forward that deduplicates and flattens outputs.
+
+        Clones any tensor that appears multiple times in the output structure so
+        the ONNX optimizer does not deduplicate/rename outputs, then returns a
+        flat sequence of tensors (ONNX export only tracks tensor outputs).
+        """
         outputs = original_forward(*args, **kwargs)
         # Clone duplicate tensors so ONNX optimizer doesn't deduplicate/rename outputs
         deduped = dedup_output_tensors(outputs)
@@ -476,6 +526,12 @@ def patch_for_onnx_export(model):
 # This function applies in-place fixes to the exported ONNXProgram to ensure ORT compatibility.  See its docstring for details.
 
 
+def _fix_graph(graph_like: "onnx_ir.Graph") -> None:
+    for ir_node in list(graph_like.all_nodes()):
+        if ir_node.op_type == "TopK":
+            ir_node.attributes["sorted"] = onnx_ir.Attr("sorted", onnx_ir.AttributeType.INT, 1)
+
+
 def patch_onnx_program_for_onnxruntime(onnx_program: "ONNXProgram") -> None:
     """Patch an exported ONNXProgram in-place for ORT compatibility.
 
@@ -488,11 +544,6 @@ def patch_onnx_program_for_onnxruntime(onnx_program: "ONNXProgram") -> None:
     Call this function after :meth:`OnnxExporter.export` and before running ORT
     inference (i.e. before ``onnx_program(...)``).
     """
-
-    def _fix_graph(graph_like: "onnx_ir.Graph") -> None:
-        for ir_node in list(graph_like.all_nodes()):
-            if ir_node.op_type == "TopK":
-                ir_node.attributes["sorted"] = onnx_ir.Attr("sorted", onnx_ir.AttributeType.INT, 1)
 
     _fix_graph(onnx_program.model.graph)
     for func in onnx_program.model.functions.values():

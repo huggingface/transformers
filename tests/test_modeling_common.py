@@ -4219,6 +4219,9 @@ class ModelTesterMixin:
                 onnx_outputs = dict(zip(onnx_names, onnx_outputs))
                 self.assertTrue(onnx_outputs, "ONNX outputs is empty.")
 
+                if eager_outputs.get("") is not None:
+                    eager_outputs["output"] = eager_outputs.pop("")
+
                 try:
                     # Check if outputs are close
                     torch.testing.assert_close(onnx_outputs, eager_outputs, atol=atol, rtol=rtol, check_device=False)

@@ -1488,7 +1488,7 @@ class FastSpeech2ConformerHifiGan(PreTrainedModel):
             # remove seq-len dim since this collapses to 1
             waveform = hidden_states.squeeze(1)
 
-        return BaseModelOutput(last_hidden_state=waveform)
+        return waveform
 
 
 @auto_docstring(
