@@ -64,7 +64,7 @@ limitations under the License.
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/transformers_as_a_model_definition.png"/>
 </h3>
 
-Transformers acts as the model-definition framework for state-of-the-art machine learning with text, computer
+The 🤗 Transformers library acts as the model-definition framework for state-of-the-art machine learning with text, computer
 vision, audio, video, and multimodal models, for both inference and training.
 
 It centralizes the model definition so that this definition is agreed upon across the ecosystem. `transformers` is the
@@ -75,13 +75,13 @@ and adjacent modeling libraries (llama.cpp, mlx, ...) which leverage the model d
 We pledge to help support new state-of-the-art models and democratize their usage by having their model definition be
 simple, customizable, and efficient.
 
-There are over 1M+ Transformers [model checkpoints](https://huggingface.co/models?library=transformers&sort=trending) on the [Hugging Face Hub](https://huggingface.com/models) you can use.
+There are over 1M+ 🤗 Transformers library [model checkpoints](https://huggingface.co/models?library=transformers&sort=trending) on the [Hugging Face Hub](https://huggingface.com/models) you can use.
 
-Explore the [Hub](https://huggingface.com/) today to find a model and use Transformers to help you get started right away.
+Explore the [Hub](https://huggingface.com/) today to find a model and use the 🤗 Transformers library to help you get started right away.
 
 ## Installation
 
-Transformers works with Python 3.10+, and [PyTorch](https://pytorch.org/get-started/locally/) 2.4+.
+The 🤗 Transformers library works with Python 3.10+, and [PyTorch](https://pytorch.org/get-started/locally/) 2.4+.
 
 Create and activate a virtual environment with [venv](https://docs.python.org/3/library/venv.html) or [uv](https://docs.astral.sh/uv/), a fast Rust-based Python package and project manager.
 
@@ -94,7 +94,7 @@ uv venv .my-env
 source .my-env/bin/activate
 ```
 
-Install Transformers in your virtual environment.
+Install the 🤗 Transformers library in your virtual environment.
 
 ```py
 # pip
@@ -104,7 +104,7 @@ pip install "transformers[torch]"
 uv pip install "transformers[torch]"
 ```
 
-Install Transformers from source if you want the latest changes in the library or are interested in contributing. However, the *latest* version may not be stable. Feel free to open an [issue](https://github.com/huggingface/transformers/issues) if you encounter an error.
+Install the 🤗 Transformers library from source if you want the latest changes in the library or are interested in contributing. However, the *latest* version may not be stable. Feel free to open an [issue](https://github.com/huggingface/transformers/issues) if you encounter an error.
 
 ```shell
 git clone https://github.com/huggingface/transformers.git
@@ -119,7 +119,7 @@ uv pip install '.[torch]'
 
 ## Quickstart
 
-Get started with Transformers right away with the [Pipeline](https://huggingface.co/docs/transformers/pipeline_tutorial) API. The `Pipeline` is a high-level inference class that supports text, audio, vision, and multimodal tasks. It handles preprocessing the input and returns the appropriate output.
+Get started with the 🤗 Transformers library right away with the [Pipeline](https://huggingface.co/docs/transformers/pipeline_tutorial) API. The `Pipeline` is a high-level inference class that supports text, audio, vision, and multimodal tasks. It handles preprocessing the input and returns the appropriate output.
 
 Instantiate a pipeline and specify model to use for text generation. The model is downloaded and cached so you can easily reuse it again. Finally, pass some text to prompt the model.
 
@@ -211,7 +211,7 @@ pipeline(
 
 </details>
 
-## Why should I use Transformers?
+## Why should I use the 🤗 Transformers library?
 
 1. Easy-to-use state-of-the-art models:
     - High performance on natural language understanding & generation, computer vision, audio, video, and multimodal tasks.
@@ -238,21 +238,21 @@ pipeline(
     <img alt="Hugging Face Enterprise Hub" src="https://github.com/user-attachments/assets/247fb16d-d251-4583-96c4-d3d76dda4925">
 </a><br>
 
-## Why shouldn't I use Transformers?
+## Why shouldn't I use the 🤗 Transformers library?
 
 - This library is not a modular toolbox of building blocks for neural nets. The code in the model files is not refactored with additional abstractions on purpose, so that researchers can quickly iterate on each of the models without diving into additional abstractions/files.
-- The training API is optimized to work with PyTorch models provided by Transformers. For generic machine learning loops, you should use another library like [Accelerate](https://huggingface.co/docs/accelerate).
+- The training API is optimized to work with PyTorch models provided by the 🤗 Transformers library. For generic machine learning loops, you should use another library like [Accelerate](https://huggingface.co/docs/accelerate).
 - The [example scripts](https://github.com/huggingface/transformers/tree/main/examples) are only *examples*. They may not necessarily work out-of-the-box on your specific use case and you'll need to adapt the code for it to work.
 
-## 100 projects using Transformers
+## 100 projects using the 🤗 Transformers library
 
-Transformers is more than a toolkit to use pretrained models, it's a community of projects built around it and the
-Hugging Face Hub. We want Transformers to enable developers, researchers, students, professors, engineers, and anyone
+The 🤗 Transformers library is more than a toolkit to use pretrained models, it's a community of projects built around it and the
+Hugging Face Hub. We want the 🤗 Transformers library to enable developers, researchers, students, professors, engineers, and anyone
 else to build their dream projects.
 
-In order to celebrate Transformers 100,000 stars, we wanted to put the spotlight on the
+In order to celebrate the 🤗 Transformers library's 100,000 stars, we wanted to put the spotlight on the
 community with the [awesome-transformers](./awesome-transformers.md) page which lists 100
-incredible projects built with Transformers.
+incredible projects built with the 🤗 Transformers library.
 
 If you own or use a project that you believe should be part of the list, please open a PR to add it!
 
