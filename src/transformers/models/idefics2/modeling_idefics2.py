@@ -143,11 +143,8 @@ class Idefics2VisionEmbeddings(nn.Module):
         boundaries = torch.arange(
             1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side, device=pixel_values.device
         )
-        position_ids = torch.full(
-            size=(batch_size, max_nb_patches_h * max_nb_patches_w),
-            fill_value=0,
-            dtype=torch.long,
-            device=pixel_values.device,
+        position_ids = torch.zeros(
+            (batch_size, max_nb_patches_h * max_nb_patches_w), device=pixel_values.device, dtype=torch.long
         )
 
         nb_patches_h = patch_attention_mask[:, :, 0].sum(dim=1)  # (batch_size,)
