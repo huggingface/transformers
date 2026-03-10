@@ -32,7 +32,6 @@ class BaseModelOutputWithSpatialAndTemporalStates(ModelOutput):
     temporal_hidden_state (`torch.FloatTensor`, *optional*):
         The last hidden state of the temporal encoder, typically of shape
         `(batch_size * num_patches, num_frames, hidden_size)`.
-
     spatial_hidden_state (`torch.FloatTensor`, *optional*):
         The last hidden state of the spatial encoder, typically of shape
         `(batch_size * num_frames, num_patches, hidden_size)`.
@@ -70,8 +69,6 @@ class VideoPrismVideoOutput(ModelOutput):
 )
 class VideoPrismClipOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-        Contrastive loss for video-text similarity.
     logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
         The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
         similarity scores.
@@ -86,6 +83,8 @@ class VideoPrismClipOutput(ModelOutput):
         The output of the [`VideoPrismVideoModel`].
     text_model_output (`BaseModelOutput`):
         The output of the [`VideoPrismTextModel`].
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        Contrastive loss for video-text similarity.
     """
 
     logits_per_video: torch.FloatTensor | None = None

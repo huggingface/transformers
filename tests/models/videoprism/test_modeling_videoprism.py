@@ -22,6 +22,7 @@ from parameterized import parameterized
 
 from transformers import VideoPrismConfig, VideoPrismTextConfig, VideoPrismVisionConfig
 from transformers.testing_utils import (
+    require_sentencepiece,
     require_torch,
     require_vision,
     slow,
@@ -507,11 +508,6 @@ class VideoPrismClipModelTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    # @unittest.skip(reason="VideoPrismClipModel does not have input/output embeddings")
-    # # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_model_get_set_embeddings
-    # def test_model_get_set_embeddings(self):
-    #     pass
-
     @unittest.skip(
         reason="VideoPrismClipModel normalizes exp(similarity) across the batch, so logits are batch-dependent by design."
     )
@@ -558,13 +554,11 @@ class VideoPrismForVideoClassificationModelTester(ModelTesterMixin, VideoPrismVi
         model = VideoPrismForVideoClassification._from_config(config=config)
         model.to(torch_device)
         pixel_values = pixel_values.to(torch_device)
-        label = torch.tensor([1], dtype=torch.long)
-        labels = torch.stack((label, label), dim=0)
-        labels.to(torch_device)
+        labels = labels.to(torch_device)
 
         model.eval()
         with torch.no_grad():
-            result = model(pixel_values, labels)
+            result = model(pixel_values, labels=labels)
         image_size = (self.image_size, self.image_size)
         patch_size = (self.tubelet_size[1], self.tubelet_size[2])
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
@@ -641,7 +635,9 @@ def prepare_video(video_type="water_bottle_drumming"):
     elif video_type == "basketball_dunk":
         filename = "v_BasketballDunk_g14_c06.avi"
     else:
-        raise "The `video_type` should be one of ['water_bottle_drumming', 'water_bottle_drumming_frames', 'basketball_dunk']."
+        raise ValueError(
+            "The `video_type` should be one of ['water_bottle_drumming', 'water_bottle_drumming_frames', 'basketball_dunk']."
+        )
 
     file = api.hf_hub_download(repo_id="MHRDYN7/videoprism_assets", filename=filename, repo_type="dataset")
     if video_type == "water_bottle_drumming_frames":
@@ -650,29 +646,40 @@ def prepare_video(video_type="water_bottle_drumming"):
 
 
 def prepare_texts():
-    TEXT_QUERY_CSV = "playing drums,sitting,playing flute,playing at playground,concert"  # @param {type: "string"}
-    PROMPT_TEMPLATE = "a video of {}."
+    text_query_csv = "playing drums,sitting,playing flute,playing at playground,concert"
+    prompt_template = "a video of {}."
 
-    text_queries = TEXT_QUERY_CSV.split(",")
-    text_queries = [PROMPT_TEMPLATE.format(t) for t in text_queries]
+    text_queries = text_query_csv.split(",")
+    text_queries = [prompt_template.format(t) for t in text_queries]
     tokenizer = VideoPrismTokenizer.from_pretrained("MHRDYN7/videoprism-lvt-base-f16r288")
     return tokenizer, text_queries
 
 
 @require_vision
 @require_torch
+@require_sentencepiece
 class VideoPrismModelIntegrationTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.water_bottle_drumming_frames = (
+            torch.tensor(prepare_video("water_bottle_drumming_frames")).unsqueeze(0).permute(0, 1, 4, 2, 3)
+        )
+        cls.water_bottle_drumming_video = prepare_video("water_bottle_drumming")
+        cls.basketball_dunk_video = prepare_video("basketball_dunk")
+        cls.tokenizer, cls.text_queries = prepare_texts()
+
     @slow
     def test_videoprism_vision_model(self):
         model = VideoPrismVisionModel.from_pretrained(
             "MHRDYN7/videoprism-base-f16r288", attn_implementation="eager"
         ).to(torch_device)
-        frames = torch.tensor(prepare_video("water_bottle_drumming_frames")).unsqueeze(0).permute(0, 1, 4, 2, 3)
-        input_vids = torch.cat([frames, frames], dim=0)  # batch size 2
+        input_vids = torch.cat([self.water_bottle_drumming_frames, self.water_bottle_drumming_frames], dim=0).to(
+            torch_device
+        )
         model.eval()
         with torch.inference_mode():
             outputs = model(input_vids).last_hidden_state
-            print(outputs.shape)
 
         self.assertListEqual(
             outputs[0].cpu().tolist(),
@@ -686,17 +693,19 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
                 [0.24594213, -0.3914095, -0.30516925],
             ]
         )
-        expected_slice = outputs[0, :3, :3]
+        expected_slice = outputs[0, :3, :3].cpu()
         torch.testing.assert_close(expected_slice, expectations, rtol=1e-5, atol=1e-5)
 
     @slow
     def test_videoprism_clip_model(self):
         model = VideoPrismClipModel.from_pretrained("MHRDYN7/videoprism-lvt-base-f16r288").to(torch_device)
         model.config._attn_implementation = "eager"
-        frames = torch.tensor(prepare_video("water_bottle_drumming_frames")).unsqueeze(0).permute(0, 1, 4, 2, 3)
-        input_vids = torch.cat([frames, frames], dim=0)
-        tokenizer, text_queries = prepare_texts()
-        tokens = tokenizer(text_queries, max_length=64, padding="max_length", return_tensors="pt").to(torch_device)
+        input_vids = torch.cat([self.water_bottle_drumming_frames, self.water_bottle_drumming_frames], dim=0).to(
+            torch_device
+        )
+        tokens = self.tokenizer(self.text_queries, max_length=64, padding="max_length", return_tensors="pt").to(
+            torch_device
+        )
         model.eval()
         with torch.inference_mode():
             outputs = model(input_vids, **tokens)
@@ -734,8 +743,8 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
             ]
         )
 
-        video_logits = outputs.video_embeds[0, :9]
-        text_logits = outputs.text_embeds[:, :3]
+        video_logits = outputs.video_embeds[0, :9].cpu()
+        text_logits = outputs.text_embeds[:, :3].cpu()
         torch.testing.assert_close(video_logits, video_expectation, rtol=1e-5, atol=1e-5)
         torch.testing.assert_close(text_logits, text_expectation, rtol=1e-5, atol=1e-5)
 
@@ -749,9 +758,7 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
             "size": {"height": 144, "width": 144},
             "do_resize": True,
         }
-        inputs = processor(videos=prepare_video("water_bottle_drumming"), return_tensors="pt", **kwargs).to(
-            torch_device
-        )
+        inputs = processor(videos=self.water_bottle_drumming_video, return_tensors="pt", **kwargs).to(torch_device)
         model.eval()
         with torch.inference_mode():
             outputs = model(**inputs, interpolate_pos_encoding=True)
@@ -764,12 +771,13 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
         model_name = "MHRDYN7/videoprism-base-f16r288-finetuned-ucf101"
         model = VideoPrismForVideoClassification.from_pretrained(model_name).to(torch_device)
         processor = VideoPrismVideoProcessor.from_pretrained(model_name)
-        video = prepare_video(video_type="basketball_dunk")
-        inputs = processor(videos=video, return_tensors="pt")["pixel_values_videos"].to(torch_device)
-        label = torch.tensor([8], dtype=torch.long)
+        inputs = processor(videos=self.basketball_dunk_video, return_tensors="pt")["pixel_values_videos"].to(
+            torch_device
+        )
+        label = torch.tensor([8], dtype=torch.long, device=torch_device)
         model.eval()
         with torch.inference_mode():
-            outputs = model(inputs, label)
+            outputs = model(inputs, labels=label)
 
         expected_logits = torch.tensor(
             [
@@ -778,5 +786,5 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
                 ]
             ]
         )
-        torch.testing.assert_close(outputs.logits, expected_logits, rtol=1e-4, atol=1e-4)
-        torch.testing.assert_close(outputs.loss, torch.tensor(0.0009), rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.logits.cpu(), expected_logits, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.loss.cpu(), torch.tensor(0.0009), rtol=1e-4, atol=1e-4)
