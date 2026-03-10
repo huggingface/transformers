@@ -14,100 +14,29 @@
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="rednote-hilab/dots.llm1.base")
 class Dots1Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Dots1Model`]. It is used to instantiate a
-    `dots.llm1` model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of
-    [rednote-hilab/dots.llm1.base](https://huggingface.co/rednote-hilab/dots.llm1.base).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 152064):
-            Vocabulary size of the model. Defines the number of different tokens that can be represented by the
-            `input_ids` passed when calling [`Dots1Model`].
-        hidden_size (`int`, *optional*, defaults to 4608):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 10944):
-            Dimension of the MLP representations.
-        moe_intermediate_size (`int`, *optional*, defaults to 1408):
-            Dimension of the MoE representations.
-        num_hidden_layers (`int`, *optional*, defaults to 62):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*, defaults to 32):
-            Number of key/value heads for Grouped Query Attention. If `num_key_value_heads=num_attention_heads`, Multi
-            Head Attention (MHA) is used. If `num_key_value_heads=1`, Multi Query Attention (MQA) is used. Otherwise,
-            Grouped Query Attention (GQA) is used. If not specified, defaults to `num_attention_heads`.
-        n_shared_experts (`int`, *optional*, default=None):
-            Number of shared experts. None means dense model.
-        n_routed_experts (`int`, *optional*, default=None):
-            Number of routed experts. None means dense model.
-        n_group (`int`, *optional*, defaults to 1):
-            Number of groups for routed experts.
-        topk_group (`int`, *optional*, defaults to 1):
-            Number of selected groups for each token (selected experts only within `topk_group` groups).
-        num_experts_per_tok (`int`, *optional*, default=None):
-            Number of selected experts. None means dense model.
-        first_k_dense_replace (`int`, *optional*, defaults to 0):
-            Number of dense layers at the beginning of the model before the first MoE layer.
-        norm_topk_prob (`bool`, *optional*, defaults to `False`):
-            Whether to normalize the weights of the routed experts.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string).
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            Maximum sequence length the model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            Standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            Epsilon used by the RMS normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions. Only relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie the input and output word embeddings.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the self-attention projections.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout ratio for the attention probabilities.
-        routed_scaling_factor (`float`, *optional*, defaults to 1.0):
-            Scaling factor for routed experts.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Size of the sliding window for attention. If not specified, defaults to `4096`.
-        max_window_layers (`int`, *optional*, defaults to 62):
-            The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
-            additional layer afterwards will use SWA (Sliding Window Attention).
-        layer_types (`list`, *optional*):
-            Attention pattern for each layer.
-        pad_token_id (`int`, *optional*):
-            Padding token id.
-        bos_token_id (`int`, *optional*):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*):
-            End of stream token id.
+    n_group (`int`, *optional*, defaults to 1):
+        Number of groups for routed experts.
+    first_k_dense_replace (`int`, *optional*, defaults to 0):
+        Number of dense layers at the beginning of the model before the first MoE layer.
 
     Examples:
-        ```python
-        >>> from transformers import Dots1Model, Dots1Config
 
-        >>> # Initializing a Dots1 style configuration
-        >>> configuration = Dots1Config()
-
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-        ```
+    ```python
+    >>> from transformers import Dots1Model, Dots1Config
+    >>> # Initializing a Dots1 style configuration
+    >>> configuration = Dots1Config()
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     """
 
     model_type = "dots1"

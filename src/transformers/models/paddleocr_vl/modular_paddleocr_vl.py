@@ -578,41 +578,9 @@ class PaddleOCRVLProcessor(ProcessorMixin):
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
 
+@auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
 class PaddleOCRVisionConfig(SiglipVisionConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PaddleOCRVisionModel`]. It is used to instantiate a
-    PaddleOCRVL vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the vision encoder of the PaddleOCRVL
-    [PaddlePaddle/PaddleOCRVL](https://huggingface.co/PaddlePaddle/PaddleOCR-VL) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1152):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 4304):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 27):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels in the input images.
-        image_size (`int`, *optional*, defaults to 384):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        spatial_merge_size (`int`, *optional*, defaults to 2):
-            The size used for merging spatial dimensions.
-
     Example:
 
     ```python
@@ -651,36 +619,15 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
         self.spatial_merge_size = spatial_merge_size
 
 
+@auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
 class PaddleOCRTextConfig(Ernie4_5Config):
     model_type = "paddleocr_vl_text"
 
 
+@auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
 class PaddleOCRVLConfig(Qwen2VLConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PaddleOCRVLForConditionalGeneration`]. It is used to instantiate a
-    PaddleOCRVL model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of
-    PaddleOCRVL [PaddlePaddle/PaddleOCR-VL](https://huggingface.co/PaddlePaddle/PaddleOCR-VL).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `PaddleOCRTextConfig`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `PaddleOCRVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to 100295):
-            The image token index to encode the image prompt.
-        video_token_id (`int`, *optional*, defaults to 100296):
-            The video token index to encode the image prompt.
-        vision_start_token_id (`int`, *optional*, defaults to 101305):
-            The token index to denote start of vision input.
-        vision_end_token_id (`int`, *optional*, defaults to 101306):
-            The token index to denote end of vision input.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied.
+    Example:
 
     ```python
     >>> from transformers import PaddleOCRVLForConditionalGeneration, PaddleOCRVLConfig

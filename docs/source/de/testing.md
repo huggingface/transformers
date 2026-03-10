@@ -527,7 +527,7 @@ einen normalen Prozess erzeugt, der dann mehrere Worker erzeugt und die IO-Pipes
 
 Hier sind einige Tests, die dies verwenden:
 
-- [test_trainer_distributed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/test_trainer_distributed.py)
+- [test_trainer_distributed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/distributed/test_trainer_distributed.py)
 - [test_deepspeed.py](https://github.com/huggingface/transformers/tree/main/tests/deepspeed/test_deepspeed.py)
 
 Um direkt mit der Ausführung zu beginnen, suchen Sie in diesen Tests nach dem Aufruf `execute_subprocess_async`.
