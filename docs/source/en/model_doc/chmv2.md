@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-03-09.*
+*This model was released on 2026-03-10 and added to Hugging Face Transformers on 2026-03-10.*
 # CHMv2
 
 <div class="flex flex-wrap space-x-1">
@@ -24,23 +24,61 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The {new_paper_name} model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The Canopy Height Maps v2 (CHMv2) model was proposed in [CHMv2: Improvements in Global Canopy Height Mapping using DINOv3](https://arxiv.org/abs/2603.06382). Building on our [original high-resolution canopy height maps](https://sustainability.atmeta.com/blog/2024/04/22/using-artificial-intelligence-to-map-the-earths-forests/) released in 2024, CHMv2 delivers substantial improvements in accuracy, detail, and global consistency by leveraging DINOv3, Meta's self-supervised vision model.
 
-The abstract from the paper is the following:
+You can find more information [here](http://ai.meta.com/blog/world-resources-institute-dino-canopy-height-maps-v2), and the original code [here](https://github.com/facebookresearch/dinov3).
 
-<INSERT PAPER ABSTRACT HERE>
+**Abstract from the paper**:
 
-Tips:
+Accurate canopy height information is essential for quantifying forest carbon, monitoring restoration and degradation, and
+assessing habitat structure, yet high-fidelity measurements from airborne laser scanning (ALS) remain unevenly available
+globally. Here we present CHMv2, a global, meter-resolution canopy height map derived from high-resolution optical satellite
+imagery using a depth-estimation model built on DINOv3 and trained against ALS canopy height models. Compared to existing
+products, CHMv2 substantially improves accuracy, reduces bias in tall forests, and better preserves fine-scale structure such as
+canopy edges and gaps. These gains are enabled by a large expansion of geographically diverse training data, automated data
+curation and registration, and a loss formulation and data sampling strategy tailored to canopy height distributions. We validate
+CHMv2 against independent ALS test sets and against tens of millions of GEDI and ICESat-2 observations, demonstrating
+consistent performance across major forest biomes.
 
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+> [!TIP]
+> You can download the model weights and follow the examples below to convert them to the HF format. There are two checkpoints to download - the backbone (DINOv3 ViT-L) and the head (CHMv2).
 
 ## Usage examples
 
-<INSERT SOME NICE EXAMPLES HERE>
+Convert the original weights with the following command:
+```bash
+python -m transformers.models.chmv2.convert_chmv2_to_hf \
+    --head_checkpoint_path /path/to/chmv2_head.pth \
+    --backbone_checkpoint_path /path/to/dinov3_vitl16.pth \
+    --pytorch_dump_folder_path /path/to/chmv2_hf_checkpoint \
+    --verify_image_path /path/to/image.tif \
+```
+
+Add the flags `--push_to_hub` and `--model_name <model_name>` to push the converted model and processor to `facebook/<model_name>` on the Hub.
+
+Then for running inference on an image:
+
+```python
+from PIL import Image
+import torch
+
+from transformers import CHMv2ForDepthEstimation, CHMv2ImageProcessorFast
+
+processor = CHMv2ImageProcessorFast.from_pretrained("/path/to/chmv2_hf_checkpoint")
+model = CHMv2ForDepthEstimation.from_pretrained("/path/to/chmv2_hf_checkpoint").eval()
+
+image = Image.open("image.tif")
+inputs = processor(images=image, return_tensors="pt")
+
+with torch.no_grad():
+    outputs = model(**inputs)
+
+depth = processor.post_process_depth_estimation(
+    outputs, target_sizes=[(image.height, image.width)]
+)[0]["predicted_depth"]
+```
+
+
 
 
 ## CHMv2Config
