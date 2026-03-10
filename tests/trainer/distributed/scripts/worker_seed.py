@@ -1,3 +1,26 @@
+# Copyright 2024 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""
+Worker script for dataloader worker seed divergence tests.
+
+Verifies that dataloader workers get different random seeds across GPUs,
+so that each rank sees different random augmentations.
+
+Run via torchrun or accelerate launch.
+"""
+
 import random
 
 import numpy as np
@@ -6,28 +29,14 @@ import torch.distributed as dist
 import torch.nn as nn
 from torch.utils.data import Dataset
 
-from transformers import (
-    HfArgumentParser,
-    Trainer,
-    TrainingArguments,
-    set_seed,
-)
-from transformers.testing_utils import (
-    TestCasePlus,
-    backend_device_count,
-    execute_subprocess_async,
-    get_torch_dist_unique_port,
-    require_torch_multi_accelerator,
-    run_first,
-    torch_device,
-)
+from transformers import HfArgumentParser, Trainer, TrainingArguments, set_seed
+from transformers.testing_utils import torch_device
 
 
 def gather_from_all_gpus(tensor, world_size):
-    # Prepare a list to gather tensors from all processes
     gather_list = [torch.zeros_like(tensor) for _ in range(world_size)]
     dist.all_gather(gather_list, tensor)
-    return gather_list  # List of tensors from all ranks
+    return gather_list
 
 
 class DummyDataset(Dataset):
@@ -57,26 +66,11 @@ class DummyModel(nn.Module):
         return (y.mean(), y)
 
 
-class TestTrainerDistributedWorkerSeed(TestCasePlus):
-    @run_first
-    @require_torch_multi_accelerator
-    def test_trainer(self):
-        device_count = backend_device_count(torch_device)
-        output_dir = self.get_auto_remove_tmp_dir()
-        distributed_args = f"""--nproc_per_node={device_count}
-            --master_port={get_torch_dist_unique_port()}
-            {self.test_file_dir}/test_trainer_distributed_worker_seed.py
-        """.split()
-        args = f"--output_dir {output_dir}".split()
-        cmd = ["torchrun"] + distributed_args + args
-        execute_subprocess_async(cmd, env=self.get_env())
-
-
 def run_distributed_training(training_args):
     set_seed(42)
     model = DummyModel()
     dataset = DummyDataset()
-    training_args.max_steps = 10
+    training_args.max_steps = 3
     # dataloader_num_workers must be > 0 to enable worker_init_fn
     training_args.dataloader_num_workers = 2
     trainer = Trainer(

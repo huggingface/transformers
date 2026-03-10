@@ -16,61 +16,22 @@
 import os
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="susnato/clvp_dev")
 class ClvpEncoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ClvpEncoder`]. It is used to instantiate a CLVP
-    text or CLVP speech encoder according to the specified arguments. Instantiating a configuration with the defaults
-    will yield a similar configuration to that of the encoder of the CLVP
-    [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 256):
-            Vocabulary size of the CLVP Encoder model.
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 1536):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        projection_dim (`int`, *optional*, defaults to 768):
-            Dimensionality of the projection vector.
-        num_hidden_layers (`int`, *optional*, defaults to 20):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the feed-forward layers in [`ClvpEncoderMLP`].
-        use_rotary_embedding (`bool`, *optional*, defaults to `True`):
-            Whether to use rotary_embedding or not.
-        use_attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in Query, Key and Value layers during self attention.
-        summary_type (`str`, *optional*, defaults to `"mean"`):
-            What strategy to use to get pooler_output from the last_hidden_state. `"last"`, `"first"`, `"mean"` and
-            `"cls_index"` are supported.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1.0, used internally for initialization
-            testing).
-        bos_token_id (`int`, *optional*, defaults to 255):
-            Beginning of sequence token id.
-        eos_token_id (`int`, *optional*, defaults to 0):
-            End of sequence token id.
-        pad_token_id (`int`, *optional*):
-            Padding token id.
-
+    use_rotary_embedding (`bool`, *optional*, defaults to `True`):
+        Whether to use rotary_embedding or not.
+    use_attention_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use bias in Query, Key and Value layers during self attention.
+    summary_type (`str`, *optional*, defaults to `"mean"`):
+        What strategy to use to get pooler_output from the last_hidden_state. `"last"`, `"first"`, `"mean"` and
+        `"cls_index"` are supported.
     Example:
 
     ```python
@@ -156,87 +117,42 @@ class ClvpEncoderConfig(PreTrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@auto_docstring(checkpoint="susnato/clvp_dev")
 class ClvpDecoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ClvpDecoder`]. It is used to instantiate a CLVP
-    Decoder Model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Decoder part of the CLVP
-    [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    The architecture is similar to GPT2.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 8194):
-            Vocabulary size of the model.
-        max_position_embeddings (`int`, *optional*, defaults to 608):
-            The maximum sequence length of mel tokens that this model might ever be used with. Similar to `n_positions`
-            in `GPT2Config`.
-        max_text_tokens (`int`, *optional*, defaults to 404):
-            The maximum sequence length of text tokens that this model might ever be used with. Similar to
-            `n_positions` in `GPT2Config`.
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimensionality of the embeddings and hidden states.
-        num_hidden_layers (`int`, *optional*, defaults to 30):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        n_inner (`int`, *optional*):
-            Dimensionality of the inner feed-forward layers. `None` will set it to 4 times `hidden_size`.
-        num_mel_attn_blocks (`int`, *optional*, defaults to 6):
-            Denotes the number of self attention layers in [`ClvpConditioningEncoder`].
-        activation_function (`str`, *optional*, defaults to `"gelu_new"`):
-            Activation function, to be selected in the list `["relu", "silu", "gelu", "tanh", "gelu_new"]`.
-        resid_pdrop (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        embd_pdrop (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the embeddings.
-        attention_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention.
-        layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
-            The epsilon to use in the layer normalization layers.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        summary_type (`string`, *optional*, defaults to `"cls_index"`):
-            Argument used when doing sequence summary.
-
-            Has to be one of the following options:
-
-                - `"last"`: Take the last token hidden state (like XLNet).
-                - `"first"`: Take the first token hidden state (like BERT).
-                - `"mean"`: Take the mean of all tokens hidden states.
-                - `"cls_index"`: Supply a Tensor of classification token position (like GPT/GPT-2).
-                - `"attn"`: Not implemented now, use multi-head attention.
-        summary_use_proj (`bool`, *optional*, defaults to `True`):
-            Whether or not to add a projection after the vector extraction.
-        summary_activation (`str`, *optional*):
-            Pass `"tanh"` for a tanh activation to the output, any other value will result in no activation.
-        summary_proj_to_labels (`bool`, *optional*, defaults to `True`):
-            Whether the projection outputs should have `config.num_labels` or `config.hidden_size` classes.
-        summary_first_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout ratio to be used after the projection and activation.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
-        bos_token_id (`int`, *optional*, defaults to 8192):
-            Beginning of sequence token id, used at the start of the generation.
-        eos_token_id (`int`, *optional*, defaults to 8193):
-            End of sequence token id, used in the method
-            [`ClvpModelForConditionalGeneration.fix_speech_decoder_output()`] to correct decoder outputs.
-        pad_token_id (`int`, *optional*):
-            Padding token id.
-        feature_size (`int`, *optional*, defaults to 80):
-            The feature dimension of the extracted mel features. This value is used in [`ClvpConditioningEncoder`].
-        use_attention_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in Query, Key and Value layers during self attention.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1.0, used internally for initialization
-            testing).
-        decoder_fixing_codes (`list`, *optional*, defaults to `[83, 45, 45, 248]`):
-            These values are used in the method `fix_speech_decoder_output` to fix decoder generated outputs.
-        add_cross_attention (`bool`, *optional*, defaults to `False`):
-            Whether cross-attention layers should be added to the model.
+    resid_pdrop (`float`, *optional*, defaults to 0.1):
+        The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+    embd_pdrop (`float`, *optional*, defaults to 0.1):
+        The dropout ratio for the embeddings.
+    summary_type (`string`, *optional*, defaults to `"cls_index"`):
+        Argument used when doing sequence summary.
+        Has to be one of the following options:
+            - `"last"`: Take the last token hidden state (like XLNet).
+            - `"first"`: Take the first token hidden state (like BERT).
+            - `"mean"`: Take the mean of all tokens hidden states.
+            - `"cls_index"`: Supply a Tensor of classification token position (like GPT/GPT-2).
+            - `"attn"`: Not implemented now, use multi-head attention.
+    summary_use_proj (`bool`, *optional*, defaults to `True`):
+        Whether or not to add a projection after the vector extraction.
+    summary_activation (`str`, *optional*):
+        Pass `"tanh"` for a tanh activation to the output, any other value will result in no activation.
+    summary_proj_to_labels (`bool`, *optional*, defaults to `True`):
+        Whether the projection outputs should have `config.num_labels` or `config.hidden_size` classes.
+    summary_first_dropout (`float`, *optional*, defaults to 0.1):
+        The dropout ratio to be used after the projection and activation.
+    feature_size (`int`, *optional*, defaults to 80):
+        The feature dimension of the extracted mel features. This value is used in [`ClvpConditioningEncoder`].
+    use_attention_bias (`bool`, *optional*, defaults to `True`):
+        Whether to use bias in Query, Key and Value layers during self attention.
+    decoder_fixing_codes (`list`, *optional*, defaults to `[83, 45, 45, 248]`):
+        These values are used in the method `fix_speech_decoder_output` to fix decoder generated outputs.
+    n_inner (`int`, *optional*):
+        Dimensionality of the inner feed-forward layers. `None` will set it to 4 times `hidden_size`.
+    num_mel_attn_blocks (`int`, *optional*, defaults to 6):
+        Denotes the number of self attention layers in [`ClvpConditioningEncoder`].
+    max_text_tokens (`int`, *optional*, defaults to 404):
+        The maximum sequence length of text tokens that this model might ever be used with. Similar to
+        `n_positions` in `GPT2Config`.
 
     Example:
 
@@ -321,32 +237,13 @@ class ClvpDecoderConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="susnato/clvp_dev")
 class ClvpConfig(PreTrainedConfig):
     r"""
-    [`ClvpConfig`] is the configuration class to store the configuration of a [`ClvpModelForConditionalGeneration`]. It
-    is used to instantiate a CLVP model according to the specified arguments, defining the text model, speech model and
-    decoder model configs. Instantiating a configuration with the defaults will yield a similar configuration to that
-    of the CLVP [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize the CLVP text encoder.
-        speech_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize CLVP speech encoder.
-        decoder_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`ClvpDecoderConfig`].
-        projection_dim (`int`, *optional*, defaults to 768):
-            Dimensionality of text and speech projection layers.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The initial value of the *logit_scale* parameter. Default is used as per the original CLVP implementation.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1.0, used internally for initialization
-            testing).
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+    speech_config (`dict`, *optional*):
+        Dictionary of configuration options used to initialize CLVP speech encoder.
+    decoder_config (`dict`, *optional*):
+        Dictionary of configuration options used to initialize [`ClvpDecoderConfig`].
 
     Example:
 

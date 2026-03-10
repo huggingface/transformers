@@ -118,8 +118,8 @@ PALETTE = {
 }
 
 
-def _color(s, color):
-    """Return color-formatted input `s` if `sys.stdout` is interactive, e.g. connected to a terminal."""
+def _style(s, color):
+    """Return color/style-formatted input `s` if `sys.stdout` is interactive, e.g. connected to a terminal."""
     if sys.stdout.isatty():
         return f"{PALETTE[color]}{s}{PALETTE['reset']}"
     else:
@@ -176,33 +176,32 @@ class LoadStateDictInfo:
         term_w = _get_terminal_width()
 
         rows = []
-        tips = ""
+        tips = "\n\nNotes:"
         if self.unexpected_keys:
-            tips += (
-                f"\n- {_color('UNEXPECTED', 'orange') + PALETTE['italic']}\t:can be ignored when loading from different "
-                "task/architecture; not ok if you expect identical arch."
+            tips += f"\n- {_style('UNEXPECTED:', 'orange')}\t" + _style(
+                "can be ignored when loading from different task/architecture; not ok if you expect identical arch.",
+                "italic",
             )
             for k in update_key_name(self.unexpected_keys):
-                status = _color("UNEXPECTED", "orange")
+                status = _style("UNEXPECTED", "orange")
                 rows.append([k, status, "", ""])
 
         if self.missing_keys:
-            tips += (
-                f"\n- {_color('MISSING', 'red') + PALETTE['italic']}\t:those params were newly initialized because missing "
-                "from the checkpoint. Consider training on your downstream task."
+            tips += f"\n- {_style('MISSING:', 'red')}\t" + _style(
+                "those params were newly initialized because missing from the checkpoint. Consider training on your downstream task.",
+                "italic",
             )
             for k in update_key_name(self.missing_keys):
-                status = _color("MISSING", "red")
+                status = _style("MISSING", "red")
                 rows.append([k, status, ""])
 
         if self.mismatched_keys:
-            tips += (
-                f"\n- {_color('MISMATCH', 'yellow') + PALETTE['italic']}\t:ckpt weights were loaded, but they did not match "
-                "the original empty weight shapes."
+            tips += f"\n- {_style('MISMATCH:', 'yellow')}\t" + _style(
+                "ckpt weights were loaded, but they did not match the original empty weight shapes.", "italic"
             )
             iterator = {a: (b, c) for a, b, c in self.mismatched_keys}
             for key, (shape_ckpt, shape_model) in update_key_name(iterator).items():
-                status = _color("MISMATCH", "yellow")
+                status = _style("MISMATCH", "yellow")
                 data = [
                     key,
                     status,
@@ -211,9 +210,11 @@ class LoadStateDictInfo:
                 rows.append(data)
 
         if self.conversion_errors:
-            tips += f"\n- {_color('CONVERSION', 'purple') + PALETTE['italic']}\t:originate from the conversion scheme"
+            tips += f"\n- {_style('CONVERSION:', 'purple')}\t" + _style(
+                "originate from the conversion scheme", "italic"
+            )
             for k, v in update_key_name(self.conversion_errors).items():
-                status = _color("CONVERSION", "purple")
+                status = _style("CONVERSION", "purple")
                 _details = f"\n\n{v}\n\n"
                 rows.append([k, status, _details])
 
@@ -227,7 +228,6 @@ class LoadStateDictInfo:
         else:
             headers += ["", ""]
         table = _make_table(rows, headers=headers)
-        tips = f"\n\n{PALETTE['italic']}Notes:{tips}{PALETTE['reset']}"
         report = table + tips
 
         return report

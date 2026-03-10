@@ -35,22 +35,6 @@ You can find all the original Switch Transformers checkpoints under the [Switch 
 The example below demonstrates how to predict the masked token with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```python
-import torch
-from transformers import pipeline
-
-pipeline = pipeline(
-    task="text2text-generation", 
-    model="google/switch-base-8",
-    dtype=torch.float16,
-    device=0
-)
-print(pipeline("The capital of France is <extra_id_0>."))
-```
-
-</hfoption>
 <hfoption id="AutoModel">
 
 ```python
@@ -65,14 +49,6 @@ input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to(0)
 
 outputs = model.generate(input_ids)
 print(tokenizer.decode(outputs[0]))
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "The capital of France is <extra_id_0>." | transformers run --task text2text-generation --model google/switch-base-8 --device 0
-# [{'generated_text': 'Paris.'}]
 ```
 
 </hfoption>
