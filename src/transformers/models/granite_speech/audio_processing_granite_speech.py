@@ -32,7 +32,13 @@ class GraniteSpeechAudioProcessor(TorchAudioBackend):
         ),
         log_mode="log10",
     )
-        
+
+    def extract_spectrogram(self, audio, **kwargs):
+        features = super().extract_spectrogram(audio, **kwargs)
+        features = [f.T for f in features]
+        features = [f.reshape(-1, 2 * f.shape[-1]) for f in features]
+
+        return features
 
 
 __all__ = ["GraniteSpeechAudioProcessor"]
