@@ -54,6 +54,8 @@ class InternVLProcessor(ProcessorMixin):
             The number of image token to use per image patch. it should be set so that:
             image_seq_length = (config.image_size // config.patch_size) ** 2 * (config.scale_factor**2)
         """
+        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template, **kwargs)
+
         self.image_seq_length = image_seq_length
         self.start_image_token = tokenizer.start_image_token
         self.end_image_token = tokenizer.end_image_token
@@ -63,8 +65,6 @@ class InternVLProcessor(ProcessorMixin):
         self.video_token = tokenizer.video_token
         self.image_token_id = tokenizer.context_image_token_id
         self.image_ids = [self.image_token_id, self.start_image_token_id, self.end_image_token_id]
-
-        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template, **kwargs)
 
     def _insert_media_placeholders(
         self,
@@ -219,11 +219,7 @@ class InternVLProcessor(ProcessorMixin):
         self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**text_inputs, **image_videos_inputs}, tensor_type=return_tensors)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):

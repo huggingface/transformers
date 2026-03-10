@@ -360,6 +360,7 @@ class FuyuProcessor(ProcessorMixin):
         self.dummy_image_index = -1
         self.image_token_id = tokenizer.encode("|SPEAKER|", add_special_tokens=False)[1]
         self.image_newline_id = tokenizer.encode("|NEWLINE|", add_special_tokens=False)[1]
+        self.image_ids = [self.image_newline_id, self.image_token_id]
 
     def _left_pad_inputs_with_attention_mask(self, model_inputs: list[dict], return_attention_mask: bool):
         max_length_input_ids = max(entry["input_ids"].shape[1] for entry in model_inputs)
@@ -565,12 +566,7 @@ class FuyuProcessor(ProcessorMixin):
             model_inputs=all_encodings, return_attention_mask=True
         )
         if return_mm_token_type_ids:
-            input_ids = batch_encoding["input_ids"]
-            mm_token_type_ids = torch.zeros_like(input_ids)
-            mm_token_type_ids[input_ids == self.image_token_id] = 1
-            mm_token_type_ids[input_ids == self.image_newline_id] = 1
-            batch_encoding["mm_token_type_ids"] = mm_token_type_ids
-
+            batch_encoding["mm_token_type_ids"] = self.create_mm_token_type_ids(batch_encoding["input_ids"])
         return FuyuBatchFeature(data=batch_encoding)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):

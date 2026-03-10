@@ -17,7 +17,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -352,11 +351,7 @@ class Florence2Processor(ProcessorMixin):
         self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**image_inputs, **text_inputs}, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):

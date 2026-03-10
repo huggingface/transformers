@@ -241,11 +241,7 @@ class PaliGemmaProcessor(ProcessorMixin):
             return_data.update({"labels": labels})
 
         if return_mm_token_type_ids:
-            array_ids = np.array(return_data["input_ids"])
-            mm_token_type_ids = np.zeros_like(return_data["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            return_data["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
+            return_data["mm_token_type_ids"] = self.create_mm_token_type_ids(return_data["input_ids"])
         return BatchFeature(data=return_data, tensor_type=return_tensors)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):

@@ -14,8 +14,6 @@
 # limitations under the License.
 import re
 
-import numpy as np
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
@@ -128,13 +126,8 @@ class Gemma3Processor(ProcessorMixin):
         text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
         self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
-        # Add token type ids manually, as tokenizer can't do arbitrary position token types
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(array_ids)
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            text_inputs["token_type_ids"] = mm_token_type_ids.tolist()
-
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):

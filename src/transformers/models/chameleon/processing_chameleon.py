@@ -15,8 +15,6 @@
 Processor class for Chameleon.
 """
 
-import numpy as np
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import (
@@ -64,6 +62,8 @@ class ChameleonProcessor(ProcessorMixin):
         image_token (`str`, *optional*, defaults to `"<image>"`):
             The special token used to indicate image in the text.
         """
+        super().__init__(image_processor, tokenizer)
+
         self.image_seq_length = image_seq_length
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
@@ -75,8 +75,6 @@ class ChameleonProcessor(ProcessorMixin):
         self.image_start_token_id = tokenizer.convert_tokens_to_ids(self.image_start_token)
         self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
         self.image_ids = [self.image_token_id, self.image_start_token_id, self.image_end_token_id]
-
-        super().__init__(image_processor, tokenizer)
 
     @auto_docstring
     def __call__(
@@ -129,11 +127,7 @@ class ChameleonProcessor(ProcessorMixin):
         self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):

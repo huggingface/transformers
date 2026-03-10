@@ -1445,8 +1445,17 @@ class Glm4vProcessor(Qwen2VLProcessor):
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
+        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
+
+    def create_mm_token_type_ids(self, input_ids: list | np.array | "torch.Tensor") -> list[list[int]]:
+        # We have to iterate for each list separately because inputs
+        # might be non-padded lists and we can't cast numpy on that!
+        # Then cast numpy as each input for faster indexing
+        mm_token_type_ids = []
+        for input in input_ids:
+            array_ids = np.array(input)
+            mm_token_types = np.zeros_like(input)
 
             # Replace 0 -> 2 only inside video segments because GLM4v
             # uses the same special token to denote images and video
@@ -1455,10 +1464,10 @@ class Glm4vProcessor(Qwen2VLProcessor):
             ends = np.cumsum(array_ids == self.video_end_id, axis=1)
             is_video_modality = starts > ends
 
-            mm_token_type_ids[(array_ids == self.image_token_id) & is_video_modality] = 2
-            mm_token_type_ids[(array_ids == self.image_token_id) & (~is_video_modality)] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
+            mm_token_types[(array_ids == self.image_token_id) & is_video_modality] = 2
+            mm_token_types[(array_ids == self.image_token_id) & (~is_video_modality)] = 1
+            mm_token_type_ids.append(mm_token_types.tolist())
+        return mm_token_type_ids
 
     def replace_frame_token_id(self, timestamp_sec):
         return f"<|begin_of_image|>{self.image_token}<|end_of_image|>{int(timestamp_sec)}"
