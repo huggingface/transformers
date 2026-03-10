@@ -1707,15 +1707,25 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if not is_init_check:
             param_devices = list({param.device for param in self.parameters()})
             if len(param_devices) == 1 and param_devices[0].type == "cpu":
+                found_device = False
                 for device_availability_check, device_name in flash_attention_compatibility_matrix[flash_attn_version][
                     "supported_devices"
                 ]:
                     if device_availability_check():
-                        raise ValueError(
+                        found_device = True
+                        logger.warning_once(
                             f"You are attempting to use Flash Attention {flash_attn_version} with a model not initialized on GPU. Please make sure to have "
                             "access to a GPU and either initialise the model on a GPU by passing a device_map or initialising the model on CPU and then "
                             f"moving it to GPU, e.g. with `model.to('{device_name}')`."
                         )
+                        break
+
+                if not found_device:
+                    raise ValueError(
+                        f"You are attempting to use Flash Attention {flash_attn_version} with a model not initialized on GPU and with no GPU available. "
+                        "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
+                        "or initialising the model on CPU and then moving it to GPU."
+                    )
 
         # If no error raise by this point, we can return `True`
         return True
