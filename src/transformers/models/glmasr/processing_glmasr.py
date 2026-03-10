@@ -314,6 +314,7 @@ class GlmAsrProcessor(ProcessorMixin):
         for prefix in (
             "The spoken content of the audio is",
             "The transcription of the audio is",
+            "The content of the input audio is",
         ):
             if stripped.startswith(prefix):
                 stripped = stripped[len(prefix) :].strip()
