@@ -14,19 +14,28 @@
 # limitations under the License.
 
 
+import sys
+from pathlib import Path
+
 import numpy as np
 
 from .audio_processing_utils import BaseAudioProcessor
-from .audio_utils import SpectrogramConfig, amplitude_to_db, mel_filter_bank, power_to_db
+from .audio_utils import SpectrogramConfig, amplitude_to_db, power_to_db
 from .feature_extraction_utils import BatchFeature
-from .utils import PaddingStrategy, TensorType, is_torch_available, is_torch_tensor, logging, to_numpy
+from .utils import PaddingStrategy, TensorType, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
 
+_WORKSPACE_ROOT = str(Path(__file__).resolve().parents[3])
+if _WORKSPACE_ROOT not in sys.path:
+    sys.path.insert(0, _WORKSPACE_ROOT)
+
+from spectrograms import numpy_mel_spectrogram as _np_spec
 
 if is_torch_available():
     import torch
+    from spectrograms import torch_mel_spectrogram as _torch_spec
 
 
 class NumpyAudioBackend(BaseAudioProcessor):
@@ -86,40 +95,24 @@ class NumpyAudioBackend(BaseAudioProcessor):
         **kwargs,
     ) -> list[np.ndarray]:
         """Compute the (power) spectrogram via STFT using the numpy backend."""
-        from .audio_utils import spectrogram as compute_spectrogram, window_function
-
         stft_cfg = spectrogram_config.stft_config
-        n_fft = stft_cfg.n_fft
-        hop_length = stft_cfg.hop_length
-        win_length = stft_cfg.win_length if stft_cfg.win_length is not None else n_fft
 
-        # Build window — map torch names like "hann_window" to audio_utils names like "hann"
-        window_name = stft_cfg.window_fn.replace("_window", "")
-        window = window_function(win_length, window_name, periodic=stft_cfg.periodic)
-
-        features = []
-        for waveform in audio:
-            w = waveform
-            if spectrogram_config.waveform_scale is not None:
-                w = np.squeeze(w) * spectrogram_config.waveform_scale
-            spec = compute_spectrogram(
-                w,
-                window=window,
-                frame_length=win_length,
-                hop_length=hop_length,
-                fft_length=n_fft,
+        return _np_spec._extract_spectrogram(
+                audio,
+                self.sample_rate,
+                n_fft=stft_cfg.n_fft,
+                win_length=stft_cfg.win_length,
+                hop_length=stft_cfg.hop_length,
+                window_fn=stft_cfg.window_fn,
                 power=stft_cfg.power,
                 center=stft_cfg.center,
                 pad_mode=stft_cfg.pad_mode,
+                normalized=stft_cfg.normalized,
+                pad=stft_cfg.pad,
+                periodic=stft_cfg.periodic,
                 preemphasis=spectrogram_config.preemphasis,
                 remove_dc_offset=spectrogram_config.remove_dc_offset,
-                mel_filters=None,
-                mel_floor=spectrogram_config.mel_floor,
-                log_mel=None,
             )
-            features.append(spec)
-
-        return features
 
     def _apply_mel_scale(
         self,
@@ -129,14 +122,7 @@ class NumpyAudioBackend(BaseAudioProcessor):
         **kwargs,
     ) -> list[np.ndarray]:
         """Apply mel filterbank to spectrogram features using the numpy backend."""
-        if not hasattr(self, "mel_filters"):
-            raise ValueError(
-                f"{self.__class__.__name__} does not have `mel_filters`. "
-                "Either set `mel_filters` or override `_apply_mel_scale`."
-            )
-
-        mel_filters = self.mel_filters
-        return [mel_filters.T @ spec for spec in features]
+        return _np_spec._apply_mel_scale(features, self.mel_filters, mel_floor=spectrogram_config.mel_floor)
 
     def _normalize_magnitude(
         self,
@@ -182,7 +168,7 @@ class NumpyAudioBackend(BaseAudioProcessor):
     def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):
         stft_cfg = spectrogram_config.stft_config
         mel_cfg = spectrogram_config.mel_scale_config
-        return mel_filter_bank(
+        return _np_spec.mel_filter_bank(
             num_frequency_bins=1 + stft_cfg.n_fft // 2,
             num_mel_filters=mel_cfg.n_mels,
             min_frequency=mel_cfg.f_min,
@@ -190,6 +176,7 @@ class NumpyAudioBackend(BaseAudioProcessor):
             sampling_rate=self.sample_rate,
             norm=mel_cfg.norm,
             mel_scale=mel_cfg.mel_scale,
+            triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
         )
 
     def _preprocess(
@@ -205,11 +192,14 @@ class NumpyAudioBackend(BaseAudioProcessor):
         do_batch_spectrogram=True,
         **kwargs,
     ) -> BatchFeature:
+        import numpy as np
+
         # pad and truncate
         audio = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
 
         if do_extract_spectrogram:
-            feature = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config, do_batch_spectrogram=do_batch_spectrogram)
+            audio = np.stack(audio) if do_batch_spectrogram else audio
+            feature = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config)
             output = BatchFeature({"audio_features": feature}, tensor_type=return_tensors)
         else:
             output = BatchFeature({"audio_values": audio}, tensor_type=return_tensors)
@@ -280,40 +270,38 @@ class TorchAudioBackend(BaseAudioProcessor):
         import torch
 
         stft_cfg = spectrogram_config.stft_config
-        n_fft = stft_cfg.n_fft
-        hop_length = stft_cfg.hop_length
-        win_length = stft_cfg.win_length if stft_cfg.win_length is not None else n_fft
 
-        # Stack list into batch for efficient batched STFT if not already batched
         if isinstance(audio, torch.Tensor) and audio.dim() == 2:
             waveform = audio
         else:
-            waveform = torch.stack(audio)  # (batch, length)
-        device = waveform.device
+            waveform = torch.stack(audio)
 
         if spectrogram_config.preemphasis is not None:
             audio_ranges = kwargs.get("audio_ranges", None)
             if audio_ranges is not None:
+                device = waveform.device
                 timemask = torch.arange(waveform.shape[1], device=device).unsqueeze(0)
                 timemask = timemask < audio_ranges.unsqueeze(1)
                 waveform = waveform.masked_fill(~timemask, 0.0)
 
-        window_fn = getattr(torch, stft_cfg.window_fn, torch.hann_window)
-        window = window_fn(win_length, periodic=stft_cfg.periodic, device=device)
-
-        stft = torch.stft(
+        magnitudes = _torch_spec._extract_spectrogram(
             waveform,
-            n_fft,
-            hop_length=hop_length,
-            win_length=win_length,
-            window=window,
+            self.sample_rate,
+            n_fft=stft_cfg.n_fft,
+            win_length=stft_cfg.win_length,
+            hop_length=stft_cfg.hop_length,
+            window_fn=stft_cfg.window_fn,
+            wkwargs=stft_cfg.wkwargs,
+            power=stft_cfg.power,
             center=stft_cfg.center,
             pad_mode=stft_cfg.pad_mode,
             normalized=stft_cfg.normalized,
-            onesided=stft_cfg.onesided,
-            return_complex=True,
+            pad=stft_cfg.pad,
+            periodic=stft_cfg.periodic,
+            preemphasis=spectrogram_config.preemphasis,
+            remove_dc_offset=spectrogram_config.remove_dc_offset,
         )
-        magnitudes = stft[..., :-1].abs() ** stft_cfg.power
+        magnitudes = magnitudes[..., :-1]
 
         return [magnitudes[i] for i in range(magnitudes.shape[0])]
 
@@ -325,17 +313,7 @@ class TorchAudioBackend(BaseAudioProcessor):
         **kwargs,
     ) -> list["torch.Tensor"]:
         """Apply mel filterbank to spectrogram features using the torch backend."""
-        import torch
-
-        if not hasattr(self, "mel_filters"):
-            raise ValueError(
-                f"{self.__class__.__name__} does not have `mel_filters`. "
-                "Either set `mel_filters` or override `_apply_mel_scale`."
-            )
-
-        device = features[0].device
-        mel_filters = torch.from_numpy(self.mel_filters).to(device, torch.float32)
-        return [mel_filters.T @ spec for spec in features]
+        return _torch_spec._apply_mel_scale(features, self.mel_filters, mel_floor=spectrogram_config.mel_floor)
 
     def _normalize_magnitude(
         self,
@@ -399,7 +377,7 @@ class TorchAudioBackend(BaseAudioProcessor):
     def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):
         stft_cfg = spectrogram_config.stft_config
         mel_cfg = spectrogram_config.mel_scale_config
-        return mel_filter_bank(
+        return _torch_spec.mel_filter_bank_torch(
             num_frequency_bins=1 + stft_cfg.n_fft // 2,
             num_mel_filters=mel_cfg.n_mels,
             min_frequency=mel_cfg.f_min,
@@ -407,7 +385,8 @@ class TorchAudioBackend(BaseAudioProcessor):
             sampling_rate=self.sample_rate,
             norm=mel_cfg.norm,
             mel_scale=mel_cfg.mel_scale,
-        )
+            triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
+        ).numpy()
 
     def _preprocess(
         self,
@@ -429,7 +408,7 @@ class TorchAudioBackend(BaseAudioProcessor):
 
         if do_extract_spectrogram:
             audio = torch.stack(audio) if do_batch_spectrogram else audio
-            feature = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config, do_batch_spectrogram=do_batch_spectrogram)
+            feature = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config)
             output = BatchFeature({"audio_features": feature}, tensor_type=return_tensors)
         else:
             output = BatchFeature({"audio_values": audio}, tensor_type=return_tensors)

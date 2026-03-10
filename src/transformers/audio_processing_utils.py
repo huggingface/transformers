@@ -52,17 +52,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
     sample_rate: int = None
     force_mono: bool = None
 
-    # Pipeline stage defaults
-    normalize_before_pad = True
     spectrogram_config = None
     do_extract_spectrogram = None
-    do_feature_normalize = None
-    feature_normalize_before_pad = True
-    do_pad_features = None
-    do_resample = False
-    add_channel_dim = False
     pad_to_multiple_of = None
-    transpose_features = False
 
     def __init__(
         self,
@@ -236,7 +228,8 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """
         raise NotImplementedError
 
-    def extract_spectrogram(self, audio, *, do_batch_spectrogram: bool = True, spectrogram_config: SpectrogramConfig | None = None, **kwargs):
+    def extract_spectrogram(self, audio, *, spectrogram_config: SpectrogramConfig | None = None, **kwargs):
+        # TODO: it might be a bit unclear to have extract_spectrogram and _extract_spectrogram methods.
         """
         Both the numpy and torch backends implement this method in a batched/ sequential manner.
         Is is batched by default, but can be set to be sequential.
@@ -252,17 +245,12 @@ class BaseAudioProcessor(AudioProcessingMixin):
         overrides = {k: kwargs.pop(k) for k in list(kwargs) if k in config_field_names}
         if overrides:
             spectrogram_config = replace(spectrogram_config, **overrides)
+    
+        features = self._extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
+        if spectrogram_config.mel_scale_config is not None:
+            features = self._apply_mel_scale(features, spectrogram_config=spectrogram_config, **kwargs)
+        features = self._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
 
-        if do_batch_spectrogram:
-            features = self._extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
-            if spectrogram_config.mel_scale_config is not None:
-                features = self._apply_mel_scale(features, spectrogram_config=spectrogram_config, **kwargs)
-            features = self._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
-        else:
-            features = [self._extract_spectrogram(audio_el, spectrogram_config=spectrogram_config, **kwargs) for audio_el in audio]
-            if spectrogram_config.mel_scale_config is not None:
-                features = [self._apply_mel_scale(feature_el, spectrogram_config=spectrogram_config, **kwargs) for feature_el in features]
-            features = [self._normalize_magnitude(feature_el, spectrogram_config=spectrogram_config, **kwargs) for feature_el in features]
         return features
 
     def _extract_spectrogram(self, *args, **kwargs):
