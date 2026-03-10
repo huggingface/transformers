@@ -15,51 +15,14 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="nari-labs/Dia-1.6B")
 class DiaEncoderConfig(PreTrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`DiaEncoder`]. It is used to instantiate a Dia
-    encoder according to the specified arguments, defining the encoder architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        max_position_embeddings (`int`, *optional*, defaults to 1024):
-            The maximum sequence length that this model might ever be used with.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 16):
-            Number of key and value heads for each attention layer in the Transformer encoder.
-        head_dim (`int`, *optional*, defaults to 128):
-            Dimensionality of the attention head.
-        intermediate_size (`int`, *optional*, defaults to 4096):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the normalization layers.
-        vocab_size (`int`, *optional*, defaults to 256):
-            Vocabulary size of the Dia model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`DiaModel`].
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"swish"` and `"gelu_new"` are supported.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-    """
-
     model_type = "dia_encoder"
 
     def __init__(
@@ -94,63 +57,17 @@ class DiaEncoderConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="nari-labs/Dia-1.6B")
 class DiaDecoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DiaDecoder`]. It is used to instantiate a Dia
-    decoder according to the specified arguments, defining the decoder architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        max_position_embeddings (`int`, *optional*, defaults to 3072):
-            The maximum sequence length that this model might ever be used with.
-        num_hidden_layers (`int`, *optional*, defaults to 18):
-            Number of hidden layers in the Transformer decoder.
-        hidden_size (`int`, *optional*, defaults to 2048):
-            Dimensionality of the decoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 8192):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*, defaults to 4):
-            Number of key and value heads for each attention layer in the Transformer decoder.
-        head_dim (`int`, *optional*, defaults to 128):
-            Dimensionality of the attention head.
-        cross_num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each cross-attention layer in the Transformer decoder.
-        cross_head_dim (`int`, *optional*, defaults to 128):
-            Dimensionality of the cross-attention head.
-        cross_num_key_value_heads (`int`, *optional*, defaults to 16):
-            Number of key and value heads for each cross-attention layer in the Transformer decoder.
-        cross_hidden_size (`int`, *optional*, defaults to 1024):
-            Dimensionality of the cross-attention layers.
-        norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the normalization layers.
-        vocab_size (`int`, *optional*, defaults to 1028):
-            Vocabulary size of the Dia model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`DiaModel`].
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder. If string, `"gelu"`, `"relu"`,
-            `"swish"` and `"gelu_new"` are supported.
-        num_channels (`int`, *optional*, defaults to 9):
-            Number of channels for the Dia decoder.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
-        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
-            Indicating that this model is part of an encoder-decoder architecture.
-        pad_token_id (`int`, *optional*, defaults to 1025):
-            The token id used for padding sequences to the same length within a batch.
-        eos_token_id (`int`, *optional*, defaults to 1024):
-            The token id representing the end-of-sequence token, indicating that generation should stop.
-        bos_token_id (`int`, *optional*, defaults to 1026):
-            The token id representing the beginning-of-sequence token, used to initialize decoding.
+    cross_num_attention_heads (`int`, *optional*, defaults to 16):
+        Number of attention heads for each cross-attention layer in the Transformer decoder.
+    cross_head_dim (`int`, *optional*, defaults to 128):
+        Dimensionality of the cross-attention head.
+    cross_num_key_value_heads (`int`, *optional*, defaults to 16):
+        Number of key and value heads for each cross-attention layer in the Transformer decoder.
+    cross_hidden_size (`int`, *optional*, defaults to 1024):
+        Dimensionality of the cross-attention layers.
     """
 
     model_type = "dia_decoder"
@@ -206,40 +123,11 @@ class DiaDecoderConfig(PreTrainedConfig):
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
+@auto_docstring(checkpoint="nari-labs/Dia-1.6B")
 class DiaConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DiaModel`]. It is used to instantiate a
-    Dia model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the
-    [nari-labs/Dia-1.6B](https://huggingface.co/nari-labs/Dia-1.6B) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        encoder_config (`DiaEncoderConfig`, *optional*):
-            Configuration for the encoder part of the model. If not provided, a default `DiaEncoderConfig` will be used.
-        decoder_config (`DiaDecoderConfig`, *optional*):
-            Configuration for the decoder part of the model. If not provided, a default `DiaDecoderConfig` will be used.
-        norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the normalization layers.
-        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
-            Indicating that this model uses an encoder-decoder architecture.
-        pad_token_id (`int`, *optional*):
-            Deprecated. Please set this on `DiaDecoderConfig` directly. If provided, it will be forwarded
-            to `decoder_config`.
-        eos_token_id (`int`, *optional*):
-            Deprecated. Please set this on `DiaDecoderConfig` directly. If provided, it will be forwarded
-            to `decoder_config`.
-        bos_token_id (`int`, *optional*):
-            Deprecated. Please set this on `DiaDecoderConfig` directly. If provided, it will be forwarded
-            to `decoder_config`.
-        delay_pattern (`list[int]`, *optional*, defaults to `[0, 8, 9, 10, 11, 12, 13, 14, 15]`):
-            The delay pattern for the decoder. The length of this list must match `decoder_config.num_channels`.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
+    delay_pattern (`list[int]`, *optional*, defaults to `[0, 8, 9, 10, 11, 12, 13, 14, 15]`):
+        The delay pattern for the decoder. The length of this list must match `decoder_config.num_channels`.
 
     Example:
 
