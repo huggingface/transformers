@@ -137,6 +137,7 @@ class AudioVisualFlamingoConfig(PretrainedConfig):
         self.sound_encoder = sound_encoder
         self.audio_sampling_rate = 16000
         self.audio_chunk_length = 120
+        self.load_audio_in_video = True
         self.interleaved_vis_aud_in_video = True
         self.interleaved_video_segment_duration = 30
         self.audio_hop_length = 60

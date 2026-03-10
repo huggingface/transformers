@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from .aria import *
     from .audio_spectrogram_transformer import *
     from .audioflamingo3 import *
+    from .audiovisualflamingo import *
     from .auto import *
     from .autoformer import *
     from .aya_vision import *
@@ -280,7 +281,6 @@ if TYPE_CHECKING:
     from .olmo3 import *
     from .olmoe import *
     from .omdet_turbo import *
-    from .audiovisualflamingo import *
     from .oneformer import *
     from .openai import *
     from .opt import *
