@@ -133,18 +133,20 @@ def paged_attention_forward(
             flash_kwargs["s_aux"] = kwargs["s_aux"]  # this is only available in VLLM's FA3
         # Call flash_attn_with_kvcache - this updates cache in-place and computes attention
         # Use wrapper to prevent dynamo from tracing into the flash attention kernel
-        attn_output = _flash_attn_with_kvcache_wrapper(  # TODO: add more doc in a dedicated wrapper (coming in next PRs)
-            flash_attn_with_kvcache,
-            q=q,
-            k_cache=k_cache,
-            v_cache=v_cache,
-            k=k,
-            v=v,
-            cache_seqlens=cache_seqlens,
-            softmax_scale=module.scaling,
-            causal=True,
-            window_size=sliding_window,
-            **flash_kwargs,
+        attn_output = (
+            _flash_attn_with_kvcache_wrapper(  # TODO: add more doc in a dedicated wrapper (coming in next PRs)
+                flash_attn_with_kvcache,
+                q=q,
+                k_cache=k_cache,
+                v_cache=v_cache,
+                k=k,
+                v=v,
+                cache_seqlens=cache_seqlens,
+                softmax_scale=module.scaling,
+                causal=True,
+                window_size=sliding_window,
+                **flash_kwargs,
+            )
         )
         if isinstance(attn_output, tuple):
             attn_output = attn_output[0]

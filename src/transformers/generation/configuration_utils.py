@@ -1577,6 +1577,12 @@ class ContinuousBatchingConfig:
             set to 0.
         max_cached_graphs (`int`, *optional*, defaults to 0):
             Maximum number of cached CUDA graphs. Uses a preset from `continuous_api.py` when set to 0.
+        varlen_compile_config (`CompileConfig`, *optional*, defaults to None):
+            CompileConfig for varlen (prefill) path. Default is None (uses generation_config fallback)
+        decode_compile_config (`CompileConfig`, *optional*, defaults to None):
+            CompileConfig for decode (fast) path. Default is None (uses generation_config fallback)
+        use_default_compile_configs (`bool`, *optional*, defaults to False):
+            If True, a default compile config will be used for paths that are not explicitly set.
         scheduler (`str`, *optional*, defaults to `"fifo"`):
             Scheduler type to use.
         max_queue_size (`int`, *optional*, defaults to 0):
@@ -1614,11 +1620,13 @@ class ContinuousBatchingConfig:
     kv_padding_interval_size: int = 0
     max_cached_graphs: int = 0
 
-    # Flags to controls which path are compiled. If set to None, they are resolved automatically.
-    # If one of those is set to a boolean value and no compile config is provided, a default compile config will be
-    # provided.
-    compile_varlen_path: bool | None = None
-    compile_decode_fast_path: bool | None = None
+    # Compile configs for the two execution paths. If None, uses the compile_config from generation_config as fallback.
+    # The varlen path is used for prefill and when fast decode is unavailable. The decode path is used when
+    # max_blocks_per_request > 0 (fast decode with block table).
+    varlen_compile_config: CompileConfig | None = None
+    decode_compile_config: CompileConfig | None = None
+    # If this flag is set to True, a default compile config will be used for paths that are not explicitly set.
+    use_default_compile_configs: bool = False
 
     # Scheduler type used
     scheduler: str = "fifo"
@@ -1744,37 +1752,48 @@ class ContinuousBatchingConfig:
             self.max_cached_graphs = 32
 
     def process_compile_config(
-        self, compile_config: CompileConfig | None, decode_fast_path_available: bool
-    ) -> CompileConfig | None:
-        """Processes the compile config (or lack thereof) depending on the `compile_.*_path` flags and the availability
-        of the decode fast path. After this function is called, `compile_.*_path` flags are set."""
+        self, fallback_compile_config: CompileConfig | None, decode_fast_path_available: bool
+    ) -> tuple[CompileConfig | None, CompileConfig | None]:
+        """Processes the compile configs for varlen and decode paths. Returns (varlen_config, decode_config) with either
+        potentially None.
+        Args:
+            fallback_compile_config: The compile_config from generation_config to use as fallback
+            decode_fast_path_available: Whether the fast decode path (block table) is available
+        """
         logger_ = logging.get_logger("ContinuousBatchingLogger")
-        # First catch the case where the user wants to compile the decode fast path but it's not available
-        if self.compile_decode_fast_path and not decode_fast_path_available:
-            logger_.warning("The decode fast path is not available, so it cannot be compiled.")
-            self.compile_decode_fast_path = False
 
-        # If a compile config is provided, resolve the flags automatically if needed
-        if compile_config is not None:
-            # Decode fast path cannot be traced, so fullgraph needs to be False
-            if self.compile_decode_fast_path is None:
-                self.compile_decode_fast_path = decode_fast_path_available and not compile_config.fullgraph
-                logger_.info(f"The decode fast path will {'' if self.compile_decode_fast_path else 'not '}be compiled.")
-            # Varlen path has 2 dynamic axis, so static shapes are not a great fit for it. But if compile is turned off
-            # for decode, it has to be the compiled path, otherwise compile is never used.
-            if self.compile_varlen_path is None:
-                self.compile_varlen_path = compile_config.dynamic or not self.compile_decode_fast_path
-                logger_.info(f"The normal (varlen) path will {'' if self.compile_varlen_path else 'not '}be compiled.")
-            return compile_config
+        # For each config, priority is: explicit config, default config, fallback config, None
+        if self.varlen_compile_config is None:
+            if self.use_default_compile_configs:
+                varlen_config = CompileConfig(mode="max-autotune-no-cudagraphs", dynamic=True, fullgraph=False)
+            elif fallback_compile_config is not None:
+                varlen_config = fallback_compile_config
+            else:
+                varlen_config = None
+        else:
+            varlen_config = self.varlen_compile_config
 
-        # Otherwise, we first resolve the flags to False if there are not set
-        if self.compile_varlen_path is None:
-            self.compile_varlen_path = False
-        if self.compile_decode_fast_path is None:
-            self.compile_decode_fast_path = False
-        # Then we return a default compile config if any of the flags is set to True
-        if self.compile_varlen_path or self.compile_decode_fast_path:
-            fullgraph = not self.compile_decode_fast_path  # this path has graph breaks
-            dynamic = self.compile_varlen_path  # varlen is quite dynamic
-            compile_config = CompileConfig(mode="max-autotune-no-cudagraphs", fullgraph=fullgraph, dynamic=dynamic)
-        return compile_config
+        if self.decode_compile_config is None:
+            if self.use_default_compile_configs:
+                decode_config = CompileConfig(mode="max-autotune-no-cudagraphs", dynamic=False, fullgraph=False)
+            elif fallback_compile_config is not None:
+                decode_config = fallback_compile_config
+            else:
+                decode_config = None
+        else:
+            decode_config = self.decode_compile_config
+
+        # For decode, we throw a warning if the fast decode path is not available and a compile config was found
+        if not decode_fast_path_available:
+            decode_config = None
+            if self.decode_compile_config is not None:
+                logger_.warning(
+                    "decode_compile_config provided but fast decode path is not available (max_blocks_per_request=0)"
+                )
+
+        # Log what will be compiled
+        if varlen_config is not None:
+            logger_.info(f"Varlen path will be compiled with {varlen_config.to_dict()}")
+        if decode_config is not None:
+            logger_.info(f"Decode path will be compiled with {decode_config.to_dict()}")
+        return varlen_config, decode_config

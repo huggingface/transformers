@@ -138,16 +138,23 @@ class ContinuousBatchProcessor:
         # If the user turned on the decode fast path (ie. using a block table), check if it is available
         self._ensure_decode_fast_path_is_available()  # this needs to happen before self.inputs_and_outputs is created
 
-        # Now resolve the behavior of compile
-        self.compile_config = self.cb_config.process_compile_config(
-            compile_config=self.compile_config, decode_fast_path_available=self.cache.max_blocks_per_request > 0
+        # Now resolve the compile configs for both paths
+        varlen_config, decode_config = self.cb_config.process_compile_config(
+            fallback_compile_config=self.compile_config,
+            decode_fast_path_available=self.cache.max_blocks_per_request > 0,
         )
-        if self.compile_config is not None:
-            self._compiled_static_forward = torch.compile(
-                self._forward_process_and_sample, **self.compile_config.to_dict()
-            )
+
+        # Compile the varlen path if config provided
+        if varlen_config is not None:
+            self._compiled_varlen = torch.compile(self._forward_process_and_sample, **varlen_config.to_dict())
         else:
-            self._compiled_static_forward = None
+            self._compiled_varlen = None
+
+        # Compile the decode path if config provided
+        if decode_config is not None:
+            self._compiled_decode = torch.compile(self._forward_process_and_sample, **decode_config.to_dict())
+        else:
+            self._compiled_decode = None
 
         # Setup inputs and outputs
         self.use_async_batching = self.cb_config.use_async_batching
@@ -419,23 +426,16 @@ class ContinuousBatchProcessor:
     def _generation_step(self, model: nn.Module, logit_processor: LogitsProcessorList, do_sample: bool) -> None:
         """Perform a single generation step."""
 
-        # NOTE: in the future, we want to give the user the option to compile everything. This would happen either here
-        # or at init time.
-
         # Retrieve the model kwargs with or without padding
         batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=self._pad_inputs)
         carry_over_ids, prev_output_ids, output_ids = self.inputs_and_outputs.get_cb_kwargs()
         compute_stream = self.inputs_and_outputs.compute_stream
 
-        # Get the appropriate forward function (compiled or not, based on config)
-        if self._compiled_static_forward is None:
-            forward_fn = self._forward_process_and_sample
-        elif self.inputs_and_outputs.use_block_table and self.cb_config.compile_decode_fast_path:
-            forward_fn = self._compiled_static_forward
-        elif not self.inputs_and_outputs.use_block_table and self.cb_config.compile_varlen_path:
-            forward_fn = self._compiled_static_forward
+        # Get the appropriate forward function (compiled or not, based on current path)
+        if self.inputs_and_outputs.use_block_table:
+            forward_fn = self._forward_process_and_sample if self._compiled_decode is None else self._compiled_decode
         else:
-            forward_fn = self._forward_process_and_sample
+            forward_fn = self._forward_process_and_sample if self._compiled_varlen is None else self._compiled_varlen
 
         # If we are not using cuda graphs, we perform the generation step and return
         if not self.use_cuda_graph:
@@ -464,7 +464,7 @@ class ContinuousBatchProcessor:
                 graph = torch.cuda.CUDAGraph()
                 with torch.cuda.graph(graph, stream=compute_stream, pool=self.graph_pool):
                     forward_fn(
-                        model, batch_data, logit_processor, do_sample, carry_over_ids,   prev_output_ids, output_ids
+                        model, batch_data, logit_processor, do_sample, carry_over_ids, prev_output_ids, output_ids
                     )
                 # Store
                 self.inputs_and_outputs.set_graph(graph)
