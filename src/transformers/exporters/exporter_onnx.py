@@ -523,7 +523,7 @@ def patch_for_onnx_export(model):
 
 # ── post-ONNX-export ORT compatibility fixer ───────────────────────────────────
 # Some ONNX ops have attributes or input patterns that are technically valid but cause ORT to reject the model.
-# This function applies in-place fixes to the exported ONNXProgram to ensure ORT compatibility.  See its docstring for details.
+# This function applies in-place fixes to the exported ONNXProgram to ensure ORT compatibility.
 
 
 def _fix_graph(graph_like: "onnx_ir.Graph") -> None:

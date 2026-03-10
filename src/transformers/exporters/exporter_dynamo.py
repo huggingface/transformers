@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..utils import logging
 from ..utils.export_config import DynamoConfig
-from ..utils.import_utils import is_torch_available, is_torch_greater_or_equal
+from ..utils.import_utils import is_torch_available
 from .base import HfExporter
 from .utils import get_auto_dynamic_shapes, prepare_for_export, register_pytrees_for_model
 
@@ -42,9 +42,6 @@ class DynamoExporter(HfExporter):
 
     def validate_environment(self, *args, **kwargs):
         super().validate_environment(*args, **kwargs)
-
-        if not is_torch_greater_or_equal("2.6.0"):
-            raise ImportError(f"{self.__class__.__name__} requires torch>=2.6.0 for stable Dynamo based export.")
 
     def export(self, model: "PreTrainedModel", sample_inputs: dict[str, Any]) -> "ExportedProgram":
         """Exports a model to a TorchDynamo ExportedProgram.
