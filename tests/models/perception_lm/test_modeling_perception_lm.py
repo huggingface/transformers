@@ -434,7 +434,7 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
             return_tensors="pt",
             padding=True,
             padding_side="left",
-        ).to(torch_device, dtype=model.dtype)
+        ).to(torch_device)
 
         generate_ids = model.generate(**inputs, max_new_tokens=18)
         input_length = inputs["input_ids"].shape[1]
@@ -461,7 +461,7 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
             return_tensors="pt",
             padding=True,
             padding_side="left",
-        ).to(torch_device, dtype=model.dtype)
+        ).to(torch_device)
 
         generate_ids = model.generate(**inputs, max_new_tokens=18)
         input_length = inputs["input_ids"].shape[1]
