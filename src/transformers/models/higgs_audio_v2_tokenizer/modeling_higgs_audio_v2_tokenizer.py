@@ -36,6 +36,7 @@ from ..auto import AutoModel
 from .configuration_higgs_audio_v2_tokenizer import HiggsAudioV2TokenizerConfig
 
 
+@requires(backends=("torchaudio",))
 @auto_docstring
 class HiggsAudioV2TokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
     """
