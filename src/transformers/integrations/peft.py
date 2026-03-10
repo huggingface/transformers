@@ -12,12 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+import importlib.metadata
 import inspect
 import json
 import os
 import re
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Literal, Optional
+
+from packaging import version
 
 from ..conversion_mapping import (
     _MODEL_TO_CONVERSION_PATTERN,
@@ -31,8 +34,6 @@ from ..core_model_loading import (
     Transpose,
     WeightConverter,
     WeightRenaming,
-    dot_natural_key,
-    rename_source_key,
 )
 from ..utils import (
     CONFIG_NAME,
@@ -58,6 +59,7 @@ if is_accelerate_available():
 
 # Minimum PEFT version supported for the integration
 MIN_PEFT_VERSION = "0.18.0"
+IS_PEFT_GE_019 = version.parse(importlib.metadata.version("peft")) >= version.parse("0.19.0")
 
 
 logger = logging.get_logger(__name__)
@@ -66,7 +68,8 @@ if TYPE_CHECKING:
     from ..modeling_utils import LoadStateDictConfig
 
 
-def _block_diag_3d(tensors: list["torch.Tensor"]) -> "torch.Tensor":
+# TODO: remove once PEFT < 0.19 no longer supported
+def _block_diag_3d(tensors: list[torch.Tensor]) -> torch.Tensor:
     if len(tensors) < 2:
         raise ValueError(f"_block_diag_3d expects at least 2 tensors, got {len(tensors)}")
 
@@ -83,6 +86,7 @@ def _block_diag_3d(tensors: list["torch.Tensor"]) -> "torch.Tensor":
     return torch.stack(lora_b_block_diag, dim=0)
 
 
+# TODO: remove once PEFT < 0.19 no longer supported
 class PeftConcatenate(Concatenate):
     """Convert per-expert LoRA weights to merged weights.
 
@@ -92,16 +96,21 @@ class PeftConcatenate(Concatenate):
 
     To illustrate:
 
-    Before
+    Before:
+
     W0' = W0 + A0 @ B0
+
     W1' = W1 + A1 @ B1
 
-    After
+    After:
+
     W01' = W01 + A01 @ B01_bd
-        where
-        A01 = [A0, A1]
-        B01_bd = [[B0,  0],
-                  [0,  B1]]
+
+    where:
+
+    A01 = [A0, A1]
+
+    B01_bd = [[B0, 0], [0, B1]]
 
     This class is responsible for merging LoRA B in this block-diagonal fashion. Assuming that we fuse N weights, it
     should look like this:
@@ -157,6 +166,7 @@ class PeftConcatenate(Concatenate):
         raise NotImplementedError("Reversing PEFT LoRA MoE conversions is not supported yet.")
 
 
+# TODO: remove once PEFT < 0.19 no longer supported
 class FlattenDims(ConversionOps):
     """
     Flatten the tensors along the given dimensions
@@ -187,6 +197,7 @@ class FlattenDims(ConversionOps):
         return f"{self.__class__.__name__}(dims={self.dims})"
 
 
+# TODO: remove once PEFT < 0.19 no longer supported
 class PermuteDims(ConversionOps):
     """
     Permute the tensors along the given dimensions
@@ -215,6 +226,7 @@ class PermuteDims(ConversionOps):
         return f"{self.__class__.__name__}(dims={self.dims})"
 
 
+# TODO: remove once PEFT < 0.19 no longer supported
 def build_peft_weight_mapping(
     weight_conversions: list[WeightConverter | WeightRenaming] | None, adapter_name: str, peft_config=None
 ) -> list[WeightConverter | WeightRenaming]:
@@ -336,6 +348,7 @@ def build_peft_weight_mapping(
 # has the full layer name, while the config do not. We coould regex match but
 # this is more explicit and less error prone.
 # Note: this is used in PEFT, changing it requires coordiation.
+# TODO: remove once PEFT < 0.19 no longer supported
 _MOE_TARGET_MODULE_MAPPING: dict[str, dict[str, str]] = {
     "mixtral": {
         "gate": "gate.weight",
@@ -352,6 +365,7 @@ _MOE_TARGET_MODULE_MAPPING: dict[str, dict[str, str]] = {
 }
 
 # Note: this is used in PEFT, changing it requires coordiation.
+# TODO: remove once PEFT < 0.19 no longer supported
 _MOE_FUSED_TARGETS: dict[str, dict[str, set[str]]] = {
     # use lists for dict values to ensure stable order
     "mixtral": {"gate_up_proj": ["w1", "w3"]},
@@ -359,6 +373,7 @@ _MOE_FUSED_TARGETS: dict[str, dict[str, set[str]]] = {
 }
 
 
+# TODO: remove once PEFT < 0.19 no longer supported
 def patch_moe_parameter_targeting(model, peft_config):
     """PEFT currently assumes that expert layers are of shape
         (expert, in, out)
@@ -370,21 +385,18 @@ def patch_moe_parameter_targeting(model, peft_config):
 
     import peft
 
-    if hasattr(peft, "convert_peft_config_for_transformers"):
-        # this means that PEFT handles this
-        return
-
     model_type = getattr(model.config, "model_type", None)
     if get_checkpoint_conversion_mapping(model_type) is not None:
         update_layer = peft.tuners.lora.layer.ParamWrapper.update_layer
 
         @wraps(update_layer)
         def new_update_layer(layer, *args, **kwargs):
-            if not hasattr(layer, "_swapped_in_out") and layer.parameter_name in ("down_proj", "gate_up_proj"):
+            did_swap = getattr(layer, "_did_swap_in_out_features", False)
+            if not did_swap and layer.parameter_name in ("down_proj", "gate_up_proj"):
                 tmp_in_features = layer.in_features
                 layer.in_features = layer.out_features
                 layer.out_features = tmp_in_features
-                layer._swapped_in_out = True
+                layer._did_swap_in_out_features = True
             return update_layer(layer, *args, **kwargs)
 
         peft.tuners.lora.layer.ParamWrapper.update_layer = new_update_layer
@@ -518,7 +530,6 @@ class PeftAdapterMixin:
         adapter_name = adapter_name if adapter_name is not None else "default"
         adapter_kwargs = adapter_kwargs or {}
 
-        import peft
         from peft import PeftConfig, inject_adapter_in_model
 
         if self._hf_peft_config_loaded and (not hotswap) and (adapter_name in self.peft_config):
@@ -553,13 +564,8 @@ class PeftAdapterMixin:
 
         weight_conversions = get_model_conversion_mapping(self)
 
-        if hasattr(peft, "convert_peft_config_for_transformers"):
-            peft_config = peft.convert_peft_config_for_transformers(
-                peft_config, model=self, conversions=weight_conversions
-            )
-        else:
-            # TODO: remove once PEFT < 0.19 is dropped
-            peft_config = convert_peft_config_for_transformers(peft_config, model=self, conversions=weight_conversions)
+        # TODO: remove once PEFT < 0.19 is dropped, use peft.utils.transformers_weight_conversion
+        peft_config = convert_peft_config_for_transformers(peft_config, model=self, conversions=weight_conversions)
 
         if hasattr(peft_config, "inference_mode"):
             peft_config.inference_mode = not is_trainable
@@ -1013,10 +1019,8 @@ def maybe_load_adapters(
 # PEFT adapters for these models, they also need to be updated. This may require updating the PEFT config too. The
 # logic for this is found below. Right now, only LoRA is supported.
 
-# TODO: These functions will be added to PEFT in release 0.19.0. Drop them here once 0.19.0 becomes the min PEFT
-# version.
 
-
+# TODO: remove once PEFT < 0.19 no longer supported
 def _convert_peft_config_moe(peft_config, model_type: str):
     base_model_type = _MODEL_TO_CONVERSION_PATTERN.get(model_type, None)
     if base_model_type is None:
@@ -1076,8 +1080,13 @@ def _convert_peft_config_moe(peft_config, model_type: str):
     return peft_config
 
 
+# TODO: remove once PEFT < 0.19 no longer supported
 def convert_peft_config_for_transformers(peft_config, model: torch.nn.Module, conversions: list[Any] | None):
-    # FIXME document this properly
+    """
+    Convert the PEFT config of models whose architecture changed from transformers v4 to v5.
+
+    For most models, this requires no changes, this mostly affects some MoE models like Mixtral.
+    """
     # If, for any reason, we cannot apply conversion, we just return the PEFT config as is.
     from peft import PeftType  # avoid circular import
 
@@ -1097,55 +1106,3 @@ def convert_peft_config_for_transformers(peft_config, model: torch.nn.Module, co
         peft_config = _convert_peft_config_moe(peft_config, model_type)
 
     return peft_config
-
-
-def apply_peft_weight_mapping_to_state_dict(
-    model: torch.nn.Module,
-    state_dict: dict[str, torch.Tensor],
-    weight_mapping: list[WeightConverter | WeightRenaming],
-) -> dict[str, torch.Tensor]:
-    """
-    Function that exposes the weight conversion to the state dict. This is required to be called within PEFT to apply
-    weight conversion there without having to duplicate the whole weight conversion logic.
-    """
-    renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
-    converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
-    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
-
-    param_name_to_load: dict[str, WeightRenaming | WeightConverter] = {}
-
-    # 1) Rebuild the same "collect by target key + source pattern" structure used by core model loading.
-    # We need this because some conversions are many-to-one (e.g. w1/w3 -> gate_up_proj) and must see all inputs.
-    for original_key, tensor in sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0])):
-        renamed_key, source_pattern = rename_source_key(
-            original_key,
-            renamings,
-            converters,
-            prefix=None,
-            meta_state_dict=None,
-        )
-
-        if source_pattern is not None:
-            # Each destination key needs its own converter instance because converters keep internal collected state.
-            new_converter = copy.deepcopy(pattern_to_converter[source_pattern])
-            mapping = param_name_to_load.setdefault(renamed_key, new_converter)
-        else:
-            mapping = param_name_to_load.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
-            source_pattern = original_key
-
-        mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
-
-    converted_state_dict = {}
-    # 2) Materialize conversion ops (merge/concat/block-diag/permute/...) and emit final tensors.
-    for first_param_name, mapping in param_name_to_load.items():
-        realized_value = mapping.convert(
-            first_param_name,
-            model=model,
-            config=model.config,
-            hf_quantizer=None,
-            loading_info=None,
-        )
-        for target_name, param in realized_value.items():
-            converted_state_dict[target_name] = param[0] if isinstance(param, list) else param
-
-    return converted_state_dict
