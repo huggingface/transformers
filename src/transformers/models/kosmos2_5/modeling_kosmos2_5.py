@@ -1302,12 +1302,12 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
 class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
     config_class = Kosmos2_5TextConfig
     input_modalities = ("text",)
-    _tied_weights_keys = {"lm_head.weight": "model.model.embed_tokens.weight"}
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: Kosmos2_5TextConfig):
         super().__init__(config)
 
-        self.model = Kosmos2_5TextModel._from_config(config)
+        self.model = Kosmos2_5TextTransformer._from_config(config)
         self.lm_head = nn.Linear(in_features=config.embed_dim, out_features=config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
