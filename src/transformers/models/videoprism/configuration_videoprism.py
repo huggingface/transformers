@@ -159,8 +159,8 @@ class VideoPrismTextConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="google/videoprism-base-patch16-224")
 class VideoPrismConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VideoPrismModel`]. It is used to instantiate a
-    VideoPrism model according to the specified arguments, defining the model architecture. Instantiating a
+    This is the configuration class to store the configuration of a [`VideoPrismClipModel`]. It is used to instantiate a
+    VideoPrismClipModel according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the VideoPrism
     [google/videoprism-base-f16r288](https://huggingface.co/google/videoprism-base-f16r288) architecture.
 
@@ -186,7 +186,8 @@ class VideoPrismConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "videoprism"
     sub_configs = {"text_config": VideoPrismTextConfig, "vision_config": VideoPrismVisionConfig}

@@ -185,8 +185,8 @@ class VideoPrismTextConfig(SiglipTextConfig):
 
 class VideoPrismConfig(SiglipConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VideoPrismModel`]. It is used to instantiate a
-    VideoPrism model according to the specified arguments, defining the model architecture. Instantiating a
+    This is the configuration class to store the configuration of a [`VideoPrismClipModel`]. It is used to instantiate a
+    VideoPrismClipModel according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the VideoPrism
     [google/videoprism-base-f16r288](https://huggingface.co/google/videoprism-base-f16r288) architecture.
 
@@ -212,7 +212,8 @@ class VideoPrismConfig(SiglipConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     def __init__(self, text_config=None, vision_config=None, **kwargs):
         super().__init__(**kwargs)
@@ -246,10 +247,11 @@ class VideoPrismTokenizer(T5Tokenizer):
     ```python
     >>> from transformers import VideoPrismTokenizer
 
-    >>> tokenizer = VideoPrismTokenizer.from_pretrained("google/videoprism-base-f16r288")
+    >>> tokenizer = VideoPrismTokenizer.from_pretrained("google/videoprism-lvt-base-f16r288")
     >>> encoded = tokenizer("Hello, my dog is cute", return_tensors="pt")
     >>> print(encoded)
-    ```"""
+    ```
+    """
 
     def __init__(
         self,
@@ -362,23 +364,23 @@ class VideoPrismVideoOutput(ModelOutput):
 
     Args:
         video_last_hidden_state (`torch.FloatTensor`):
-            The last hidden_state after attention pooling, typically of shape
-            (batch_size, num_patches * num_frames, hidden_size).
+            The pooled video embeddings after the attention pooling head, typically of shape
+            `(batch_size, 1, hidden_size)`.
 
-        auxiliary_output (`torch.FloatTensor`, *optional*):
-            The last hidden_state of the auxiliary encoder, typically of shape
-            (batch_size * num_patches, num_frames, hidden_size).
+        auxiliary_output (`BaseModelOutput`, *optional*):
+            The output of the auxiliary encoder. Its `last_hidden_state` is typically of shape
+            `(batch_size, num_patches * num_frames, hidden_size)`.
 
-        attention_pooling_output (`torch.FloatTensor`, *optional*):
-            The output tuple of VideoPrismMultiheadAttentionPoolingHead containing the pooled tensor
-            and the attention probabilities, typically of shape
-            (batch_size * num_frames, num_patches, hidden_size).
+        attention_pooling_output (`tuple(torch.FloatTensor, torch.FloatTensor)`, *optional*):
+            The output tuple of [`VideoPrismMultiheadAttentionPoolingHead`] containing:
+            - the pooled tensor of shape `(batch_size, 1, hidden_size)`, and
+            - the attention probabilities of shape
+            `(batch_size, num_attention_heads, 1, num_patches * num_frames)`.
     """
 
-    # todo: place the correct output shapes.
     video_last_hidden_state: torch.FloatTensor
-    auxiliary_output: torch.FloatTensor | None = None
-    attention_pooling_output: torch.FloatTensor | None = None
+    auxiliary_output: BaseModelOutput | None = None
+    attention_pooling_output: tuple[torch.FloatTensor, torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -390,18 +392,18 @@ class VideoPrismClipOutput(ModelOutput):
         The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
         similarity scores.
     logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, video_batch_size)`):
-        The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-image
+        The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-video
         similarity scores.
     video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-        The image embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismVideoModel`].
+        The video embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismVideoModel`].
     text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
         The text embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismTextModel`].
     video_model_output (`VideoPrismVideoOutput`):
         The output of the [`VideoPrismVideoModel`].
-    text_model_output (`BaseModelOutputWithPooling`):
+    text_model_output (`BaseModelOutput`):
         The output of the [`VideoPrismTextModel`].
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-        Contrastive loss for image-text similarity.
+        Contrastive loss for video-text similarity.
     """
 
     logits_per_video: torch.FloatTensor | None = None
@@ -958,7 +960,7 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    The bare VideoPrism text encoder outputting raw hidden-states without any specific head on top. This model is used in VideoPrismClipModel.
+    The bare VideoPrism text encoder outputting last hidden states without any specific head on top. This model is used in VideoPrismClipModel.
     """
 )
 class VideoPrismTextModel(VideoPrismPreTrainedModel):

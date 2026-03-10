@@ -43,10 +43,11 @@ class VideoPrismTokenizer(TokenizersBackend):
     ```python
     >>> from transformers import VideoPrismTokenizer
 
-    >>> tokenizer = VideoPrismTokenizer.from_pretrained("google/videoprism-base-f16r288")
+    >>> tokenizer = VideoPrismTokenizer.from_pretrained("google/videoprism-lvt-base-f16r288")
     >>> encoded = tokenizer("Hello, my dog is cute", return_tensors="pt")
     >>> print(encoded)
-    ```"""
+    ```
+    """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
