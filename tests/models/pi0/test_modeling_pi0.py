@@ -200,19 +200,17 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224")
 
         inputs = processor(
-            text=["Pick up the object\n"],
-            images=load_image("/raid/raushan/image.png"),
+            text=["Pick up the object"],
+            images=load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/vla_pi0.jpg"),
             padding="max_length",
+            padding_side="right",
             truncation=True,
             max_length=304,
             return_tensors="pt",
         )
-        input_ids = inputs["input_ids"]
-        attention_mask = inputs["attention_mask"]
 
+        # Generate random state and actions for prediction
         torch.manual_seed(42)
-        pixel_values = torch.randn(1, 1, 3, 224, 224)
-        image_masks = torch.tensor([[True]])
         state = torch.randn(1, 32)
         actions = torch.randn(1, 50, 32)
         noise = torch.randn(1, 50, 32)
@@ -224,20 +222,20 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         self.assertAlmostEqual(suffix_embs.mean().item(), -0.10177, delta=0.002)
         print(suffix_embs.shape, suffix_embs[0, 0, :4], suffix_embs[0, -1, :4])
         torch.testing.assert_close(
-            suffix_embs[0, 0, :4], torch.tensor([-0.7092, -0.5197, -0.7360, -2.2933]), atol=1e-3, rtol=1e-3
+            suffix_embs[0, 0, :4], torch.tensor([-0.0460,  0.8858,  0.7172, -0.7538]), atol=1e-3, rtol=1e-3
         )
         torch.testing.assert_close(
-            suffix_embs[0, -1, :4], torch.tensor([-4.3729, -3.0147, -0.4809, 0.4930]), atol=1e-3, rtol=1e-3
+            suffix_embs[0, -1, :4], torch.tensor([0.7107, -1.3107, -4.8396, -6.9446]), atol=1e-3, rtol=1e-3
         )
 
         with torch.no_grad():
-            prefix_embs = model.model.embed_prefix(input_ids, pixel_values, pixel_attention_mask=image_masks)
+            prefix_embs = model.model.embed_prefix(**inputs)
 
         self.assertEqual(prefix_embs.shape, (1, 304, 2048))
-        self.assertAlmostEqual(prefix_embs.mean().item(), 0.0212, places=3)
+        self.assertAlmostEqual(prefix_embs.mean().item(), 0.0224, places=3)
         print(prefix_embs.shape, prefix_embs[0, 0, :4], prefix_embs[0, -1, :4])
         torch.testing.assert_close(
-            prefix_embs[0, 0, :4], torch.tensor([2.6215, -0.2010, -0.0071, -0.0147]), atol=1e-3, rtol=1e-3
+            prefix_embs[0, 0, :4], torch.tensor([1.1781,  0.1176, -0.2231, -0.3662]), atol=1e-3, rtol=1e-3
         )
         torch.testing.assert_close(
             prefix_embs[0, -1, :4], torch.tensor([23.8649, -1.4916, 4.2868, 4.3973]), atol=1e-3, rtol=1e-3
@@ -245,36 +243,26 @@ class PI0ModelIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             outputs = model(
-                pixel_values=pixel_values,
-                pixel_attention_mask=image_masks,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
+                **inputs,
                 state=state,
                 actions=actions,
                 noise=noise,
                 timestep=timestep,
             )
         self.assertEqual(outputs.loss.shape, (1, 50, 32))
-        self.assertAlmostEqual(outputs.loss.mean().item(), 3.8819, places=3)
+        self.assertAlmostEqual(outputs.loss.mean().item(), 3.950, places=3)
 
-        torch.manual_seed(99)
-        model.model.dit.config._attn_implementation = "eager"  # as per LeRobot impl
+        torch.manual_seed(99) # different seed to sample random noise
+        model.model.dit.config._attn_implementation = "eager"
         with torch.no_grad():
-            sampled = model.sample_actions(
-                pixel_values=pixel_values,
-                pixel_attention_mask=image_masks,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                state=state,
-                num_steps=3,
-            )
+            sampled = model.sample_actions(**inputs, state=state, num_steps=3)
         self.assertEqual(sampled.shape, (1, 50, 32))
         print(sampled.mean(), sampled.std(), sampled[0, 0, :4], sampled[0, -1, :4])
-        self.assertAlmostEqual(sampled.mean().item(), -0.0689, places=3)
-        self.assertAlmostEqual(sampled.std().item(), 0.2650, places=3)
+        self.assertAlmostEqual(sampled.mean().item(), -0.0764, places=3)
+        self.assertAlmostEqual(sampled.std().item(), 0.2300, places=3)
         torch.testing.assert_close(
-            sampled[0, 0, :4], torch.tensor([-0.5143, -0.4314, -0.6774, 0.5146]), atol=1e-3, rtol=1e-3
+            sampled[0, 0, :4], torch.tensor([0.0602, -0.1177, -0.5010, -0.0028]), atol=1e-3, rtol=1e-3
         )
         torch.testing.assert_close(
-            sampled[0, -1, :4], torch.tensor([0.1482, -0.0937, -0.7080, -0.6505]), atol=1e-3, rtol=1e-3
+            sampled[0, -1, :4], torch.tensor([0.0615,  0.0161, -0.3112, -0.9186]), atol=1e-3, rtol=1e-3
         )

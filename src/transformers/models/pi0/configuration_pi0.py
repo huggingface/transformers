@@ -67,6 +67,18 @@ class PI0Config(PreTrainedConfig):
     """
 
     model_type = "pi0"
+
+    # This plan should work with the VLM and DiT modules ig
+    # both have a transformers decoder layer
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
     sub_configs = {"vlm_config": AutoConfig, "dit_config": AutoConfig}
 
     def __init__(

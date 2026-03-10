@@ -14,6 +14,7 @@
 """PI0 model: PaliGemma + Action Expert with flow matching for robot action prediction."""
 
 import math
+from collections.abc import Callable
 
 import torch
 import torch.nn.functional as F
@@ -160,6 +161,18 @@ class PI0Config(PreTrainedConfig):
     """
 
     model_type = "pi0"
+
+    # This plan should work with the VLM and DiT modules ig
+    # both have a transformers decoder layer
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
     sub_configs = {"vlm_config": AutoConfig, "dit_config": AutoConfig}
 
     def __init__(
@@ -247,7 +260,14 @@ class PI0Config(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-class TimestepEmbeddings(nn.Module):
+def blockwise_bidirectional_mask(block_boundaries: torch.Tensor) -> Callable:
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        q_block = torch.bucketize(q_idx, block_boundaries)
+        kv_block = torch.bucketize(kv_idx, block_boundaries)
+        return kv_block <= q_block
+    return inner_mask
+
+class PI0TimestepEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -270,10 +290,10 @@ class TimestepEmbeddings(nn.Module):
         return time_embeds
 
 
-class ActionTimeEmbedding(nn.Module):
+class PI0ActionTimeEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.sinusoid_embeds = TimestepEmbeddings(config)
+        self.sinusoid_embeds = PI0TimestepEmbeddings(config)
         self.action_in_proj = nn.Linear(config.max_action_dim, config.dit_config.hidden_size)
         self.state_proj = nn.Linear(config.max_state_dim, config.dit_config.hidden_size)
         self.action_time_mlp_in = nn.Linear(2 * config.dit_config.hidden_size, config.dit_config.hidden_size)
@@ -307,7 +327,7 @@ class PI0PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, TimestepEmbeddings):
+        if isinstance(module, PI0TimestepEmbeddings):
             init.copy_(module.sinusoid_freq, module.compute_freqs(module.config))
 
 
@@ -325,7 +345,7 @@ class PI0Model(PI0PreTrainedModel):
     def set_input_embeddings(self, value):
         self.vlm.set_input_embeddings(value)
 
-    def embed_prefix(self, input_ids, pixel_values, pixel_attention_mask):
+    def embed_prefix(self, input_ids, pixel_values, pixel_attention_mask, attention_mask=None):
         max_num_cameras = pixel_attention_mask.shape[1]
         pixel_values = pixel_values.flatten(0, 1)
         image_features = self.vlm.get_image_features(pixel_values).pooler_output
@@ -383,7 +403,6 @@ class PI0Model(PI0PreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                past_key_values=None,  # `None` on purpose
                 use_cache=True,
             ).past_key_values
 
@@ -402,15 +421,8 @@ class PI0Model(PI0PreTrainedModel):
             dit_attention_mask = torch.cat([attention_mask, noise_mask], dim=1)
             dit_position_ids = (torch.cumsum(dit_attention_mask, dim=1) - 1)[:, -action_embeds.shape[1] :]
 
-        def blockwise_bidirectional_mask(block_boundaries: torch.Tensor):
-            def inner_mask(b_idx, h_idx, q_idx, kv_idx):
-                q_block = torch.bucketize(q_idx, block_boundaries)
-                kv_block = torch.bucketize(kv_idx, block_boundaries)
-                return kv_block <= q_block
-
-            return inner_mask
-
-        # Only 1 state token and the rest are actions
+        # We have three blocks: vlm-inputss, state and actions from which only 1 token is `state`
+        # The mask should be bidirectional within each block and to prev blocks, but not to next blocks 
         vlm_input_length = past_key_values.get_seq_length()
         block_sizes = torch.tensor([vlm_input_length + 1, action_embeds.shape[1] - 1], device=action_embeds.device)
         block_boundaries = torch.cumsum(block_sizes, dim=0) - 1
@@ -437,12 +449,13 @@ class PI0Model(PI0PreTrainedModel):
 
 class PI0ForConditionalGeneration(PI0PreTrainedModel):
     """PI0 model with action projection heads and flow matching."""
+    _tp_plan = {"action_out_proj": "colwise_gather_output"}
 
     def __init__(self, config: PI0Config):
         super().__init__(config)
         self.model = PI0Model(config)
         self.expert_hidden_size = config.dit_config.hidden_size
-        self.embed_action_time = ActionTimeEmbedding(config)
+        self.embed_action_time = PI0ActionTimeEmbedding(config)
         self.action_out_proj = nn.Linear(self.expert_hidden_size, config.max_action_dim)
         self.post_init()
 
@@ -491,7 +504,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             )
 
         # 3. If training: merge noise with the ground truth actions (aka labels)
-        # Target velocity is the label we want to preduct and will compute loss upon
+        # Target velocity is the label we want to predict and will compute loss upon
         if actions is not None:
             time_expanded = timestep[:, None, None]
             noisy_actions = (time_expanded * noise + (1 - time_expanded) * actions).to(actions.dtype)
