@@ -1029,7 +1029,10 @@ class Llama4VisionRotaryEmbedding(nn.Module):
         freqs = torch.cat([freqs_x, freqs_y], dim=-1).float().contiguous()[..., ::2]
         freqs = freqs.masked_fill(img_idx.reshape(-1, 1, 1) < 0, 0)
         freq_cis = torch.view_as_complex(torch.stack([torch.cos(freqs), torch.sin(freqs)], dim=-1))
-        self.freqs_ci = freq_cis  # idx**2, idx**2, idx * 2
+        # register_buffer so that freqs_ci moves with .to(device) / dispatch_model.
+        # Plain attribute stays on the init device (meta when low_cpu_mem_usage=True),
+        # causing "Cannot copy out of meta tensor" in forward().
+        self.register_buffer("freqs_ci", freq_cis, persistent=False)
 
     def forward(self, hidden_states):
         return self.freqs_ci.to(hidden_states.device)
