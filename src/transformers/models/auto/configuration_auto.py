@@ -49,7 +49,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("audioflamingo3_encoder", "AudioFlamingo3EncoderConfig"),
         ("autoformer", "AutoformerConfig"),
         ("aya_vision", "AyaVisionConfig"),
-        ("axk1", "AXK1Config"),
+        ("AXK1", "AXK1Config"),
         ("bamba", "BambaConfig"),
         ("bark", "BarkConfig"),
         ("bart", "BartConfig"),
@@ -532,7 +532,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("audioflamingo3_encoder", "AudioFlamingo3Encoder"),
         ("autoformer", "Autoformer"),
         ("aya_vision", "AyaVision"),
-        ("axk1", "A.X-K1"),
+        ("AXK1", "A.X-K1"),
         ("bamba", "Bamba"),
         ("bark", "Bark"),
         ("bart", "BART"),
@@ -1036,7 +1036,7 @@ DEPRECATED_MODELS = []
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
     [
         ("audioflamingo3_encoder", "audioflamingo3"),
-        ("axk1", "ax_k1"),
+        ("AXK1", "ax_k1"),
         ("openai-gpt", "openai"),
         ("blip-2", "blip_2"),
         ("data2vec-audio", "data2vec"),
