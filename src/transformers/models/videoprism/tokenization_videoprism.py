@@ -22,31 +22,6 @@ class VideoPrismTokenizer(TokenizersBackend):
 
     This tokenizer inherits from [`T5Tokenizer`] which contains most of the main methods. Users should refer to this
     superclass for more information regarding those methods.
-
-    Args:
-        vocab (`Union[str, List[Tuple[str, float]]], *optional*`):
-            Path to the vocabulary file or a list of token-score pairs.
-        eos_token (`str`, *optional*, defaults to `"</s>"`):
-            The end of sequence token.
-        unk_token (`str`, *optional*, defaults to `"<unk>"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
-        pad_token (`str`, *optional*, defaults to `"<pad>"`):
-            The token used for padding, for example when batching sequences of different lengths.
-        extra_ids (`int`, *optional*, defaults to 100):
-            Add `extra_ids` additional tokens to the end of the vocabulary.
-        additional_special_tokens (`List[str]`, *optional*):
-            Additional special tokens used by the tokenizer.
-
-    Example:
-
-    ```python
-    >>> from transformers import VideoPrismTokenizer
-
-    >>> tokenizer = VideoPrismTokenizer.from_pretrained("google/videoprism-lvt-base-f16r288")
-    >>> encoded = tokenizer("Hello, my dog is cute", return_tensors="pt")
-    >>> print(encoded)
-    ```
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

@@ -23,36 +23,14 @@ class VideoPrismVisionConfig(PreTrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        image_size (`int`, *optional*, defaults to 288):
-            The size of the input image.
         num_frames (`int`, *optional*, defaults to 16):
             The number of frames in the input video.
         tubelet_size (`List[int]`, *optional*, defaults to `[1, 18, 18]`):
             The size of the tubelet patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
         num_spatial_layers (`int`, *optional*, defaults to 12):
             Number of spatial transformer blocks.
         num_temporal_layers (`int`, *optional*, defaults to 4):
             Number of temporal transformer blocks.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_python"`):
-            The non-linear activation function (function or string).
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the qkv projections in attention layers.
         attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
             Softcapping constant for attention logits.
         num_auxiliary_layers (`int`, *optional*, defaults to 2):
@@ -156,27 +134,23 @@ class VideoPrismTextConfig(PreTrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
 
 
-@auto_docstring(checkpoint="google/videoprism-base-patch16-224")
-class VideoPrismConfig(PreTrainedConfig):
-    r"""
+@auto_docstring(
+    custom_intro="""
     This is the configuration class to store the configuration of a [`VideoPrismClipModel`]. It is used to instantiate a
     VideoPrismClipModel according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the VideoPrism
-    [google/videoprism-base-f16r288](https://huggingface.co/google/videoprism-base-f16r288) architecture.
+    [google/videoprism-lvt-base-f16r288](https://huggingface.co/google/videoprism-lvt-base-f16r288) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        text_config (`VideoPrismTextConfig`, *optional*):
-            Configuration for the text model.
-        vision_config (`VideoPrismVisionConfig`, *optional*):
-            Configuration for the vision model.
-
+    """
+)
+class VideoPrismConfig(PreTrainedConfig):
+    r"""
     Example:
 
     ```python
-    >>> from transformers import VideoPrismConfig, VideoPrismModel
+    >>> from transformers import VideoPrismClipModel, VideoPrismConfig
 
     >>> # Initializing a VideoPrismConfig with default values
     >>> configuration = VideoPrismConfig()

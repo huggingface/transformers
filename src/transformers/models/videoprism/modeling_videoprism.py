@@ -26,22 +26,18 @@ from .configuration_videoprism import VideoPrismConfig, VideoPrismTextConfig, Vi
 
 
 @dataclass
+@auto_docstring
 class BaseModelOutputWithSpatialAndTemporalStates(ModelOutput):
     r"""
     Base class for model outputs that include spatial and temporal states.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor`):
-            The last hidden state of the model, typically of shape
-            (batch_size, num_patches * num_frames, hidden_size).
+    temporal_hidden_state (`torch.FloatTensor`, *optional*):
+        The last hidden state of the temporal encoder, typically of shape
+        `(batch_size * num_patches, num_frames, hidden_size)`.
 
-        temporal_hidden_state (`torch.FloatTensor`, *optional*):
-            The last hidden_state of the temporal encoder, typically of shape
-            (batch_size * num_patches, num_frames, hidden_size).
-
-        spatial_hidden_state (`torch.FloatTensor`, *optional*):
-            The last hidden_state of the spatial encoder, typically of shape
-            (batch_size * num_frames, num_patches, hidden_size).
+    spatial_hidden_state (`torch.FloatTensor`, *optional*):
+        The last hidden state of the spatial encoder, typically of shape
+        `(batch_size * num_frames, num_patches, hidden_size)`.
     """
 
     last_hidden_state: torch.FloatTensor
@@ -50,24 +46,21 @@ class BaseModelOutputWithSpatialAndTemporalStates(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 class VideoPrismVideoOutput(ModelOutput):
     r"""
     Base class for VideoPrismVideo model outputs.
 
-    Args:
-        video_last_hidden_state (`torch.FloatTensor`):
-            The pooled video embeddings after the attention pooling head, typically of shape
-            `(batch_size, 1, hidden_size)`.
-
-        auxiliary_output (`BaseModelOutput`, *optional*):
-            The output of the auxiliary encoder. Its `last_hidden_state` is typically of shape
-            `(batch_size, num_patches * num_frames, hidden_size)`.
-
-        attention_pooling_output (`tuple(torch.FloatTensor, torch.FloatTensor)`, *optional*):
-            The output tuple of [`VideoPrismMultiheadAttentionPoolingHead`] containing:
-            - the pooled tensor of shape `(batch_size, 1, hidden_size)`, and
-            - the attention probabilities of shape
-            `(batch_size, num_attention_heads, 1, num_patches * num_frames)`.
+    video_last_hidden_state (`torch.FloatTensor`):
+        The pooled video embeddings after the attention pooling head, typically of shape
+        `(batch_size, 1, hidden_size)`.
+    auxiliary_output (`BaseModelOutput`, *optional*):
+        The output of the auxiliary encoder. Its `last_hidden_state` is typically of shape
+        `(batch_size, num_patches * num_frames, hidden_size)`.
+    attention_pooling_output (`tuple(torch.FloatTensor, torch.FloatTensor)`, *optional*):
+        The output tuple of [`VideoPrismMultiheadAttentionPoolingHead`] containing the pooled tensor of shape
+        `(batch_size, 1, hidden_size)` and the attention probabilities of shape
+        `(batch_size, num_attention_heads, 1, num_patches * num_frames)`.
     """
 
     video_last_hidden_state: torch.FloatTensor
@@ -80,22 +73,22 @@ class VideoPrismVideoOutput(ModelOutput):
 class VideoPrismClipOutput(ModelOutput):
     r"""
     Base class for VideoPrismClip model outputs.
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        Contrastive loss for video-text similarity.
     logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
         The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
         similarity scores.
     logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, video_batch_size)`):
         The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-video
         similarity scores.
-    video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+    video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`):
         The video embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismVideoModel`].
-    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`):
         The text embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismTextModel`].
     video_model_output (`VideoPrismVideoOutput`):
         The output of the [`VideoPrismVideoModel`].
     text_model_output (`BaseModelOutput`):
         The output of the [`VideoPrismTextModel`].
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-        Contrastive loss for video-text similarity.
     """
 
     logits_per_video: torch.FloatTensor | None = None
@@ -643,28 +636,6 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithSpatialAndTemporalStates:
-        r"""
-        pixel_values_videos (`torch.FloatTensor`):
-            Pixel values of the video frames of shape (batch_size, num_frames, num_channels, height, width).
-        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-            Whether to interpolate positional encodings to match input size.
-
-        Example:
-
-        ```python
-        >>> from transformers import VideoPrismVideoProcessor, VideoPrismVisionModel
-        >>> import torch
-
-        >>> processor = VideoPrismVideoProcessor.from_pretrained("google/videoprism-base-f16r288")
-        >>> model = VideoPrismVisionModel.from_pretrained("google/videoprism-base-f16r288")
-
-        >>> video = "sample_video.mp4"
-        >>> inputs = processor(videos=video)
-        >>> with torch.no_grad():
-        ...     outputs = model(**inputs)
-        ...     features = outputs.last_hidden_state
-        ```
-        """
         if pixel_values_videos is None:
             raise ValueError("You have to specify pixel_values_videos")
 

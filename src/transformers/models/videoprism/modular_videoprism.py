@@ -166,13 +166,30 @@ class VideoPrismTextConfig(SiglipTextConfig):
     This is the configuration class to store the configuration of a [`VideoPrismClipModel`]. It is used to instantiate a
     VideoPrismClipModel according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the VideoPrism
-    [google/videoprism-base-f16r288](https://huggingface.co/google/videoprism-base-f16r288) architecture.
+    [google/videoprism-lvt-base-f16r288](https://huggingface.co/google/videoprism-lvt-base-f16r288) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-    """,
+    """
 )
 class VideoPrismConfig(SiglipConfig):
+    r"""
+    Example:
+
+    ```python
+    >>> from transformers import VideoPrismClipModel, VideoPrismConfig
+
+    >>> # Initializing a VideoPrismConfig with default values
+    >>> configuration = VideoPrismConfig()
+
+    >>> # Initializing a VideoPrismClipModel with the configuration
+    >>> model = VideoPrismClipModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+    """
+
     def __init__(self, text_config=None, vision_config=None, **kwargs):
         super().__init__(**kwargs)
         del self.initializer_factor

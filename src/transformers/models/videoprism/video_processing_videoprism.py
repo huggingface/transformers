@@ -9,21 +9,13 @@ from ...utils import auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
 
 
-@auto_docstring(checkpoint="google/videoprism-base-f16r288")
+@auto_docstring
 class VideoPrismVideoProcessor(BaseVideoProcessor):
     r"""
     Constructs a VideoPrism video processor.
 
     This processor inherits from [`LlavaOnevisionVideoProcessor`] and sets default parameters for VideoPrism models.
     Video frames are resized to 288x288 using bicubic resampling without normalization.
-
-    Args:
-        size (`Dict[str, int]`, *optional*, defaults to `{"height": 288, "width": 288}`):
-            The size to resize the video frames to.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-            The resampling filter to use when resizing images.
-        do_normalize (`bool`, *optional*, defaults to `False`):
-            Whether to normalize the video frames.
     """
 
     resample = PILImageResampling.BICUBIC

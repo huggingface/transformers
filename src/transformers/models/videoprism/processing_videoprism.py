@@ -5,6 +5,7 @@
 #                          modular_videoprism.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...utils import auto_docstring
 
 
 class VideoPrismProcessorKwargs(ProcessingKwargs, total=False):
@@ -21,20 +22,15 @@ class VideoPrismProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-class VideoPrismProcessor(ProcessorMixin):
-    r"""
+@auto_docstring(
+    custom_intro="""
     Constructs a VideoPrism processor which wraps a VideoPrism video processor and a VideoPrism tokenizer into a single processor.
 
     [`VideoPrismProcessor`] offers all the functionalities of [`VideoPrismVideoProcessor`] and [`VideoPrismTokenizer`]. See the
     [`~VideoPrismProcessor.__call__`] for more information.
-
-    Args:
-        video_processor ([`VideoPrismVideoProcessor`], *optional*):
-            An instance of [`VideoPrismVideoProcessor`].
-        tokenizer ([`VideoPrismTokenizer`], *optional*):
-            An instance of [`VideoPrismTokenizer`].
     """
-
+)
+class VideoPrismProcessor(ProcessorMixin):
     valid_processor_kwargs = VideoPrismProcessorKwargs
 
     def __init__(self, video_processor=None, tokenizer=None):
