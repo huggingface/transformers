@@ -423,7 +423,7 @@ def grouped_mm_experts_forward(
 
 
 class ExpertsInterface(GeneralInterface):
-    """Interface for registering custom experts implementations."""
+    """Interface for registering custom experts forward functions."""
 
     _global_mapping = {
         "batched_mm": batched_mm_experts_forward,
@@ -475,6 +475,8 @@ def use_experts_implementation(
     Args:
         experts_class (`type[torch.nn.Module]`, *optional*):
             The experts class to modify. If not provided, returns a decorator that can be applied to the class.
+        experts_interface (`ExpertsInterface`, *optional*, defaults to `ALL_EXPERTS_FUNCTIONS`):
+            The experts interface to use for dispatching the forward method.
         is_transposed (`bool`, *optional*, defaults to `False`):
             Whether the expert weights are stored in transposed format.
         has_bias (`bool`, *optional*, defaults to `False`):

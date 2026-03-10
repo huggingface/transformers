@@ -513,7 +513,7 @@ class FP8Experts(nn.Module):
 
 
 class FP8ExpertsInterface(ExpertsInterface):
-    """Interface for registering custom experts implementations."""
+    """Interface for registering custom FP8 experts forward functions."""
 
     _global_mapping = {
         "batched_mm": fp8_batched_mm_experts_forward,
