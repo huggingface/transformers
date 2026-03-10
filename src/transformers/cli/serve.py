@@ -80,10 +80,12 @@ if serve_dependencies_available:
     from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse, StreamingResponse
+    from openai.types import Completion, CompletionChoice, CompletionUsage
     from openai.types.audio.transcription import Transcription
     from openai.types.audio.transcription_create_params import TranscriptionCreateParamsBase
     from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageParam
     from openai.types.chat.chat_completion import Choice
+    from openai.types.completion_create_params import CompletionCreateParamsBase
     from openai.types.chat.chat_completion_chunk import (
         ChatCompletionChunk,
         ChoiceDelta,
@@ -129,6 +131,14 @@ if serve_dependencies_available:
 
         generation_config: str
 
+    class TransformersLegacyCompletionCreateParams(CompletionCreateParamsBase, total=False):
+        """
+        OpenAI's CompletionCreateParamsBase with an additional field for the generation config (as a json string).
+        """
+
+        generation_config: str
+        stream: bool
+
     class TransformersTranscriptionCreateParams(TranscriptionCreateParamsBase, total=False):
         """
         OpenAI's TranscriptionCreateParamsBase with an additional field for the generation config (as a json string).
@@ -141,6 +151,7 @@ if serve_dependencies_available:
     # Contrarily to OpenAI's output types, input types are `TypedDict`, which don't have built-in validation.
     response_validator = TypeAdapter(TransformersResponseCreateParamsStreaming)
     completion_validator = TypeAdapter(TransformersCompletionCreateParamsStreaming)
+    legacy_completion_validator = TypeAdapter(TransformersLegacyCompletionCreateParams)
     transcription_validator = TypeAdapter(TransformersTranscriptionCreateParams)
 
     # Define request fields that are not yet used in `transformers serve`. Receiving these fields will raise an
@@ -183,6 +194,15 @@ if serve_dependencies_available:
         "top_logprobs",
         "user",
         "web_search_options",
+    }
+    UNUSED_LEGACY_COMPLETION_FIELDS = {
+        "best_of",
+        "echo",
+        "logprobs",
+        "n",
+        "presence_penalty",
+        "stream_options",
+        "user",
     }
     UNUSED_TRANSCRIPTION_FIELDS = {
         "chunking_strategy",
@@ -508,6 +528,11 @@ class Serve:
             else:
                 return self.generate_chat_completion(body)
 
+        @app.post("/v1/completions")
+        def completions(request: dict):
+            self.validate_legacy_completion_request(request=request)
+            return self.generate_legacy_completion(request)
+
         @app.post("/v1/responses")
         def responses(request: dict):
             self.validate_response_request(request=request)
@@ -655,6 +680,14 @@ class Serve:
             schema=TransformersTranscriptionCreateParams,
             validator=transcription_validator,
             unused_fields=UNUSED_TRANSCRIPTION_FIELDS,
+        )
+
+    def validate_legacy_completion_request(self, request: dict):
+        self._validate_request(
+            request=request,
+            schema=TransformersLegacyCompletionCreateParams,
+            validator=legacy_completion_validator,
+            unused_fields=UNUSED_LEGACY_COMPLETION_FIELDS,
         )
 
     def build_chat_completion_chunk(
@@ -1275,6 +1308,176 @@ class Serve:
             result = chat_completion_result.model_dump(exclude_none=True)
 
             return JSONResponse(result, media_type="application/json")
+
+    def generate_legacy_completion(self, req: dict) -> StreamingResponse | JSONResponse:
+        """
+        Generates an OpenAI legacy Completion (/v1/completions) using `generate`.
+
+        The legacy completions API takes a freeform text `prompt` instead of chat messages,
+        and returns generated text in `choices[].text`. It also supports `suffix` for text
+        insertion (fill-in-the-middle).
+
+        Args:
+            req (`dict`): The request to generate a legacy completion for.
+
+        Returns:
+            `StreamingResponse | JSONResponse`: The legacy completion result.
+        """
+        if self.force_model is not None:
+            req["model"] = self.force_model
+
+        prompt = req.get("prompt", "")
+        # The OpenAI spec allows prompt to be a string or array of strings/tokens.
+        # We handle the string case (most common for legacy completions).
+        if isinstance(prompt, list):
+            # If it's a list of strings, join them; if tokens, this endpoint doesn't support token arrays
+            if len(prompt) > 0 and isinstance(prompt[0], str):
+                prompt = "".join(prompt)
+            else:
+                raise HTTPException(
+                    status_code=400, detail="Token array prompts are not supported. Please pass a string prompt."
+                )
+
+        suffix = req.get("suffix")
+
+        model_id_and_revision = self.process_model_name(req["model"])
+        self.last_model = model_id_and_revision
+        model, processor = self.load_model_and_processor(model_id_and_revision)
+
+        tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
+
+        # Tokenize the prompt directly (no chat template for legacy completions)
+        inputs = tokenizer(prompt, return_tensors="pt")
+        inputs = inputs.to(model.device)
+        input_length = inputs["input_ids"].shape[-1]
+
+        generation_config = create_generation_config_from_req(req, model_generation_config=model.generation_config)
+
+        if req.get("stream"):
+            generation_streamer = TextIteratorStreamer(
+                tokenizer,
+                skip_special_tokens=True,
+                skip_prompt=True,
+            )
+
+            generation_kwargs = {
+                **inputs,
+                "streamer": generation_streamer,
+                "generation_config": generation_config,
+            }
+
+            request_id = f"cmpl-{uuid.uuid4().hex[:24]}"
+
+            def stream_legacy_completion(streamer):
+                thread = Thread(target=model.generate, kwargs=generation_kwargs)
+                try:
+                    thread.start()
+                    n_tokens_generated = 0
+
+                    for text in streamer:
+                        n_tokens_generated += 1
+                        if text == "":
+                            continue
+
+                        chunk = {
+                            "id": request_id,
+                            "created": int(time.time()),
+                            "model": model_id_and_revision,
+                            "choices": [
+                                {
+                                    "text": text,
+                                    "index": 0,
+                                    "logprobs": None,
+                                    "finish_reason": None,
+                                }
+                            ],
+                            "object": "text_completion",
+                        }
+                        yield f"data: {json.dumps(chunk)}\n\n"
+
+                    # Final chunk with finish_reason
+                    generated_all_tokens = (
+                        generation_config.max_new_tokens is not None
+                        and n_tokens_generated >= generation_config.max_new_tokens
+                    )
+                    reason = "length" if generated_all_tokens else "stop"
+
+                    final_chunk = Completion(
+                        id=request_id,
+                        created=int(time.time()),
+                        model=model_id_and_revision,
+                        choices=[
+                            CompletionChoice(
+                                text="",
+                                index=0,
+                                logprobs=None,
+                                finish_reason=reason,
+                            )
+                        ],
+                        object="text_completion",
+                    )
+                    yield self.chunk_to_sse_element(final_chunk)
+
+                    thread.join()
+                except Exception as e:
+                    logger.error(str(e))
+                    yield f'data: {{"error": "{str(e)}"}}\n\n'
+                finally:
+                    thread.join()
+
+            return StreamingResponse(
+                stream_legacy_completion(generation_streamer),
+                media_type="text/event-stream",
+            )
+        else:
+            # Non-streaming: generate all at once
+            generate_output = model.generate(
+                **inputs,
+                generation_config=generation_config,
+            )
+
+            # Decode only the newly generated tokens (skip the prompt)
+            generated_ids = generate_output[:, input_length:]
+            generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+
+            # If suffix was provided, append it (fill-in-the-middle)
+            if suffix is not None:
+                generated_text = generated_text + suffix
+
+            prompt_tokens = input_length
+            completion_tokens = generated_ids.shape[-1]
+
+            generated_all_tokens = (
+                generation_config.max_new_tokens is not None
+                and completion_tokens >= generation_config.max_new_tokens
+            )
+            reason = "length" if generated_all_tokens else "stop"
+
+            request_id = f"cmpl-{uuid.uuid4().hex[:24]}"
+            result = Completion(
+                id=request_id,
+                created=int(time.time()),
+                model=model_id_and_revision,
+                choices=[
+                    CompletionChoice(
+                        text=generated_text,
+                        index=0,
+                        logprobs=None,
+                        finish_reason=reason,
+                    )
+                ],
+                object="text_completion",
+                usage=CompletionUsage(
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=prompt_tokens + completion_tokens,
+                ),
+            )
+
+            return JSONResponse(
+                result.model_dump(exclude_none=True),
+                media_type="application/json",
+            )
 
     def generate_response(self, req: dict) -> Generator[str, None, None]:
         """
@@ -1921,6 +2124,7 @@ Models will be loaded and unloaded automatically based on usage and a timeout.
 \b
 The server will expose the following endpoints:
     - POST /v1/chat/completions: Generates chat completions.
+    - POST /v1/completions: Generates legacy text completions from a prompt.
     - POST /v1/responses: Generates responses.
     - POST /v1/audio/transcriptions: Generates transcriptions from audio.
     - GET /v1/models: Lists available models for 3rd party tools.

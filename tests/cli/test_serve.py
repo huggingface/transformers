@@ -841,6 +841,88 @@ class ServeResponsesIntegrationTest(ServeResponsesMixin, unittest.TestCase):
         self.assertIsInstance(first_part.text, str)
 
 
+@require_openai
+class ServeLegacyCompletionsMixin:
+    """
+    Mixin class for the legacy Completions API (/v1/completions) tests.
+    """
+
+    @retry
+    def run_legacy_completion(self, request):
+        client = OpenAI(base_url=f"http://localhost:{self.port}/v1", api_key="<KEY>")
+        return client.completions.create(**request)
+
+    @retry
+    def run_legacy_completion_stream(self, request):
+        client = OpenAI(base_url=f"http://localhost:{self.port}/v1", api_key="<KEY>")
+        request["stream"] = True
+        stream = client.completions.create(**request)
+        all_payloads = list(stream)
+        return all_payloads
+
+    def test_non_streaming_request(self):
+        """Tests that the legacy completions endpoint returns a valid non-streaming response."""
+        from openai.types import Completion as OpenAICompletion
+
+        result = self.run_legacy_completion({
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "prompt": "The capital of France is",
+            "max_tokens": 5,
+        })
+
+        self.assertIsInstance(result, OpenAICompletion)
+        self.assertEqual(result.object, "text_completion")
+        self.assertTrue(len(result.choices) >= 1)
+        self.assertIsInstance(result.choices[0].text, str)
+        self.assertTrue(len(result.choices[0].text) > 0)
+        self.assertIn(result.choices[0].finish_reason, ["stop", "length"])
+        self.assertIsNotNone(result.usage)
+        self.assertGreater(result.usage.prompt_tokens, 0)
+        self.assertGreater(result.usage.completion_tokens, 0)
+
+    def test_streaming_request(self):
+        """Tests that the legacy completions endpoint returns valid streaming chunks."""
+        all_payloads = self.run_legacy_completion_stream({
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "prompt": "The capital of France is",
+            "max_tokens": 5,
+        })
+
+        self.assertTrue(len(all_payloads) >= 1)
+
+        # Collect text from all chunks
+        texts = [p.choices[0].text for p in all_payloads]
+        self.assertTrue(any(t != "" for t in texts))
+
+        # Last chunk with content should have a finish_reason
+        finish_reasons = [p.choices[0].finish_reason for p in all_payloads]
+        self.assertIn(finish_reasons[-1], ["stop", "length"])
+
+    def test_early_return_due_to_length(self):
+        """Tests that max_tokens=1 results in a 'length' finish reason."""
+        result = self.run_legacy_completion({
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "prompt": "Hello",
+            "max_tokens": 1,
+        })
+        self.assertEqual(result.choices[0].finish_reason, "length")
+
+
+@slow
+@require_openai
+class ServeLegacyCompletionsIntegrationTest(ServeLegacyCompletionsMixin, unittest.TestCase):
+    """Tests the legacy Completions API (/v1/completions)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.port = 8004
+        cls.server = Serve(port=cls.port, default_seed=42, non_blocking=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.kill_server()
+
+
 class ServeInfrastructureTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
