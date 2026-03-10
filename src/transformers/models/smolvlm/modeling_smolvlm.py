@@ -108,7 +108,6 @@ class SmolVLMVisionEmbeddings(nn.Module):
             (batch_size, max_nb_patches_h * max_nb_patches_w), device=pixel_values.device, dtype=torch.long
         )
 
-
         nb_patches_h = patch_attention_mask[:, :, 0].sum(dim=1)  # (batch_size,)
         nb_patches_w = patch_attention_mask[:, 0, :].sum(dim=1)  # (batch_size,)
 
