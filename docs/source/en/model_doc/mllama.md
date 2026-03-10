@@ -54,7 +54,7 @@ model.set_output_embeddings(resized_embeddings)
 
 ## Usage Example
 
-#### Instruct model
+### Instruct model
 
 ```python
 import torch
@@ -80,7 +80,7 @@ output = model.generate(**inputs, max_new_tokens=25)
 print(processor.decode(output[0]))
 ```
 
-#### Base model
+### Base model
 
 ```python
 import requests
@@ -108,6 +108,7 @@ print(processor.decode(output[0], skip_special_tokens=True))
 ## MllamaProcessor
 
 [[autodoc]] MllamaProcessor
+    - __call__
 
 ## MllamaImageProcessor
 

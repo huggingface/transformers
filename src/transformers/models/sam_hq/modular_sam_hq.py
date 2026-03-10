@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -14,16 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
 
-from transformers.modeling_outputs import ModelOutput
-from transformers.utils.generic import TransformersKwargs, check_model_inputs
-
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ...utils.generic import ModelOutput, TransformersKwargs, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..sam.configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 from ..sam.modeling_sam import (
     SamFeedForward,
@@ -43,71 +40,31 @@ from ..sam.modeling_sam import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="Uminosachi/sam-hq")
 class SamHQPromptEncoderConfig(SamPromptEncoderConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`SamHQPromptEncoderModel`].The [`SamHQPromptEncoderModel`]
-    module is used to encode the input 2D points and bounding boxes. Instantiating a configuration defaults will yield a
-    similar configuration to that of the SAM_HQ model. The configuration is used to store the configuration of the model.
-    [Uminosachi/sam-hq](https://huggingface.co/Uminosachi/sam-hq) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model's output.Read the documentation from
-    [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the hidden states.
-        image_size (`int`, *optional*, defaults to 1024):
-            The expected output resolution of the image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        mask_input_channels (`int`, *optional*, defaults to 16):
-            The number of channels to be fed to the `MaskDecoder` module.
-        num_point_embeddings (`int`, *optional*, defaults to 4):
-            The number of point embeddings to be used.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the encoder and pooler.
-    """
-
     pass
 
 
+@auto_docstring(checkpoint="Uminosachi/sam-hq")
 class SamHQVisionConfig(SamVisionConfig):
     pass
 
 
+@auto_docstring(checkpoint="Uminosachi/sam-hq")
 class SamHQMaskDecoderConfig(SamMaskDecoderConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SamHQMaskDecoder`]. It is used to instantiate a SAM_HQ
-    mask decoder to the specified arguments, defining the model architecture. Instantiating a configuration defaults
-    will yield a similar configuration to that of the SAM_HQ-vit-h
-    [facebook/sam_hq-vit-huge](https://huggingface.co/facebook/sam_hq-vit-huge) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the hidden states.
-        hidden_act (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function used inside the `SamHQMaskDecoder` module.
-        mlp_dim (`int`, *optional*, defaults to 2048):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 2):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        attention_downsample_rate (`int`, *optional*, defaults to 2):
-            The downsampling rate of the attention layer.
-        num_multimask_outputs (`int`, *optional*, defaults to 3):
-            The number of outputs from the `SamHQMaskDecoder` module. In the Segment Anything paper, this is set to 3.
-        iou_head_depth (`int`, *optional*, defaults to 3):
-            The number of layers in the IoU head module.
-        iou_head_hidden_dim (`int`, *optional*, defaults to 256):
-            The dimensionality of the hidden states in the IoU head module.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        vit_dim (`int`, *optional*, defaults to 768):
-            Dimensionality of the Vision Transformer (ViT) used in the `SamHQMaskDecoder` module.
+    vit_dim (`int`, *optional*, defaults to 768):
+        Dimensionality of the Vision Transformer (ViT) used in the `SamHQMaskDecoder` module.
+    mlp_dim (`int`, *optional*, defaults to 2048):
+        Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+    attention_downsample_rate (`int`, *optional*, defaults to 2):
+        The downsampling rate of the attention layer.
+    num_multimask_outputs (`int`, *optional*, defaults to 3):
+        The number of outputs from the `SamMaskDecoder` module. In the Segment Anything paper, this is set to 3.
+    iou_head_depth (`int`, *optional*, defaults to 3):
+        The number of layers in the IoU head module.
+    iou_head_hidden_dim (`int`, *optional*, defaults to 256):
+        The dimensionality of the hidden states in the IoU head module.
     """
 
     def __init__(
@@ -119,28 +76,14 @@ class SamHQMaskDecoderConfig(SamMaskDecoderConfig):
         self.vit_dim = vit_dim
 
 
+@auto_docstring(checkpoint="Uminosachi/sam-hq")
 class SamHQConfig(SamConfig):
     r"""
-    [`SamHQConfig`] is the configuration class to store the configuration of a [`SamHQModel`]. It is used to instantiate a
-    SAM-HQ model according to the specified arguments, defining the vision model, prompt-encoder model and mask decoder
-    configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    SAM-HQ-ViT-H [sushmanth/sam_hq_vit_h](https://huggingface.co/sushmanth/sam_hq_vit_h) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vision_config (Union[`dict`, `SamHQVisionConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`SamHQVisionConfig`].
-        prompt_encoder_config (Union[`dict`, `SamHQPromptEncoderConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`SamHQPromptEncoderConfig`].
-        mask_decoder_config (Union[`dict`, `SamHQMaskDecoderConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`SamHQMaskDecoderConfig`].
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+    prompt_encoder_config (Union[`dict`, `SamHQPromptEncoderConfig`], *optional*):
+        Dictionary of configuration options used to initialize [`SamHQPromptEncoderConfig`].
+    mask_decoder_config (Union[`dict`, `SamHQMaskDecoderConfig`], *optional*):
+        Dictionary of configuration options used to initialize [`SamHQMaskDecoderConfig`].
     """
-
-    pass
 
 
 class SamHQVisionEncoderOutput(SamVisionEncoderOutput):
@@ -153,7 +96,7 @@ class SamHQVisionEncoderOutput(SamVisionEncoderOutput):
         This is specific to SAM-HQ and not present in base SAM.
     """
 
-    intermediate_embeddings: Optional[list[torch.FloatTensor]] = None
+    intermediate_embeddings: list[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -169,8 +112,8 @@ class SamHQMMaskDecoderOutputs(ModelOutput):
     """
 
     masks: torch.FloatTensor
-    iou_scores: Optional[torch.FloatTensor] = None
-    mask_decoder_attentions: Optional[torch.FloatTensor] = None
+    iou_scores: torch.FloatTensor | None = None
+    mask_decoder_attentions: torch.FloatTensor | None = None
 
 
 class SamHQImageSegmentationOutput(SamImageSegmentationOutput):
@@ -195,10 +138,11 @@ class SamHQVisionEncoder(SamVisionEncoder, SamHQPreTrainedModel):
         "attentions": SamHQVisionAttention,
     }
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
-        self, pixel_values: Optional[torch.FloatTensor] = None, **kwargs: Unpack[TransformersKwargs]
-    ) -> Union[tuple, SamHQVisionEncoderOutput]:
+        self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | SamHQVisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -289,9 +233,9 @@ class SamHQMaskDecoder(nn.Module):
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
         hq_token_only: bool,
-        intermediate_embeddings: Optional[list[torch.Tensor]] = None,
-        attention_similarity: Optional[torch.Tensor] = None,
-        target_embedding: Optional[torch.Tensor] = None,
+        intermediate_embeddings: list[torch.Tensor] | None = None,
+        attention_similarity: torch.Tensor | None = None,
+        target_embedding: torch.Tensor | None = None,
     ) -> SamHQMMaskDecoderOutputs:
         """
         Predict high-quality masks given image and prompt embeddings.
@@ -446,9 +390,6 @@ class SamHQVisionModel(SamVisionModel):
     """
 )
 class SamHQModel(SamModel):
-    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
-
     def __init__(self, config):
         super().__init__(config)
         self.vision_encoder = SamHQVisionEncoder(config.vision_config)
@@ -476,17 +417,17 @@ class SamHQModel(SamModel):
 
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_labels: Optional[torch.LongTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_masks: Optional[torch.LongTensor] = None,
-        image_embeddings: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        input_points: torch.FloatTensor | None = None,
+        input_labels: torch.LongTensor | None = None,
+        input_boxes: torch.FloatTensor | None = None,
+        input_masks: torch.LongTensor | None = None,
+        image_embeddings: torch.FloatTensor | None = None,
         multimask_output: bool = True,
         hq_token_only: bool = False,
-        attention_similarity: Optional[torch.FloatTensor] = None,
-        target_embedding: Optional[torch.FloatTensor] = None,
-        intermediate_embeddings: Optional[list[torch.FloatTensor]] = None,
+        attention_similarity: torch.FloatTensor | None = None,
+        target_embedding: torch.FloatTensor | None = None,
+        intermediate_embeddings: list[torch.FloatTensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> list[dict[str, torch.Tensor]]:
         r"""
@@ -553,16 +494,18 @@ class SamHQModel(SamModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 
         >>> model = AutoModel.from_pretrained("sushmanth/sam_hq_vit_b")
         >>> processor = AutoProcessor.from_pretrained("sushmanth/sam_hq_vit_b")
 
-        >>> img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
-        >>> raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> input_points = [[[400, 650]]]  # 2D location of a window on the car
-        >>> inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt")
+        >>> inputs = processor(images=image, input_points=input_points, return_tensors="pt")
 
         >>> # Get high-quality segmentation mask
         >>> outputs = model(**inputs)

@@ -279,7 +279,6 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     pipeline_model_mapping = (
         {"feature-extraction": XGLMModel, "text-generation": XGLMForCausalLM} if is_torch_available() else {}
     )
-    fx_compatible = True
     test_missing_keys = False
 
     def setUp(self):

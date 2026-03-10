@@ -67,8 +67,6 @@
       title: ゼロショット画像分類
     - local: tasks/monocular_depth_estimation
       title: 深さの推定
-    - local: tasks/image_to_image
-      title: 画像から画像へ
     - local: tasks/knowledge_distillation_for_image_classification
       title: コンピュータビジョンのための知識の蒸留
     title: コンピュータビジョン
@@ -200,8 +198,6 @@
       title: モデル
     - local: main_classes/text_generation
       title: テキストの生成
-    - local: main_classes/onnx
-      title: ONNX
     - local: main_classes/optimizer_schedules
       title: 最適化
     - local: main_classes/output
@@ -254,8 +250,6 @@
         title: Blenderbot Small
       - local: model_doc/bloom
         title: BLOOM
-      - local: model_doc/bort
-        title: BORT
       - local: model_doc/byt5
         title: ByT5
       - local: model_doc/camembert
@@ -299,8 +293,6 @@
         title: Deformable DETR
       - local: model_doc/deit
         title: DeiT
-      - local: model_doc/deta
-        title: DETA
       - local: model_doc/detr
         title: DETR
       - local: model_doc/dinat

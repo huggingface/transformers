@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -15,37 +14,13 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="mistralai/Mistral-Small-3.1-24B-Instruct-2503")
 class Mistral3Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Mistral3ForConditionalGeneration`]. It is used to instantiate an
-    Mistral3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of
-    [mistralai/Mistral-Small-3.1-24B-Instruct-2503](https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `PixtralVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `MistralConfig`):
-            The config object or dictionary of the text backbone.
-        image_token_index (`int`, *optional*, defaults to 10):
-            The image token index to encode the image prompt.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
-        vision_feature_layer (`Union[int, list[int]]`, *optional*, defaults to -1):
-            The index of the layer to select the vision feature. If multiple indices are provided,
-            the vision feature of the corresponding indices will be concatenated to form the
-            vision features.
-        multimodal_projector_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in the multimodal projector.
-        spatial_merge_size (`int`, *optional*, defaults to 2):
-            The downsampling factor for the spatial merge operation.
-
     Example:
 
     ```python
@@ -83,6 +58,7 @@ class Mistral3Config(PreTrainedConfig):
         vision_feature_layer=-1,
         multimodal_projector_bias=False,
         spatial_merge_size=2,
+        tie_word_embeddings: bool = True,
         **kwargs,
     ):
         self.image_token_index = image_token_index
@@ -134,6 +110,7 @@ class Mistral3Config(PreTrainedConfig):
         self.text_config = text_config
         self.multimodal_projector_bias = multimodal_projector_bias
         self.spatial_merge_size = spatial_merge_size
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 

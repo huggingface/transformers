@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
+import importlib.metadata
 import os
 
 from packaging import version
@@ -113,7 +114,4 @@ def check_peft_version(min_version: str) -> None:
     is_peft_version_compatible = version.parse(importlib.metadata.version("peft")) >= version.parse(min_version)
 
     if not is_peft_version_compatible:
-        raise ValueError(
-            f"The version of PEFT you are using is not compatible, please use a version that is greater"
-            f" than {min_version}"
-        )
+        raise ValueError(f"The version of PEFT you are using is not compatible, please use a version >= {min_version}")

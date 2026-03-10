@@ -13,11 +13,12 @@
 # limitations under the License.
 """Testing suite for the PyTorch TVP model."""
 
+import copy
 import unittest
 from functools import cached_property
 
 from transformers import ResNetConfig, TimmBackboneConfig, TvpConfig
-from transformers.testing_utils import require_timm, require_torch, require_vision, torch_device
+from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_modeling_common import (
@@ -196,7 +197,7 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_backbone_selection(self):
         def _validate_backbone_init():
             for model_class in self.all_model_classes:
-                model = model_class(config)
+                model = model_class(copy.deepcopy(config))
                 model.to(torch_device)
                 model.eval()
 
@@ -211,18 +212,21 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config.is_hybrid = False
 
         # We load through configs, as the modeling file assumes config.backbone_config is always set
-        config.use_pretrained_backbone = False
-        config.backbone_kwargs = None
+        config_dict = config.to_dict()
+        config_dict["use_pretrained_backbone"] = False
+        config_dict["backbone_kwargs"] = None
 
         # Load a timm backbone
         # We hack adding hidden_sizes to the config to test the backbone loading
         backbone_config = TimmBackboneConfig("resnet18", out_indices=[-2, -1], hidden_sizes=[64, 128])
-        config.backbone_config = backbone_config
+        config_dict["backbone_config"] = backbone_config
+        config = config.__class__(**config_dict)
         _validate_backbone_init()
 
         # Load a HF backbone
         backbone_config = ResNetConfig.from_pretrained("facebook/dinov2-small", out_indices=[-2, -1])
-        config.backbone_config = backbone_config
+        config_dict["backbone_config"] = backbone_config
+        config = config.__class__(**config_dict)
         _validate_backbone_init()
 
 
@@ -234,13 +238,14 @@ def prepare_img():
 
 @require_vision
 @require_torch
+@slow
 class TvpModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return TvpImageProcessor.from_pretrained("Jiqing/tiny-random-tvp")
+        return TvpImageProcessor.from_pretrained("Jiqing/tiny-random-tvp", revision="refs/pr/1")
 
     def test_inference_no_head(self):
-        model = TvpModel.from_pretrained("Jiqing/tiny-random-tvp").to(torch_device)
+        model = TvpModel.from_pretrained("Jiqing/tiny-random-tvp", revision="refs/pr/1").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -261,7 +266,7 @@ class TvpModelIntegrationTests(unittest.TestCase):
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_inference_with_head(self):
-        model = TvpForVideoGrounding.from_pretrained("Jiqing/tiny-random-tvp").to(torch_device)
+        model = TvpForVideoGrounding.from_pretrained("Jiqing/tiny-random-tvp", revision="refs/pr/1").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -280,7 +285,7 @@ class TvpModelIntegrationTests(unittest.TestCase):
         torch.testing.assert_close(outputs.logits, expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_interpolate_inference_no_head(self):
-        model = TvpModel.from_pretrained("Jiqing/tiny-random-tvp").to(torch_device)
+        model = TvpModel.from_pretrained("Jiqing/tiny-random-tvp", revision="refs/pr/1").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()  # 480X640
@@ -299,7 +304,7 @@ class TvpModelIntegrationTests(unittest.TestCase):
         assert outputs.last_hidden_state.shape == expected_shape
 
     def test_interpolate_inference_with_head(self):
-        model = TvpForVideoGrounding.from_pretrained("Jiqing/tiny-random-tvp").to(torch_device)
+        model = TvpForVideoGrounding.from_pretrained("Jiqing/tiny-random-tvp", revision="refs/pr/1").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()  # 480X640

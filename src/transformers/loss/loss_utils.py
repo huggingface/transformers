@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -22,13 +21,14 @@ from .loss_d_fine import DFineForObjectDetectionLoss
 from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, DeformableDetrForSegmentationLoss
 from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
 from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
+from .loss_lw_detr import LwDetrForObjectDetectionLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
 
 
 def fixed_cross_entropy(
     source: torch.Tensor,
     target: torch.Tensor,
-    num_items_in_batch: Optional[torch.Tensor] = None,
+    num_items_in_batch: torch.Tensor | None = None,
     ignore_index: int = -100,
     **kwargs,
 ) -> torch.Tensor:
@@ -46,9 +46,9 @@ def ForCausalLMLoss(
     logits,
     labels,
     vocab_size: int,
-    num_items_in_batch: Optional[torch.Tensor] = None,
+    num_items_in_batch: torch.Tensor | None = None,
     ignore_index: int = -100,
-    shift_labels: Optional[torch.Tensor] = None,
+    shift_labels: torch.Tensor | None = None,
     **kwargs,
 ) -> torch.Tensor:
     # Upcast to float if we need to compute the loss to avoid potential precision issues
@@ -71,7 +71,7 @@ def ForMaskedLMLoss(
     logits: torch.Tensor,
     labels: torch.Tensor,
     vocab_size: int,
-    num_items_in_batch: Optional[torch.Tensor] = None,
+    num_items_in_batch: torch.Tensor | None = None,
     ignore_index: int = -100,
     **kwargs,
 ):
@@ -164,4 +164,5 @@ LOSS_MAPPING = {
     "RTDetrV2ForObjectDetection": RTDetrForObjectDetectionLoss,
     "DFineForObjectDetection": DFineForObjectDetectionLoss,
     "CsmForConditionalGeneration": ForCausalLMLoss,
+    "LwDetrForObjectDetection": LwDetrForObjectDetectionLoss,
 }

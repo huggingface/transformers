@@ -35,24 +35,6 @@ You can find all the original [mT5] checkpoints under the [mT5](https://huggingf
 The example below demonstrates how to summarize text with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```python
-import torch
-from transformers import pipeline
-
-pipeline = pipeline(
-    task="text2text-generation",
-    model="csebuetnlp/mT5_multilingual_XLSum",
-    dtype=torch.float16,
-    device=0
-)
-pipeline("""Plants are remarkable organisms that produce their own food using a method called photosynthesis.
-This process involves converting sunlight, carbon dioxide, and water into glucose, which provides energy for growth.
-Plants play a crucial role in sustaining life on Earth by generating oxygen and serving as the foundation of most ecosystems.""")
-```
-
-</hfoption>
 <hfoption id="AutoModel">
 
 ```python
@@ -75,13 +57,6 @@ input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants are remarkable organisms that produce their own food using a method called photosynthesis." | transformers run --task text2text-generation --model csebuetnlp/mT5_multilingual_XLSum --device 0
 ```
 
 </hfoption>
@@ -126,18 +101,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ## MT5Config
 
 [[autodoc]] MT5Config
-
-## MT5Tokenizer
-
-[[autodoc]] MT5Tokenizer
-
-See [`T5Tokenizer`] for all details.
-
-## MT5TokenizerFast
-
-[[autodoc]] MT5TokenizerFast
-
-See [`T5TokenizerFast`] for all details.
 
 ## MT5Model
 

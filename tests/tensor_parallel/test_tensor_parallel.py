@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,29 +11,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
+import warnings
+from types import SimpleNamespace
 
-# Run the test: CUDA_VISIBLE_DEVICES=0,1 RUN_SLOW=1 pytest -sv tests/tensor_parallel/test_tensor_parallel.py
+import torch
 
-import os
-import tempfile
-import textwrap
-
-from transformers import is_torch_available
-from transformers.integrations.tensor_parallel import get_packed_weights, repack_weights
-from transformers.testing_utils import (
-    TestCasePlus,
-    backend_device_count,
-    require_huggingface_hub_greater_or_equal,
-    require_torch_multi_accelerator,
-    torch_device,
-    torchrun,
+from transformers import AutoModelForCausalLM
+from transformers.integrations.tensor_parallel import (
+    ColwiseParallel,
+    EmbeddingParallel,
+    GroupedGemmParallel,
+    PackedColwiseParallel,
+    PackedRowwiseParallel,
+    RowwiseParallel,
+    get_packed_weights,
+    repack_weights,
 )
+from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
 
-if is_torch_available():
-    import torch
-
-
+@is_tensor_parallel_test
 class TestTensorParallelUtils(TestCasePlus):
     def test_packed_unpacked_conversion(self):
         WORLD_SIZE = 2
@@ -63,192 +61,11 @@ class TestTensorParallelUtils(TestCasePlus):
         assert torch.allclose(unpacked_weights, original_packed_weights)
 
 
-class TestTensorParallel(TestCasePlus):
-    nproc_per_node = 2
-
-    def test_model_forward(self):
-        script_to_run = textwrap.dedent(
-            """
-            import torch
-            import os
-            from transformers import AutoModelForCausalLM, AutoTokenizer
-
-            model_id = "JackFram/llama-68m"
-
-            model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
-            torch.distributed.barrier()
-
-            has_dtensor = 0
-            for name, parameter in model.named_parameters():
-                if isinstance(parameter.data, torch.distributed.tensor.DTensor):
-                    has_dtensor = 1
-                    break
-
-            assert has_dtensor == 1, "TP model must has DTensor"
-
-            tokenizer = AutoTokenizer.from_pretrained(model_id, legacy=False)
-            prompt = "Can I help"
-
-            inputs = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
-            outputs = model(inputs)
-
-            next_token_logits = outputs[0][:, -1, :]
-            next_token = torch.argmax(next_token_logits, dim=-1)
-            response = tokenizer.decode(next_token)
-            assert response == "with"
-
-            torch.distributed.barrier()
-            torch.distributed.destroy_process_group()
-            """
-        )
-        torchrun(script_to_run, self.nproc_per_node, env=self.get_env())
-
-    def test_model_backward_pass(self):
-        script_to_run = textwrap.dedent(
-            """
-            import torch
-            import os
-            from transformers import AutoModelForCausalLM
-            from torch import nn
-
-            model_id = "JackFram/llama-68m"
-
-            model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32, tp_plan="auto")
-            torch.distributed.barrier()
-
-            # Dummy forward and backward pass
-            # Note that loss.backward() will fail if there is a bug in the TP implementation
-            inputs = torch.randint(0, model.config.vocab_size, (2, 10), device=model.device)
-            labels = torch.randint(0, model.config.vocab_size, (2, 10), device=model.device)
-            loss = model(inputs, labels=labels).loss
-            loss.backward()
-
-            torch.distributed.barrier()
-            torch.distributed.destroy_process_group()
-            """
-        )
-        torchrun(script_to_run, self.nproc_per_node, env=self.get_env())
-
-    def test_model_generate(self):
-        script_to_run = textwrap.dedent(
-            """
-            import torch
-            import os
-            from transformers import AutoModelForCausalLM, AutoTokenizer
-
-            model_id = "JackFram/llama-68m"
-
-            model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
-            torch.distributed.barrier()
-
-            model.forward = torch.compile(model.forward)
-
-            has_dtensor = 0
-            for name, parameter in model.named_parameters():
-                if isinstance(parameter.data, torch.distributed.tensor.DTensor):
-                    has_dtensor = 1
-                    break
-
-            assert has_dtensor == 1, "TP model must have DTensor"
-
-            tokenizer = AutoTokenizer.from_pretrained(model_id)
-            prompt = "Can I help"
-
-            inputs = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
-            outputs = model.generate(inputs, max_new_tokens=10, cache_implementation="static")
-
-            output_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-            assert output_text[0].startswith(prompt), f"Expected output to start with '{prompt}', got '{output_text[0]}'"
-
-            torch.distributed.barrier()
-            torch.distributed.destroy_process_group()
-            """
-        )
-        torchrun(script_to_run, self.nproc_per_node, env=self.get_env())
-
-    @require_huggingface_hub_greater_or_equal("0.31.4")
-    def test_model_save(self):
-        from safetensors import safe_open
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            for is_torchrun in [True, False]:
-                script_to_run = textwrap.dedent(
-                    f"""
-                    import torch
-                    import os
-                    from transformers import AutoModelForCausalLM
-
-                    model_id = "JackFram/llama-68m"
-                    kwargs = dict()
-
-                    if os.environ.get("RANK", None) is not None:
-                        kwargs["tp_plan"] = "auto"
-                        result_dir = "{tmp_dir}/tp"
-                    else:
-                        result_dir = "{tmp_dir}/nontp"
-
-                    model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
-                    model.save_pretrained(result_dir)
-                    """
-                )
-                torchrun(script_to_run, self.nproc_per_node, is_torchrun=is_torchrun, env=self.get_env())
-
-            non_tp_model_path = os.path.join(tmp_dir, "nontp")
-            tp_model_path = os.path.join(tmp_dir, "tp")
-
-            for filename in os.listdir(non_tp_model_path):
-                if not filename.endswith(".safetensors"):
-                    continue
-
-                non_tp_model = safe_open(os.path.join(non_tp_model_path, filename), device="cpu", framework="pt")
-                tp_model = safe_open(os.path.join(tp_model_path, filename), device="cpu", framework="pt")
-                for non_tp_key in non_tp_model.keys():
-                    non_tp_tensor = non_tp_model.get_tensor(non_tp_key)
-                    tp_tensor = tp_model.get_tensor(non_tp_key)
-                    assert torch.allclose(non_tp_tensor, tp_tensor), f"Tensor with key: {non_tp_key} does not match"
-                    del non_tp_tensor, tp_tensor
-
-    def test_custom_tp_plan(self):
-        script_to_run = textwrap.dedent(
-            r"""
-            import re
-            import torch
-            from torch.distributed.tensor import DTensor
-            from transformers import AutoModelForCausalLM
-
-            model_id = "JackFram/llama-68m"
-            # only shard attentions, but not mlps
-            tp_plan = {
-                "model.layers.*.self_attn.q_proj": "colwise",
-                "model.layers.*.self_attn.k_proj": "colwise",
-                "model.layers.*.self_attn.v_proj": "colwise",
-                "model.layers.*.self_attn.o_proj": "rowwise",
-            }
-
-            # Use custom tp_plan directly in from_pretrained
-            model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, tp_plan=tp_plan)
-
-            # Check we can generate with the tp_plan
-            inputs = torch.randint(100, 200, (1, 10), device=model.device)
-            out = model.generate(inputs, max_new_tokens=10, do_sample=False)
-
-            # Check only the attentions are sharded
-            for name, param in model.named_parameters():
-                if re.search(r"\.self_attn\.(q|k|v|o)_proj\.", name):
-                    assert isinstance(param, DTensor)
-                else:
-                    assert not isinstance(param, DTensor)
-            """
-        )
-        torchrun(script_to_run, self.nproc_per_node, env=self.get_env())
-
-
+@is_tensor_parallel_test
 class TestTensorParallelProperties(TestCasePlus):
     def test_tp_plan_property_setter_getter(self):
         """Test that tp_plan property can be set and retrieved correctly."""
-        from transformers import AutoModelForCausalLM
-
-        model_id = "JackFram/llama-68m"
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
         # Test setting empty plan
@@ -266,18 +83,16 @@ class TestTensorParallelProperties(TestCasePlus):
         self.assertEqual(model.tp_plan, expected_plan)
 
         # Test overriding existing entry
-        model.tp_plan.update({"model.layers.*.self_attn.q_proj": "colwise_rep"})
+        model.tp_plan.update({"model.layers.*.self_attn.q_proj": "rowwise"})
         expected_plan = {
-            "model.layers.*.self_attn.q_proj": "colwise_rep",
+            "model.layers.*.self_attn.q_proj": "rowwise",
             "model.layers.*.self_attn.k_proj": "colwise",
         }
         self.assertEqual(model.tp_plan, expected_plan)
 
     def test_tp_plan_validation_invalid_style(self):
         """Test that invalid parallel styles are rejected."""
-        from transformers import AutoModelForCausalLM
-
-        model_id = "JackFram/llama-68m"
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
         # Test invalid parallel style
@@ -289,11 +104,8 @@ class TestTensorParallelProperties(TestCasePlus):
 
     def test_tp_plan_validation_nonexistent_layer_warning(self):
         """Test that warnings are issued for non-existent layer patterns."""
-        import warnings
 
-        from transformers import AutoModelForCausalLM
-
-        model_id = "JackFram/llama-68m"
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
         # Test warning for non-existent layer pattern
@@ -308,18 +120,14 @@ class TestTensorParallelProperties(TestCasePlus):
 
     def test_tp_plan_valid_layer_patterns(self):
         """Test that valid layer patterns are accepted without warnings."""
-        import warnings
-
-        from transformers import AutoModelForCausalLM
-
-        model_id = "JackFram/llama-68m"
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
         # Test valid layer patterns that should match the model structure
         valid_plans = [
             {"model.layers.*.self_attn.q_proj": "colwise"},
             {"model.layers.*.self_attn.k_proj": "rowwise"},
-            {"model.layers.*.mlp.gate_proj": "colwise_rep"},
+            {"model.layers.*.mlp.gate_proj": "colwise"},
         ]
 
         for plan in valid_plans:
@@ -347,9 +155,7 @@ class TestTensorParallelProperties(TestCasePlus):
 
     def test_tp_plan_none_handling(self):
         """Test that None values are handled correctly."""
-        from transformers import AutoModelForCausalLM
-
-        model_id = "JackFram/llama-68m"
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
         # Test setting None
@@ -361,6 +167,254 @@ class TestTensorParallelProperties(TestCasePlus):
         self.assertEqual(model.tp_plan, {"model.layers.*.self_attn.q_proj": "colwise"})
 
 
-@require_torch_multi_accelerator
-class TestTensorParallelAccelerator(TestTensorParallel):
-    nproc_per_node = backend_device_count(torch_device)
+@is_tensor_parallel_test
+class TestTensorParallelLayer(TestCasePlus):
+    class MockDeviceMesh:
+        def __init__(self, world_size, rank):
+            self.world_size = world_size
+            self.rank = rank
+            self.shape = (world_size,)
+
+        def size(self):
+            return self.world_size
+
+        def get_local_rank(self):
+            return self.rank
+
+    def test_colwise_get_expected_sharded_shape(self):
+        world_size = 3
+        size = 10  # not divisible by world_size to test edge case
+        empty_param_2d = torch.empty(size, 32)
+        empty_param_1d = torch.empty((size,))
+        step = math.ceil(size / world_size)
+
+        for rank in range(world_size):
+            for empty_param in [empty_param_2d, empty_param_1d]:
+                device_mesh = self.MockDeviceMesh(world_size=world_size, rank=rank)
+                layer = ColwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty_param)
+
+                begin = rank * step
+                end = min(begin + step, size)
+                ground_truth = (end - begin,) + empty_param.shape[1:]
+                expected_shape = layer.get_expected_sharded_shape(empty_param.shape)
+                self.assertEqual(
+                    expected_shape, ground_truth, f"Rank {rank} expected shape {ground_truth} but got {expected_shape}"
+                )
+
+    def test_rowwise_get_expected_sharded_shape(self):
+        world_size = 3
+        size = 10  # not divisible by world_size to test edge case
+        empty_param_2d = torch.empty(32, size)
+        empty_param_1d = torch.empty((size,))
+        step = math.ceil(size / world_size)
+
+        for rank in range(world_size):
+            device_mesh = self.MockDeviceMesh(world_size=world_size, rank=rank)
+
+            # 2D: shards on dim -1 (input features)
+            layer = RowwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty_param_2d)
+            begin = rank * step
+            end = min(begin + step, size)
+            ground_truth = empty_param_2d.shape[:-1] + (end - begin,)
+            expected_shape = layer.get_expected_sharded_shape(empty_param_2d.shape)
+            self.assertEqual(
+                expected_shape, ground_truth, f"Rank {rank} expected shape {ground_truth} but got {expected_shape}"
+            )
+
+            # 1D bias: NOT sharded
+            layer = RowwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty_param_1d)
+            self.assertEqual(layer.get_expected_sharded_shape(empty_param_1d.shape), empty_param_1d.shape)
+
+    def test_embedding_get_expected_sharded_shape(self):
+        world_size = 3
+        size = 10  # not divisible by world_size to test edge case; same size on both dims so step applies to both
+        empty_param = torch.empty(size, size)
+        step = math.ceil(size / world_size)
+
+        for rank in range(world_size):
+            device_mesh = self.MockDeviceMesh(world_size=world_size, rank=rank)
+            begin = rank * step
+            end = min(begin + step, size)
+
+            # embedding_dim_sharding=0: shards dim 0 (vocab)
+            layer = EmbeddingParallel(
+                device_mesh=device_mesh, rank=rank, empty_param=empty_param, embedding_dim_sharding=0
+            )
+            ground_truth = (end - begin,) + empty_param.shape[1:]
+            expected_shape = layer.get_expected_sharded_shape(empty_param.shape)
+            self.assertEqual(
+                expected_shape, ground_truth, f"Rank {rank} expected shape {ground_truth} but got {expected_shape}"
+            )
+
+            # embedding_dim_sharding=1: shards dim 1 (embedding dim)
+            layer = EmbeddingParallel(
+                device_mesh=device_mesh, rank=rank, empty_param=empty_param, embedding_dim_sharding=1
+            )
+            ground_truth = empty_param.shape[:1] + (end - begin,) + empty_param.shape[2:]
+            expected_shape = layer.get_expected_sharded_shape(empty_param.shape)
+            self.assertEqual(
+                expected_shape, ground_truth, f"Rank {rank} expected shape {ground_truth} but got {expected_shape}"
+            )
+
+    def test_grouped_gemm_get_expected_sharded_shape(self):
+        world_size = 3
+        size = 9  # must be divisible by world_size (GroupedGemm requires it)
+        empty_param = torch.empty(size, 16, 32)
+        step = math.ceil(size / world_size)
+
+        for rank in range(world_size):
+            device_mesh = self.MockDeviceMesh(world_size=world_size, rank=rank)
+            layer = GroupedGemmParallel(device_mesh=device_mesh, rank=rank, empty_param=empty_param)
+            begin = rank * step
+            end = min(begin + step, size)
+            ground_truth = (end - begin,) + empty_param.shape[1:]
+            expected_shape = layer.get_expected_sharded_shape(empty_param.shape)
+            self.assertEqual(
+                expected_shape, ground_truth, f"Rank {rank} expected shape {ground_truth} but got {expected_shape}"
+            )
+
+    def test_colwise_update_module_attributes(self):
+        device_mesh = self.MockDeviceMesh(world_size=4, rank=0)
+
+        # gather_output=False (default): out_features is updated
+        module = torch.nn.Linear(32, 16)
+        layer = ColwiseParallel(device_mesh=device_mesh, rank=0, empty_param=torch.empty(16, 32))
+        layer.update_module_attributes(module)
+        self.assertEqual(module.out_features, 4)
+
+        # gather_output=True: out_features is NOT updated
+        module = torch.nn.Linear(32, 16)
+        layer = ColwiseParallel(device_mesh=device_mesh, rank=0, empty_param=torch.empty(16, 32), gather_output=True)
+        layer.update_module_attributes(module)
+        self.assertEqual(module.out_features, 16)
+
+    def test_rowwise_update_module_attributes(self):
+        device_mesh = self.MockDeviceMesh(world_size=4, rank=0)
+
+        module = torch.nn.Linear(32, 16)
+        layer = RowwiseParallel(device_mesh=device_mesh, rank=0, empty_param=torch.empty(16, 32))
+        layer.update_module_attributes(module)
+        self.assertEqual(module.in_features, 8)
+
+    def test_embedding_update_module_attributes(self):
+        device_mesh = self.MockDeviceMesh(world_size=4, rank=0)
+
+        # embedding_dim_sharding=0: num_embeddings is updated
+        module = torch.nn.Embedding(32, 16)
+        layer = EmbeddingParallel(
+            device_mesh=device_mesh, rank=0, empty_param=torch.empty(32, 16), embedding_dim_sharding=0
+        )
+        layer.update_module_attributes(module)
+        self.assertEqual(module.num_embeddings, 8)
+        self.assertEqual(module.embedding_dim, 16)
+
+        # embedding_dim_sharding=1: embedding_dim is updated
+        module = torch.nn.Embedding(32, 16)
+        layer = EmbeddingParallel(
+            device_mesh=device_mesh, rank=0, empty_param=torch.empty(32, 16), embedding_dim_sharding=1
+        )
+        layer.update_module_attributes(module)
+        self.assertEqual(module.num_embeddings, 32)
+        self.assertEqual(module.embedding_dim, 4)
+
+    def test_grouped_gemm_update_module_attributes(self):
+        device_mesh = self.MockDeviceMesh(world_size=4, rank=0)
+
+        # There is no torch module with num_experts attribute, it is more at the Transformers level,
+        # so just use a SimpleNamespace to test that the attribute is updated correctly.
+        module = SimpleNamespace(num_experts=8)
+        layer = GroupedGemmParallel(device_mesh=device_mesh, rank=0, empty_param=torch.empty(8, 16, 32))
+        layer.update_module_attributes(module)
+        self.assertEqual(module.num_experts, 2)
+
+    def test_update_module_attributes_missing_attribute(self):
+        device_mesh = self.MockDeviceMesh(world_size=4, rank=0)
+        module = SimpleNamespace(random_attr=123)
+        for cls in [ColwiseParallel, RowwiseParallel, GroupedGemmParallel]:
+            layer = cls(device_mesh=device_mesh, rank=0, empty_param=torch.empty(16, 32))
+            layer.update_module_attributes(module)
+
+        self.assertEqual(
+            module.__dict__,
+            {"random_attr": 123},
+            "update_module_attributes should not modify attributes that don't exist",
+        )
+
+    def test_shard_tensor_shape_consistency(self):
+        """
+        Test that shard_tensor returns tensors of the expected shape for different parallel styles and ranks.
+        """
+        WORLD_SIZE = 4
+        cases = [
+            (ColwiseParallel, (16, 32), {}),
+            (ColwiseParallel, (16, 32), {"gather_output": True}),
+            (ColwiseParallel, (16,), {}),
+            (RowwiseParallel, (16, 32), {}),
+            (RowwiseParallel, (32,), {}),
+            (EmbeddingParallel, (32, 16), {"embedding_dim_sharding": 0}),
+            (EmbeddingParallel, (32, 16), {"embedding_dim_sharding": 1}),
+        ]
+        for cls, shape, kwargs in cases:
+            for rank in range(WORLD_SIZE):
+                device_mesh = self.MockDeviceMesh(world_size=WORLD_SIZE, rank=rank)
+                layer = cls(device_mesh=device_mesh, rank=rank, empty_param=torch.empty(*shape), **kwargs)
+
+                full_tensor = torch.randn(*shape)
+                sharded = layer.shard_tensor(full_tensor)
+                expected = layer.get_expected_sharded_shape(shape)
+
+                self.assertEqual(tuple(sharded.shape), expected, f"{cls.__name__} rank={rank} shape={shape}")
+
+    def test_packed_colwise_shard_tensor(self):
+        WORLD_SIZE = 2
+        # 3D empty_param
+        empty = torch.empty(2, 16, 64)
+
+        # Packed vs unpacked path is determined by checking the following:
+        # input.dim() == get_expected_sharded_shape(empty_param).dim()
+
+        # Packed
+        full_packed = torch.randn(2, 16, 64)
+        full_packed.get_dtype = lambda: "F32"
+        for rank in range(WORLD_SIZE):
+            device_mesh = self.MockDeviceMesh(world_size=WORLD_SIZE, rank=rank)
+            layer = PackedColwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty)
+            sharded = layer.shard_tensor(full_packed)
+            expected_shape = (2, 8, 64)  # last dim is packed size, middle dim is sharded
+            self.assertEqual(sharded.shape, expected_shape)
+
+        # Unpacked
+        full_unpacked = torch.randn(16, 64)
+        for rank in range(WORLD_SIZE):
+            device_mesh = self.MockDeviceMesh(world_size=WORLD_SIZE, rank=rank)
+            layer = PackedColwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty)
+            sharded = layer.shard_tensor(full_unpacked)
+            expected_shape = (8, 64)  # last dim is not packed, so just sharded
+            self.assertEqual(sharded.shape, expected_shape)
+
+    def test_packed_rowwise_shard_tensor(self):
+        WORLD_SIZE = 2
+        # empty_param last dim = 64 signals the packed size (2 * 32)
+        empty = torch.empty(16, 64)
+
+        # Packed vs unpacked path is determined by checking the following:
+        # input.shape[-1] < empty_param.shape[-1]
+
+        # Packed
+        full_packed = torch.randn(16, 64)
+        full_packed.get_dtype = lambda: "F32"
+        for rank in range(WORLD_SIZE):
+            device_mesh = self.MockDeviceMesh(world_size=WORLD_SIZE, rank=rank)
+            layer = PackedRowwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty)
+            sharded = layer.shard_tensor(full_packed)
+            expected_shape = (16, 32)  # last dim is packed size, sharded
+            self.assertEqual(sharded.shape, expected_shape)
+
+        # Unpacked
+        full_unpacked = torch.randn(16, 32)
+        for rank in range(WORLD_SIZE):
+            device_mesh = self.MockDeviceMesh(world_size=WORLD_SIZE, rank=rank)
+            layer = PackedRowwiseParallel(device_mesh=device_mesh, rank=rank, empty_param=empty)
+            sharded = layer.shard_tensor(full_unpacked)
+            expected_shape = (16, 16)  # last dim is not packed, so just sharded
+            self.assertEqual(sharded.shape, expected_shape)

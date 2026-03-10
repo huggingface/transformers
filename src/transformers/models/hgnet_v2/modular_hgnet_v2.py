@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Baidu Inc and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,12 +13,12 @@
 # limitations under the License.
 
 
-from typing import Optional
-
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from ... import initialization as init
+from ...backbone_utils import BackboneConfigMixin, BackboneMixin
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import (
     BackboneOutput,
@@ -30,74 +29,44 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
 )
-from ...utils.backbone_utils import BackboneConfigMixin, BackboneMixin, get_aligned_output_features_output_indices
 from ..rt_detr.modeling_rt_detr_resnet import RTDetrResNetConvLayer
 
 
 # TODO: Modular conversion for resnet must be fixed as
 # it provides incorrect import for configuration like resnet_resnet
+@auto_docstring(checkpoint="ustc-community/dfine_x_coco")
 class HGNetV2Config(BackboneConfigMixin, PreTrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`HGNetV2Backbone`]. It is used to instantiate a HGNet-V2
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of D-FINE-X-COCO B4 "[ustc-community/dfine_x_coco"](https://huggingface.co/ustc-community/dfine_x_coco").
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        embedding_size (`int`, *optional*, defaults to 64):
-            Dimensionality (hidden size) for the embedding layer.
-        depths (`list[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
-            Depth (number of layers) for each stage.
-        hidden_sizes (`list[int]`, *optional*, defaults to `[256, 512, 1024, 2048]`):
-            Dimensionality (hidden size) at each stage.
-        hidden_act (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function in each block. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"`
-            are supported.
-        out_features (`list[str]`, *optional*):
-            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
-            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        out_indices (`list[int]`, *optional*):
-            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
-            If unset and `out_features` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        stem_channels (`list[int]`, *optional*, defaults to `[3, 32, 48]`):
-            Channel dimensions for the stem layers:
-            - First number (3) is input image channels
-            - Second number (32) is intermediate stem channels
-            - Third number (48) is output stem channels
-        stage_in_channels (`list[int]`, *optional*, defaults to `[48, 128, 512, 1024]`):
-            Input channel dimensions for each stage of the backbone.
-            This defines how many channels the input to each stage will have.
-        stage_mid_channels (`list[int]`, *optional*, defaults to `[48, 96, 192, 384]`):
-            Mid-channel dimensions for each stage of the backbone.
-            This defines the number of channels used in the intermediate layers of each stage.
-        stage_out_channels (`list[int]`, *optional*, defaults to `[128, 512, 1024, 2048]`):
-            Output channel dimensions for each stage of the backbone.
-            This defines how many channels the output of each stage will have.
-        stage_num_blocks (`list[int]`, *optional*, defaults to `[1, 1, 3, 1]`):
-            Number of blocks to be used in each stage of the backbone.
-            This controls the depth of each stage by specifying how many convolutional blocks to stack.
-        stage_downsample (`list[bool]`, *optional*, defaults to `[False, True, True, True]`):
-            Indicates whether to downsample the feature maps at each stage.
-            If `True`, the spatial dimensions of the feature maps will be reduced.
-        stage_light_block (`list[bool]`, *optional*, defaults to `[False, False, True, True]`):
-            Indicates whether to use light blocks in each stage.
-            Light blocks are a variant of convolutional blocks that may have fewer parameters.
-        stage_kernel_size (`list[int]`, *optional*, defaults to `[3, 3, 5, 5]`):
-            Kernel sizes for the convolutional layers in each stage.
-        stage_numb_of_layers (`list[int]`, *optional*, defaults to `[6, 6, 6, 6]`):
-            Number of layers to be used in each block of the stage.
-        use_learnable_affine_block (`bool`, *optional*, defaults to `False`):
-            Whether to use Learnable Affine Blocks (LAB) in the network.
-            LAB adds learnable scale and bias parameters after certain operations.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+    stem_channels (`list[int]`, *optional*, defaults to `[3, 32, 48]`):
+        Channel dimensions for the stem layers:
+        - First number (3) is input image channels
+        - Second number (32) is intermediate stem channels
+        - Third number (48) is output stem channels
+    stage_in_channels (`list[int]`, *optional*, defaults to `[48, 128, 512, 1024]`):
+        Input channel dimensions for each stage of the backbone.
+        This defines how many channels the input to each stage will have.
+    stage_mid_channels (`list[int]`, *optional*, defaults to `[48, 96, 192, 384]`):
+        Mid-channel dimensions for each stage of the backbone.
+        This defines the number of channels used in the intermediate layers of each stage.
+    stage_out_channels (`list[int]`, *optional*, defaults to `[128, 512, 1024, 2048]`):
+        Output channel dimensions for each stage of the backbone.
+        This defines how many channels the output of each stage will have.
+    stage_num_blocks (`list[int]`, *optional*, defaults to `[1, 1, 3, 1]`):
+        Number of blocks to be used in each stage of the backbone.
+        This controls the depth of each stage by specifying how many convolutional blocks to stack.
+    stage_downsample (`list[bool]`, *optional*, defaults to `[False, True, True, True]`):
+        Indicates whether to downsample the feature maps at each stage.
+        If `True`, the spatial dimensions of the feature maps will be reduced.
+    stage_light_block (`list[bool]`, *optional*, defaults to `[False, False, True, True]`):
+        Indicates whether to use light blocks in each stage.
+        Light blocks are a variant of convolutional blocks that may have fewer parameters.
+    stage_kernel_size (`list[int]`, *optional*, defaults to `[3, 3, 5, 5]`):
+        Kernel sizes for the convolutional layers in each stage.
+    stage_numb_of_layers (`list[int]`, *optional*, defaults to `[6, 6, 6, 6]`):
+        Number of layers to be used in each block of the stage.
+    use_learnable_affine_block (`bool`, *optional*, defaults to `False`):
+        Whether to use Learnable Affine Blocks (LAB) in the network.
+        LAB adds learnable scale and bias parameters after certain operations.
     """
 
     model_type = "hgnet_v2"
@@ -131,9 +100,7 @@ class HGNetV2Config(BackboneConfigMixin, PreTrainedConfig):
         self.hidden_sizes = hidden_sizes
         self.hidden_act = hidden_act
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
-        )
+        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
         self.stem_channels = stem_channels
         self.stage_in_channels = stage_in_channels
         self.stage_mid_channels = stage_mid_channels
@@ -167,8 +134,17 @@ class HGNetV2PreTrainedModel(PreTrainedModel):
     config: HGNetV2Config
     base_model_prefix = "hgnetv2"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["HGNetV2BasicLayer"]
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        # We need to check it like that as d_fine models replace the BatchNorm2d by their own
+        if "BatchNorm" in module.__class__.__name__:
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.zeros_(module.running_mean)
+            init.ones_(module.running_var)
 
 
 class HGNetV2LearnableAffineBlock(nn.Module):
@@ -454,12 +430,11 @@ class HGNetV2Encoder(nn.Module):
         )
 
 
-class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
+class HGNetV2Backbone(BackboneMixin, HGNetV2PreTrainedModel):
     has_attentions = False
 
     def __init__(self, config: HGNetV2Config):
         super().__init__(config)
-        super()._init_backbone(config)
         self.depths = config.depths
         self.num_features = [config.embedding_size] + config.hidden_sizes
         self.embedder = HGNetV2Embeddings(config)
@@ -470,7 +445,11 @@ class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
 
     @auto_docstring
     def forward(
-        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+        self,
+        pixel_values: Tensor,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -545,10 +524,11 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
     ) -> ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -559,12 +539,14 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
         Examples:
         ```python
         >>> import torch
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import HGNetV2ForImageClassification, AutoImageProcessor
         >>> from PIL import Image
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> model = HGNetV2ForImageClassification.from_pretrained("ustc-community/hgnet-v2")
         >>> processor = AutoImageProcessor.from_pretrained("ustc-community/hgnet-v2")

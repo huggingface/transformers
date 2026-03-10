@@ -27,9 +27,9 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoTokenizer,
         BloomForCausalLM,
         BloomModel,
-        BloomTokenizerFast,
     )
 
 
@@ -168,7 +168,6 @@ class BloomModelTester(CausalLMModelTester):
 @require_torch
 class BloomModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = BloomModelTester
-    fx_compatible = True
     test_missing_keys = False
 
     def test_bloom_model_past(self):
@@ -225,7 +224,7 @@ class BloomIntegrationTest(unittest.TestCase):
         # TODO change the script (or just add skip) when building the env with tokenizers 0.12.0
         """
         # The config in this checkpoint has `bfloat16` as `dtype` -> model in `bfloat16`
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, dtype="auto")
+        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_safetensors=False, dtype="auto")
         model.eval()
 
         EMBEDDINGS_DS_BEFORE_LN_BF_16_MEAN = {
@@ -453,7 +452,9 @@ class BloomIntegrationTest(unittest.TestCase):
 
     @require_torch
     def test_hidden_states_transformers(self):
-        model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False, dtype="auto").to(torch_device)
+        model = BloomModel.from_pretrained(
+            self.path_bigscience_model, use_safetensors=False, use_cache=False, dtype="auto"
+        ).to(torch_device)
         model.eval()
 
         EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]  # fmt: skip
@@ -478,9 +479,9 @@ class BloomIntegrationTest(unittest.TestCase):
 
     @require_torch
     def test_logits(self):
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_cache=False, dtype="auto").to(
-            torch_device
-        )  # load in bf16
+        model = BloomForCausalLM.from_pretrained(
+            self.path_bigscience_model, use_safetensors=False, use_cache=False, dtype="auto"
+        ).to(torch_device)  # load in bf16
         model.eval()
 
         EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]  # fmt: skip
@@ -519,9 +520,11 @@ class BloomIntegrationTest(unittest.TestCase):
         # >=1b1 + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
 
         path_560m = "bigscience/bloom-560m"
-        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
+        model = BloomForCausalLM.from_pretrained(
+            path_560m, use_safetensors=False, use_cache=True, revision="gs555750"
+        ).to(torch_device)
         model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_560m)
+        tokenizer = AutoTokenizer.from_pretrained(path_560m)
 
         input_sentence = "I enjoy walking with my cute dog"
         # This output has been obtained using fp32 model on the huggingface DGX workstation - NVIDIA A100 GPU
@@ -539,13 +542,15 @@ class BloomIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_batch_generation(self):
         path_560m = "bigscience/bloom-560m"
-        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
+        model = BloomForCausalLM.from_pretrained(
+            path_560m, use_safetensors=False, use_cache=True, revision="gs555750"
+        ).to(torch_device)
         model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_560m, padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained(path_560m, padding_side="left")
 
         input_sentence = ["I enjoy walking with my cute dog", "I enjoy walking with my cute dog"]
 
-        inputs = tokenizer.batch_encode_plus(input_sentence, return_tensors="pt", padding=True)
+        inputs = tokenizer(input_sentence, return_tensors="pt", padding=True)
         input_ids = inputs["input_ids"].to(torch_device)
         attention_mask = inputs["attention_mask"]
         greedy_output = model.generate(input_ids, attention_mask=attention_mask, max_length=50, do_sample=False)
@@ -559,14 +564,16 @@ class BloomIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_batch_generation_padding(self):
         path_560m = "bigscience/bloom-560m"
-        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
+        model = BloomForCausalLM.from_pretrained(
+            path_560m, use_safetensors=False, use_cache=True, revision="gs555750"
+        ).to(torch_device)
         model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_560m, padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained(path_560m, padding_side="left")
 
         input_sentence = ["I enjoy walking with my cute dog", "Hello my name is"]
         input_sentence_without_pad = "Hello my name is"
 
-        input_ids = tokenizer.batch_encode_plus(input_sentence, return_tensors="pt", padding=True)
+        input_ids = tokenizer(input_sentence, return_tensors="pt", padding=True)
         input_ids_without_pad = tokenizer.encode(input_sentence_without_pad, return_tensors="pt")
 
         input_ids, attention_mask = input_ids["input_ids"].to(torch_device), input_ids["attention_mask"]
@@ -589,9 +596,11 @@ class BloomIntegrationTest(unittest.TestCase):
     def test_batch_generated_text(self):
         path_560m = "bigscience/bloom-560m"
 
-        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
+        model = BloomForCausalLM.from_pretrained(
+            path_560m, use_safetensors=False, use_cache=True, revision="gs555750"
+        ).to(torch_device)
         model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_560m, padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained(path_560m, padding_side="left")
 
         input_sentences = [
             "Hello what is",

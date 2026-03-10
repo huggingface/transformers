@@ -82,13 +82,6 @@ print(f"The predicted relation is: {labels[predicted_class]}")
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e '{"text": "A soccer game with multiple people playing.", "text_pair": "Some people are playing a sport."}' | transformers run --task text-classification --model microsoft/deberta-base-mnli --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 ## Notes
@@ -104,16 +97,12 @@ echo -e '{"text": "A soccer game with multiple people playing.", "text_pair": "S
 ## DebertaTokenizer
 
 [[autodoc]] DebertaTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## DebertaTokenizerFast
 
 [[autodoc]] DebertaTokenizerFast
-    - build_inputs_with_special_tokens
-    - create_token_type_ids_from_sequences
 
 ## DebertaModel
 

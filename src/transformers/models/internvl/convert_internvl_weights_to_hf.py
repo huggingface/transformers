@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +14,7 @@ import argparse
 import gc
 import os
 import re
-from typing import Literal, Optional
+from typing import Literal
 
 import torch
 from einops import rearrange
@@ -147,7 +146,7 @@ def get_lm_type(path: str) -> Literal["qwen2", "llama"]:
     return lm_type
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None, path: Optional[str] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None, path: str | None = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -244,7 +243,8 @@ def write_model(
     config.architectures = ["InternVLForConditionalGeneration"]
     config.save_pretrained(model_path)
     if push_to_hub:
-        config.push_to_hub(hub_dir, use_temp_dir=True)
+        model_name = (hub_dir or model_path).split(os.path.sep)[-1]
+        config.push_to_hub(model_name)
     print("Model config saved successfully...")
 
     # ------------------------------------------------------------
@@ -303,9 +303,10 @@ def write_model(
     print("Unexpected keys:", unexpected_keys)
 
     print("Saving the model.")
+    model_name = model_path.split(os.path.sep)[-1]
     model.save_pretrained(model_path)
     if push_to_hub:
-        model.push_to_hub(hub_dir, use_temp_dir=True)
+        model.push_to_hub(model_name)
 
     image_processor = GotOcr2ImageProcessorFast.from_pretrained(model_path)
     video_processor = InternVLVideoProcessor.from_pretrained(model_path)
@@ -318,7 +319,7 @@ def write_model(
     )
     processor.save_pretrained(model_path)
     if push_to_hub:
-        processor.push_to_hub(hub_dir, use_temp_dir=True)
+        processor.push_to_hub(model_name)
 
     # generation config
     if get_lm_type(input_base_path) == "llama":
@@ -330,7 +331,7 @@ def write_model(
         )
         generation_config.save_pretrained(model_path)
         if push_to_hub:
-            generation_config.push_to_hub(hub_dir, use_temp_dir=True)
+            generation_config.push_to_hub(model_name)
 
     # del state_dict, model
 
@@ -342,9 +343,7 @@ def write_model(
     del model
 
 
-def write_tokenizer(
-    save_dir: str, push_to_hub: bool = False, path: Optional[str] = None, hub_dir: Optional[str] = None
-):
+def write_tokenizer(save_dir: str, push_to_hub: bool = False, path: str | None = None, hub_dir: str | None = None):
     if get_lm_type(path) == "qwen2":
         tokenizer = AutoTokenizer.from_pretrained(
             "Qwen/Qwen2.5-VL-7B-Instruct",
@@ -393,11 +392,12 @@ def write_tokenizer(
 
     tokenizer.chat_template = chat_template
     tokenizer.save_pretrained(save_dir)
+    model_name = (hub_dir or save_dir).split(os.path.sep)[-1]
     if push_to_hub:
-        tokenizer.push_to_hub(hub_dir, use_temp_dir=True)
+        tokenizer.push_to_hub(model_name)
 
 
-def write_image_processor(save_dir: str, push_to_hub: bool = False, hub_dir: Optional[str] = None):
+def write_image_processor(save_dir: str, push_to_hub: bool = False, hub_dir: str | None = None):
     image_processor = GotOcr2ImageProcessorFast(
         do_resize=True,
         size={"height": 448, "width": 448},
@@ -410,8 +410,9 @@ def write_image_processor(save_dir: str, push_to_hub: bool = False, hub_dir: Opt
     )
 
     image_processor.save_pretrained(save_dir)
+    model_name = (hub_dir or save_dir).split(os.path.sep)[-1]
     if push_to_hub:
-        image_processor.push_to_hub(hub_dir, use_temp_dir=True)
+        image_processor.push_to_hub(model_name)
 
 
 def main():
@@ -433,7 +434,9 @@ def main():
     )
 
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
     args = parser.parse_args()
     write_tokenizer(

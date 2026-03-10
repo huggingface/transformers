@@ -279,7 +279,6 @@ class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         {
             "feature-extraction": MegatronBertModel,
             "fill-mask": MegatronBertForMaskedLM,
-            "question-answering": MegatronBertForQuestionAnswering,
             "text-classification": MegatronBertForSequenceClassification,
             "text-generation": MegatronBertForCausalLM,
             "token-classification": MegatronBertForTokenClassification,
@@ -288,7 +287,6 @@ class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
     # test_resize_embeddings = False
 
     # special case for ForPreTraining model

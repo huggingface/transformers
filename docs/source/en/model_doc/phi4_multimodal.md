@@ -152,6 +152,7 @@ print(f'>>> Response\n{response}')
 ## Phi4MultimodalProcessor
 
 [[autodoc]] Phi4MultimodalProcessor
+    - __call__
 
 ## Phi4MultimodalAudioConfig
 

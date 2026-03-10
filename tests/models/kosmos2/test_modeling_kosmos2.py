@@ -38,12 +38,13 @@ from transformers.utils import (
     is_vision_available,
 )
 
-from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
+from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
+    global_rng,
     ids_tensor,
     random_attention_mask,
 )
@@ -262,19 +263,16 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     pipeline_model_mapping = (
         {
             "feature-extraction": Kosmos2Model,
-            "image-to-text": Kosmos2ForConditionalGeneration,
             "image-text-to-text": Kosmos2ForConditionalGeneration,
         }
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
 
     test_resize_embeddings = False
     test_attention_outputs = False
     _is_composite = True
 
-    # TODO: `image-to-text` pipeline for this model needs Processor.
     # TODO: Tiny model needs fixing for `image-text-to-text` (latent_query_num=3 not compatible with num_image_tokens=64).
     def is_pipeline_test_to_skip(
         self,
@@ -309,6 +307,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.config_tester = ConfigTester(
             self, config_class=Kosmos2Config, has_text_modality=False, common_properties=["latent_query_num"]
         )
+        global_rng.seed(0)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -346,7 +345,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                         v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
                     )
                 # Checking there was no complain of missing weights
-                self.assertEqual(infos["missing_keys"], [])
+                self.assertEqual(infos["missing_keys"], set())
 
     # overwrite from common in order to use `self.model_tester.text_model_tester.num_hidden_layers`
     def test_hidden_states_output(self):
@@ -407,6 +406,15 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     @unittest.skip("KOSMOS-2 doesn't support padding")
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(reason="Kosmos2 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(reason="Kosmos2 does not support generation from no inputs")
+    def test_generate_without_input_ids(self):
         pass
 
     @pytest.mark.generate
@@ -473,7 +481,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             outputs_from_embeds = model.generate(
                 input_ids=input_ids, inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
             )
-            self.assertTrue(has_similar_generate_outputs(outputs_from_ids, outputs_from_embeds))
+            assert_similar_generate_outputs(outputs_from_ids, outputs_from_embeds)
 
             # input_ids is not a required input on most models -- if we don't pass it, the newly generated tokens will
             # be the same
@@ -481,7 +489,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
             )
             outputs_from_embeds.sequences = outputs_from_embeds.sequences[:, inputs_embeds.shape[1] :]
-            self.assertTrue(has_similar_generate_outputs(outputs_from_embeds_wo_ids, outputs_from_embeds))
+            assert_similar_generate_outputs(outputs_from_embeds_wo_ids, outputs_from_embeds)
 
 
 # We will verify our results on an image of cute cats

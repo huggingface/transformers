@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Databricks Mosaic Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,32 +13,28 @@
 # limitations under the License.
 """DBRX model configuration"""
 
-from typing import Any, Optional
+from typing import Any
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
-from ...utils import logging
+from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(
+    custom_intro="This config is used to instantiate attention layers.",
+    checkpoint="transformers-community/dbrx-instruct",
+)
 class DbrxAttentionConfig(PreTrainedConfig):
-    """Configuration class for Dbrx Attention.
-
-    [`DbrxAttention`] class. It is used to instantiate attention layers
-    according to the specified arguments, defining the layers architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        attn_pdrop (`float`, *optional*, defaults to 0.0):
-            The dropout probability for the attention layers.
-        clip_qkv (`float`, *optional*):
-            If set, clip the queries, keys, and values in the attention layer to this value.
-        kv_n_heads (`int`, *optional*, defaults to 1):
-            For grouped_query_attention only, allow user to specify number of kv heads.
+    r"""
+    attn_pdrop (`float`, *optional*, defaults to 0.0):
+        The dropout probability for the attention layers.
+    clip_qkv (`float`, *optional*):
+        If set, clip the queries, keys, and values in the attention layer to this value.
+    kv_n_heads (`int`, *optional*, defaults to 1):
+        For grouped_query_attention only, allow user to specify number of kv heads.
     """
 
     base_config_key = "attn_config"
@@ -47,7 +42,7 @@ class DbrxAttentionConfig(PreTrainedConfig):
     def __init__(
         self,
         attn_pdrop: float = 0.0,
-        clip_qkv: Optional[float] = None,
+        clip_qkv: float | None = None,
         kv_n_heads: int = 1,
         **kwargs: Any,
     ):
@@ -57,25 +52,27 @@ class DbrxAttentionConfig(PreTrainedConfig):
         self.kv_n_heads = kv_n_heads
 
 
+@auto_docstring(
+    custom_intro="This config is used to instantiate feedforward layers.",
+    checkpoint="transformers-community/dbrx-instruct",
+)
 class DbrxFFNConfig(PreTrainedConfig):
-    """Configuration class for Dbrx FFN.
-
-    [`DbrxFFN`] class. It is used to instantiate feedforward layers according to
-    the specified arguments, defining the layers architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        ffn_act_fn (`dict`, *optional*, defaults to `None`): A dict specifying activation function for the FFN.
-            The dict should have a key 'name' with the value being the name of the activation function along with
-            any additional keyword arguments. If `None`, then set to `{"name": "silu"}`.
-        ffn_hidden_size (`int`, *optional*, defaults to 3584): The hidden size of the feedforward network.
-        moe_num_experts (`int`, *optional*, defaults to 4): The number of experts in the mixture of experts layer.
-        moe_top_k (`int`, *optional*, defaults to 1): The number of experts to use in the mixture of experts layer.
-        moe_jitter_eps (`float`, *optional*, defaults to `None`): If not `None`, the jitter epsilon for the mixture of experts layer.
-        moe_loss_weight (`float`, *optional*, defaults to 0.01): The loss weight for the mixture of experts layer.
-        moe_normalize_expert_weights (`float`, *optional*, defaults to 1.0): The normalization factor for the expert weights.
+    r"""
+    ffn_act_fn (`dict`, *optional*, defaults to `None`): A dict specifying activation function for the FFN.
+        The dict should have a key 'name' with the value being the name of the activation function along with
+        any additional keyword arguments. If `None`, then set to `{"name": "silu"}`.
+    ffn_hidden_size (`int`, *optional*, defaults to 3584):
+        The hidden size of the feedforward network.
+    moe_num_experts (`int`, *optional*, defaults to 4):
+        The number of experts in the mixture of experts layer.
+    moe_top_k (`int`, *optional*, defaults to 1):
+        The number of experts to use in the mixture of experts layer.
+    moe_jitter_eps (`float`, *optional*, defaults to `None`):
+        If not `None`, the jitter epsilon for the mixture of experts layer.
+    moe_loss_weight (`float`, *optional*, defaults to 0.01):
+        The loss weight for the mixture of experts layer.
+    moe_normalize_expert_weights (`float`, *optional*, defaults to 1.0):
+        The normalization factor for the expert weights.
     """
 
     base_config_key = "ffn_config"
@@ -83,13 +80,13 @@ class DbrxFFNConfig(PreTrainedConfig):
     def __init__(
         self,
         hidden_size=6144,
-        ffn_act_fn: Optional[dict] = None,
+        ffn_act_fn: dict | None = None,
         ffn_hidden_size: int = 3584,
         moe_num_experts: int = 4,
         moe_top_k: int = 1,
-        moe_jitter_eps: Optional[float] = None,
+        moe_jitter_eps: float | None = None,
         moe_loss_weight: float = 0.01,
-        moe_normalize_expert_weights: Optional[float] = 1.0,
+        moe_normalize_expert_weights: float | None = 1.0,
         **kwargs: Any,
     ):
         super().__init__()
@@ -104,52 +101,30 @@ class DbrxFFNConfig(PreTrainedConfig):
         self.moe_loss_weight = moe_loss_weight
         self.moe_normalize_expert_weights = moe_normalize_expert_weights
 
-        for k in ["model_type", "attn_implementation", "transformers_version", "_commit_hash", "torch_dtype", "dtype"]:
+        for k in [
+            "model_type",
+            "attn_implementation",
+            "experts_implementation",
+            "transformers_version",
+            "_commit_hash",
+            "torch_dtype",
+            "dtype",
+        ]:
             if k in kwargs:
                 kwargs.pop(k)
         if len(kwargs) != 0:
             raise ValueError(f"Found unknown {kwargs=}")
 
 
+@auto_docstring(checkpoint="transformers-community/dbrx-instruct")
 class DbrxConfig(PreTrainedConfig):
     r"""
-
-    This is the configuration class to store the configuration of a [`DbrxModel`]. It is used to instantiate a Dbrx model according to the
-    specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a different configuration to that of the [databricks/dbrx-instruct](https://huggingface.co/databricks/dbrx-instruct) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        d_model (`int`, *optional*, defaults to 2048):
-            Dimensionality of the embeddings and hidden states.
-        n_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        n_layers (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer encoder.
-        max_seq_len (`int`, *optional*, defaults to 2048):
-            The maximum sequence length of the model.
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the Dbrx model. Defines the maximum number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`DbrxModel`].
-        resid_pdrop (`float`, *optional*, defaults to 0.0):
-            The dropout probability applied to the attention output before combining with residual.
-        emb_pdrop (`float`, *optional*, defaults to 0.0):
-            The dropout probability for the embedding layer.
-        attn_config (`dict`, *optional*):
-            A dictionary used to configure the model's attention module.
-        ffn_config (`dict`, *optional*):
-            A dictionary used to configure the model's FFN module.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabling this will also
-            allow the model to output the auxiliary loss. See [here]() for more details.
-
+    max_seq_len (`int`, *optional*, defaults to 2048):
+        The maximum sequence length of the model.
+    attn_config (`dict`, *optional*):
+        A dictionary used to configure the model's attention module.
+    ffn_config (`dict`, *optional*):
+        A dictionary used to configure the model's FFN module.
 
     Example:
     ```python
@@ -177,19 +152,23 @@ class DbrxConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        d_model: Optional[int] = 2048,
-        n_heads: Optional[int] = 16,
-        n_layers: Optional[int] = 24,
-        max_seq_len: Optional[int] = 2048,
-        vocab_size: Optional[int] = 32000,
-        resid_pdrop: Optional[float] = 0.0,
-        emb_pdrop: Optional[float] = 0.0,
-        attn_config: Optional[DbrxAttentionConfig] = None,
-        ffn_config: Optional[DbrxFFNConfig] = None,
-        use_cache: Optional[bool] = True,
-        initializer_range: Optional[float] = 0.02,
-        output_router_logits: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        d_model: int | None = 2048,
+        n_heads: int | None = 16,
+        n_layers: int | None = 24,
+        max_seq_len: int | None = 2048,
+        vocab_size: int | None = 32000,
+        resid_pdrop: float | None = 0.0,
+        emb_pdrop: float | None = 0.0,
+        attn_config: DbrxAttentionConfig | None = None,
+        ffn_config: DbrxFFNConfig | None = None,
+        use_cache: bool | None = True,
+        initializer_range: float | None = 0.02,
+        output_router_logits: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
+        tie_word_embeddings: bool | None = False,
         **kwargs: Any,
     ):
         if attn_config is None:
@@ -217,19 +196,16 @@ class DbrxConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.output_router_logits = output_router_logits
         self.num_key_value_heads = self.attn_config.kv_n_heads
-        tie_word_embeddings = kwargs.pop("tie_word_embeddings", False)
         if tie_word_embeddings:
             raise ValueError("tie_word_embeddings is not supported for DBRX models.")
 
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        standardize_rope_params(self, rope_theta=10000.0)
-        rope_config_validation(self)
-
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
 
 __all__ = ["DbrxConfig"]

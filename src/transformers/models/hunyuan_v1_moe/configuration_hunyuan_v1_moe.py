@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright (C) 2025 THL A29 Limited, a Tencent company and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,90 +13,22 @@
 # limitations under the License.
 """HunYuanMoEV1 model configuration"""
 
-from typing import Optional, Union
-
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
-from ...utils import logging
+from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="tencent/Hunyuan-A13B-Instruct")
 class HunYuanMoEV1Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`HunYuanMoEV1Model`]. It is used to instantiate an
-    HunYuan model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the HunYuan-7B.
-    Hunyuan-A13B-Instruct [tencent/Hunyuan-A13B-Instruct](https://huggingface.co/tencent/Hunyuan-A13B-Instruct).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 290943):
-            Vocabulary size of the HunYuan model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`HunYuanMoEV1Model`]
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 11008):
-            Dimension of the MLP representations or shared MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
-            `num_attention_heads`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*, defaults to 0):
-            Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 1):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            End of stream token id.
-        eod_token_id (int, *optional*, defaults to 3):
-            Token ID representing the end-of-document marker. Used to indicate the termination of a text sequence.
-            Example: In multi-document processing, this token helps the model distinguish between separate documents.
-        sep_token_id (`int`, *optional*, defaults to 4):
-            Token ID representing the separator token (`[SEP]`), used to demarcate boundaries between different text segments.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
-            document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
-            necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
-            issue](https://github.com/pytorch/pytorch/issues/76232).
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        num_experts (`int` or `List`, *optional*, defaults to 1):
-            The number of experts for moe. If it is a list, it will be used as the number of experts for each layer.
-        moe_topk (int or List, *optional*, defaults to 1):
-            Number of experts selected per token (Top-K routing). List form enables layer-wise customization.
-        head_dim (`int`, *optional*, defaults to 128):
-            The attention head dimension.
+    eod_token_id (int, *optional*, defaults to 3):
+        Token ID representing the end-of-document marker. Used to indicate the termination of a text sequence.
+        For Example, in multi-document processing, this token helps the model distinguish between separate documents.
+    moe_topk (`int | list`, *optional*, defaults to 1):
+        Number of experts selected per token (Top-K routing). List form enables layer-wise customization.
     """
 
     model_type = "hunyuan_v1_moe"
@@ -109,30 +40,30 @@ class HunYuanMoEV1Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 290943,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 11008,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = None,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 2048,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 1e-5,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = 0,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
-        eod_token_id: Optional[int] = 3,
-        sep_token_id: Optional[int] = 4,
-        pretraining_tp: Optional[int] = 1,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        num_experts: Union[int, list] = 1,
-        moe_topk: Union[int, list] = 1,
-        head_dim: Optional[int] = None,
+        vocab_size: int | None = 290943,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 11008,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = None,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 2048,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-5,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = 0,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        eod_token_id: int | None = 3,
+        sep_token_id: int | None = 4,
+        pretraining_tp: int | None = 1,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        num_experts: int | list = 1,
+        moe_topk: int | list = 1,
+        head_dim: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -157,23 +88,14 @@ class HunYuanMoEV1Config(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            sep_token_id=sep_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.sep_token_id = sep_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
     def _rope_parameters_validation(self):
         """
@@ -184,7 +106,7 @@ class HunYuanMoEV1Config(PreTrainedConfig):
 
         if not isinstance(self.rope_parameters, dict) or len(self.rope_parameters) != 2:
             raise ValueError(
-                "`rope_parameters` must be a dictionary with with two fields, `type` and `factor` or `type` and `alpha`, "
+                "`rope_parameters` must be a dictionary with two fields, `type` and `factor` or `type` and `alpha`,"
                 f"got {self.rope_parameters}"
             )
         rope_parameters_type = self.rope_parameters.get("type", None)

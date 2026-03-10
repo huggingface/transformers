@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Microsoft Research & University of Wisconsin-Madison and the HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,39 +13,16 @@
 """PaliGemmamodel configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="paligemma-hf/paligemma-2b")
 class PaliGemmaConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PaliGemmaForConditionalGeneration`]. It is used to instantiate an
-    PaliGemmamodel according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the PaliGemma-2B.
-
-    e.g. [paligemma-hf/paligemma-2b](https://huggingface.co/paligemma-hf/paligemma-2b)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vision_config (`PaliGemmaVisionConfig`,  *optional*):
-            Custom vision config or dict
-        text_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
-        image_token_index (`int`, *optional*, defaults to 256000):
-            The image token index to encode the image prompt.
-        vocab_size (`int`, *optional*, defaults to 257152):
-            Vocabulary size of the PaliGemmamodel. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~PaliGemmaForConditionalGeneration`]
-        projection_dim (`int`, *optional*, defaults to 2048):
-            Dimension of the multimodal projection space.
-        hidden_size (`int`, *optional*, defaults to 2048):
-            Dimension of the hidden layer of the Language model.
-
     Example:
 
     ```python
@@ -83,12 +59,14 @@ class PaliGemmaConfig(PreTrainedConfig):
         vocab_size=257152,
         projection_dim=2048,
         hidden_size=2048,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.image_token_index = image_token_index
         self.projection_dim = projection_dim
         self.hidden_size = hidden_size
         self.vision_config = vision_config
+        self.tie_word_embeddings = tie_word_embeddings
         self.is_encoder_decoder = False
 
         if isinstance(self.vision_config, dict):

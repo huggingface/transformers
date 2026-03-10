@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     require_torch_large_accelerator,
     require_triton,
     slow,
+    torch_device,
 )
 from transformers.utils import (
     is_torch_available,
@@ -39,6 +40,8 @@ if is_torch_available():
 if torch.cuda.is_available():
     REQUIRE_TRITON_MXFP4 = require_triton(min_version="3.4.0")
 elif hasattr(torch, "xpu") and torch.xpu.is_available():
+    REQUIRE_TRITON_MXFP4 = require_triton(min_version="3.5.0")
+elif torch_device == "cpu":
     REQUIRE_TRITON_MXFP4 = require_triton(min_version="3.5.0")
 else:
     REQUIRE_TRITON_MXFP4 = unittest.skip("test requires CUDA or XPU")
@@ -57,6 +60,7 @@ def _patch_no_accelerator():
         stack.enter_context(patch("torch.cuda.is_available", return_value=False))
         if hasattr(torch, "xpu"):
             stack.enter_context(patch("torch.xpu.is_available", return_value=False))
+        stack.enter_context(patch("torch.accelerator.current_accelerator", return_value=None))
         yield
 
 
@@ -128,9 +132,8 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             config = Mxfp4Config()
             quantizer = Mxfp4HfQuantizer(config)
             quantizer.pre_quantized = False
-
-            with self.assertRaises(RuntimeError):
-                quantizer.validate_environment()
+            # CPU already supported MXFP4
+            quantizer.validate_environment()
 
     @require_torch_gpu
     def test_quantizer_validation_low_compute_capability(self):
@@ -192,8 +195,8 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             quantizer = Mxfp4HfQuantizer(config)
             quantizer.pre_quantized = False
 
-            with self.assertRaises(RuntimeError):
-                quantizer.validate_environment()
+            # CPU already supported MXFP4
+            quantizer.validate_environment()
 
     def test_quantizer_validation_missing_triton(self):
         """Test quantizer validation when triton is not available"""
@@ -225,79 +228,6 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             quantizer.validate_environment()
             self.assertTrue(quantizer.quantization_config.dequantize)
 
-    def test_update_dtype(self):
-        """Test torch dtype updating"""
-        from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
-
-        config = Mxfp4Config()
-        quantizer = Mxfp4HfQuantizer(config)
-
-        # Should default to bfloat16
-        result_dtype = quantizer.update_dtype(None)
-        self.assertEqual(result_dtype, torch.bfloat16)
-
-        # Should preserve existing dtype
-        result_dtype = quantizer.update_dtype(torch.float32)
-        self.assertEqual(result_dtype, torch.float32)
-
-    def test_update_expected_keys(self):
-        """Test expected keys updating for quantized models"""
-        from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
-
-        config = Mxfp4Config()
-        quantizer = Mxfp4HfQuantizer(config)
-
-        expected_keys = [
-            "model.layers.0.mlp.experts.gate_up_proj",
-            "model.layers.0.mlp.experts.down_proj",
-            "model.embed_tokens.weight",
-        ]
-
-        updated_keys = quantizer.update_expected_keys(None, expected_keys, [])
-
-        expected_updated = [
-            "model.layers.0.mlp.experts.gate_up_proj_blocks",
-            "model.layers.0.mlp.experts.gate_up_proj_scales",
-            "model.layers.0.mlp.experts.down_proj_blocks",
-            "model.layers.0.mlp.experts.down_proj_scales",
-            "model.embed_tokens.weight",
-        ]
-
-        self.assertEqual(set(updated_keys), set(expected_updated))
-
-    def test_get_param_name_dequantize(self):
-        """Test parameter name updating when dequantizing"""
-        from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
-
-        config = Mxfp4Config(dequantize=True)
-        quantizer = Mxfp4HfQuantizer(config)
-
-        # Should remove _blocks suffix
-        param_name = "model.layers.0.mlp.experts.gate_up_proj_blocks"
-        updated_name = quantizer.get_param_name(param_name)
-        self.assertEqual(updated_name, "model.layers.0.mlp.experts.gate_up_proj")
-
-        # Should remove _scales suffix
-        param_name = "model.layers.0.mlp.experts.down_proj_scales"
-        updated_name = quantizer.get_param_name(param_name)
-        self.assertEqual(updated_name, "model.layers.0.mlp.experts.down_proj")
-
-        # Should not change other names
-        param_name = "model.embed_tokens.weight"
-        updated_name = quantizer.get_param_name(param_name)
-        self.assertEqual(updated_name, "model.embed_tokens.weight")
-
-    def test_get_param_name_no_dequantize(self):
-        """Test parameter name updating when not dequantizing"""
-        from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
-
-        config = Mxfp4Config(dequantize=False)
-        quantizer = Mxfp4HfQuantizer(config)
-
-        param_name = "model.layers.0.mlp.experts.gate_up_proj_blocks"
-        updated_name = quantizer.get_param_name(param_name)
-        self.assertEqual(updated_name, param_name)
-
     def test_is_trainable(self):
         """Test trainability"""
         from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
@@ -314,18 +244,16 @@ class Mxfp4IntegrationTest(unittest.TestCase):
 
     def test_should_convert_module(self):
         """Test module conversion decision logic"""
-        from transformers.integrations.mxfp4 import should_convert_module
+        from transformers.quantizers.quantizers_utils import should_convert_module
 
         # Should convert by default
-        self.assertTrue(should_convert_module(["model", "layers", "0", "mlp"], []))
+        self.assertTrue(should_convert_module("model", None))
+        self.assertTrue(should_convert_module("model", []))
 
         # Should not convert if in exclusion list
         patterns = ["model.layers.*.self_attn", "lm_head"]
-        self.assertFalse(should_convert_module(["model", "layers", "0", "self_attn"], patterns))
-        self.assertFalse(should_convert_module(["lm_head"], patterns))
-
-        # Should convert if not in exclusion list
-        self.assertTrue(should_convert_module(["model", "layers", "0", "mlp", "experts"], patterns))
+        self.assertFalse(should_convert_module("lm_head", patterns))
+        self.assertTrue(should_convert_module("experts", patterns))
 
     @require_torch
     def test_convert_moe_packed_tensors(self):
@@ -352,7 +280,7 @@ class Mxfp4IntegrationTest(unittest.TestCase):
         quantizer = Mxfp4HfQuantizer(config)
 
         # Create dummy weight tensor
-        device = "xpu" if (hasattr(torch, "xpu") and torch.xpu.is_available()) else "cuda"
+        device = torch_device
         w = torch.randn(32, 64, 128, dtype=torch.bfloat16, device=torch.device(device))
 
         quantized_w, w_scale = quantize_to_mxfp4(w, quantizer._lazy_import_kernels())
@@ -443,9 +371,8 @@ class Mxfp4ModelTest(unittest.TestCase):
         quantizer = Mxfp4HfQuantizer(config)
         quantizer.pre_quantized = False
 
-        # Test with CPU in device map (should raise error for non-pre-quantized)
-        with self.assertRaises(ValueError):
-            quantizer.validate_environment(device_map={"": "cpu"})
+        # Test with CPU in device map (CPU already support mxfp4)
+        quantizer.validate_environment(device_map={"": "cpu"})
 
     def test_memory_footprint_comparison(self):
         """Test memory footprint differences between quantized and unquantized models"""
@@ -528,3 +455,54 @@ class Mxfp4ModelTest(unittest.TestCase):
                 device_map="auto",
             )
             self.check_inference_correctness_quantized(loaded_model, tokenizer)
+
+    def test_compute_module_sizes(self):
+        r"""
+        Test if we compute the right module sizes needed to generate the device map.
+        Also test if we get the right values for `total_byte_count` in `caching_allocator_warmup`.
+        """
+        from transformers import AutoConfig, AutoModelForCausalLM
+        from transformers.integrations import Mxfp4GptOssExperts
+        from transformers.integrations.accelerate import compute_module_sizes
+        from transformers.modeling_utils import expand_device_map, get_total_byte_count
+        from transformers.quantizers import AutoHfQuantizer
+
+        # we need to preprocess the model like that because device_map calculation happens before we load the weights inside the model.
+        # For normal wieghts, it's fine but for quantized weights, the tensors dtype might change during loading.
+        with torch.device("meta"):
+            config = AutoConfig.from_pretrained(self.model_name)
+            model = AutoModelForCausalLM.from_config(config, dtype=torch.bfloat16)
+            model_size, _ = compute_module_sizes(model, only_modules=False)
+
+            expected_keys = [name for name, _ in model.named_parameters()] + [
+                name for name, _ in model.named_buffers()
+            ]
+            expanded_device_map = expand_device_map({"": torch_device}, expected_keys)
+            total_byte_count = list(get_total_byte_count(model, expanded_device_map).values())[0]
+
+            # testing prequantized = False should be enough, the shape should be the same whether it is pre-quantized or not
+            hf_quantizer = AutoHfQuantizer.from_config(Mxfp4Config(), pre_quantized=False)
+            hf_quantizer.preprocess_model(model=model, config=model.config)
+            quantized_model_size, _ = compute_module_sizes(model, hf_quantizer, only_modules=False)
+
+            expected_keys = [name for name, _ in model.named_parameters()] + [
+                name for name, _ in model.named_buffers()
+            ]
+            expanded_device_map = expand_device_map({"": torch_device}, expected_keys)
+            quantized_total_byte_count = list(get_total_byte_count(model, expanded_device_map, hf_quantizer).values())[
+                0
+            ]
+        for name, module in model.named_modules():
+            if isinstance(module, Mxfp4GptOssExperts):
+                # from 16 bits to 4 bits
+                assert int(model_size[f"{name}.gate_up_proj"] // 4) == int(
+                    quantized_model_size[f"{name}.gate_up_proj"]
+                )
+                assert int(model_size[f"{name}.down_proj"] // 4) == int(quantized_model_size[f"{name}.down_proj"])
+
+        # check that we get the same value, as we use `compute_module_sizes` in `get_total_byte_count`
+        assert total_byte_count == model_size[""]
+        assert quantized_total_byte_count == quantized_model_size[""]
+
+        # we should at least have 3 times memory reduction in total for this model
+        assert model_size[""] > quantized_model_size[""] * 3

@@ -18,7 +18,6 @@ import tempfile
 import unittest
 
 import pytest
-from packaging import version
 
 from transformers import AutoTokenizer, BitsAndBytesConfig, DiffLlamaConfig, StaticCache, is_torch_available
 from transformers.testing_utils import (
@@ -26,10 +25,8 @@ from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_flash_attn,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -187,14 +184,11 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             "text-classification": DiffLlamaForSequenceClassification,
             "text-generation": DiffLlamaForCausalLM,
             "zero-shot": DiffLlamaForSequenceClassification,
-            "question-answering": DiffLlamaForQuestionAnswering,
             "token-classification": DiffLlamaForTokenClassification,
         }
         if is_torch_available()
         else {}
     )
-
-    fx_compatible = False
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -326,10 +320,9 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             )  # missing "factor"
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @pytest.mark.flash_attn_test
-    @require_read_token
     @slow
     def test_flash_attn_2_generate_padding_right(self):
         """
@@ -366,7 +359,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         self.assertListEqual(output_native, output_fa_2)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     @pytest.mark.flash_attn_test
     def test_use_flash_attention_2_true(self):
@@ -381,7 +374,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
                 new_model = DiffLlamaForCausalLM.from_pretrained(
                     tmp_dir, attn_implementation="flash_attention_2", dtype=torch.float16
-                ).to("cuda")
+                ).to(torch_device)
 
                 self.assertTrue(new_model.config._attn_implementation == "flash_attention_2")
 
@@ -460,14 +453,8 @@ class DiffLlamaIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
-    @require_read_token
     @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
-        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
-        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
-        if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
         NUM_TOKENS_TO_GENERATE = 40
         # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
         # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Microsoft Research and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,13 +15,13 @@
 
 import collections
 import math
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -201,25 +200,20 @@ class LayoutLMv3TextEmbeddings(nn.Module):
 class LayoutLMv3PreTrainedModel(PreTrainedModel):
     config: LayoutLMv3Config
     base_model_prefix = "layoutlmv3"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, LayoutLMv3Model):
+        super()._init_weights(module)
+        if isinstance(module, LayoutLMv3Model):
             if self.config.visual_embed:
-                module.cls_token.data.zero_()
-                module.pos_embed.data.zero_()
+                init.zeros_(module.cls_token)
+                init.zeros_(module.pos_embed)
+            if hasattr(module, "visual_bbox"):
+                init.copy_(module.visual_bbox, module.create_visual_bbox(image_size=(module.size, module.size)))
+        elif isinstance(module, LayoutLMv3TextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 class LayoutLMv3SelfAttention(nn.Module):
@@ -584,22 +578,24 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
             # when the input_size is larger in fine-tuning, we will interpolate the position embeddings in forward
             self.patch_embed = LayoutLMv3PatchEmbeddings(config)
 
-            size = int(config.input_size / config.patch_size)
+            self.size = int(config.input_size / config.patch_size)
             self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-            self.pos_embed = nn.Parameter(torch.zeros(1, size * size + 1, config.hidden_size))
+            self.pos_embed = nn.Parameter(torch.zeros(1, self.size * self.size + 1, config.hidden_size))
             self.pos_drop = nn.Dropout(p=0.0)
 
             self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
             self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
             if self.config.has_relative_attention_bias or self.config.has_spatial_attention_bias:
-                self.init_visual_bbox(image_size=(size, size))
+                self.register_buffer(
+                    "visual_bbox", self.create_visual_bbox(image_size=(self.size, self.size)), persistent=False
+                )
 
             self.norm = nn.LayerNorm(config.hidden_size, eps=1e-6)
 
         self.encoder = LayoutLMv3Encoder(config)
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -607,7 +603,7 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    def init_visual_bbox(self, image_size=(14, 14), max_len=1000):
+    def create_visual_bbox(self, image_size=(14, 14), max_len=1000):
         """
         Create the bounding boxes for the visual (patch) tokens.
         """
@@ -628,7 +624,7 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         ).view(-1, 4)
 
         cls_token_box = torch.tensor([[0 + 1, 0 + 1, max_len - 1, max_len - 1]])
-        self.visual_bbox = torch.cat([cls_token_box, visual_bbox], dim=0)
+        return torch.cat([cls_token_box, visual_bbox], dim=0)
 
     def calculate_visual_bbox(self, device, dtype, batch_size):
         visual_bbox = self.visual_bbox.repeat(batch_size, 1, 1)
@@ -655,17 +651,18 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        bbox: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutput]:
+        input_ids: torch.LongTensor | None = None,
+        bbox: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, token_sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -815,7 +812,7 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
                 final_position_ids = position_ids
 
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-            attention_mask, None, device, dtype=embedding_output.dtype
+            attention_mask, None, dtype=embedding_output.dtype
         )
 
         encoder_outputs = self.encoder(
@@ -889,23 +886,30 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         else:
             self.classifier = LayoutLMv3ClassificationHead(config, pool_feature=False)
 
-        self.init_weights()
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.layoutlmv3.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.layoutlmv3.set_input_embeddings(value)
 
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        bbox: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        pixel_values: Optional[torch.LongTensor] = None,
-    ) -> Union[tuple, TokenClassifierOutput]:
+        input_ids: torch.LongTensor | None = None,
+        bbox: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        pixel_values: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> tuple | TokenClassifierOutput:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -988,24 +992,31 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         self.layoutlmv3 = LayoutLMv3Model(config)
         self.qa_outputs = LayoutLMv3ClassificationHead(config, pool_feature=False)
 
-        self.init_weights()
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.layoutlmv3.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.layoutlmv3.set_input_embeddings(value)
 
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        start_positions: Optional[torch.LongTensor] = None,
-        end_positions: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        bbox: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.LongTensor] = None,
-    ) -> Union[tuple, QuestionAnsweringModelOutput]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        start_positions: torch.LongTensor | None = None,
+        end_positions: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        bbox: torch.LongTensor | None = None,
+        pixel_values: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> tuple | QuestionAnsweringModelOutput:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -1107,23 +1118,30 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
         self.layoutlmv3 = LayoutLMv3Model(config)
         self.classifier = LayoutLMv3ClassificationHead(config, pool_feature=False)
 
-        self.init_weights()
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.layoutlmv3.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.layoutlmv3.set_input_embeddings(value)
 
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        bbox: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.LongTensor] = None,
-    ) -> Union[tuple, SequenceClassifierOutput]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        bbox: torch.LongTensor | None = None,
+        pixel_values: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> tuple | SequenceClassifierOutput:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,

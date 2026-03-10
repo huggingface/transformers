@@ -204,7 +204,6 @@ class MPNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "feature-extraction": MPNetModel,
             "fill-mask": MPNetForMaskedLM,
-            "question-answering": MPNetForQuestionAnswering,
             "text-classification": MPNetForSequenceClassification,
             "token-classification": MPNetForTokenClassification,
             "zero-shot": MPNetForSequenceClassification,
@@ -241,10 +240,6 @@ class MPNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mpnet_for_question_answering(*config_and_inputs)
-
-    @unittest.skip(reason="TFMPNet adds poolers to all models, unlike the PT model class.")
-    def test_tf_from_pt_safetensors(self):
-        return
 
 
 @require_torch

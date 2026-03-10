@@ -86,13 +86,6 @@ for token_id in top_k[0]:
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model albert-base-v2 --device 0
-```
-
-</hfoption>
 
 </hfoptions>
 
@@ -153,7 +146,9 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 ## AlbertTokenizer[[alberttokenizer]]
 
-[[autodoc]] AlbertTokenizer - build_inputs_with_special_tokens - get_special_tokens_mask - create_token_type_ids_from_sequences - save_vocabulary
+[[autodoc]] AlbertTokenizer 
+    - get_special_tokens_mask 
+    - save_vocabulary
 
 ## AlbertTokenizerFast[[alberttokenizerfast]]
 
@@ -166,19 +161,23 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 ## AlbertModel[[albertmodel]]
 
-[[autodoc]] AlbertModel - forward
+[[autodoc]] AlbertModel 
+    - forward
 
 ## AlbertForPreTraining[[albertforpretraining]]
 
-[[autodoc]] AlbertForPreTraining - forward
+[[autodoc]] AlbertForPreTraining 
+    - forward
 
 ## AlbertForMaskedLM[[albertformaskedlm]]
 
-[[autodoc]] AlbertForMaskedLM - forward
+[[autodoc]] AlbertForMaskedLM 
+    - forward
 
 ## AlbertForSequenceClassification[[albertforsequenceclassification]]
 
-[[autodoc]] AlbertForSequenceClassification - forward
+[[autodoc]] AlbertForSequenceClassification 
+    - forward
 
 ## AlbertForMultipleChoice[[albertformultiplechoice]]
 
@@ -186,9 +185,11 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 ## AlbertForTokenClassification[[albertfortokenclassification]]
 
-[[autodoc]] AlbertForTokenClassification - forward
+[[autodoc]] AlbertForTokenClassification 
+    - forward
 
 ## AlbertForQuestionAnswering[[albertforquestionanswering]]
 
-[[autodoc]] AlbertForQuestionAnswering - forward
+[[autodoc]] AlbertForQuestionAnswering 
+    - forward
 

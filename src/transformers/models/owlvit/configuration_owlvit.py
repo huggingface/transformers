@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,67 +13,16 @@
 # limitations under the License.
 """OWL-ViT model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
-
-
-if TYPE_CHECKING:
-    from ...processing_utils import ProcessorMixin
-
 from ...configuration_utils import PreTrainedConfig
-from ...onnx import OnnxConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="google/owlvit-base-patch16")
 class OwlViTTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of an [`OwlViTTextModel`]. It is used to instantiate an
-    OwlViT text encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the OwlViT
-    [google/owlvit-base-patch32](https://huggingface.co/google/owlvit-base-patch32) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 49408):
-            Vocabulary size of the OWL-ViT text model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`OwlViTTextModel`].
-        hidden_size (`int`, *optional*, defaults to 512):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        max_position_embeddings (`int`, *optional*, defaults to 16):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-        pad_token_id (`int`, *optional*, defaults to 0):
-            The id of the padding token in the input sequences.
-        bos_token_id (`int`, *optional*, defaults to 49406):
-            The id of the beginning-of-sequence token in the input sequences.
-        eos_token_id (`int`, *optional*, defaults to 49407):
-            The id of the end-of-sequence token in the input sequences.
-
     Example:
 
     ```python
@@ -111,7 +59,10 @@ class OwlViTTextConfig(PreTrainedConfig):
         eos_token_id=49407,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -126,44 +77,9 @@ class OwlViTTextConfig(PreTrainedConfig):
         self.initializer_factor = initializer_factor
 
 
+@auto_docstring(checkpoint="google/owlvit-base-patch16")
 class OwlViTVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of an [`OwlViTVisionModel`]. It is used to instantiate
-    an OWL-ViT image encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the OWL-ViT
-    [google/owlvit-base-patch32](https://huggingface.co/google/owlvit-base-patch32) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels in the input images.
-        image_size (`int`, *optional*, defaults to 768):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 32):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-
     Example:
 
     ```python
@@ -214,32 +130,8 @@ class OwlViTVisionConfig(PreTrainedConfig):
         self.initializer_factor = initializer_factor
 
 
+@auto_docstring(checkpoint="google/owlvit-base-patch16")
 class OwlViTConfig(PreTrainedConfig):
-    r"""
-    [`OwlViTConfig`] is the configuration class to store the configuration of an [`OwlViTModel`]. It is used to
-    instantiate an OWL-ViT model according to the specified arguments, defining the text model and vision model
-    configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the OWL-ViT
-    [google/owlvit-base-patch32](https://huggingface.co/google/owlvit-base-patch32) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`OwlViTTextConfig`].
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`OwlViTVisionConfig`].
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of text and vision projection layers.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The initial value of the *logit_scale* parameter. Default is used as per the original OWL-ViT
-            implementation.
-        return_dict (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return a dictionary. If `False`, returns a tuple.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
-    """
-
     model_type = "owlvit"
     sub_configs = {"text_config": OwlViTTextConfig, "vision_config": OwlViTVisionConfig}
 
@@ -274,52 +166,4 @@ class OwlViTConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-class OwlViTOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
-            ]
-        )
-
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("logits_per_image", {0: "batch"}),
-                ("logits_per_text", {0: "batch"}),
-                ("text_embeds", {0: "batch"}),
-                ("image_embeds", {0: "batch"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-    def generate_dummy_inputs(
-        self,
-        processor: "ProcessorMixin",
-        batch_size: int = -1,
-        seq_length: int = -1,
-    ) -> Mapping[str, Any]:
-        text_input_dict = super().generate_dummy_inputs(
-            processor.tokenizer,
-            batch_size=batch_size,
-            seq_length=seq_length,
-        )
-        image_input_dict = super().generate_dummy_inputs(
-            processor.image_processor,
-            batch_size=batch_size,
-        )
-        return {**text_input_dict, **image_input_dict}
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 14
-
-
-__all__ = ["OwlViTConfig", "OwlViTOnnxConfig", "OwlViTTextConfig", "OwlViTVisionConfig"]
+__all__ = ["OwlViTConfig", "OwlViTTextConfig", "OwlViTVisionConfig"]

@@ -32,7 +32,7 @@ from transformers.testing_utils import (
 from transformers.utils import is_soundfile_available, is_torch_available, is_torchaudio_available
 from transformers.utils.import_utils import is_datasets_available
 
-from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
+from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -133,14 +133,14 @@ class DiaModelTester:
             vocab_size=self.vocab_size,
             hidden_act=self.hidden_act,
             num_channels=self.num_channels,
+            eos_token_id=self.eos_token_id,
+            pad_token_id=self.pad_token_id,
+            bos_token_id=self.bos_token_id,
         )
 
         config = DiaConfig(
             encoder_config=encoder_config,
             decoder_config=decoder_config,
-            eos_token_id=self.eos_token_id,
-            pad_token_id=self.pad_token_id,
-            bos_token_id=self.bos_token_id,
             delay_pattern=self.delay_pattern,
         )
 
@@ -230,6 +230,30 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         # Skipping `has_text_modality` but manually testing down below
         self.config_tester = ConfigTester(self, has_text_modality=False, config_class=DiaConfig)
         self.skip_non_greedy_generate()
+
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        # DIA should not have a `None` eos token id because it uses certain LogitsProcessors
+        # so we overwrite preparation
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # We don't want a few model inputs in our model input dictionary for generation tests
+        input_keys_to_ignore = [
+            # we don't want encoder-decoder models to start from filled decoder ids
+            "decoder_input_ids",
+            "decoder_attention_mask",
+            # we'll set cache use in each test differently
+            "use_cache",
+            # Ignore labels if it is in the input dict
+            "labels",
+            # model-specific exceptions should overload/overwrite this function
+        ]
+        filtered_inputs_dict = {
+            k: v[:batch_size, ...] if isinstance(v, torch.Tensor) else v
+            for k, v in inputs_dict.items()
+            if k not in input_keys_to_ignore
+        }
+
+        return config, filtered_inputs_dict
 
     def skip_non_greedy_generate(self):
         skippable_tests = [
@@ -480,7 +504,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             outputs_cached.scores = full_cached_scores
 
             # The two sets of generated text and past kv should be equal to each other
-            self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
+            assert_similar_generate_outputs(outputs, outputs_cached)
             self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
 
     @pytest.mark.generate

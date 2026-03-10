@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,27 +13,19 @@
 # limitations under the License.
 
 import inspect
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
-import pytest
 from PIL import Image
 
-from transformers import AutoProcessor, Qwen2Tokenizer
 from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
     from transformers import VideoLlama3Processor
-
-    if is_torchvision_available():
-        from transformers import VideoLlama3ImageProcessor, VideoLlama3VideoProcessor
-
 if is_torch_available():
     import torch
 
@@ -51,33 +42,16 @@ def prepare_image_inputs():
 @require_torchvision
 class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = VideoLlama3Processor
+    model_id = "lkhl/VideoLLaMA3-2B-Image-HF"
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor = VideoLlama3Processor.from_pretrained(
-            "lkhl/VideoLLaMA3-2B-Image-HF", patch_size=4, max_pixels=56 * 56, min_pixels=28 * 28
-        )
-        processor.save_pretrained(cls.tmpdirname)
+    def _setup_from_pretrained(cls, model_id, **kwargs):
+        return super()._setup_from_pretrained(model_id, patch_size=4, max_pixels=56 * 56, min_pixels=28 * 28, **kwargs)
+
+    @classmethod
+    def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
 
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_video_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
-
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
-
-    @require_vision
     def prepare_image_inputs(self, batch_size: int | None = None):
         """This function prepares a list of PIL images for testing"""
         if batch_size is None:
@@ -99,65 +73,6 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue("num_image_patches" in output)
         self.assertEqual(len(output["num_image_patches"]), 3)
 
-    def test_save_load_pretrained_default(self):
-        tokenizer = self.get_tokenizer()
-        image_processor = self.get_image_processor()
-        video_processor = self.get_video_processor()
-
-        processor = VideoLlama3Processor(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
-        )
-        processor.save_pretrained(self.tmpdirname)
-        processor = VideoLlama3Processor.from_pretrained(self.tmpdirname, use_fast=False)
-
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertIsInstance(processor.tokenizer, Qwen2Tokenizer)
-        self.assertIsInstance(processor.image_processor, VideoLlama3ImageProcessor)
-        self.assertIsInstance(processor.video_processor, VideoLlama3VideoProcessor)
-
-    def test_image_processor(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        video_processor = self.get_video_processor()
-
-        processor = VideoLlama3Processor(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
-        )
-
-        image_input = self.prepare_image_inputs()
-
-        input_image_proc = image_processor(image_input, return_tensors="pt")
-        input_processor = processor(images=image_input, text="dummy", return_tensors="pt")
-
-        for key in input_image_proc:
-            self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
-
-    def test_processor(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        video_processor = self.get_video_processor()
-
-        processor = VideoLlama3Processor(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
-        )
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-        inputs = processor(text=input_str, images=image_input)
-
-        self.assertListEqual(
-            list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values", "image_grid_thw", "image_merge_sizes"]
-        )
-
-        # test if it raises when no input is passed
-        with pytest.raises(ValueError):
-            processor()
-
-        # test if it raises when no text is passed
-        with pytest.raises(TypeError):
-            processor(images=image_input)
-
     @require_torch
     @require_av
     def _test_apply_chat_template(
@@ -173,7 +88,7 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        if processor_name not in self.processor_class.attributes:
+        if processor_name not in self.processor_class.get_attributes():
             self.skipTest(f"{processor_name} attribute not present in {self.processor_class}")
 
         batch_messages = [

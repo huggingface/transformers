@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Microsoft Research & University of Wisconsin-Madison and the HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,50 +13,16 @@
 """VideoLlava model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="LanguageBind/Video-LLaVA-7B-hf")
 class VideoLlavaConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VideoLlavaForConditionalGeneration`]. It is used to instantiate an
-    VideoLlava model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the like LanguageBind/Video-LLaVA-7B-hf.
-
-    e.g. [LanguageBind/Video-LLaVA-7B-hf](https://huggingface.co/LanguageBind/Video-LLaVA-7B-hf)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vision_config (`VideoLlavaVisionConfig`, *optional*):
-            Custom vision config or dict. Defaults to `CLIPVisionConfig` if not indicated.
-        text_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
-            Defaults to `LlamaConfig` if not indicated.
-        image_token_index (`int`, *optional*, defaults to 32000):
-            The image token index to encode the image prompt.
-        video_token_index (`int`, *optional*, defaults to 32001):
-            The video token index to encode the image prompt.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the CLIP backbone.
-            Can be either "full" to select all features or "default" to select features without `CLS`.
-        vision_feature_layer (`Union[int, list[int]]`, *optional*, defaults to -2):
-            The index of the layer to select the vision feature. If multiple indices are provided,
-            the vision feature of the corresponding indices will be concatenated to form the
-            vision features.
-        image_seq_length (`int`, *optional*, defaults to 256):
-            Sequence length of one image embedding.
-        video_seq_length (`int`, *optional*, defaults to 2056):
-            Sequence length of one video embedding.
-        multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in the multimodal projector.
-
     Example:
 
     ```python
@@ -98,6 +63,7 @@ class VideoLlavaConfig(PreTrainedConfig):
         image_seq_length=256,
         video_seq_length=2056,
         multimodal_projector_bias=True,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.image_token_index = image_token_index
@@ -108,6 +74,7 @@ class VideoLlavaConfig(PreTrainedConfig):
         self.image_seq_length = image_seq_length
         self.video_seq_length = video_seq_length
         self.multimodal_projector_bias = multimodal_projector_bias
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.vision_config = vision_config
 

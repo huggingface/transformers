@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -128,9 +127,7 @@ def decoder_config_from_checkpoint(checkpoint: str) -> MusicgenDecoderConfig:
 
 
 @torch.no_grad()
-def convert_musicgen_checkpoint(
-    checkpoint, pytorch_dump_folder=None, repo_id=None, device="cpu", safe_serialization=False
-):
+def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, repo_id=None, device="cpu"):
     fairseq_model = MusicGen.get_pretrained(checkpoint, device=device)
     decoder_config = decoder_config_from_checkpoint(checkpoint)
 
@@ -192,12 +189,12 @@ def convert_musicgen_checkpoint(
     if pytorch_dump_folder is not None:
         Path(pytorch_dump_folder).mkdir(exist_ok=True)
         logger.info(f"Saving model {checkpoint} to {pytorch_dump_folder}")
-        model.save_pretrained(pytorch_dump_folder, safe_serialization=safe_serialization)
+        model.save_pretrained(pytorch_dump_folder)
         processor.save_pretrained(pytorch_dump_folder)
 
     if repo_id:
         logger.info(f"Pushing model {checkpoint} to {repo_id}")
-        model.push_to_hub(repo_id, safe_serialization=safe_serialization)
+        model.push_to_hub(repo_id)
         processor.push_to_hub(repo_id)
 
 
@@ -221,15 +218,10 @@ if __name__ == "__main__":
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
+        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the Hugging Face hub."
     )
     parser.add_argument(
         "--device", default="cpu", type=str, help="Torch device to run the conversion, either cpu or cuda."
-    )
-    parser.add_argument(
-        "--safe_serialization",
-        action="store_true",
-        help="Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).",
     )
 
     args = parser.parse_args()

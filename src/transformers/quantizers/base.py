@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin, QuantizationMethod
@@ -31,14 +31,39 @@ else:
 logger = logging.get_logger(__file__)
 
 
-def _assign_original_dtype(module, original_dtype):
-    # not very nice in a recursive function but it avoids a circular import
+def get_keys_to_not_convert(model) -> list:
+    r"""
+    Function to automatically detect keys to not convert for usage like quantization. For example for CausalLM modules
+    we may want to keep the lm_head in full precision for numerical stability reasons.
+    """
+    # remove tied weights
+    tied_keys = set()
+    if len(model.all_tied_weights_keys) > 0:
+        tied_keys = set(model.all_tied_weights_keys.values()) | set(model.all_tied_weights_keys.keys())
+
+    # remove last module
+    last_module_key = {list(model.named_parameters())[-1][0]}
+
+    # remove output emb
+    output_emb_module = model.get_output_embeddings()
+    output_emb_keys = {
+        name
+        for name, module in model.named_modules()
+        if output_emb_module is not None and id(module) == id(output_emb_module)
+    }
+    modules_to_not_convert = tied_keys | last_module_key | output_emb_keys
+
+    modules_to_not_convert = list({k.removesuffix(".weight") for k in modules_to_not_convert})
+
+    return list(modules_to_not_convert)
+
+
+def _assign_is_quantized(model):
     from ..modeling_utils import PreTrainedModel
 
-    for child in module.children():
-        if isinstance(child, PreTrainedModel):
-            child.config._pre_quantization_dtype = original_dtype
-        _assign_original_dtype(child, original_dtype)
+    for module in model.modules():
+        if isinstance(module, PreTrainedModel):
+            module.config._is_quantized = True
 
 
 class HfQuantizer(ABC):
@@ -50,26 +75,14 @@ class HfQuantizer(ABC):
     Attributes
         quantization_config (`transformers.utils.quantization_config.QuantizationConfigMixin`):
             The quantization config that defines the quantization parameters of your model that you want to quantize.
-        modules_to_not_convert (`list[str]`, *optional*):
-            The list of module names to not convert when quantizing the model.
-        required_packages (`list[str]`, *optional*):
-            The list of required pip packages to install prior to using the quantizer
         requires_calibration (`bool`):
             Whether the quantization method requires to calibrate the model before using it.
-        requires_parameters_quantization (`bool`):
-            Whether the quantization method requires to create a new Parameter. For example, for bitsandbytes, it is
-            required to create a new xxxParameter in order to properly quantize the model.
     """
 
     requires_calibration = False
-    required_packages = None
-    requires_parameters_quantization = False
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config
-
-        # -- Handle extra kwargs below --
-        self.modules_to_not_convert = kwargs.pop("modules_to_not_convert", [])
         self.pre_quantized = kwargs.pop("pre_quantized", True)
 
         if not self.pre_quantized and self.requires_calibration:
@@ -91,7 +104,7 @@ class HfQuantizer(ABC):
         """
         return dtype
 
-    def update_device_map(self, device_map: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    def update_device_map(self, device_map: dict[str, Any] | None) -> dict[str, Any] | None:
         """
         Override this method if you want to pass a override the existing device map with a new
         one. E.g. for bitsandbytes, since `accelerate` is a hard requirement, if no device_map is
@@ -103,97 +116,18 @@ class HfQuantizer(ABC):
         """
         return device_map
 
-    def adjust_target_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        """
-        Override this method if you want to adjust the `target_dtype` variable used in `from_pretrained`
-        to compute the device_map in case the device_map is a `str`. E.g. for bitsandbytes we force-set `target_dtype`
-        to `torch.int8` and for 4-bit we pass a custom enum `accelerate.CustomDtype.int4`.
+    def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
+        return param.element_size()
 
-        Args:
-            dtype (`torch.dtype`, *optional*):
-                The dtype that is used to compute the device_map.
-        """
-        return dtype
-
-    def param_element_size(self, model: "PreTrainedModel", param_name: str) -> float:
-        "Return the element size (in bytes) for `param_name`."
-        if self.param_needs_quantization(model, param_name):
-            from accelerate.utils import CustomDtype
-
-            mapping = {
-                torch.int8: 1,
-                CustomDtype.INT4: 0.5,
-                CustomDtype.FP8: 1,
-                CustomDtype.INT2: 0.25,
-            }
-            # The value passed is actually not used when the method is overriden
-            if (custom_dtype := self.adjust_target_dtype(torch.float16)) in mapping:
-                return mapping[custom_dtype]
-        return model.get_parameter_or_buffer(param_name).element_size()
-
-    def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
-        """
-        Override this method if you want to adjust the `missing_keys`.
-
-        Args:
-            missing_keys (`list[str]`, *optional*):
-                The list of missing keys in the checkpoint compared to the state dict of the model
-        """
-        return missing_keys
-
-    def update_expected_keys(self, model, expected_keys: list[str], loaded_keys: list[str]) -> list[str]:
-        """
-        Override this method if you want to adjust the `update_expected_keys`.
-
-        Args:
-            expected_keys (`list[str]`, *optional*):
-                The list of the expected keys in the initialized model.
-            loaded_keys (`list[str]`, *optional*):
-                The list of the loaded keys in the checkpoint.
-        """
-        return expected_keys
-
-    def update_unexpected_keys(self, model, unexpected_keys: list[str]) -> list[str]:
-        return unexpected_keys
-
-    def get_special_dtypes_update(self, model, dtype: "torch.dtype") -> dict[str, "torch.dtype"]:
-        """
-        returns dtypes for modules that are not quantized - used for the computation of the device_map in case
-        one passes a str as a device_map. The method will use the `modules_to_not_convert` that is modified
-        in `_process_model_before_weight_loading`.
-
-        Args:
-            model (`~transformers.PreTrainedModel`):
-                The model to quantize
-            dtype (`torch.dtype`):
-                The dtype passed in `from_pretrained` method.
-        """
-
-        return {
-            name: dtype for name, _ in model.named_parameters() if any(m in name for m in self.modules_to_not_convert)
-        }
-
-    def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:
+    def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         """adjust max_memory argument for infer_auto_device_map() if extra memory is needed for quantization"""
         return max_memory
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         """
-        Check whether a given param needs quantization as defined by `create_quantized_param`.
+        Check whether a given param needs to be quantized.
         """
         return False
-
-    def create_quantized_param(self, *args, **kwargs):
-        """
-        Take needed components from state_dict (those from which `param_needs_quantization` is True) and create
-        quantized param.
-        It usually also load the new param directly in the `model`.
-        Note: only applicable if requires_parameters_quantization == True.
-        """
-        if not self.requires_parameters_quantization:
-            raise AttributeError(
-                f"`.create_quantized_param()` method is not supported by quantizer class {self.__class__.__name__}."
-            )
 
     def validate_environment(self, *args, **kwargs):
         """
@@ -214,7 +148,7 @@ class HfQuantizer(ABC):
     def _process_model_before_weight_loading(self, model, **kwargs):
         return model
 
-    def preprocess_model(self, model: "PreTrainedModel", config, dtype=None, checkpoint_files=None, **kwargs):
+    def preprocess_model(self, model: "PreTrainedModel", dtype=None, **kwargs):
         """
         Setting model attributes and/or converting model before weights loading. At this point
         the model should be initialized on the meta device so you can freely manipulate the skeleton
@@ -232,14 +166,6 @@ class HfQuantizer(ABC):
             self._convert_model_for_quantization(model)
         self._process_model_before_weight_loading(model, **kwargs)
 
-        # We store the original dtype for quantized models as we cannot easily retrieve it
-        # once the weights have been quantized
-        # Note that once you have loaded a quantized model, you can't change its dtype so this will
-        # remain a single source of truth
-        original_dtype = dtype if dtype is not None else torch.get_default_dtype()
-        config._pre_quantization_dtype = original_dtype
-        _assign_original_dtype(model, original_dtype)
-
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         return model
 
@@ -254,6 +180,13 @@ class HfQuantizer(ABC):
             kwargs (`dict`, *optional*):
                 The keyword arguments that are passed along `_process_model_after_weight_loading`.
         """
+        model.config.quantization_config = self.quantization_config
+
+        if self.pre_quantized and getattr(self.quantization_config, "dequantize", False):
+            self.remove_quantization_config(model)
+        else:
+            _assign_is_quantized(model)
+
         return self._process_model_after_weight_loading(model, **kwargs)
 
     def remove_quantization_config(self, model):
@@ -264,40 +197,25 @@ class HfQuantizer(ABC):
             del model.hf_quantizer
         if hasattr(model.config, "quantization_config"):
             del model.config.quantization_config
-        if hasattr(model.config, "_pre_quantization_dtype"):
-            del model.config._pre_quantization_dtype
         if hasattr(model, "quantization_method"):
             del model.quantization_method
         model.is_quantized = False
 
-    def dequantize(self, model):
+    def dequantize(self, model, dtype=None):
         """
         Potentially dequantize the model to retrieve the original model, with some loss in accuracy / performance.
         Note not all quantization schemes support this.
         """
-        model = self._dequantize(model)
-
-        # Delete quantizer and quantization config
-        del model.hf_quantizer
-        del model.config.quantization_config
-        del model.config._pre_quantization_dtype
-        del model.quantization_method
-        model.is_quantized = False
+        if dtype is None:
+            # using the same dtype we used to load the model. If we don't do that, we might have issues with modules we didn't quantize.
+            # or we need to upcast everything to the same dtype
+            dtype = model.config.dtype
+        model = self._dequantize(model, dtype=dtype)
+        self.remove_quantization_config(model)
 
         return model
 
-    def get_accelerator_warm_up_factor(self):
-        """
-        The factor to be used in `caching_allocator_warmup` to get the number of bytes to pre-allocate to warm up accelerator.
-        A factor of 2 means we allocate all bytes in the empty model (since we allocate in fp16), a factor of 4 means
-        we allocate half the memory of the weights residing in the empty model, etc...
-        """
-        # By default we return 4, i.e. half the model size (this corresponds to the case where the model is not
-        # really pre-processed, i.e. we do not have the info that weights are going to be 8 bits before actual
-        # weight loading)
-        return 4
-
-    def _dequantize(self, model):
+    def _dequantize(self, model, dtype=None):
         raise NotImplementedError(
             f"{self.quantization_config.quant_method} has no implementation of `dequantize`, please raise an issue on GitHub."
         )
@@ -311,12 +229,10 @@ class HfQuantizer(ABC):
     @staticmethod
     def get_modules_to_not_convert(
         model: "PreTrainedModel",
-        skip_modules: Optional[list[str]] = None,
-        keep_in_fp32_modules: Optional[list[str]] = None,
+        skip_modules: list[str] | None = None,
+        keep_in_fp32_modules: list[str] | None = None,
         add_default_skips: bool = False,
     ):
-        from ..integrations import get_keys_to_not_convert
-
         if skip_modules is None or add_default_skips:
             modules_to_not_convert = get_keys_to_not_convert(model)
         else:
@@ -327,6 +243,8 @@ class HfQuantizer(ABC):
 
         if keep_in_fp32_modules is not None:
             modules_to_not_convert.extend(keep_in_fp32_modules)
+
+        modules_to_not_convert = list(set(modules_to_not_convert))
 
         return modules_to_not_convert
 
@@ -340,35 +258,37 @@ class HfQuantizer(ABC):
         """Flag indicating whether the quantized model can be compiled"""
         return False
 
-    def get_state_dict_and_metadata(self, model, safe_serialization=False):
+    def get_state_dict_and_metadata(self, model):
         """Get state dict and metadata. Useful when we need to modify a bit the state dict due to quantization"""
         return None, {}
 
-    def update_state_dict_with_metadata(self, state_dict, metadata):
-        """Update state dict with metadata. Default behaviour returns state_dict"""
-        return state_dict
-
     @abstractmethod
-    def is_serializable(self, safe_serialization=None): ...
+    def is_serializable(self): ...
 
     @property
     @abstractmethod
     def is_trainable(self): ...
 
     def _convert_model_for_quantization(self, model):
-        from accelerate import init_empty_weights
-
         for name, module in model.named_modules():
             module_class_name = module.__class__.__name__
             if module_class_name in MODULES_TO_PATCH_FOR_QUANTIZATION and (
                 self.quantization_config.quant_method
                 in MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name]["quantization_methods"]
             ):
-                with init_empty_weights():
+                with torch.device("meta"):
                     parent_module, name = get_module_from_name(model, name)
                     parent_module._modules[name] = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name]["module_name"](
                         model.config.get_text_config()
                     )
+
+    def get_quantize_ops(self):
+        raise NotImplementedError(
+            f"{self.quantization_config.quant_method} is not available yet and will be supported soon."
+        )
+
+    def get_weight_conversions(self):
+        return []
 
 
 class SequentialLlama4TextExperts(ModuleList):

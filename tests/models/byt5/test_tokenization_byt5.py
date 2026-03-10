@@ -12,21 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
 import re
 import shutil
 import tempfile
 import unittest
 from functools import cached_property
 
-from transformers import AddedToken, BatchEncoding, ByT5Tokenizer
+from transformers import BatchEncoding, ByT5Tokenizer
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = ByT5Tokenizer
+    from_pretrained_id = "google/byt5-small"
     test_rust_tokenizer = False
 
     @classmethod
@@ -189,10 +188,10 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 sample_text = " He is very happy, UNwant\u00e9d,running"
                 tokenizer.add_tokens(["bim", "bambam"])
-                additional_special_tokens = tokenizer.additional_special_tokens
-                additional_special_tokens.append("new_additional_special_token")
+                extra_special_tokens = tokenizer.extra_special_tokens
+                extra_special_tokens.append("new_extra_special_token")
                 tokenizer.add_special_tokens(
-                    {"additional_special_tokens": additional_special_tokens}, replace_additional_special_tokens=False
+                    {"extra_special_tokens": extra_special_tokens}, replace_extra_special_tokens=False
                 )
                 before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
                 tokenizer.save_pretrained(tmpdirname)
@@ -200,7 +199,7 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 after_tokenizer = tokenizer.__class__.from_pretrained(tmpdirname)
                 after_tokens = after_tokenizer.encode(sample_text, add_special_tokens=False)
                 self.assertListEqual(before_tokens, after_tokens)
-                self.assertIn("new_additional_special_token", after_tokenizer.additional_special_tokens)
+                self.assertIn("new_extra_special_token", after_tokenizer.extra_special_tokens)
                 self.assertEqual(after_tokenizer.model_max_length, 42)
 
                 tokenizer = tokenizer.__class__.from_pretrained(tmpdirname, model_max_length=43)
@@ -208,77 +207,8 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 shutil.rmtree(tmpdirname)
 
-    # There is a conflict between the default value of extra_ids and adding a new special token through additional_special_tokens
-    # We need to add the extra_ids in the list of the arg additional_special_tokens
-    def test_special_tokens_initialization_with_non_empty_additional_special_tokens(self):
-        tokenizer_list = []
-        if self.test_slow_tokenizer:
-            tokenizer_list.append((self.tokenizer_class, self.get_tokenizer()))
-
-        if self.test_rust_tokenizer:
-            tokenizer_list.append((self.rust_tokenizer_class, self.get_rust_tokenizer()))
-
-        for tokenizer_class, tokenizer_utils in tokenizer_list:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                tokenizer_utils.save_pretrained(tmp_dir)
-
-                with open(os.path.join(tmp_dir, "special_tokens_map.json"), encoding="utf-8") as json_file:
-                    special_tokens_map = json.load(json_file)
-
-                with open(os.path.join(tmp_dir, "tokenizer_config.json"), encoding="utf-8") as json_file:
-                    tokenizer_config = json.load(json_file)
-
-                added_tokens_extra_ids = [f"<extra_id_{i}>" for i in range(125)]
-
-                special_tokens_map["additional_special_tokens"] = added_tokens_extra_ids + [
-                    "an_additional_special_token"
-                ]
-                tokenizer_config["additional_special_tokens"] = added_tokens_extra_ids + [
-                    "an_additional_special_token"
-                ]
-
-                with open(os.path.join(tmp_dir, "special_tokens_map.json"), "w", encoding="utf-8") as outfile:
-                    json.dump(special_tokens_map, outfile)
-                with open(os.path.join(tmp_dir, "tokenizer_config.json"), "w", encoding="utf-8") as outfile:
-                    json.dump(tokenizer_config, outfile)
-
-                # the following checks allow us to verify that our test works as expected, i.e. that the tokenizer takes
-                # into account the new value of additional_special_tokens given in the "tokenizer_config.json" and
-                # "special_tokens_map.json" files
-                tokenizer_without_change_in_init = tokenizer_class.from_pretrained(
-                    tmp_dir,
-                )
-                self.assertIn(
-                    "an_additional_special_token", tokenizer_without_change_in_init.additional_special_tokens
-                )
-                # self.assertIn("an_additional_special_token",tokenizer_without_change_in_init.get_vocab()) # ByT5Tokenization no vocab
-                self.assertEqual(
-                    ["an_additional_special_token"],
-                    tokenizer_without_change_in_init.convert_ids_to_tokens(
-                        tokenizer_without_change_in_init.convert_tokens_to_ids(["an_additional_special_token"])
-                    ),
-                )
-
-                # Now we test that we can change the value of additional_special_tokens in the from_pretrained
-                new_added_tokens = added_tokens_extra_ids + [AddedToken("a_new_additional_special_token", lstrip=True)]
-                tokenizer = tokenizer_class.from_pretrained(
-                    tmp_dir,
-                    additional_special_tokens=new_added_tokens,
-                )
-
-                self.assertIn("a_new_additional_special_token", tokenizer.additional_special_tokens)
-                self.assertEqual(
-                    ["a_new_additional_special_token"],
-                    tokenizer.convert_ids_to_tokens(
-                        tokenizer.convert_tokens_to_ids(["a_new_additional_special_token"])
-                    ),
-                )
-
     def test_decode_single_bytes(self):
         tokenizer_list = []
-        if self.test_slow_tokenizer:
-            tokenizer_list.append((self.tokenizer_class, self.get_tokenizer()))
-
         if self.test_rust_tokenizer:
             tokenizer_list.append((self.rust_tokenizer_class, self.get_rust_tokenizer()))
 
@@ -342,11 +272,3 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     setattr(tokenizer, attr + "_id", token_id_to_test_setters)
                     self.assertEqual(getattr(tokenizer, attr), token_to_test_setters)
                     self.assertEqual(getattr(tokenizer, attr + "_id"), token_id_to_test_setters)
-
-                setattr(tokenizer, "additional_special_tokens_ids", [])
-                self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [])
-                self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [])
-
-                setattr(tokenizer, "additional_special_tokens_ids", [token_id_to_test_setters])
-                self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [token_to_test_setters])
-                self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [token_id_to_test_setters])

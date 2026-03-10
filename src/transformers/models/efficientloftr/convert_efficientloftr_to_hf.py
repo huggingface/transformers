@@ -130,7 +130,6 @@ def write_model(
     model_repo,
     file_name,
     organization,
-    safe_serialization=True,
     push_to_hub=False,
 ):
     os.makedirs(model_path, exist_ok=True)
@@ -173,7 +172,7 @@ def write_model(
     del model.config._name_or_path
 
     print("Saving the model...")
-    model.save_pretrained(model_path, safe_serialization=safe_serialization)
+    model.save_pretrained(model_path)
     del state_dict, model
 
     # Safety check: reload the converted model
@@ -252,6 +251,5 @@ if __name__ == "__main__":
         args.repo_id,
         args.file_name,
         args.organization,
-        safe_serialization=True,
         push_to_hub=args.push_to_hub,
     )

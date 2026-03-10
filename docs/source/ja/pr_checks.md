@@ -40,7 +40,7 @@ pip install transformers[dev]
 
 
 ```bash
-pip install -e .[dev]
+pip install -e ".[dev]"
 ```
 
 トランスフォーマーズのリポジトリ内で作業しています。トランスフォーマーズのオプションの依存関係の数が増えたため、すべてを取得できない可能性があります。開発用インストールが失敗した場合、作業しているディープラーニングフレームワーク（PyTorch、TensorFlow、および/またはFlax）をインストールし、次の手順を実行してください。
@@ -53,7 +53,7 @@ pip install transformers[quality]
 または編集可能なインストールの場合：
 
 ```bash
-pip install -e .[quality]
+pip install -e ".[quality]"
 ```
 
 ## Tests
@@ -102,14 +102,7 @@ CIは、`ci/circleci: check_code_quality` チェック内でこれらのチェ�
 
 
 ```bash
-make quality
-```
-
-時間がかかることがあります。したがって、現在のブランチで変更したファイルのみで同じことを実行するには、次のコマンドを実行します。
-
-
-```bash
-make fixup
+make check-repo
 ```
 
 この最後のコマンドは、リポジトリの整合性のためのすべての追加のチェックも実行します。それらを詳しく見てみましょう。
@@ -119,7 +112,7 @@ make fixup
 これには、あなたのPRがリポジトリを適切な状態に保ったままであることを確認するためのすべてのテストが含まれており、ci/`circleci: check_repository_consistency` チェックによって実行されます。ローカルでこのチェックを実行するには、以下を実行します。
 
 ```bash
-make repo-consistency
+make check-repo
 ```
 
 これを確認します：
@@ -137,7 +130,7 @@ make repo-consistency
 
 
 ```bash
-make fix-copies
+make fix-repo
 ```
 
 追加のチェックポイントは、新しいモデルを追加するPull Request（PR）に関連しています。主に次の点を確認します：

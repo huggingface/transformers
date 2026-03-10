@@ -165,11 +165,8 @@ class DINOv3ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     all_model_classes = (DINOv3ConvNextModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-feature-extraction": DINOv3ConvNextModel} if is_torch_available() else {}
 
-    fx_compatible = False
-
     test_resize_embeddings = False
     has_attentions = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = DINOv3ConvNextModelTester(self)

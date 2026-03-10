@@ -18,7 +18,6 @@ import unittest
 from transformers import AutoTokenizer, GraniteMoeSharedConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -177,8 +176,6 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         else {}
     )
 
-    fx_compatible = False
-
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
@@ -198,7 +195,6 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
 @require_torch_accelerator
 class GraniteMoeSharedIntegrationTest(unittest.TestCase):
     @slow
-    @require_read_token
     def test_model_3b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 

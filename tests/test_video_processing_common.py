@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,6 @@ from copy import deepcopy
 
 import numpy as np
 import pytest
-from packaging import version
 
 from transformers import AutoVideoProcessor
 from transformers.testing_utils import (
@@ -167,6 +165,35 @@ class VideoProcessingTestMixin:
             video_processor = video_processing_class()
             self.assertIsNotNone(video_processor)
 
+    def test_video_processor_explicit_none_preserved(self):
+        """Test that explicitly setting an attribute to None is preserved through save/load."""
+
+        # Find an attribute with a non-None class default to test explicit None override
+        test_attr = None
+        for attr in ["do_resize", "do_rescale", "do_normalize"]:
+            if getattr(self.fast_video_processing_class, attr, None) is not None:
+                test_attr = attr
+                break
+
+        if test_attr is None:
+            self.skipTest("Could not find a suitable attribute to test")
+
+        # Create processor with explicit None (override the attribute)
+        kwargs = self.video_processor_dict.copy()
+        kwargs[test_attr] = None
+        video_processor = self.fast_video_processing_class(**kwargs)
+
+        # Verify it's in to_dict() as None (not filtered out)
+        self.assertIn(test_attr, video_processor.to_dict())
+        self.assertIsNone(video_processor.to_dict()[test_attr])
+
+        # Verify explicit None survives save/load cycle
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            video_processor.save_pretrained(tmpdirname)
+            reloaded = self.fast_video_processing_class.from_pretrained(tmpdirname)
+
+        self.assertIsNone(getattr(reloaded, test_attr), f"Explicit None for {test_attr} was lost after reload")
+
     @slow
     @require_torch_accelerator
     @require_vision
@@ -174,8 +201,6 @@ class VideoProcessingTestMixin:
     def test_can_compile_fast_video_processor(self):
         if self.fast_video_processing_class is None:
             self.skipTest("Skipping compilation test as fast video processor is not defined")
-        if version.parse(torch.__version__) < version.parse("2.3"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         torch.compiler.reset()
         video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, return_tensors="torch")

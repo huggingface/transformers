@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The LLAMA4 and HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -14,62 +13,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
-from ...utils import logging
+from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="meta-llama/Llama-4-Scout-17B-16E")
 class Llama4VisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Llama4VisionModel`]. It is used to instantiate a
-    Llama4 vision model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Llama4 109B.
-
-    e.g. [meta-llama/Llama-4-Scout-17B-16E](https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        num_hidden_layers (`int`, *optional*, defaults to 34):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels in the input image.
-        intermediate_size (`int`, *optional*, defaults to 5632):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        vision_output_dim (`int`, *optional*, defaults to 7680):
-            Dimensionality of the vision model output. Includes output of transformer
-            encoder with intermediate layers and global transformer encoder.
-        image_size (`int`, *optional*, defaults to 448):
-            The size (resolution) of each image *tile*.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        vision_feature_select_strategy (`int`, *optional*, defaults to `"default"`): TODO
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        pixel_shuffle_ratio (`int`, *optional*, defaults to 0.5): TODO
-        projector_input_dim (`int`, *optional*, defaults to 4096): TODO
-        projector_output_dim (`int`, *optional*, defaults to 4096): TODO
-        multi_modal_projector_bias (`int`, *optional*, defaults to `False`): TODO
-        projector_dropout (`int`, *optional*, defaults to 0.0): TODO
-        attention_dropout (`int`, *optional*, defaults to 0.0): TODO
-        rope_parameters (`RopeParameters`, *optional*):
-            RoPE Parameters
+    vision_output_dim (`int`, *optional*, defaults to 7680):
+        Dimensionality of the vision model output. Includes output of transformer
+        encoder with intermediate layers and global transformer encoder.
+    pixel_shuffle_ratio (`float`, *optional*, defaults to 0.5):
+        Pixel-shuffle ratio for downsampling patch tokens. Smaller values produce fewer tokens (more downsampling).
+    projector_input_dim (`int`, *optional*, defaults to 4096):
+        Width of the vision adapter MLP before pixel shuffle. Larger value increases capacity and compute.
+    projector_output_dim (`int`, *optional*, defaults to 4096):
+        Output width of the vision adapter. Larger value yields higher-dimensional image features.
+    projector_dropout (`float`, *optional*, defaults to 0.0):
+        Dropout rate inside the vision adapter MLP. Higher value adds more regularization.
     """
 
     base_model_tp_plan = {
@@ -79,32 +45,32 @@ class Llama4VisionConfig(PreTrainedConfig):
         "model.layers.*.self_attn.o_proj": "rowwise",
         "vision_adapter.mlp.fc1": "colwise",
         "vision_adapter.mlp.fc2": "rowwise",
-        "patch_embedding.linear": "colwise_rep",
+        "patch_embedding.linear": "colwise_gather_output",
     }
     model_type = "llama4_vision_model"
     base_config_key = "vision_config"
 
     def __init__(
         self,
-        hidden_size: Optional[int] = 768,
-        hidden_act: Optional[str] = "gelu",
-        num_hidden_layers: Optional[int] = 34,
-        num_attention_heads: Optional[int] = 16,
-        num_channels: Optional[int] = 3,
-        intermediate_size: Optional[int] = 5632,
-        vision_output_dim: Optional[int] = 7680,
-        image_size: Optional[int] = 448,
-        patch_size: Optional[int] = 14,
-        norm_eps: Optional[float] = 1e-5,
-        vision_feature_select_strategy: Optional[str] = "default",
-        initializer_range: Optional[float] = 0.02,
-        pixel_shuffle_ratio: Optional[float] = 0.5,
-        projector_input_dim: Optional[int] = 4096,
-        projector_output_dim: Optional[int] = 4096,
-        multi_modal_projector_bias: Optional[bool] = False,
-        projector_dropout: Optional[float] = 0.0,
-        attention_dropout: Optional[float] = 0.0,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        hidden_size: int | None = 768,
+        hidden_act: str | None = "gelu",
+        num_hidden_layers: int | None = 34,
+        num_attention_heads: int | None = 16,
+        num_channels: int | None = 3,
+        intermediate_size: int | None = 5632,
+        vision_output_dim: int | None = 7680,
+        image_size: int | None = 448,
+        patch_size: int | None = 14,
+        norm_eps: float | None = 1e-5,
+        vision_feature_select_strategy: str | None = "default",
+        initializer_range: float | None = 0.02,
+        pixel_shuffle_ratio: float | None = 0.5,
+        projector_input_dim: int | None = 4096,
+        projector_output_dim: int | None = 4096,
+        multi_modal_projector_bias: bool | None = False,
+        projector_dropout: float | None = 0.0,
+        attention_dropout: float | None = 0.0,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -125,128 +91,59 @@ class Llama4VisionConfig(PreTrainedConfig):
         self.projector_dropout = projector_dropout
         self.attention_dropout = attention_dropout
         self.vision_feature_select_strategy = vision_feature_select_strategy
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
-        @property
-        def vision_feature_layer(self):
-            warnings.warn(
-                "The `vision_feature_layer` attribute is deprecated and will be removed in v4.58.0.",
-                FutureWarning,
-            )
-            return self._vision_feature_layer
-
-        @vision_feature_layer.setter
-        def vision_feature_layer(self, value):
-            self._vision_feature_layer = value
+        self.rope_parameters = rope_parameters
 
         super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="meta-llama/Llama-4-Scout-17B-16E")
 class Llama4TextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Llama4TextModel`]. It is used to instantiate a
-    Llama4 text model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Llama4 109B.
-
-    e.g. [meta-llama/Llama-4-Scout-17B-16E](https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 202048):
-            Vocabulary size of the Llama4 text model. Defines the maximum number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`Llama4TextModel`].
-        hidden_size (`int`, *optional*, defaults to 5120):
-            Dimensionality of the embeddings and hidden states.
-        intermediate_size (`int`, *optional*, defaults to 8192):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        intermediate_size_mlp (`int`, *optional*, defaults to 16384): TODO
-        num_hidden_layers (`int`, *optional*, defaults to 48):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 40):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 8):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If not
-            specified, will default to `num_attention_heads`.
-        head_dim (`int`, *optional*, defaults to 128): TODO
-        hidden_act (`str` or `Callable`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-        max_position_embeddings (`int`, *optional*, defaults to 131072):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions.
-        pad_token_id (`int`, *optional*, defaults to 128004):
-            The id of the padding token.
-        bos_token_id (`int`, *optional*, defaults to 1):
-            The id of the beginning of sentence token.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            The id of the end of sentence token.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
-        attention_dropout (`int`, *optional*, defaults to 0.0): TODO
-        num_experts_per_tok (`int`, *optional*, defaults to 1): TODO
-        num_local_experts (`int`, *optional*, defaults to 16): TODO
-        moe_layers (`int`, *optional*): TODO
-        interleave_moe_layer_step (`int`, *optional*, defaults to 1): TODO
-        use_qk_norm (`int`, *optional*, defaults to `True`): TODO
-        output_router_logits (`int`, *optional*, defaults to `False`): TODO
-        router_aux_loss_coef (`int`, *optional*, defaults to 0.001): TODO
-        router_jitter_noise (`int`, *optional*, defaults to 0.0): TODO
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-            <TODO>
-            <TODO>
-        no_rope_layers (`list[int]`, *optional*):
-            List with at least the same length as the number of layers in the model.
-            A `1` at an index position indicates that the corresponding layer will use RoPE,
-            while a `0` indicates that it's a NoPE layer.
-        no_rope_layer_interval (`int`, *optional*, defaults to 4):
-            If `no_rope_layers` is `None`, it will be created using a NoPE layer every
-            `no_rope_layer_interval` layers.
-        attention_chunk_size (`int`, *optional*, defaults to 8192):
-            <TODO>
-        layer_types (`list`, *optional*):
-            Attention pattern for each layer.
-        attn_temperature_tuning (`bool`, *optional*, defaults to `True`):
-            Whether to dynamically scale the attention temperature for each query token based on sequence length.
-            Recommended for long sequences (e.g., >32k tokens) to maintain stable output results.
-        floor_scale (`int`, *optional*, defaults to 8192): TODO
-        attn_scale (`int`, *optional*, defaults to 0.1): TODO
+    intermediate_size_mlp (`int`, *optional*, defaults to 16384):
+        Intermediate size of dense MLP layers. Larger value increases FFN capacity and compute.
+    moe_layers (`list[int]`, *optional*):
+        List of layer indices that use MoE. Overrides `interleave_moe_layer_step` when set.
+    interleave_moe_layer_step (`int`, *optional*, defaults to 1):
+        Spacing between MoE layers when `moe_layers` is `None`. Larger value means fewer MoE layers.
+    use_qk_norm (`bool`, *optional*, defaults to `True`):
+        Whether to L2-normalize queries/keys on RoPE layers. Can stabilize attention when enabled.
+    no_rope_layers (`list[int]`, *optional*):
+        List with at least the same length as the number of layers in the model.
+        A `1` at an index position indicates that the corresponding layer will use RoPE,
+        while a `0` indicates that it's a NoPE layer.
+    no_rope_layer_interval (`int`, *optional*, defaults to 4):
+        If `no_rope_layers` is `None`, it will be created using a NoPE layer every
+        `no_rope_layer_interval` layers.
+    attention_chunk_size (`int`, *optional*, defaults to 8192):
+        Chunk size for the attention computation. Smaller value enforces more local attention and lowers memory.
+    attn_temperature_tuning (`bool`, *optional*, defaults to `True`):
+        Whether to dynamically scale the attention temperature for each query token based on sequence length.
+        Recommended for long sequences (e.g., >32k tokens) to maintain stable output results.
+    floor_scale (`int`, *optional*, defaults to 8192):
+        Base scale (in tokens) for attention temperature tuning. Larger value delays scaling to longer positions.
+    attn_scale (`float`, *optional*, defaults to 0.1):
+        Strength of attention temperature tuning. Larger value increases scaling at long positions.
 
     Example:
     """
 
     model_type = "llama4_text"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 500000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.feed_forward.shared_expert.gate_proj": "local_colwise",
-        "layers.*.feed_forward.shared_expert.up_proj": "local_colwise",
-        "layers.*.feed_forward.shared_expert.down_proj": "local_rowwise",
-        "layers.*.feed_forward.experts.gate_up_proj": "local_packed_rowwise",  # row because not linear
-        "layers.*.feed_forward.experts.down_proj": "local_colwise",  # col because not linear
-        "layers.*.feed_forward.experts": "local",
-        "layers.*.feed_forward.gate_proj": "local_colwise",
-        "layers.*.feed_forward.up_proj": "local_colwise",
-        "layers.*.feed_forward.down_proj": "local_rowwise",
-        "layers.*.feed_forward": "gather",
+        "layers.*.feed_forward.shared_expert.gate_proj": "colwise",
+        "layers.*.feed_forward.shared_expert.up_proj": "colwise",
+        "layers.*.feed_forward.shared_expert.down_proj": "rowwise",
+        "layers.*.feed_forward.experts.gate_up_proj": "packed_rowwise",  # row because not linear
+        "layers.*.feed_forward.experts.down_proj": "colwise",  # col because not linear
+        "layers.*.feed_forward.gate_proj": "colwise",
+        "layers.*.feed_forward.up_proj": "colwise",
+        "layers.*.feed_forward.down_proj": "rowwise",
     }
     base_model_ep_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -255,10 +152,9 @@ class Llama4TextConfig(PreTrainedConfig):
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.feed_forward.experts.gate_up_proj": "grouped_gemm",  # row because not linear
         "layers.*.feed_forward.experts.down_proj": "grouped_gemm",  # col because not linear
-        "layers.*.feed_forward.experts": "gather",  # all reduce
-        "layers.*.feed_forward.gate_proj": "local_colwise",
-        "layers.*.feed_forward.up_proj": "local_colwise",
-        "layers.*.feed_forward.down_proj": "local_rowwise",
+        "layers.*.feed_forward.gate_proj": "colwise",
+        "layers.*.feed_forward.up_proj": "colwise",
+        "layers.*.feed_forward.down_proj": "rowwise",
         "layers.*.feed_forward.router": "ep_router",
     }
 
@@ -290,7 +186,7 @@ class Llama4TextConfig(PreTrainedConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         router_jitter_noise=0.0,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         no_rope_layers=None,
         no_rope_layer_interval=4,
         attention_chunk_size=8192,
@@ -300,13 +196,10 @@ class Llama4TextConfig(PreTrainedConfig):
         attn_scale=0.1,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.attn_temperature_tuning = attn_temperature_tuning
         self.attn_scale = attn_scale
         self.floor_scale = floor_scale
@@ -330,10 +223,6 @@ class Llama4TextConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.use_qk_norm = use_qk_norm
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
         self.num_experts_per_tok = num_experts_per_tok
         self.num_local_experts = num_local_experts
 
@@ -355,7 +244,13 @@ class Llama4TextConfig(PreTrainedConfig):
         self.moe_layers = (
             moe_layers
             if moe_layers is not None
-            else list(range(interleave_moe_layer_step - 1, num_hidden_layers, interleave_moe_layer_step))
+            else list(
+                range(
+                    interleave_moe_layer_step - 1,
+                    num_hidden_layers,
+                    interleave_moe_layer_step,
+                )
+            )
         )
         self.attention_chunk_size = attention_chunk_size
 
@@ -366,37 +261,17 @@ class Llama4TextConfig(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 500000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
+        super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="meta-llama/Llama-4-Scout-17B-16E")
 class Llama4Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Llama4Model`]. It is used to instantiate an
-    Llama4 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Llama4 109B.
-
-    e.g. [meta-llama/Llama-4-Scout-17B-16E](https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        vision_config (`Llama4VisionConfig`, *optional*):
-            The Llama4 Vision config.
-        text_config (`Llama4TextConfig`, *optional*):
-            The Llama4 Text config.
-        boi_token_index (`int`, *optional*, defaults to 200080):
-            The begin-of-image token index to wrap the image prompt.
-        eoi_token_index (`int`, *optional*, defaults to 200081):
-            The end-of-image token index to wrap the image prompt.
-        image_token_index (`int`, *optional*, defaults to 200092):
-            The image token index to encode the image prompt.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
+    boi_token_index (`int`, *optional*, defaults to 200080):
+        The begin-of-image token index to wrap the image prompt.
+    eoi_token_index (`int`, *optional*, defaults to 200081):
+        The end-of-image token index to wrap the image prompt.
 
     ```python
     >>> from transformers import Llama4Model, Llama4Config
@@ -451,7 +326,8 @@ class Llama4Config(PreTrainedConfig):
         elif isinstance(text_config, Llama4TextConfig):
             self.text_config = text_config
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["Llama4Config", "Llama4TextConfig", "Llama4VisionConfig"]

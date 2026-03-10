@@ -15,10 +15,7 @@
 
 import unittest
 
-import pytest
-from packaging import version
-
-from transformers import AlbertConfig, AutoTokenizer, is_torch_available
+from transformers import AlbertConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -252,7 +249,6 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "feature-extraction": AlbertModel,
             "fill-mask": AlbertForMaskedLM,
-            "question-answering": AlbertForQuestionAnswering,
             "text-classification": AlbertForSequenceClassification,
             "token-classification": AlbertForTokenClassification,
             "zero-shot": AlbertForSequenceClassification,
@@ -260,7 +256,6 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = False  # will not be maintained
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -330,46 +325,3 @@ class AlbertModelIntegrationTest(unittest.TestCase):
         )
 
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
-
-    @slow
-    @pytest.mark.torch_export_test
-    def test_export(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
-        distilbert_model = "albert/albert-base-v2"
-        device = "cpu"
-        attn_implementation = "sdpa"
-        max_length = 64
-
-        tokenizer = AutoTokenizer.from_pretrained(distilbert_model)
-        inputs = tokenizer(
-            f"Paris is the {tokenizer.mask_token} of France.",
-            return_tensors="pt",
-            padding="max_length",
-            max_length=max_length,
-        )
-
-        model = AlbertForMaskedLM.from_pretrained(
-            distilbert_model,
-            device_map=device,
-            attn_implementation=attn_implementation,
-        )
-
-        logits = model(**inputs).logits
-        eg_predicted_mask = tokenizer.decode(logits[0, 4].topk(5).indices)
-        self.assertEqual(
-            eg_predicted_mask.split(),
-            ["capital", "capitol", "comune", "arrondissement", "bastille"],
-        )
-
-        exported_program = torch.export.export(
-            model,
-            args=(inputs["input_ids"],),
-            kwargs={"attention_mask": inputs["attention_mask"]},
-            strict=True,
-        )
-
-        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
-        ep_predicted_mask = tokenizer.decode(result.logits[0, 4].topk(5).indices)
-        self.assertEqual(eg_predicted_mask, ep_predicted_mask)

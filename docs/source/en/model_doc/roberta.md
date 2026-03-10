@@ -79,13 +79,6 @@ print(f"The predicted token is: {predicted_token}")
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create <mask> through a process known as photosynthesis." | transformers run --task fill-mask --model FacebookAI/roberta-base --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 ## Notes
@@ -99,15 +92,12 @@ echo -e "Plants create <mask> through a process known as photosynthesis." | tran
 ## RobertaTokenizer
 
 [[autodoc]] RobertaTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## RobertaTokenizerFast
 
 [[autodoc]] RobertaTokenizerFast
-    - build_inputs_with_special_tokens
 
 ## RobertaModel
 

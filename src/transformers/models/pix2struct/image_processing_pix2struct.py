@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import io
 import math
-from typing import Optional, Union
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -53,12 +51,19 @@ class Pix2StructImageProcessorKwargs(ImagesKwargs, total=False):
     """
     max_patches (`int`, *optional*):
         Maximum number of patches to extract.
+    patch_size (`dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
+        The patch size to use for the image. According to Pix2Struct paper and code, the patch size is 16x16.
+    is_vqa (`bool`, *optional*, defaults to `False`):
+        Whether or not the image processor is for the VQA task. If `True` and `header_text` is passed in, text is
+        rendered onto the input images.
     header_text (`Union[list[str], str]`, *optional*):
         Text to render as a header. Only has an effect if `image_processor.is_vqa` is `True`.
     """
 
     max_patches: int
-    header_text: Optional[Union[list[str], str]]
+    patch_size: dict[str, int]
+    is_vqa: bool
+    header_text: list[str] | str | None
 
 
 # adapted from: https://discuss.pytorch.org/t/tf-image-extract-patches-in-pytorch/171409/2
@@ -98,8 +103,8 @@ def render_text(
     right_padding: int = 5,
     top_padding: int = 5,
     bottom_padding: int = 5,
-    font_bytes: Optional[bytes] = None,
-    font_path: Optional[str] = None,
+    font_bytes: bytes | None = None,
+    font_path: str | None = None,
 ) -> Image.Image:
     """
     Render text. This script is entirely adapted from the original script that can be found here:
@@ -157,9 +162,7 @@ def render_text(
 
 
 # Adapted from https://github.com/google-research/pix2struct/blob/0e1779af0f4db4b652c1d92b3bbd2550a7399123/pix2struct/preprocessing/preprocessing_utils.py#L87
-def render_header(
-    image: np.ndarray, header: str, input_data_format: Optional[Union[str, ChildProcessError]] = None, **kwargs
-):
+def render_header(image: np.ndarray, header: str, input_data_format: str | ChildProcessError | None = None, **kwargs):
     """
     Renders the input text as a header on the input image.
 
@@ -227,7 +230,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         self,
         do_convert_rgb: bool = True,
         do_normalize: bool = True,
-        patch_size: Optional[dict[str, int]] = None,
+        patch_size: dict[str, int] | None = None,
         max_patches: int = 2048,
         is_vqa: bool = False,
         **kwargs,
@@ -244,7 +247,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         max_patches: int,
         patch_size: dict,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -323,8 +326,8 @@ class Pix2StructImageProcessor(BaseImageProcessor):
     def normalize(
         self,
         image: np.ndarray,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -359,14 +362,14 @@ class Pix2StructImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        header_text: Optional[str] = None,
-        do_convert_rgb: Optional[bool] = None,
-        do_normalize: Optional[bool] = None,
-        max_patches: Optional[int] = None,
-        patch_size: Optional[dict[str, int]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        header_text: str | None = None,
+        do_convert_rgb: bool | None = None,
+        do_normalize: bool | None = None,
+        max_patches: int | None = None,
+        patch_size: dict[str, int] | None = None,
+        return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> ImageInput:
         """

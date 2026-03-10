@@ -151,7 +151,6 @@ def main():
     if dist.is_initialized() and dp_mesh.size() > 1:
         model = FSDP(model, device_mesh=dp_mesh, sharding_strategy=ShardingStrategy.NO_SHARD)
         use_ddp = True
-        pass
 
     model.train()
 
@@ -341,7 +340,7 @@ def main():
     else:
         # Fallback to regular save for non-distributed case
         save_dir = "test_model_nondist"
-        model.save_pretrained(save_dir, safe_serialization=False)
+        model.save_pretrained(save_dir)
         tokenizer.save_pretrained(save_dir)  # Save tokenizer too
         logger.info(f"Saved model to {save_dir}")
 

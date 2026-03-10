@@ -81,13 +81,6 @@ print(f"The predicted token is: {predicted_token}")
 ```
 
 </hfoption>
-<hfoption id="transformers">
-
-```bash
-echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model google-bert/bert-base-uncased --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 ## 注意
@@ -101,10 +94,12 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 ## BertTokenizer
 
 [[autodoc]] BertTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
+
+## BertTokenizerLegacy
+
+[[autodoc]] BertTokenizerLegacy
 
 ## BertTokenizerFast
 

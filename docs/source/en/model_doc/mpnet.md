@@ -64,9 +64,7 @@ separate your segments with the separation token `tokenizer.sep_token` (or `[sep
 ## MPNetTokenizer
 
 [[autodoc]] MPNetTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## MPNetTokenizerFast

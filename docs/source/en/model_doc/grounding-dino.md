@@ -114,6 +114,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## GroundingDinoProcessor
 
 [[autodoc]] GroundingDinoProcessor
+    - __call__
     - post_process_grounded_object_detection
 
 ## GroundingDinoConfig

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -179,7 +178,6 @@ class Aimv2VisionModelTest(Aimv2ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (Aimv2VisionModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = False
 
@@ -308,7 +306,6 @@ class Aimv2TextModelTester:
 @require_torch
 class Aimv2TextModelTest(Aimv2ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Aimv2TextModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = False
 
@@ -388,7 +385,6 @@ class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
 
     test_resize_embeddings = False
     test_attention_outputs = False

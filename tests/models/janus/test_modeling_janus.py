@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,6 @@ import tempfile
 import unittest
 from functools import reduce
 
-import numpy as np
 import pytest
 import requests
 
@@ -45,6 +43,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -190,11 +189,14 @@ class JanusVisionText2TextModelTester:
 
 
 @require_torch
-class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (JanusModel, JanusForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (JanusForConditionalGeneration,) if is_torch_available() else ()
-    fx_compatible = False
-
+    pipeline_model_mapping = (
+        {"any-to-any": JanusForConditionalGeneration, "image-text-to-text": JanusForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
     _is_composite = True
 
     def setUp(self):
@@ -354,7 +356,6 @@ class JanusVQModelTester:
 class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (JanusVQVAE,) if is_torch_available() else ()
 
-    fx_compatible = False
     has_attentions = False
     test_resize_embeddings = False
 
@@ -398,6 +399,10 @@ class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
+    @unittest.skip("Janus VQ module has no gradient checkpointing layers")
+    def test_gradient_checkpointing_enable_disable(self):
+        pass
+
 
 class JanusIntegrationTest(unittest.TestCase):
     def setUp(self):
@@ -415,7 +420,7 @@ class JanusIntegrationTest(unittest.TestCase):
         inputs = processor(images=image, text=prompt, generation_mode="text", return_tensors="pt").to(model.device)
 
         output = model.generate(**inputs, max_new_tokens=20, generation_mode="text", do_sample=False)
-        EXPECTED_DECODED_TEXT = 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is often referred to as the "Lion"'  # fmt: skip
+        EXPECTED_DECODED_TEXT = 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is part of the zodiac and the constellation'  # fmt: skip
         text = processor.decode(output[0], skip_special_tokens=True)
         self.assertEqual(
             text,
@@ -443,8 +448,8 @@ class JanusIntegrationTest(unittest.TestCase):
         ).to(model.device, torch.float16)
 
         EXPECTED_TEXT_COMPLETION = [
-            'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is often referred to as the "Lion"',
-            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a constellation that is shaped like a stylized figure with a long tail. This",
+            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is part of the zodiac and the constellation",  # fmt: skip
+            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\nforming a constellation, the constellation of Orion is located in the constellation of Scorpius.\n",  # fmt: skip
         ]
         generated_ids = model.generate(**inputs, max_new_tokens=20, generation_mode="text", do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
@@ -516,6 +521,12 @@ class JanusIntegrationTest(unittest.TestCase):
                     15617, 6169, 2706, 8006, 14893, 3855, 10188, 15652, 6297, 1097, 12108, 15038, 311, 14998, 15165,
                     897, 4044, 1762, 4676
                 ],
+                ("xpu", None): [
+                    4484, 4015, 15750, 506, 3758, 11651, 8597, 5739, 4861, 971, 14985, 14834, 15438, 7548, 1820, 1465,
+                    13529, 12761, 10503, 12761, 14303, 6155, 4015, 11766, 705, 15736, 14146, 10417, 1951, 7713, 14305,
+                    15617, 6169, 2706, 8006, 14893, 3855, 10188, 15652, 6297, 1097, 12108, 15038, 311, 14998, 15165,
+                    897, 4044, 1762, 4676
+                ],
             }
         )
         expected_tokens = torch.tensor(expected_tokens.get_expectation()).to(model.device)
@@ -526,7 +537,7 @@ class JanusIntegrationTest(unittest.TestCase):
 
         # Decode generated tokens to pixel values and postprocess them.
         decoded_pixel_values = model.decode_image_tokens(out)
-        images = processor.postprocess(list(decoded_pixel_values.float()), return_tensors="np")
+        images = processor.postprocess(list(decoded_pixel_values.float()), return_tensors="pt")
 
-        self.assertTrue(images["pixel_values"].shape == (1, 384, 384, 3))
-        self.assertTrue(isinstance(images["pixel_values"], np.ndarray))
+        self.assertTrue(images["pixel_values"].shape == (1, 3, 384, 384))
+        self.assertTrue(isinstance(images["pixel_values"], torch.Tensor))

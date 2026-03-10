@@ -39,6 +39,7 @@ The example below demonstrates how to classify text with [`Pipeline`], [`AutoMod
 <hfoption id="Pipeline">
 
 ```py
+import torch
 from transformers import pipeline
 
 classifier = pipeline(
@@ -78,14 +79,6 @@ with torch.no_grad():
 predicted_class_id = torch.argmax(outputs.logits, dim=-1).item()
 predicted_label = model.config.id2label[predicted_class_id]
 print(f"Predicted label: {predicted_label}")
-```
-
-</hfoption>
-
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "I love using Hugging Face Transformers!" | transformers run --task text-classification --model distilbert-base-uncased-finetuned-sst-2-english
 ```
 
 </hfoption>

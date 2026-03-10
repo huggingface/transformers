@@ -366,7 +366,6 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     pipeline_model_mapping = (
         {
             "feature-extraction": GPTNeoModel,
-            "question-answering": GPTNeoForQuestionAnswering,
             "text-classification": GPTNeoForSequenceClassification,
             "text-generation": GPTNeoForCausalLM,
             "token-classification": GPTNeoForTokenClassification,
@@ -375,7 +374,6 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
     test_missing_keys = False
 
     # special case for DoubleHeads model
@@ -492,7 +490,8 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
             input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
             # The dog-eared copy of the book, which is a collection of essays by the late author,
             expected_output_ids = [464, 3290, 12, 3380, 4866, 286, 262, 1492, 11, 543, 318, 257, 4947, 286, 27126, 416, 262, 2739, 1772, 11]  # fmt: skip
-            output_ids = model.generate(input_ids, do_sample=False)
+            # We limit the generation output to (max_length - input_length) while by default 20 new tokens will be generated.
+            output_ids = model.generate(input_ids, do_sample=False, max_length=20)
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 
     @slow
@@ -503,7 +502,7 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
         torch.manual_seed(0)
         tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
         input_ids = tokenized.input_ids.to(torch_device)
-        output_ids = model.generate(input_ids, do_sample=True)
+        output_ids = model.generate(input_ids, do_sample=True, max_length=20)
         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
         EXPECTED_OUTPUT_STR = "Today is a nice day and if you don’t get the memo here is what you can"
@@ -529,17 +528,21 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
         inputs = tokenizer(sentences, return_tensors="pt", padding=True)
         input_ids = inputs["input_ids"].to(torch_device)
 
+        # We limit the generation output to (max_length - input_length) while by default 20 new tokens will be generated.
         outputs = model.generate(
             input_ids=input_ids,
             attention_mask=inputs["attention_mask"].to(torch_device),
+            max_length=20,
         )
 
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
-        output_non_padded = model.generate(input_ids=inputs_non_padded)
+        # We limit the generation output to (max_length - input_length) while by default 20 new tokens will be generated.
+        output_non_padded = model.generate(input_ids=inputs_non_padded, max_length=20)
 
         num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
-        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
+        # We limit the generation output to (max_length - input_length) while by default 20 new tokens will be generated.
+        output_padded = model.generate(input_ids=inputs_padded, max_length=20 - num_paddings)
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)

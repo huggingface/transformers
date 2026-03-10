@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team, The Hugging Face Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """Tokenization classes for DPR."""
 
 import collections
-from typing import Optional, Union
 
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, add_end_docstrings, add_start_docstrings, logging
@@ -39,6 +37,10 @@ class DPRContextEncoderTokenizer(BertTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
 
+    def __init__(self, *args, do_lower_case=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.do_lower_case = do_lower_case
+
 
 class DPRQuestionEncoderTokenizer(BertTokenizer):
     r"""
@@ -51,6 +53,10 @@ class DPRQuestionEncoderTokenizer(BertTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
+
+    def __init__(self, *args, do_lower_case=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.do_lower_case = do_lower_case
 
 
 DPRSpanPrediction = collections.namedtuple(
@@ -133,13 +139,13 @@ class CustomDPRReaderTokenizerMixin:
     def __call__(
         self,
         questions,
-        titles: Optional[str] = None,
-        texts: Optional[str] = None,
-        padding: Union[bool, str] = False,
-        truncation: Union[bool, str] = False,
-        max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = None,
+        titles: str | None = None,
+        texts: str | None = None,
+        padding: bool | str = False,
+        truncation: bool | str = False,
+        max_length: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_attention_mask: bool | None = None,
         **kwargs,
     ) -> BatchEncoding:
         if titles is None and texts is None:
@@ -315,6 +321,10 @@ class DPRReaderTokenizer(CustomDPRReaderTokenizerMixin, BertTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+
+    def __init__(self, *args, do_lower_case=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.do_lower_case = do_lower_case
 
 
 __all__ = ["DPRContextEncoderTokenizer", "DPRQuestionEncoderTokenizer", "DPRReaderOutput", "DPRReaderTokenizer"]

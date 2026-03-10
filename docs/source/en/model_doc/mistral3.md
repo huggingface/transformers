@@ -242,9 +242,9 @@ messages = [
 
 [[autodoc]] Mistral3Config
 
-## MistralCommonTokenizer
+## MistralCommonBackend
 
-[[autodoc]] MistralCommonTokenizer
+[[autodoc]] MistralCommonBackend
 
 ## Mistral3Model
 
@@ -254,3 +254,4 @@ messages = [
 
 [[autodoc]] Mistral3ForConditionalGeneration
     - forward
+    - get_image_features

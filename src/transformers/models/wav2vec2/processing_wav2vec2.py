@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,83 +15,31 @@
 Speech processor class for Wav2Vec2
 """
 
-import warnings
-from typing import Optional, Union
-
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
-from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
-from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
+from ...utils import auto_docstring
 
 
 class Wav2Vec2ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {}
 
 
+@auto_docstring
 class Wav2Vec2Processor(ProcessorMixin):
-    r"""
-    Constructs a Wav2Vec2 processor which wraps a Wav2Vec2 feature extractor and a Wav2Vec2 CTC tokenizer into a single
-    processor.
-
-    [`Wav2Vec2Processor`] offers all the functionalities of [`Wav2Vec2FeatureExtractor`] and [`PreTrainedTokenizer`].
-    See the docstring of [`~Wav2Vec2Processor.__call__`] and [`~Wav2Vec2Processor.decode`] for more information.
-
-    Args:
-        feature_extractor (`Wav2Vec2FeatureExtractor`):
-            An instance of [`Wav2Vec2FeatureExtractor`]. The feature extractor is a required input.
-        tokenizer ([`PreTrainedTokenizer`]):
-            An instance of [`PreTrainedTokenizer`]. The tokenizer is a required input.
-    """
-
-    feature_extractor_class = "Wav2Vec2FeatureExtractor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        try:
-            return super().from_pretrained(pretrained_model_name_or_path, **kwargs)
-        except (OSError, ValueError):
-            warnings.warn(
-                f"Loading a tokenizer inside {cls.__name__} from a config that does not"
-                " include a `tokenizer_class` attribute is deprecated and will be "
-                "removed in v5. Please add `'tokenizer_class': 'Wav2Vec2CTCTokenizer'`"
-                " attribute to either your `config.json` or `tokenizer_config.json` "
-                "file to suppress this warning: ",
-                FutureWarning,
-            )
-
-            feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-            tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-            return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
-
+    @auto_docstring
     def __call__(
         self,
-        audio: Optional[AudioInput] = None,
-        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
+        audio: AudioInput | None = None,
+        text: str | list[str] | TextInput | PreTokenizedInput | None = None,
         **kwargs: Unpack[Wav2Vec2ProcessorKwargs],
     ):
-        """
-        This method forwards all arguments to [`Wav2Vec2FeatureExtractor.__call__`] and/or
-        [`PreTrainedTokenizer.__call__`] depending on the input modality and returns their outputs. If both modalities are passed, [`Wav2Vec2FeatureExtractor.__call__`] and [`PreTrainedTokenizer.__call__`] are called.
-
-        Args:
-            audio (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
-                An audio input is passed to [`Wav2Vec2FeatureExtractor.__call__`].
-            text (`str`, `List[str]`, *optional*):
-                A text input is passed to [`PreTrainedTokenizer.__call__`].
-
-
+        r"""
         Returns:
             This method returns the results of each `call` method. If both are used, the output is a dictionary containing the results of both.
         """
-        if "raw_speech" in kwargs:
-            warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
-            audio = kwargs.pop("raw_speech")
-
         if audio is None and text is None:
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
 

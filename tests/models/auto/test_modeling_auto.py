@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import copy
+import json
 import sys
 import tempfile
 import unittest
@@ -26,11 +27,12 @@ from transformers import BertConfig, GPT2Model, is_torch_available
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
-    SMALL_MODEL_IDENTIFIER,
     RequestCounter,
+    require_peft,
     require_torch,
     slow,
 )
+from transformers.utils import ADAPTER_CONFIG_NAME
 
 from ..bert.test_modeling_bert import BertModelTester
 
@@ -56,7 +58,6 @@ if is_torch_available():
         AutoModelForSequenceClassification,
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
-        AutoModelWithLMHead,
         BertForMaskedLM,
         BertForPreTraining,
         BertForQuestionAnswering,
@@ -69,7 +70,6 @@ if is_torch_available():
         GPT2Config,
         GPT2LMHeadModel,
         ResNetBackbone,
-        RobertaForMaskedLM,
         T5Config,
         T5ForConditionalGeneration,
         TapasConfig,
@@ -126,18 +126,6 @@ class AutoModelTest(unittest.TestCase):
         # Only one value should not be initialized and in the missing keys.
         for value in loading_info.values():
             self.assertEqual(len(value), 0)
-
-    @slow
-    def test_lmhead_model_from_pretrained(self):
-        model_name = "google-bert/bert-base-uncased"
-        config = AutoConfig.from_pretrained(model_name)
-        self.assertIsNotNone(config)
-        self.assertIsInstance(config, BertConfig)
-
-        model = AutoModelWithLMHead.from_pretrained(model_name)
-        model, loading_info = AutoModelWithLMHead.from_pretrained(model_name, output_loading_info=True)
-        self.assertIsNotNone(model)
-        self.assertIsInstance(model, BertForMaskedLM)
 
     @slow
     def test_model_for_causal_lm(self):
@@ -258,18 +246,6 @@ class AutoModelTest(unittest.TestCase):
         model = AutoBackbone.from_pretrained("microsoft/resnet-18", out_features=["stage2", "stage4"])
         self.assertEqual(model.out_indices, [2, 4])
         self.assertEqual(model.out_features, ["stage2", "stage4"])
-
-    def test_from_pretrained_identifier(self):
-        model = AutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER)
-        self.assertIsInstance(model, BertForMaskedLM)
-        self.assertEqual(model.num_parameters(), 14410)
-        self.assertEqual(model.num_parameters(only_trainable=True), 14410)
-
-    def test_from_identifier_from_model_type(self):
-        model = AutoModelWithLMHead.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER)
-        self.assertIsInstance(model, RobertaForMaskedLM)
-        self.assertEqual(model.num_parameters(), 14410)
-        self.assertEqual(model.num_parameters(only_trainable=True), 14410)
 
     def test_from_pretrained_with_tuple_values(self):
         # For the auto model mapping, FunnelConfig has two models: FunnelModel and FunnelBaseModel
@@ -502,25 +478,6 @@ class AutoModelTest(unittest.TestCase):
         ):
             _ = AutoModel.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
 
-    def test_model_file_not_found(self):
-        with self.assertRaisesRegex(
-            EnvironmentError,
-            "hf-internal-testing/config-no-model does not appear to have a file named pytorch_model.bin",
-        ):
-            _ = AutoModel.from_pretrained("hf-internal-testing/config-no-model")
-
-    def test_model_from_tf_error(self):
-        with self.assertRaisesRegex(
-            EnvironmentError, "does not appear to have a file named pytorch_model.bin or model.safetensors."
-        ):
-            _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-tf-only")
-
-    def test_model_from_flax_error(self):
-        with self.assertRaisesRegex(
-            EnvironmentError, "does not appear to have a file named pytorch_model.bin or model.safetensors."
-        ):
-            _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
-
     @unittest.skip("Failing on main")
     def test_cached_model_has_minimum_calls_to_head(self):
         # Make sure we have cached the model.
@@ -574,6 +531,7 @@ class AutoModelTest(unittest.TestCase):
         # patching was added in v4.45)
         self.assertTrue("GenerationMixin" in str(model.__class__.__bases__))
 
+    @unittest.skip("@Cyril: add the post_init() on the hub repo")
     def test_model_with_dotted_name_and_relative_imports(self):
         """
         Test for issue #40496: AutoModel.from_pretrained() doesn't work for models with '.' in their name
@@ -586,3 +544,45 @@ class AutoModelTest(unittest.TestCase):
 
         model = AutoModel.from_pretrained(model_id, trust_remote_code=True)
         self.assertIsNotNone(model)
+
+    @require_peft
+    def test_adapter_path_not_overwritten_for_complete_model(self):
+        """
+        Test for issue #43746: Only overwrite the pretrained_model_name_or_path if needed with adapter.
+
+        This test ensures that when a model has an adapter config and the pretrained_model_name_or_path
+        points to a model directory with both a base model and an embedded adapter, the path should NOT
+        be overwritten with the hub model name embedded in the adapter's config.
+
+        The bug was that the path was being unconditionally overwritten, which would cause
+        incorrect behavior when loading models with adapters that are embedded within the
+        same directory as the base model.
+        """
+
+        peft_test_model = "peft-internal-testing/tiny-OPTForCausalLM-lora"
+        transformers_test_model = "hf-internal-testing/tiny-random-OPTForCausalLM"
+
+        # Create a temporary directory with a complete adapter model structure
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_dir = Path(tmp_dir)
+
+            # Save the model and adapter locally
+            config = AutoConfig.from_pretrained(transformers_test_model)
+            model = AutoModel.from_pretrained(transformers_test_model)
+            adapter_model = AutoModel.from_pretrained(peft_test_model)
+            config.save_pretrained(tmp_dir)
+            model.save_pretrained(tmp_dir)
+            adapter_model.save_pretrained(tmp_dir)
+
+            # Overwrite the base_model_name_or_path to an invalid value that
+            # would cause the load to fail later
+            adapter_config_path = tmp_dir / ADAPTER_CONFIG_NAME
+            with open(adapter_config_path, "r") as handle:
+                adapter_config = json.load(handle)
+            adapter_config["base_model_name_or_path"] = "some/model/that/does/not/exist"
+            with open(adapter_config_path, "w") as handle:
+                json.dump(adapter_config, handle)
+
+            # Load from the saved path and make sure it actually loads despite
+            # the invalid adapter config path
+            AutoModel.from_pretrained(tmp_dir)

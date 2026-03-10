@@ -242,7 +242,6 @@ class DebertaV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         {
             "feature-extraction": DebertaV2Model,
             "fill-mask": DebertaV2ForMaskedLM,
-            "question-answering": DebertaV2ForQuestionAnswering,
             "text-classification": DebertaV2ForSequenceClassification,
             "token-classification": DebertaV2ForTokenClassification,
             "zero-shot": DebertaV2ForSequenceClassification,
@@ -250,8 +249,6 @@ class DebertaV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         if is_torch_available()
         else {}
     )
-
-    fx_compatible = True
 
     is_encoder_decoder = False
 
@@ -292,14 +289,6 @@ class DebertaV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         model = DebertaV2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @unittest.skip("This test was broken by the refactor in #22105, TODO @ArthurZucker")
-    def test_torch_fx_output_loss(self):
-        pass
-
-    @unittest.skip("This test was broken by the refactor in #22105, TODO @ArthurZucker")
-    def test_torch_fx(self):
-        pass
-
 
 @require_torch
 @require_sentencepiece
@@ -311,7 +300,7 @@ class DebertaV2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        model = DebertaV2Model.from_pretrained("microsoft/deberta-v2-xlarge")
+        model = DebertaV2Model.from_pretrained("microsoft/deberta-v2-xlarge", dtype=torch.float32)
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])

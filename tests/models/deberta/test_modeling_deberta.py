@@ -228,7 +228,6 @@ class DebertaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         {
             "feature-extraction": DebertaModel,
             "fill-mask": DebertaForMaskedLM,
-            "question-answering": DebertaForQuestionAnswering,
             "text-classification": DebertaForSequenceClassification,
             "token-classification": DebertaForTokenClassification,
             "zero-shot": DebertaForSequenceClassification,
@@ -236,8 +235,6 @@ class DebertaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         if is_torch_available()
         else {}
     )
-
-    fx_compatible = True
 
     is_encoder_decoder = False
 
@@ -273,14 +270,6 @@ class DebertaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         model_name = "microsoft/deberta-base"
         model = DebertaModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    @unittest.skip("This test was broken by the refactor in #22105, TODO @ArthurZucker")
-    def test_torch_fx_output_loss(self):
-        pass
-
-    @unittest.skip("This test was broken by the refactor in #22105, TODO @ArthurZucker")
-    def test_torch_fx(self):
-        pass
 
 
 @require_torch

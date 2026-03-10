@@ -16,17 +16,14 @@
 import unittest
 
 import pytest
-from packaging import version
 
 from transformers import AutoTokenizer, StaticCache, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     Expectations,
     cleanup,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
-    run_test_using_subprocess,
     slow,
     torch_device,
 )
@@ -51,7 +48,6 @@ class LlamaModelTester(CausalLMModelTester):
 
 @require_torch
 class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = LlamaModelTester
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
@@ -63,7 +59,6 @@ class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
-@require_read_token
 class LlamaIntegrationTest(unittest.TestCase):
     def setup(self):
         cleanup(torch_device, gc_collect=True)
@@ -118,7 +113,7 @@ class LlamaIntegrationTest(unittest.TestCase):
             ("xpu", 3): torch.tensor([[-6.5208, -4.1218, -4.9377, -3.2536,  0.8127, -2.9811,  1.2918, -3.3848]]),
             ("cuda", 7): torch.tensor([[-6.5061, -4.1147, -4.9669, -3.2038, 0.8069, -2.9694, 1.2864, -3.3786]]),
             ("cuda", 8): torch.tensor([[-6.5208, -4.1218, -4.9377, -3.2536,  0.8127, -2.9811,  1.2918, -3.3848]]),
-            ("rocm", (9, 4)): torch.tensor([[-6.5094, -4.1329, -4.9754, -3.5042,  0.8082, -2.9443,  1.2830, -3.3539]]),
+            ("rocm", (9, 4)): torch.tensor([[-6.5067, -4.1154, -4.9819, -3.1408,  0.8117, -2.9435,  1.2883, -3.3221]]),
         })
 
         expected_mean = expected_means.get_expectation().to(torch_device)
@@ -192,49 +187,10 @@ class LlamaIntegrationTest(unittest.TestCase):
             )
         )
 
-    # TODO joao, manuel: remove this in v4.62.0
-    # TODO: check why we have the following strange situation.
-    # without running in subprocess, this test causes subsequent tests failing with `RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cpu and cuda:0!`
-    @run_test_using_subprocess
-    @slow
-    def test_model_7b_dola_generation(self):
-        # ground truth text generated with dola_layers="low", repetition_penalty=1.2
-        EXPECTED_TEXT_COMPLETION = (
-            "Simply put, the theory of relativity states that 1) time and space are relative, and 2) the laws of "
-            "physics are the same for all observers in uniform motion relative to one another.\n\nThe theory of "
-            "relativity was developed by Albert Einstein in the early 20th century, and it revolutionized our "
-            "understanding of space and time."
-        )
-        prompt = "Simply put, the theory of relativity states that "
-        tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-        model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-chat-hf", device_map="sequential", dtype=torch.float16
-        )
-        model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-
-        # greedy generation outputs
-        generated_ids = model.generate(
-            **model_inputs,
-            max_new_tokens=64,
-            top_p=None,
-            temperature=1,
-            do_sample=False,
-            dola_layers="low",
-            trust_remote_code=True,
-            custom_generate="transformers-community/dola",
-        )
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
     @slow
     @require_torch_accelerator
     @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
-        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
-        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
-        if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
         NUM_TOKENS_TO_GENERATE = 40
         # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
         # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
@@ -271,9 +227,6 @@ class LlamaIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.torch_export_test
     def test_export_static_cache(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
         )

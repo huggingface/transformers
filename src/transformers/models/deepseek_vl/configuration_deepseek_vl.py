@@ -18,34 +18,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="deepseek-community/deepseek-vl-1.3b-chat")
 class DeepseekVLConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DeepseekVLModel`]. It is used to instantiate a
-    DeepseekVL model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the DeepseekVL
-    [deepseek-community/deepseek-vl-1.3b-chat](https://huggingface.co/deepseek-community/deepseek-vl-1.3b-chat) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SiglipVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to 100015):
-            The index representing image tokens in the model's token vocabulary.
-
     Example:
 
     ```python
@@ -66,9 +50,10 @@ class DeepseekVLConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        text_config: Optional[AutoConfig] = None,
-        vision_config: Optional[AutoConfig] = None,
+        text_config: AutoConfig | None = None,
+        vision_config: AutoConfig | None = None,
         image_token_id: int = 100015,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         if text_config is None:
@@ -90,6 +75,7 @@ class DeepseekVLConfig(PreTrainedConfig):
         self.text_config = text_config
         self.vision_config = vision_config
         self.image_token_id = image_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 

@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_florence2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Microsoft and the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,60 +18,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="florence-community/Florence-2-base")
 class Florence2VisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Florence2VisionModel`]. It is used to instantiate a Florence2VisionModel
-    according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Florence2VisionModel architecture.
+    window_size (`int`, *optional*, defaults to 12):
+        The window size of the model.
+    depths (`Tuple[int]`, *optional*, defaults to `(1, 1, 9, 1)`):
+        The depth of the model.
+    patch_stride (`Tuple[int]`, *optional*, defaults to `(4, 2, 2, 2)`):
+        The patch stride of the image.
+    patch_padding (`Tuple[int]`, *optional*, defaults to `(3, 1, 1, 1)`):
+        The patch padding of the image.
+    patch_prenorm (`Tuple[bool]`, *optional*, defaults to `(False, True, True, True)`):
+        Whether to apply layer normalization before the patch embedding layer.
+    num_groups (`Tuple[int]`, *optional*, defaults to `(4, 8, 16, 32)`):
+        The number of groups.
+    max_temporal_embeddings (`int`, *optional*, defaults to 100):
+        The configuration of the visual temporal embedding.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        in_channels (`int`, *optional*, defaults to 3):
-            Number of input image channels.
-        depths (`Tuple[int]`, *optional*, defaults to `(1, 1, 9, 1)`):
-            The depth of the model.
-        patch_size (`Tuple[int]`, *optional*, defaults to `(7, 3, 3, 3)`):
-            The patch size of the image.
-        patch_stride (`Tuple[int]`, *optional*, defaults to `(4, 2, 2, 2)`):
-            The patch stride of the image.
-        patch_padding (`Tuple[int]`, *optional*, defaults to `(3, 1, 1, 1)`):
-            The patch padding of the image.
-        patch_prenorm (`Tuple[bool]`, *optional*, defaults to `(False, True, True, True)`):
-            Whether to apply layer normalization before the patch embedding layer.
-        embed_dim (`Tuple[int]`, *optional*, defaults to `(128, 256, 512, 1024)`):
-            The dimension of the embedding layer.
-        num_heads (`Tuple[int]`, *optional*, defaults to `(4, 8, 16, 32)`):
-            The number of attention heads.
-        num_groups (`Tuple[int]`, *optional*, defaults to `(4, 8, 16, 32)`):
-            The number of groups.
-        window_size (`int`, *optional*, defaults to 12):
-            The window size of the model.
-        drop_path_rate (`float`, *optional*, defaults to 0.1):
-            The dropout rate of the drop path layer.
-        mlp_ratio (`int`, *optional*, defaults to 4.0):
-            Ratio of mlp hidden dim to embedding dim.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            If True, add a learnable bias to query, key, value.
-        activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        projection_dim (`int`, *optional*, defaults to 1024):
-            The dimension of the projection layer.
-        max_temporal_embeddings (`int`, *optional*, defaults to 100):
-            The configuration of the visual temporal embedding.
-        max_position_embeddings (`int`, *optional*, defaults to 50):
-            The configuration of the image position embedding.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     Example:
 
     ```python
@@ -134,27 +104,9 @@ class Florence2VisionConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="florence-community/Florence-2-base")
 class Florence2Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Florence2ForConditionalGeneration`]. It is used to instantiate an
-    Florence-2 model according to the specified arguments, defining the model architecture.
-
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the Florence-2
-    [florence-community/Florence-2-base](https://huggingface.co/florence-community/Florence-2-base) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`AutoConfig`].
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`Florence2VisionConfig`].
-        image_token_id (`int`, *optional*, defaults to 51289):
-            The image token index to encode the image prompt.
-        is_encoder_decoder (bool, optional, *optional*, defaults to `True`):
-            Whether the model is used as an encoder/decoder or not.
-
     Example:
 
     ```python
@@ -188,6 +140,7 @@ class Florence2Config(PreTrainedConfig):
         vision_config=None,
         image_token_id=51289,
         is_encoder_decoder=True,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         if isinstance(text_config, dict):
@@ -205,6 +158,7 @@ class Florence2Config(PreTrainedConfig):
         self.text_config = text_config
         self.vision_config = vision_config
         self.image_token_id = image_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,

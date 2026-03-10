@@ -78,14 +78,6 @@ print(f"Predicted label: {predicted_label}")
 ```
 
 </hfoption>
-
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "DeBERTa-v2 is great at understanding context!" | transformers run --task fill-mask --model microsoft/deberta-v2-xlarge-mnli --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
@@ -125,16 +117,12 @@ print(f"Predicted label: {predicted_label}")
 ## DebertaV2Tokenizer
 
 [[autodoc]] DebertaV2Tokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## DebertaV2TokenizerFast
 
 [[autodoc]] DebertaV2TokenizerFast
-    - build_inputs_with_special_tokens
-    - create_token_type_ids_from_sequences
 
 ## DebertaV2Model
 

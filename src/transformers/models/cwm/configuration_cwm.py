@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_cwm.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,76 +18,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation, standardize_rope_params
+from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="facebook/cwm")
 class CwmConfig(PreTrainedConfig):
-    """
-    Configuration for Code World Model (CWM).
-    This is an inherited Llama3-compatible configuration with layer-interleaved
-    sliding-window attention. Configures a `CwmModel`. Designed to yield a configuartion mirroring the model in the
-    [facebook/cwm](https://huggingface.co/facebook/cwm) architecture by default. Other models include:
-    - [facebook/cwm-sft](https://huggingface.co/facebook/cwm-sft)
-    - [facebook/cwm-pretrain](https://huggingface.co/facebook/cwm-pretrain)
+    r"""
+    ```python
+    >>> from transformers import CwmModel, CwmConfig
 
-    Args:
-        vocab_size (`int`, *optional*, defaults to 128256):
-            Vocabulary size of the CWM model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`CwmModel`]
-        hidden_size (`int`, *optional*, defaults to 6144):
-            Dimension of the hidden representations
-        intermediate_size (`int`, *optional*, defaults to 21504):
-            Dimension of the MLP representations
-        num_hidden_layers (`int`, *optional*, defaults to 64):
-            Number of hidden layers in the Transformer decoder
-        num_attention_heads (`int`, *optional*, defaults to 48):
-            Number of attention heads for each attention layer in the Transformer decoder
-        num_key_value_heads (`int`, *optional*, defaults to 8):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention (GQA).
-            If it is not specified, will default to `num_attention_heads`.
-        head_dim (`int`, *optional*, defaults to 128):
-            The attention head dimension.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 131072):
-            The maximum sequence length that this model might ever be used with. CWM's attention allows sequence
-            lengths up to 131072 tokens.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*):
-            Padding token id.
-        eos_token_id (`int` or `list[int]`, *optional*, defaults to `[128001, 128008, 128009]`):
-            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
-        bos_token_id (`int`, *optional*, defaults to 128000):
-            The id of the *beginning-of-sequence* token.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Tensor parallelism degree used during pretraining. See [this
-            document](https://huggingface.co/docs/transformers/parallelism) and [this
-            issue](https://github.com/pytorch/pytorch/issues/76232).
-        mlp_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        sliding_window (`int`, *optional*, defaults to 8192):
-            Sliding window attention window size.
-        layer_types (`List[str]`, *optional*):
-            List of layer types for each layer. Each element should be either "full_attention" or "sliding_attention".
-            If not specified, will default to alternating pattern based on the provided window pattern.
-    """
+    >>> # Initializing a Cwm cwm-7b style configuration
+    >>> configuration = CwmConfig()
+
+    >>> # Initializing a model from the cwm-7b style configuration
+    >>> model = CwmModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "cwm"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -107,6 +56,7 @@ class CwmConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    default_theta = 1_000_000.0
 
     def __init__(
         self,
@@ -122,17 +72,17 @@ class CwmConfig(PreTrainedConfig):
         initializer_range: float = 0.02,
         rms_norm_eps: float = 1e-5,
         use_cache: bool = True,
-        pad_token_id: Optional[int] = None,
+        pad_token_id: int | None = None,
         eos_token_id=[128001, 128008, 128009],
         bos_token_id: int = 128000,
         tie_word_embeddings: bool = False,
         attention_dropout: float = 0.0,
         pretraining_tp: int = 1,
         mlp_bias: bool = False,
-        rope_parameters: Optional[dict] = None,
+        rope_parameters: dict | None = None,
         # CWM interleaved sliding window fields
         sliding_window: int = 8192,
-        layer_types: Optional[list[str]] = None,  # ["full_attention"|"sliding_attention"] per layer
+        layer_types: list[str] | None = None,  # ["full_attention"|"sliding_attention"] per layer
         **kwargs,
     ):
         if rope_parameters is None:
@@ -177,22 +127,13 @@ class CwmConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 1_000_000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["CwmConfig"]

@@ -31,7 +31,7 @@ This model was contributed by [Connor Henderson](https://huggingface.co/connor-h
 
 FastSpeech2's general structure with a Mel-spectrogram decoder was implemented, and the traditional transformer blocks were replaced with conformer blocks as done in the ESPnet library.
 
-#### FastSpeech2 Model Architecture
+### FastSpeech2 Model Architecture
 
 ![FastSpeech2 Model Architecture](https://www.microsoft.com/en-us/research/uploads/prod/2021/04/fastspeech2-1.png)
 

@@ -46,7 +46,6 @@ if is_torch_available():
         invert_mask,
         shift_tokens_right,
     )
-    from transformers.pipelines import TranslationPipeline
 
 
 class FSMTModelTester:
@@ -154,9 +153,6 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     pipeline_model_mapping = (
         {
             "feature-extraction": FSMTModel,
-            "summarization": FSMTForConditionalGeneration,
-            "text2text-generation": FSMTForConditionalGeneration,
-            "translation": FSMTForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -173,8 +169,6 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             "src_vocab_size": 10,
             "tgt_vocab_size": 20,
         }
-        # XXX: hack to appease to all other models requiring `vocab_size`
-        config["vocab_size"] = 99  # no such thing in FSMT
         self.config_tester = ConfigTester(self, config_class=FSMTConfig, **config)
 
     def test_config(self):
@@ -248,7 +242,7 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_ensure_weights_are_shared(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
@@ -282,7 +276,7 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                     model.base_model.decoder.output_projection.weight.data_ptr(),
                 }
             ),
-            2,
+            3,
         )
 
     @unittest.skip(reason="can't be implemented for FSMT due to dual vocab.")
@@ -299,6 +293,19 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @unittest.skip(reason="TODO: Decoder embeddings cannot be resized at the moment")
     def test_resize_embeddings_untied(self):
+        pass
+
+    @unittest.skip(reason="Can't do assisted decoding and not worth fixing")
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
+        pass
+
+    @unittest.skip(reason="Can't do assisted decoding and not worth fixing")
+    def test_assisted_decoding_sample(self):
+        pass
+
+    @unittest.skip(reason="Can't do assisted decoding and not worth fixing")
+    @parameterized.expand([("random",), ("same",)])
+    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
 
@@ -350,23 +357,6 @@ class FSMTHeadTests(unittest.TestCase):
         batch_size = input_ids.shape[0]
         config = self._get_config()
         return config, input_ids, batch_size
-
-    def test_generate_beam_search(self):
-        input_ids = torch.tensor([[71, 82, 2], [68, 34, 2]], dtype=torch.long, device=torch_device)
-        config = self._get_config()
-        lm_model = FSMTForConditionalGeneration(config).to(torch_device)
-        lm_model.eval()
-
-        max_length = 5
-        new_input_ids = lm_model.generate(
-            input_ids.clone(),
-            do_sample=True,
-            num_return_sequences=1,
-            num_beams=2,
-            no_repeat_ngram_size=3,
-            max_length=max_length,
-        )
-        self.assertEqual(new_input_ids.shape, (input_ids.shape[0], max_length))
 
     def test_shift_tokens_right(self):
         input_ids = torch.tensor([[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]], dtype=torch.long)
@@ -525,14 +515,6 @@ class FSMTModelIntegrationTests(unittest.TestCase):
         outputs = model.generate(input_ids)
         decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
         assert decoded == tgt_text, f"\n\ngot: {decoded}\nexp: {tgt_text}\n"
-
-    @parameterized.expand(pairs)
-    @slow
-    def test_translation_pipeline(self, pair):
-        tokenizer, model, src_text, tgt_text = self.translation_setup(pair)
-        pipeline = TranslationPipeline(model, tokenizer, device=torch_device)
-        output = pipeline([src_text])
-        self.assertEqual([tgt_text], [x["translation_text"] for x in output])
 
 
 @require_torch

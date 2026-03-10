@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +24,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_large_accelerator,
-    require_torch_large_gpu,
     slow,
     torch_device,
 )
@@ -44,6 +42,13 @@ if is_torch_available():
 class Glm4ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Glm4Model
+
+    def __init__(self, parent):
+        super().__init__(parent=parent)
+        # NOTE(3outeille): must be 0.0 for TP backward tests. In train mode, non-zero dropout causes
+        # different RNG states between the non-TP and TP model forward passes (they run sequentially),
+        # leading to different dropout masks and mismatched losses.
+        self.attention_dropout = 0.0
 
 
 @require_torch
@@ -177,13 +182,17 @@ class Glm4IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXT)
 
     @require_flash_attn
-    @require_torch_large_gpu
+    @require_torch_large_accelerator
     @pytest.mark.flash_attn_test
     def test_model_9b_flash_attn(self):
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", 7): [],
                 ("cuda", 8): [
+                    "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
+                    "Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes",
+                ],
+                ("xpu", None): [
                     "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
                     "Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes",
                 ],

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,8 +19,9 @@ URL: https://github.com/NVlabs/GroupViT
 """
 
 import argparse
+from io import BytesIO
 
-import requests
+import httpx
 import torch
 from PIL import Image
 
@@ -149,8 +149,9 @@ def convert_state_dict(orig_state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()
@@ -191,8 +192,8 @@ def convert_groupvit_checkpoint(
 
     if push_to_hub:
         print("Pushing to the hub...")
-        processor.push_to_hub(model_name, organization="nielsr")
-        model.push_to_hub(model_name, organization="nielsr")
+        processor.push_to_hub(repo_id=f"nielsr/{model_name}")
+        model.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
@@ -210,7 +211,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--push_to_hub",
         action="store_true",
-        help="Whether or not to push the converted model and processor to the 🤗 hub using the provided `model_name`.",
+        help="Whether or not to push the converted model and processor to the Hugging Face hub using the provided `model_name`.",
     )
     args = parser.parse_args()
 

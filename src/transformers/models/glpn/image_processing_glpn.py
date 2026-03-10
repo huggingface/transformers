@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 """Image processor class for GLPN."""
 
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Union
 
 from ...utils.import_utils import requires
 
@@ -39,6 +38,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging, requires_backends
 
 
@@ -47,6 +47,17 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class GLPNImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    size_divisor (`int`, *optional*, defaults to 32):
+        When `do_resize` is `True`, images are resized so their height and width are rounded down to the closest
+        multiple of `size_divisor`.
+    """
+
+    size_divisor: int
+    resample: PILImageResampling
 
 
 @requires(backends=("vision",))
@@ -66,9 +77,12 @@ class GLPNImageProcessor(BaseImageProcessor):
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether or not to apply the scaling factor (to make pixel values floats between 0. and 1.). Can be
             overridden by `do_rescale` in `preprocess`.
+        rescale_factor (`float`, *optional*, defaults to `1 / 255`):
+            The scaling factor to apply to the pixel values. Can be overridden by `rescale_factor` in `preprocess`.
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = GLPNImageProcessorKwargs
 
     def __init__(
         self,
@@ -76,12 +90,14 @@ class GLPNImageProcessor(BaseImageProcessor):
         size_divisor: int = 32,
         resample=PILImageResampling.BILINEAR,
         do_rescale: bool = True,
+        rescale_factor: float | None = 1 / 255,
         **kwargs,
     ) -> None:
         self.do_resize = do_resize
         self.do_rescale = do_rescale
         self.size_divisor = size_divisor
         self.resample = resample
+        self.rescale_factor = rescale_factor
         super().__init__(**kwargs)
 
     def resize(
@@ -89,8 +105,8 @@ class GLPNImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size_divisor: int,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: Optional[ChannelDimension] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -138,13 +154,14 @@ class GLPNImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: Union["PIL.Image.Image", TensorType, list["PIL.Image.Image"], list[TensorType]],
-        do_resize: Optional[bool] = None,
-        size_divisor: Optional[int] = None,
+        do_resize: bool | None = None,
+        size_divisor: int | None = None,
         resample=None,
-        do_rescale: Optional[bool] = None,
-        return_tensors: Optional[Union[TensorType, str]] = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        return_tensors: TensorType | str | None = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> BatchFeature:
         """
         Preprocess the given images.
@@ -181,6 +198,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
         resample = resample if resample is not None else self.resample
 
@@ -217,7 +235,9 @@ class GLPNImageProcessor(BaseImageProcessor):
             ]
 
         if do_rescale:
-            images = [self.rescale(image, scale=1 / 255, input_data_format=input_data_format) for image in images]
+            images = [
+                self.rescale(image, scale=rescale_factor, input_data_format=input_data_format) for image in images
+            ]
 
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
@@ -229,7 +249,7 @@ class GLPNImageProcessor(BaseImageProcessor):
     def post_process_depth_estimation(
         self,
         outputs: "DepthEstimatorOutput",
-        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
+        target_sizes: TensorType | list[tuple[int, int]] | None | None = None,
     ) -> list[dict[str, TensorType]]:
         """
         Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.

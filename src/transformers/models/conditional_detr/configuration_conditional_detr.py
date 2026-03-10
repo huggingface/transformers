@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,110 +13,30 @@
 # limitations under the License.
 """Conditional DETR model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
-from packaging import version
-
+from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...onnx import OnnxConfig
-from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ...utils import auto_docstring, logging
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="microsoft/conditional-detr-resnet-50")
 class ConditionalDetrConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ConditionalDetrModel`]. It is used to instantiate
-    a Conditional DETR model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Conditional DETR
-    [microsoft/conditional-detr-resnet-50](https://huggingface.co/microsoft/conditional-detr-resnet-50) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        use_timm_backbone (`bool`, *optional*, defaults to `True`):
-            Whether or not to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`]
-            API.
-        backbone_config (`PreTrainedConfig` or `dict`, *optional*):
-            The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
-            case it will default to `ResNetConfig()`.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        num_queries (`int`, *optional*, defaults to 100):
-            Number of object queries, i.e. detection slots. This is the maximal number of objects
-            [`ConditionalDetrModel`] can detect in a single image. For COCO, we recommend 100 queries.
-        d_model (`int`, *optional*, defaults to 256):
-            This parameter is a general dimension parameter, defining dimensions for components such as the encoder layer and projection parameters in the decoder layer, among others.
-        encoder_layers (`int`, *optional*, defaults to 6):
-            Number of encoder layers.
-        decoder_layers (`int`, *optional*, defaults to 6):
-            Number of decoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_ffn_dim (`int`, *optional*, defaults to 2048):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 2048):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        init_std (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        init_xavier_std (`float`, *optional*, defaults to 1):
-            The scaling factor used for the Xavier initialization gain in the HM Attention map module.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
-            for more details.
-        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
-            for more details.
-        auxiliary_loss (`bool`, *optional*, defaults to `False`):
-            Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
-        position_embedding_type (`str`, *optional*, defaults to `"sine"`):
-            Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
-        backbone (`str`, *optional*, defaults to `"resnet50"`):
-            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
-            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
-            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
-            Whether to use pretrained weights for the backbone.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
-        dilation (`bool`, *optional*, defaults to `False`):
-            Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
-            `use_timm_backbone` = `True`.
-        class_cost (`float`, *optional*, defaults to 1):
-            Relative weight of the classification error in the Hungarian matching cost.
-        bbox_cost (`float`, *optional*, defaults to 5):
-            Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.
-        giou_cost (`float`, *optional*, defaults to 2):
-            Relative weight of the generalized IoU loss of the bounding box in the Hungarian matching cost.
-        mask_loss_coefficient (`float`, *optional*, defaults to 1):
-            Relative weight of the Focal loss in the panoptic segmentation loss.
-        dice_loss_coefficient (`float`, *optional*, defaults to 1):
-            Relative weight of the DICE/F-1 loss in the panoptic segmentation loss.
-        bbox_loss_coefficient (`float`, *optional*, defaults to 5):
-            Relative weight of the L1 bounding box loss in the object detection loss.
-        giou_loss_coefficient (`float`, *optional*, defaults to 2):
-            Relative weight of the generalized IoU loss in the object detection loss.
-        eos_coefficient (`float`, *optional*, defaults to 0.1):
-            Relative classification weight of the 'no-object' class in the object detection loss.
-        focal_alpha (`float`, *optional*, defaults to 0.25):
-            Alpha parameter in the focal loss.
+    auxiliary_loss (`bool`, *optional*, defaults to `False`):
+        Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
+    position_embedding_type (`str`, *optional*, defaults to `"sine"`):
+        Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
+    eos_coefficient (`float`, *optional*, defaults to 0.1):
+        Relative classification weight of the 'no-object' class in the object detection loss.
+    num_queries (`int`, *optional*, defaults to 100):
+        Number of object queries, i.e. detection slots. This is the maximal number of objects
+        [`ConditionalDetrModel`] can detect in a single image. For COCO, we recommend 100 queries.
+    dilation (`bool`, *optional*, defaults to `False`):
+        Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
+        `use_timm_backbone` = `True`.
 
     Examples:
 
@@ -144,7 +63,6 @@ class ConditionalDetrConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        use_timm_backbone=True,
         backbone_config=None,
         num_channels=3,
         num_queries=300,
@@ -166,9 +84,6 @@ class ConditionalDetrConfig(PreTrainedConfig):
         init_xavier_std=1.0,
         auxiliary_loss=False,
         position_embedding_type="sine",
-        backbone="resnet50",
-        use_pretrained_backbone=True,
-        backbone_kwargs=None,
         dilation=False,
         class_cost=2,
         bbox_cost=5,
@@ -181,33 +96,26 @@ class ConditionalDetrConfig(PreTrainedConfig):
         focal_alpha=0.25,
         **kwargs,
     ):
-        # We default to values which were previously hard-coded in the model. This enables configurability of the config
-        # while keeping the default behavior the same.
-        if use_timm_backbone and backbone_kwargs is None:
-            backbone_kwargs = {}
-            if dilation:
-                backbone_kwargs["output_stride"] = 16
-            backbone_kwargs["out_indices"] = [1, 2, 3, 4]
-            backbone_kwargs["in_chans"] = num_channels
-        # Backwards compatibility
-        elif not use_timm_backbone and backbone in (None, "resnet50"):
-            if backbone_config is None:
-                logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-                backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
-            elif isinstance(backbone_config, dict):
-                backbone_model_type = backbone_config.get("model_type")
-                config_class = CONFIG_MAPPING[backbone_model_type]
-                backbone_config = config_class.from_dict(backbone_config)
+        # Init timm backbone with hardcoded values for BC
+        backbone_kwargs = kwargs.get("backbone_kwargs", {})
+        timm_default_kwargs = {
+            "num_channels": backbone_kwargs.get("num_channels", num_channels),
+            "features_only": True,
+            "use_pretrained_backbone": False,
+            "out_indices": backbone_kwargs.get("out_indices", [1, 2, 3, 4]),
+        }
+        if dilation:
+            timm_default_kwargs["output_stride"] = backbone_kwargs.get("output_stride", 16)
 
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
+            default_backbone="resnet50",
+            default_config_type="resnet",
+            default_config_kwargs={"out_features": ["stage4"]},
+            timm_default_kwargs=timm_default_kwargs,
+            **kwargs,
         )
 
-        self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
         self.num_channels = num_channels
         self.num_queries = num_queries
@@ -229,10 +137,6 @@ class ConditionalDetrConfig(PreTrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.backbone_kwargs = backbone_kwargs
-        self.dilation = dilation
         # Hungarian matcher
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
@@ -247,25 +151,4 @@ class ConditionalDetrConfig(PreTrainedConfig):
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
-class ConditionalDetrOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-                ("pixel_mask", {0: "batch"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-5
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 12
-
-
-__all__ = ["ConditionalDetrConfig", "ConditionalDetrOnnxConfig"]
+__all__ = ["ConditionalDetrConfig"]

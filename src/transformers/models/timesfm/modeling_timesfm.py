@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_timesfm.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Google LLC and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,12 +21,12 @@
 import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
@@ -50,8 +49,8 @@ class TimesFmOutput(BaseModelOutput):
         The scale of the time series inputs.
     """
 
-    loc: Optional[torch.Tensor] = None
-    scale: Optional[torch.Tensor] = None
+    loc: torch.Tensor | None = None
+    scale: torch.Tensor | None = None
 
 
 @dataclass
@@ -66,9 +65,9 @@ class TimesFmOutputForPrediction(BaseModelOutput):
         The loss of the TimesFM model.
     """
 
-    mean_predictions: Optional[torch.Tensor] = None
-    full_predictions: Optional[torch.Tensor] = None
-    loss: Optional[Union[torch.Tensor, float]] = None
+    mean_predictions: torch.Tensor | None = None
+    full_predictions: torch.Tensor | None = None
+    loss: torch.Tensor | float | None = None
 
 
 class TimesFmMLP(nn.Module):
@@ -117,7 +116,7 @@ class TimesFmResidualBlock(nn.Module):
 
 @use_kernel_forward_from_hub("RMSNorm")
 class TimesFmRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         TimesFmRMSNorm is equivalent to T5LayerNorm
         """
@@ -125,7 +124,7 @@ class TimesFmRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -143,6 +142,7 @@ class TimesFmPositionalEmbedding(nn.Module):
         super().__init__()
         min_timescale = config.min_timescale
         max_timescale = config.max_timescale
+        self.min_timescale, self.max_timescale = min_timescale, max_timescale
         self.embedding_dims = config.hidden_size
 
         num_timescales = self.embedding_dims // 2
@@ -186,15 +186,14 @@ def simple_eager_attention_forward(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
     value_states: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
     attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -234,9 +233,9 @@ class TimesFmAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -245,9 +244,9 @@ class TimesFmAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = simple_eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, simple_eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -280,7 +279,7 @@ class TimesFmDecoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         paddings: torch.Tensor,
         output_attentions: bool = False,
-    ) -> tuple[Optional[torch.Tensor], torch.Tensor]:
+    ) -> tuple[torch.Tensor | None, torch.Tensor]:
         # Self Attention
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
@@ -303,14 +302,26 @@ class TimesFmPreTrainedModel(PreTrainedModel):
     base_model_prefix = "timesfm"
     _no_split_modules = ["TimesFmDecoderLayer"]
     main_input_name = "past_values"
-    input_modalities = "time"
+    input_modalities = ("time",)
     _supports_sdpa = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, TimesFmAttention):
             # Initialize scaling parameter
-            nn.init.ones_(module.scaling)
+            init.ones_(module.scaling)
+        elif isinstance(module, TimesFmPositionalEmbedding):
+            num_timescales = module.embedding_dims // 2
+            max_timescale, min_timescale = module.max_timescale, module.min_timescale
+            log_timescale_increment = math.log(float(max_timescale) / float(min_timescale)) / max(
+                num_timescales - 1, 1
+            )
+            init.copy_(
+                module.inv_timescales,
+                min_timescale
+                * torch.exp(torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment),
+            )
 
 
 @auto_docstring
@@ -339,11 +350,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """Input is of shape [B, N, P]."""
         mu, sigma = self._timesfm_masked_mean_std(inputs, patched_pads)
-        sigma = torch.where(
-            sigma < self.config.tolerance,
-            torch.tensor(1.0, dtype=sigma.dtype, device=sigma.device),
-            sigma,
-        )
+        sigma = torch.clamp(sigma, min=self.config.tolerance)
 
         # Normalize each patch
         outputs = (inputs - mu[:, None, None]) / sigma[:, None, None]
@@ -363,6 +370,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         freq: torch.Tensor,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        **kwargs,
     ) -> TimesFmOutput:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -445,12 +453,12 @@ class TimesFmModel(TimesFmPreTrainedModel):
 
     @staticmethod
     def _prepare_4d_attention_mask(
-        attention_mask: Optional[torch.Tensor],
+        attention_mask: torch.Tensor | None,
         sequence_length: int,
         dtype: torch.dtype,
         device: torch.device,
         is_causal: bool = True,
-    ) -> Optional[torch.Tensor]:
+    ) -> torch.Tensor | None:
         """
         Creates 4D attention mask and combines causal and padding masks if needed.
 
@@ -522,24 +530,16 @@ class TimesFmModel(TimesFmPreTrainedModel):
 
         # Calculate the number of valid elements
         num_valid_elements = torch.sum(mask, dim=1)
-        num_valid_elements = torch.where(
-            num_valid_elements == 0,
-            torch.tensor(1, dtype=num_valid_elements.dtype, device=num_valid_elements.device),
-            num_valid_elements,
-        )
+        num_valid_elements = torch.clamp(num_valid_elements, min=1.0)
 
-        # Calculate the masked sum and squared sum
+        # Calculate the masked sum and mean
         masked_sum = torch.sum(arr * mask, dim=1)
-        masked_squared_sum = torch.sum((arr * mask) ** 2, dim=1)
+        masked_mean = masked_sum / num_valid_elements  # [b]
 
-        # Calculate the masked mean and standard deviation
-        masked_mean = masked_sum / num_valid_elements
-        masked_var = masked_squared_sum / num_valid_elements - masked_mean**2
-        masked_var = torch.where(
-            masked_var < 0.0,
-            torch.tensor(0.0, dtype=masked_var.dtype, device=masked_var.device),
-            masked_var,
-        )
+        # Calculate the masked variance using centered values
+        masked_centered_arr = (arr - masked_mean.unsqueeze(-1)) * mask
+        masked_var = torch.sum(masked_centered_arr**2, dim=1) / num_valid_elements
+        masked_var = torch.clamp(masked_var, min=0.0)
         masked_std = torch.sqrt(masked_var)
 
         return masked_mean, masked_std
@@ -600,47 +600,41 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         self.post_init()
 
     def _preprocess(
-        self, inputs: Sequence[torch.Tensor], freq: Sequence[int]
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Formats and pads raw inputs to feed into the model.
-
-        This function both pads each time series to match the context length, and
-        pads the inputs to meet the SPMD shape requirement.
+        self, inputs: Sequence[torch.Tensor], freq: Sequence[int] | None = None, context_len: int | None = None
+    ) -> tuple[torch.Tensor, ...]:
+        """Pad/truncate input time series to `context_len` and build a padding mask.
 
         Args:
-          inputs: A list of 1d Tensors. Each Tensor is the context time series of
-            a single forecast task.
-          freq: list of frequencies
+            inputs: A list of 1d Tensors. Each Tensor is the context time series of a single forecast task.
+            freq: Optional list of frequencies (returned as a tensor when provided).
+            context_len: Optional context length override (defaults to `self.context_len`).
 
         Returns:
-        A tuple of:
-        - the padded input time series to meet the model required context.
-        - the padding indicator.
-        - the number of padded examples for SPMD so that each core has the same
-            number (a multiple of `batch_size`) of examples.
+            Tuple of (padded_inputs, padding_mask) and optionally a freq tensor.
         """
-        input_ts, input_padding, inp_freq = [], [], []
+        if context_len is None:
+            context_len = self.context_len
 
-        for i, ts in enumerate(inputs):
+        input_ts, input_padding = [], []
+
+        for ts in inputs:
             input_len = ts.shape[0]
             padding = torch.zeros(input_len + self.horizon_len, dtype=ts.dtype, device=ts.device)
-            if input_len < self.context_len:
-                num_front_pad = self.context_len - input_len
+            if input_len < context_len:
+                num_front_pad = context_len - input_len
                 ts = torch.cat([torch.zeros(num_front_pad, dtype=ts.dtype, device=ts.device), ts], dim=0)
                 padding = torch.cat([torch.ones(num_front_pad, dtype=ts.dtype, device=padding.device), padding], dim=0)
-            elif input_len > self.context_len:
-                ts = ts[-self.context_len :]
-                padding = padding[-(self.context_len + self.horizon_len) :]
+            elif input_len > context_len:
+                ts = ts[-context_len:]
+                padding = padding[-(context_len + self.horizon_len) :]
 
             input_ts.append(ts)
             input_padding.append(padding)
-            inp_freq.append(freq[i])
 
-        return (
-            torch.stack(input_ts, dim=0),
-            torch.stack(input_padding, dim=0),
-            torch.tensor(inp_freq, dtype=torch.int32).reshape(-1, 1),
-        )
+        result = (torch.stack(input_ts, dim=0), torch.stack(input_padding, dim=0))
+        if freq is not None:
+            result = result + (torch.tensor(freq[: len(inputs)], dtype=torch.int32).reshape(-1, 1),)
+        return result
 
     def _postprocess_output(
         self, model_output: torch.Tensor, stats: tuple[torch.Tensor, torch.Tensor]
@@ -670,14 +664,15 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
     def forward(
         self,
         past_values: Sequence[torch.Tensor],
-        freq: Optional[Sequence[Union[torch.Tensor, int]]] = None,
-        window_size: Optional[int] = None,
-        future_values: Optional[torch.Tensor] = None,
-        forecast_context_len: Optional[int] = None,
+        freq: Sequence[torch.Tensor | int] | None = None,
+        window_size: int | None = None,
+        future_values: torch.Tensor | None = None,
+        forecast_context_len: int | None = None,
         return_forecast_on_context: bool = False,
         truncate_negative: bool = False,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        **kwargs,
     ) -> TimesFmOutputForPrediction:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):

@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
-from typing import Optional, Union
 
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils import logging
@@ -27,15 +26,18 @@ from ..utils.quantization_config import (
     EetqConfig,
     FbgemmFp8Config,
     FineGrainedFP8Config,
+    FourOverSixConfig,
     FPQuantConfig,
     GPTQConfig,
     HiggsConfig,
     HqqConfig,
+    MetalConfig,
     Mxfp4Config,
     QuantizationConfigMixin,
     QuantizationMethod,
     QuantoConfig,
     QuarkConfig,
+    SinqConfig,
     SpQRConfig,
     TorchAoConfig,
     VptqConfig,
@@ -51,13 +53,16 @@ from .quantizer_compressed_tensors import CompressedTensorsHfQuantizer
 from .quantizer_eetq import EetqHfQuantizer
 from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
 from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
+from .quantizer_fouroversix import FourOverSixHfQuantizer
 from .quantizer_fp_quant import FPQuantHfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
+from .quantizer_metal import MetalHfQuantizer
 from .quantizer_mxfp4 import Mxfp4HfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
 from .quantizer_quark import QuarkHfQuantizer
+from .quantizer_sinq import SinqHfQuantizer
 from .quantizer_spqr import SpQRHfQuantizer
 from .quantizer_torchao import TorchAoHfQuantizer
 from .quantizer_vptq import VptqHfQuantizer
@@ -71,6 +76,7 @@ AUTO_QUANTIZER_MAPPING = {
     "aqlm": AqlmHfQuantizer,
     "quanto": QuantoHfQuantizer,
     "quark": QuarkHfQuantizer,
+    "fouroversix": FourOverSixHfQuantizer,
     "fp_quant": FPQuantHfQuantizer,
     "eetq": EetqHfQuantizer,
     "higgs": HiggsHfQuantizer,
@@ -84,6 +90,8 @@ AUTO_QUANTIZER_MAPPING = {
     "fp8": FineGrainedFP8HfQuantizer,
     "auto-round": AutoRoundQuantizer,
     "mxfp4": Mxfp4HfQuantizer,
+    "metal": MetalHfQuantizer,
+    "sinq": SinqHfQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -95,6 +103,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "aqlm": AqlmConfig,
     "quanto": QuantoConfig,
     "quark": QuarkConfig,
+    "fouroversix": FourOverSixConfig,
     "fp_quant": FPQuantConfig,
     "hqq": HqqConfig,
     "compressed-tensors": CompressedTensorsConfig,
@@ -107,6 +116,8 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "fp8": FineGrainedFP8Config,
     "auto-round": AutoRoundConfig,
     "mxfp4": Mxfp4Config,
+    "metal": MetalConfig,
+    "sinq": SinqConfig,
 }
 
 logger = logging.get_logger(__name__)
@@ -160,7 +171,7 @@ class AutoHfQuantizer:
     """
 
     @classmethod
-    def from_config(cls, quantization_config: Union[QuantizationConfigMixin, dict], **kwargs):
+    def from_config(cls, quantization_config: QuantizationConfigMixin | dict, **kwargs):
         # Convert it to a QuantizationConfig if the q_config is a dict
         if isinstance(quantization_config, dict):
             quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
@@ -192,8 +203,8 @@ class AutoHfQuantizer:
     @classmethod
     def merge_quantization_configs(
         cls,
-        quantization_config: Union[dict, QuantizationConfigMixin],
-        quantization_config_from_args: Optional[QuantizationConfigMixin],
+        quantization_config: dict | QuantizationConfigMixin,
+        quantization_config_from_args: QuantizationConfigMixin | None,
     ):
         """
         handles situations where both quantization_config from args and quantization_config from model config are present.
@@ -225,7 +236,16 @@ class AutoHfQuantizer:
         if (
             isinstance(
                 quantization_config,
-                (GPTQConfig, AwqConfig, AutoRoundConfig, FbgemmFp8Config, CompressedTensorsConfig, Mxfp4Config),
+                (
+                    GPTQConfig,
+                    AwqConfig,
+                    AutoRoundConfig,
+                    FbgemmFp8Config,
+                    CompressedTensorsConfig,
+                    Mxfp4Config,
+                    MetalConfig,
+                    FineGrainedFP8Config,
+                ),
             )
             and quantization_config_from_args is not None
         ):
@@ -235,7 +255,7 @@ class AutoHfQuantizer:
 
             warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
 
-        if warning_msg != "" and not isinstance(quantization_config, Mxfp4Config):
+        if warning_msg != "" and not isinstance(quantization_config, (Mxfp4Config, MetalConfig, FineGrainedFP8Config)):
             warnings.warn(warning_msg)
         else:
             # in the case of mxfp4, we don't want to print the warning message, bit confusing for users
@@ -295,7 +315,7 @@ def register_quantizer(name: str):
     return register_quantizer_fn
 
 
-def get_hf_quantizer(config, quantization_config, dtype, device_map, weights_only, user_agent):
+def get_hf_quantizer(config, quantization_config, device_map, weights_only, user_agent):
     pre_quantized = hasattr(config, "quantization_config")
     if pre_quantized and not AutoHfQuantizer.supports_quant_method(config.quantization_config):
         pre_quantized = False
@@ -317,11 +337,9 @@ def get_hf_quantizer(config, quantization_config, dtype, device_map, weights_onl
 
     if hf_quantizer is not None:
         hf_quantizer.validate_environment(
-            dtype=dtype,
             device_map=device_map,
             weights_only=weights_only,
         )
-        dtype = hf_quantizer.update_dtype(dtype)
         device_map = hf_quantizer.update_device_map(device_map)
         config = hf_quantizer.update_tp_plan(config)
         config = hf_quantizer.update_ep_plan(config)
@@ -330,4 +348,4 @@ def get_hf_quantizer(config, quantization_config, dtype, device_map, weights_onl
         if not getattr(hf_quantizer.quantization_config, "dequantize", False):
             quant_method = hf_quantizer.quantization_config.quant_method
             user_agent["quant"] = getattr(quant_method, "value", quant_method)
-    return hf_quantizer, config, dtype, device_map
+    return hf_quantizer, config, device_map

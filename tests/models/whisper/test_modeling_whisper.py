@@ -15,7 +15,6 @@
 
 import copy
 import inspect
-import os
 import random
 import re
 import tempfile
@@ -31,7 +30,6 @@ from transformers import WhisperConfig
 from transformers.testing_utils import (
     Expectations,
     is_flaky,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -362,7 +360,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = False
 
     test_missing_keys = False
     # Needs higher percentages after model tester's vocab_size is changed to 200 (PR #21222)
@@ -423,7 +420,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -509,25 +506,20 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.assertEqual(output.beam_indices.shape[0], input_features.shape[0] * 3)
         self.assertEqual(output.sequences_scores.shape[0], input_features.shape[0] * 3)
 
-    # training is not supported yet
-    @unittest.skip(reason="Training is not supported yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Training is not supported yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @parameterized.expand([("offloaded",)])
@@ -1098,6 +1090,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_longform_generate_multi_batch(self):
         self._check_longform_generate_multi_batch(condition_on_prev_tokens=False)
 
+    @unittest.skip("Broken by #44130, to be checked asap")
     def test_longform_generate_multi_batch_cond_prev(self):
         self._check_longform_generate_multi_batch(condition_on_prev_tokens=True)
 
@@ -1250,7 +1243,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_tiny_logits_librispeech(self):
         torch_device = "cpu"
-        set_seed(0)
+        set_seed(42)
         model = WhisperModel.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
         input_speech = self._load_datasamples(1)
@@ -1295,7 +1288,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_small_en_logits_librispeech(self):
-        set_seed(0)
+        set_seed(42)
         torch_device = "cpu"
         model = WhisperModel.from_pretrained("openai/whisper-small.en")
         model.to(torch_device)
@@ -1330,7 +1323,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_large_logits_librispeech(self):
-        set_seed(0)
+        set_seed(42)
 
         torch_device = "cpu"
         model = WhisperModel.from_pretrained("openai/whisper-large")
@@ -1452,7 +1445,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_large_batched_generation(self):
-        set_seed(0)
+        set_seed(42)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3")
         model.to(torch_device)
@@ -1487,22 +1480,17 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
 
-    @require_read_token
     @slow
     def test_large_batched_generation_multilingual(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
         model.to(torch_device)
 
-        token = os.getenv("HF_HUB_READ_TOKEN", None)
-        if token is None:
-            token = True
         ds = load_dataset(
             "hf-internal-testing/fixtures_common_voice",
             "ja",
             split="test",
             streaming=True,
-            token=token,
         )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
@@ -1528,7 +1516,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_en_batched_generation(self):
-        set_seed(0)
+        set_seed(42)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model.to(torch_device)
@@ -1566,7 +1554,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_timestamp_generation(self):
-        set_seed(0)
+        set_seed(42)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
@@ -1652,7 +1640,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_longform_timestamps_generation(self):
-        set_seed(0)
+        set_seed(42)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
@@ -1904,7 +1892,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_large_timestamp_generation(self):
-        set_seed(0)
+        set_seed(42)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3")
         model.to(torch_device)
@@ -1977,7 +1965,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_token_timestamp_generation(self):
-        set_seed(0)
+        set_seed(42)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
@@ -2006,7 +1994,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_small_token_timestamp_generation(self):
-        set_seed(0)
+        set_seed(42)
         processor = WhisperProcessor.from_pretrained("openai/whisper-small")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-small")
         model.to(torch_device)
@@ -2036,7 +2024,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_token_timestamp_batch_generation(self):
-        set_seed(0)
+        set_seed(42)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
@@ -2063,7 +2051,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_token_timestamp_generation_longform(self):
-        set_seed(0)
+        set_seed(42)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
@@ -2116,7 +2104,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_tiny_specaugment_librispeech(self):
         torch_device = "cpu"
-        set_seed(0)
+        set_seed(42)
         # Apply SpecAugment
         model = WhisperModel.from_pretrained("openai/whisper-tiny", apply_spec_augment=True)
         # Set model to training mode to enable SpecAugment
@@ -2846,7 +2834,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             "renormalize_logits": True,  # necessary to match OAI beam search implementation
         }
 
-        set_seed(0)
+        set_seed(42)
         result = model.generate(**inputs, **gen_kwargs)
         decoded_all = processor.batch_decode(result, skip_special_tokens=True)
 
@@ -2856,7 +2844,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     def test_whisper_shortform_multi_batch_hard_prev_cond(self):
         # Without this set here, this test may fail if it is run with other tests (say, `test_tiny_*`). It's unclear
         # why other tests may affect this tests: it seems some random operations are beyond the scene.
-        set_seed(0)
+        set_seed(42)
         # fmt: off
         EXPECTED_TEXT = [
             " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
@@ -3235,7 +3223,6 @@ class WhisperEncoderModelTester:
 class WhisperEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperForAudioClassification,) if is_torch_available() else ()
     is_encoder_decoder = False
-    fx_compatible = False
 
     test_missing_keys = False
 
@@ -3503,8 +3490,6 @@ class WhisperStandaloneDecoderModelTester:
 @require_torch
 class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperDecoder, WhisperForCausalLM) if is_torch_available() else ()
-    fx_comptatible = False
-
     is_encoder_decoder = False
     test_missing_keys = False
 

@@ -76,14 +76,6 @@ print(f"The predicted token is: {predicted_token}")
 
 </hfoption>
 
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Le camembert est un délicieux fromage <mask>." | transformers run --task fill-mask --model camembert-base --device 0
-```
-
-</hfoption>
-
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing weights in lower precision. Refer to the [Quantization](../quantization/overview) overview for available options.
@@ -122,9 +114,7 @@ print(f"The predicted token is: {predicted_token}")
 ## CamembertTokenizer
 
 [[autodoc]] CamembertTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## CamembertTokenizerFast

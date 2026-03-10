@@ -56,9 +56,7 @@ ConvBERT 훈련 팁은 BERT와 유사합니다. 사용 팁은 [BERT 문서](bert
 ## ConvBertTokenizer [[transformers.ConvBertTokenizer]]
 
 [[autodoc]] ConvBertTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## ConvBertTokenizerFast [[transformers.ConvBertTokenizerFast]]

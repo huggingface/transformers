@@ -71,8 +71,6 @@
 #       title: تصنيف الصور بدون تدريب
 #     - local: tasks/monocular_depth_estimation
 #       title: تقدير العمق
-#     - local: tasks/image_to_image
-#       title: صورة إلى صورة
 #     - local: tasks/image_feature_extraction
 #       title: استخراج ميزات الصورة
 #     - local: tasks/mask_generation
@@ -258,8 +256,6 @@
 #       title: النماذج
 #     - local: main_classes/text_generation
 #       title: توليد النصوص
-#     - local: main_classes/onnx
-#       title: ONNX
 #     - local: main_classes/optimizer_schedules
 #       title: التحسين
 #     - local: main_classes/output

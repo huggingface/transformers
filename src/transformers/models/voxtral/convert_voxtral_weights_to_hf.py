@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -23,7 +22,7 @@ import torch
 from safetensors.torch import load_file
 
 from transformers import (
-    MistralCommonTokenizer,
+    MistralCommonBackend,
     VoxtralConfig,
     VoxtralForConditionalGeneration,
     VoxtralProcessor,
@@ -176,7 +175,6 @@ def write_model(
     model_name,
     config_name,
     output_dir,
-    safe_serialization=True,
 ):
     print("Converting the model.")
     os.makedirs(output_dir, exist_ok=True)
@@ -224,7 +222,7 @@ def write_model(
     model.generation_config.pad_token_id = 11
 
     print("Saving the model.")
-    model.save_pretrained(output_dir, safe_serialization=safe_serialization)
+    model.save_pretrained(output_dir)
     del state_dict, model
 
     # Safety check: reload the converted model
@@ -235,7 +233,7 @@ def write_model(
 
 
 def write_processor(input_path_or_repo: str, feature_extractor_path_or_repo: str, output_dir: str):
-    tokenizer = MistralCommonTokenizer.from_pretrained(input_path_or_repo)
+    tokenizer = MistralCommonBackend.from_pretrained(input_path_or_repo)
     feature_extractor = WhisperFeatureExtractor.from_pretrained(feature_extractor_path_or_repo)
 
     print("Creating the processor...")
@@ -278,9 +276,6 @@ def main():
         "--output_dir",
         help="Location to write HF model and tokenizer",
     )
-    parser.add_argument(
-        "--safe_serialization", action="store_true", default=True, help="Whether or not to save using `safetensors`."
-    )
     args = parser.parse_args()
 
     write_model(
@@ -288,7 +283,6 @@ def main():
         args.model_name,
         args.config_name,
         args.output_dir,
-        safe_serialization=args.safe_serialization,
     )
 
     write_processor(

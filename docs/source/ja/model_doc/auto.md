@@ -230,10 +230,6 @@ AutoModel.register(NewModelConfig, NewModel)
 
 [[autodoc]] AutoModelForVisualQuestionAnswering
 
-### AutoModelForVision2Seq
-
-[[autodoc]] AutoModelForVision2Seq
-
 
 ### AutoModelForImageTextToText
 
