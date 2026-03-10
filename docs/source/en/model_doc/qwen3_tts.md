@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-01-22 and added to Hugging Face Transformers on 2026-03-05.*
+*This model was released on 2026-01-22 and added to Hugging Face Transformers on 2026-03-09.*
 
 # Qwen3-TTS
 
@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Qwen3-TTS is a series of text-to-speech models proposed in [Qwen3-TTS Technical Report](https://arxiv.org/abs/2601.15621) by the Qwen team, Alibaba Group.
+Qwen3-TTS is a series of text-to-speech models proposed in [Qwen3-TTS Technical Report](https://huggingface.co/papers/2601.15621) by the Qwen team, Alibaba Group.
 
 The abstract from the paper is the following:
 
