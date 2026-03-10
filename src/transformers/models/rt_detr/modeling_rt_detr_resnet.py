@@ -302,6 +302,7 @@ class RTDetrResNetPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = ["RTDetrResNetConvLayer", "RTDetrResNetShortCut"]
+    _can_record_outputs = {"hidden_states": RTDetrResNetStage}
 
     @torch.no_grad()
     def _init_weights(self, module):
