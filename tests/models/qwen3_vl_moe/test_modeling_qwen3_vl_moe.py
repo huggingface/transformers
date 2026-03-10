@@ -188,7 +188,7 @@ class Qwen3VLMoeModelTest(VLMModelTest, unittest.TestCase):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         B = self.model_tester.batch_size
-        C = config.vision_config.in_chans
+        C = config.vision_config.in_channels
         T = config.vision_config.temporal_patch_size
         P = config.vision_config.patch_size
         num_images = 2
