@@ -1476,9 +1476,39 @@ class ModelUtilsTest(TestCasePlus):
                     # Make sure both state dict are the same
                     compare_state_dicts(model.state_dict(), new_model.state_dict())
 
-    def test_tied_weights_are_not_tied_if_both_present(self):
-        """Test that if both the source and target of tied weights are present, we do NOT tie them, and instead
+    def test_tied_weights_are_not_tied_if_both_present_but_different(self):
+        """Test that if both the source and target of tied weights are present and different, we do NOT tie them, and instead
         raise a warning"""
+        model = BaseModelWithTiedWeights(PreTrainedConfig(tie_word_embeddings=True))
+        # Just to be sure it's actually tied
+        self.assertIs(model.linear.weight, model.linear_2.weight, msg="Weights are not tied!")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Save the config
+            with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+                f.write(json.dumps(model.config.to_dict()))
+
+            state_dict = model.state_dict()
+            # Clone every param to make sure nothing is tied -> we save everything
+            state_dict = {k: v.clone() for k, v in state_dict.items()}
+            # Make sure the target tied weights has a different value than the source
+            state_dict["linear_2.weight"] = state_dict["linear_2.weight"] + 2
+            safe_save_file(state_dict, os.path.join(tmp_dir, "model.safetensors"))
+
+            logger = logging.get_logger("transformers.modeling_utils")
+            with CaptureLogger(logger) as cl:
+                new_model, load_info = BaseModelWithTiedWeights.from_pretrained(tmp_dir, output_loading_info=True)
+
+            # We should have raised a warning here saying that we will NOT tie the weights
+            self.assertIn("both are present in the checkpoints with different values, so we will NOT tie them", cl.out)
+            # Assert no missing keys
+            self.assertSetEqual(load_info["missing_keys"], set(), msg=f"{load_info['missing_keys']} are missing!")
+            # It should not be the same weight anymore
+            self.assertIsNot(
+                new_model.linear.weight, new_model.linear_2.weight, msg="Weights are tied but they should not!"
+            )
+
+    def test_tied_weights_are_tied_if_both_present_and_similar(self):
+        """Test that if both the source and target of tied weights are present but have same values, we tie them"""
         model = BaseModelWithTiedWeights(PreTrainedConfig(tie_word_embeddings=True))
         # Just to be sure it's actually tied
         self.assertIs(model.linear.weight, model.linear_2.weight, msg="Weights are not tied!")
@@ -1492,20 +1522,16 @@ class ModelUtilsTest(TestCasePlus):
             state_dict = {k: v.clone() for k, v in state_dict.items()}
             safe_save_file(state_dict, os.path.join(tmp_dir, "model.safetensors"))
 
-            logger = logging.get_logger("transformers.modeling_utils")
-            with CaptureLogger(logger) as cl:
-                new_model, load_info = BaseModelWithTiedWeights.from_pretrained(tmp_dir, output_loading_info=True)
+            new_model, load_info = BaseModelWithTiedWeights.from_pretrained(tmp_dir, output_loading_info=True)
 
-            # We should have raised a warning here saying that we will NOT tie the weights
-            self.assertIn("both are present in the checkpoints, so we will NOT tie them.", cl.out)
             # Assert no missing keys
             self.assertSetEqual(load_info["missing_keys"], set(), msg=f"{load_info['missing_keys']} are missing!")
-            # It should not be the same weight anymore
-            self.assertIsNot(
-                new_model.linear.weight, new_model.linear_2.weight, msg="Weights are tied but they should not!"
+            # It should still be the same weight
+            self.assertIs(
+                new_model.linear.weight, new_model.linear_2.weight, msg="Weights are NOT tied but they should be!"
             )
 
-            # Make sure both state dict are the same (the values are still the same, it's just not tied)
+            # Make sure both state dict are the same
             compare_state_dicts(model.state_dict(), new_model.state_dict())
 
     def test_tied_weights_are_missing_if_both_absent(self):
@@ -2333,6 +2359,127 @@ class ModelUtilsTest(TestCasePlus):
         model.config.is_causal = False
         with_config_only = model(input_ids, attention_mask=attention_mask).last_hidden_state
         torch.testing.assert_close(reference, with_config_only)
+
+
+@require_torch
+class InitializeMissingKeysTest(unittest.TestCase):
+    """Tests for _initialize_missing_keys to prevent regressions in FSDP non-rank-0 weight initialization.
+
+    On FSDP non-rank-0 processes, weights are loaded on meta device and then moved to CPU via
+    _move_missing_keys_from_meta_to_device. The _initialize_missing_keys method must mark all
+    params as _is_hf_initialized so that guarded init functions (init.normal_, init.zeros_, etc.)
+    skip them, preventing expensive and unnecessary re-initialization.
+    """
+
+    def _clear_init_flags(self, model):
+        """Clear all _is_hf_initialized flags from params, buffers, and modules."""
+        for module in model.modules():
+            if hasattr(module, "_is_hf_initialized"):
+                delattr(module, "_is_hf_initialized")
+        for param in model.parameters():
+            if hasattr(param, "_is_hf_initialized"):
+                delattr(param, "_is_hf_initialized")
+        for buffer in model.buffers():
+            if hasattr(buffer, "_is_hf_initialized"):
+                delattr(buffer, "_is_hf_initialized")
+
+    @staticmethod
+    def _fsdp_non_rank0_patches():
+        """Return a context manager that mocks FSDP as enabled on a non-rank-0 process."""
+        from contextlib import ExitStack
+
+        stack = ExitStack()
+        stack.enter_context(patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True))
+        stack.enter_context(patch("transformers.modeling_utils.is_local_dist_rank_0", return_value=False))
+        return stack
+
+    def test_initialize_missing_keys_marks_all_params(self):
+        """On FSDP non-rank-0, all params/buffers should get _is_hf_initialized=True."""
+        model = BaseModel(PreTrainedConfig())
+        self._clear_init_flags(model)
+
+        with self._fsdp_non_rank0_patches():
+            model._initialize_missing_keys(is_quantized=False)
+
+        for name, param in model.named_parameters():
+            self.assertTrue(
+                getattr(param, "_is_hf_initialized", False),
+                f"param {name} should be marked as initialized",
+            )
+
+    def test_initialize_missing_keys_sets_model_flag(self):
+        """On FSDP non-rank-0, the model itself should get _is_hf_initialized=True."""
+        model = BaseModel(PreTrainedConfig())
+        self._clear_init_flags(model)
+
+        with self._fsdp_non_rank0_patches():
+            model._initialize_missing_keys(is_quantized=False)
+
+        self.assertTrue(getattr(model, "_is_hf_initialized", False))
+
+    def test_initialize_missing_keys_no_reinit_of_marked_params(self):
+        """Guarded init functions should not modify params that have _is_hf_initialized=True."""
+        model = BaseModel(PreTrainedConfig())
+        self._clear_init_flags(model)
+
+        # Snapshot values before _initialize_missing_keys
+        pre_values = {name: param.clone() for name, param in model.named_parameters()}
+
+        with self._fsdp_non_rank0_patches():
+            model._initialize_missing_keys(is_quantized=False)
+
+        # Params should not have changed (guarded inits skip marked params)
+        for name, param in model.named_parameters():
+            torch.testing.assert_close(param, pre_values[name], msg=f"param {name} should not be re-initialized")
+
+    def test_move_missing_keys_fsdp_non_rank0_moves_meta_to_cpu(self):
+        """FSDP non-rank-0 path should move all params/buffers from meta to CPU."""
+        with torch.device("meta"):
+            model = BaseModel(PreTrainedConfig())
+
+        # Verify everything starts on meta
+        for param in model.parameters():
+            self.assertEqual(param.device, torch.device("meta"))
+
+        with (
+            patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True),
+            patch("transformers.modeling_utils.is_local_dist_rank_0", return_value=False),
+        ):
+            model._move_missing_keys_from_meta_to_device(
+                missing_keys=set(), device_map=None, device_mesh=None, hf_quantizer=None
+            )
+
+        # All params should now be on CPU
+        for name, param in model.named_parameters():
+            self.assertEqual(param.device, torch.device("cpu"), f"param {name} should be on CPU after FSDP move")
+
+    def test_fsdp_non_rank0_end_to_end_no_reinit(self):
+        """End-to-end: FSDP non-rank-0 move + _initialize_missing_keys should not re-init params."""
+        with torch.device("meta"):
+            model = BaseModel(PreTrainedConfig())
+
+        with self._fsdp_non_rank0_patches():
+            model._move_missing_keys_from_meta_to_device(
+                missing_keys=set(), device_map=None, device_mesh=None, hf_quantizer=None
+            )
+
+            # After move: params are empty CPU tensors. Snapshot values.
+            pre_init_values = {name: param.clone() for name, param in model.named_parameters()}
+
+            model._initialize_missing_keys(is_quantized=False)
+
+        # All params should be marked as initialized
+        for name, param in model.named_parameters():
+            self.assertTrue(
+                getattr(param, "_is_hf_initialized", False), f"param {name} should be marked as initialized"
+            )
+
+        # Model should be marked as initialized
+        self.assertTrue(getattr(model, "_is_hf_initialized", False), "model should be marked as initialized")
+
+        # Param values should NOT have changed (no re-initialization)
+        for name, param in model.named_parameters():
+            torch.testing.assert_close(param, pre_init_values[name], msg=f"param {name} should not be re-initialized")
 
 
 @slow

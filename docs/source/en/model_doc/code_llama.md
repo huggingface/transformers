@@ -91,13 +91,6 @@ print(filled_text)
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "# Function to calculate the factorial of a number\ndef factorial(n):" | transformers run --task text-generation --model meta-llama/CodeLlama-7b-hf --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
