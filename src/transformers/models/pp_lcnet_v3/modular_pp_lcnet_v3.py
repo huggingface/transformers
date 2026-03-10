@@ -12,20 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+import torch
 import torch.nn as nn
 
+from ...activations import ACT2FN
 from ...utils import (
     auto_docstring,
 )
+from ..mobilenet_v2.modeling_mobilenet_v2 import make_divisible
 from ..pp_lcnet.configuration_pp_lcnet import PPLCNetConfig
 from ..pp_lcnet.modeling_pp_lcnet import (
     PPLCNetBackbone,
     PPLCNetConvLayer,
+    PPLCNetDepthwiseSeparableConvLayer,
     PPLCNetEmbeddings,
-    PPLCNetEncoder,
     PPLCNetPreTrainedModel,
-    PPLCNetSEModule,
 )
 
 
@@ -51,33 +52,160 @@ class PPLCNetV3Config(PPLCNetConfig):
         class_expand=1280,
         use_last_convolution=True,
         divisor=8,
+        conv_kxk_num=4,
         **kwargs,
     ):
+        self.conv_kxk_num = conv_kxk_num
         super().__init__()
         # Default block configs for PP-LCNetV3
         # Each tuple: (kernel_size, in_channels, out_channels, stride, use_squeeze_excitation)
-        self.block_configs = [
-            # Stage 1 (blocks2)
-            [[3, 16, 32, 1, False]],
-            # Stage 2 (blocks3)
-            [[3, 32, 64, 2, False], [3, 64, 64, 1, False]],
-            # Stage 3 (blocks4)
-            [[3, 64, 128, 2, False], [3, 128, 128, 1, False]],
-            # Stage 4 (blocks5)
-            [[3, 128, 256, 2, False], [5, 256, 256, 1, False],
-            [5, 256, 256, 1, False], [5, 256, 256, 1, False],
-            [5, 256, 256, 1, False]],
-            # Stage 5 (blocks6)
-            [[5, 256, 512, 2, True], [5, 512, 512, 1, True],
-            [5, 512, 512, 1, False], [5, 512, 512, 1, False]],
-        ] if block_configs is None else block_configs
+        self.block_configs = (
+            [
+                # Stage 1 (blocks2)
+                [[3, 16, 32, 1, False]],
+                # Stage 2 (blocks3)
+                [[3, 32, 64, 2, False], [3, 64, 64, 1, False]],
+                # Stage 3 (blocks4)
+                [[3, 64, 128, 2, False], [3, 128, 128, 1, False]],
+                # Stage 4 (blocks5)
+                [
+                    [3, 128, 256, 2, False],
+                    [5, 256, 256, 1, False],
+                    [5, 256, 256, 1, False],
+                    [5, 256, 256, 1, False],
+                    [5, 256, 256, 1, False],
+                ],
+                # Stage 5 (blocks6)
+                [[5, 256, 512, 2, True], [5, 512, 512, 1, True], [5, 512, 512, 1, False], [5, 512, 512, 1, False]],
+            ]
+            if block_configs is None
+            else block_configs
+        )
 
 
 class PPLCNetV3ConvLayer(PPLCNetConvLayer):
     pass
 
 
-class PPLCNetDepthwiseSeparableConvLayer(nn.Module):
+class PPLCNetV3Embeddings(PPLCNetEmbeddings):
+    def __init__(self, config: PPLCNetV3Config):
+        super().__init__()
+        self.convolution = PPLCNetV3ConvLayer(
+            in_channels=3,
+            kernel_size=3,
+            out_channels=make_divisible(config.stem_channels * config.scale, config.divisor),
+            stride=config.stem_stride,
+            activation=None,
+        )
+
+
+class PPLCNetV3LearnableAffineBlock(nn.Module):
+    def __init__(self, scale_value: float = 1.0, bias_value: float = 0.0):
+        super().__init__()
+        self.scale = nn.Parameter(torch.tensor([scale_value]), requires_grad=True)
+        self.bias = nn.Parameter(torch.tensor([bias_value]), requires_grad=True)
+
+    def forward(self, hidden_state):
+        hidden_state = self.scale * hidden_state + self.bias
+        return hidden_state
+
+
+class PPLCNetV3Act(nn.Module):
+    """
+    Activation block with a trainable affine transformation applied after the non-linear activation.
+    """
+
+    def __init__(self, activation="hardswish"):
+        super().__init__()
+        self.act = ACT2FN[activation] if activation is not None else nn.Identity()
+        self.lab = PPLCNetV3LearnableAffineBlock()
+
+    def forward(self, hidden_state: torch.Tensor):
+        hidden_state = self.act(hidden_state)
+        hidden_state = self.lab(hidden_state)
+        return hidden_state
+
+
+class PPLCNetV3LearnableRepLayer(nn.Module):
+    """
+    Learnable Reparameterization Layer (RepLayer) that fuses multiple convolution branches
+    (kxk and 1x1) with an optional identity branch. This layer enables structural reparameterization
+    for efficient inference while maintaining training flexibility.
+    """
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        activation: str,
+        stride: int,
+        num_conv_branches: int,
+        groups: int = 1,
+    ):
+        super().__init__()
+        self.groups = groups
+        self.stride = stride
+        self.kernel_size = kernel_size
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.num_conv_branches = num_conv_branches
+        self.padding = (kernel_size - 1) // 2
+
+        self.identity = (
+            nn.BatchNorm2d(num_features=in_channels) if out_channels == in_channels and stride == 1 else None
+        )
+
+        self.conv_kxk = nn.ModuleList(
+            [
+                PPLCNetV3ConvLayer(
+                    in_channels,
+                    out_channels,
+                    kernel_size,
+                    stride,
+                    groups=groups,
+                    activation=None,
+                )
+                for _ in range(self.num_conv_branches)
+            ]
+        )
+
+        self.conv_1x1 = (
+            PPLCNetV3ConvLayer(in_channels, out_channels, 1, stride, groups=groups, activation=None)
+            if kernel_size > 1
+            else None
+        )
+
+        self.lab = PPLCNetV3LearnableAffineBlock()
+        self.act = PPLCNetV3Act(activation=activation)
+
+    def forward(self, hidden_state: torch.Tensor):
+        """
+        Forward pass of the PPLCNetV3LearnableRepLayer, fusing all enabled branches and applying post-processing.
+
+        Args:
+            hidden_state (torch.Tensor): Input feature tensor of shape (B, in_channels, H, W).
+
+        Returns:
+            torch.Tensor: Output feature tensor of shape (B, out_channels, H', W').
+        """
+        output = 0
+        if self.identity is not None:
+            output += self.identity(hidden_state)
+
+        if self.conv_1x1 is not None:
+            output += self.conv_1x1(hidden_state)
+
+        for conv in self.conv_kxk:
+            output += conv(hidden_state)
+
+        hidden_state = self.lab(output)
+        if self.stride != 2:
+            hidden_state = self.act(hidden_state)
+        return hidden_state
+
+
+class PPLCNetV3DepthwiseSeparableConvLayer(PPLCNetDepthwiseSeparableConvLayer):
     """
     Depthwise Separable Convolution Layer: Depthwise Conv -> SE Module (optional) -> Pointwise Conv
     Core component of lightweight models (e.g., MobileNet, PP-LCNet) that significantly reduces
@@ -89,79 +217,36 @@ class PPLCNetDepthwiseSeparableConvLayer(nn.Module):
         in_channels,
         out_channels,
         stride,
-        reduction: int,
-        kernel_size=3,
-        use_squeeze_excitation=False,
-        activation="hardswish",
+        kernel_size,
+        use_squeeze_excitation,
+        config,
     ):
-        """
-        Initialize the PPLCNetDepthwiseSeparableConvLayer module.
-
-        Args:
-            in_channels (int): Number of channels of the input feature map.
-            out_channels (int): Number of channels of the output feature map.
-            stride (int): Stride of the depthwise convolution.
-            reduction (int): Reduction ratio for SE module.
-            depthwise_size (int, optional): Kernel size of depthwise convolution. Defaults to 3.
-            use_squeeze_excitation (bool, optional): Whether to use SE module. Defaults to False.
-            activation (str, optional): Name of activation function. Defaults to "hardswish".
-        """
         super().__init__()
-        self.use_squeeze_excitation = use_squeeze_excitation
-        self.depthwise_convolution = PPLCNetV3ConvLayer(
+        self.depthwise_convolution = PPLCNetV3LearnableRepLayer(
             in_channels=in_channels,
             out_channels=in_channels,
             kernel_size=kernel_size,
             stride=stride,
             groups=in_channels,
-            activation=activation,
+            num_conv_branches=config.conv_kxk_num,
+            activation=config.hidden_act,
         )
-        self.squeeze_excitation_module = (
-            PPLCNetV3SEModule(in_channels, reduction) if use_squeeze_excitation else nn.Identity()
-        )
-        self.pointwise_convolution = PPLCNetV3ConvLayer(
+        self.pointwise_convolution = PPLCNetV3LearnableRepLayer(
             in_channels=in_channels,
             kernel_size=1,
             out_channels=out_channels,
             stride=1,
-            activation=activation,
+            num_conv_branches=config.conv_kxk_num,
+            activation=config.hidden_act,
         )
-
-    def forward(self, hidden_state):
-        """
-        Forward propagation logic.
-
-        Args:
-            hidden_state (FloatTensor): Input feature map with shape [B, C, H, W].
-
-        Returns:
-            FloatTensor: Output feature map with shape [B, out_channels, H', W'].
-        """
-        hidden_state = self.depthwise_convolution(hidden_state)
-        hidden_state = self.squeeze_excitation_module(hidden_state)
-        hidden_state = self.pointwise_convolution(hidden_state)
-        return hidden_state
-
-
-class PPLCNetV3SEModule(PPLCNetSEModule):
-    pass
 
 
 class PPLCNetV3PreTrainedModel(PPLCNetPreTrainedModel):
     pass
 
 
-class PPLCNetV3Embeddings(PPLCNetEmbeddings):
-    pass
-
-
-class PPLCNetV3Encoder(PPLCNetEncoder):
-    pass
-
-
 class PPLCNetV3Backbone(PPLCNetBackbone):
     pass
-
 
 
 __all__ = [

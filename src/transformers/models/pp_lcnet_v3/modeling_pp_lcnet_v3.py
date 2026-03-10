@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import torch
 import torch.nn as nn
 from torch import Tensor
@@ -28,6 +27,7 @@ from ...backbone_utils import BackboneMixin
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
+from ...utils.output_capturing import capture_outputs
 from .configuration_pp_lcnet_v3 import PPLCNetV3Config
 
 
@@ -61,69 +61,148 @@ class PPLCNetV3ConvLayer(nn.Module):
         return hidden_state
 
 
-class PPLCNetDepthwiseSeparableConvLayer(nn.Module):
+def make_divisible(value: int, divisor: int = 8, min_value: int | None = None) -> int:
     """
-    Depthwise Separable Convolution Layer: Depthwise Conv -> SE Module (optional) -> Pointwise Conv
-    Core component of lightweight models (e.g., MobileNet, PP-LCNet) that significantly reduces
-    the number of parameters and computational cost.
+    Ensure that all layers have a channel count that is divisible by `divisor`.
+    """
+    if min_value is None:
+        min_value = divisor
+    new_value = max(min_value, int(value + divisor / 2) // divisor * divisor)
+    # Make sure that round down does not go down by more than 10%.
+    if new_value < 0.9 * value:
+        new_value += divisor
+    return int(new_value)
+
+
+class PPLCNetV3Embeddings(nn.Module):
+    """
+    PPLCNetV3 Embeddings (Stem): Initial convolutional layer for processing input images.
+    """
+
+    def __init__(self, config: PPLCNetV3Config):
+        super().__init__()
+        self.convolution = PPLCNetV3ConvLayer(
+            in_channels=3,
+            kernel_size=3,
+            out_channels=make_divisible(config.stem_channels * config.scale, config.divisor),
+            stride=config.stem_stride,
+            activation=None,
+        )
+        self.num_channels = 3
+
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        num_channels = pixel_values.shape[1]
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        embedding = self.convolution(pixel_values)
+        return embedding
+
+
+class PPLCNetV3LearnableAffineBlock(nn.Module):
+    def __init__(self, scale_value: float = 1.0, bias_value: float = 0.0):
+        super().__init__()
+        self.scale = nn.Parameter(torch.tensor([scale_value]), requires_grad=True)
+        self.bias = nn.Parameter(torch.tensor([bias_value]), requires_grad=True)
+
+    def forward(self, hidden_state):
+        hidden_state = self.scale * hidden_state + self.bias
+        return hidden_state
+
+
+class PPLCNetV3Act(nn.Module):
+    """
+    Activation block with a trainable affine transformation applied after the non-linear activation.
+    """
+
+    def __init__(self, activation="hardswish"):
+        super().__init__()
+        self.act = ACT2FN[activation] if activation is not None else nn.Identity()
+        self.lab = PPLCNetV3LearnableAffineBlock()
+
+    def forward(self, hidden_state: torch.Tensor):
+        hidden_state = self.act(hidden_state)
+        hidden_state = self.lab(hidden_state)
+        return hidden_state
+
+
+class PPLCNetV3LearnableRepLayer(nn.Module):
+    """
+    Learnable Reparameterization Layer (RepLayer) that fuses multiple convolution branches
+    (kxk and 1x1) with an optional identity branch. This layer enables structural reparameterization
+    for efficient inference while maintaining training flexibility.
     """
 
     def __init__(
         self,
-        in_channels,
-        out_channels,
-        stride,
-        reduction: int,
-        kernel_size=3,
-        use_squeeze_excitation=False,
-        activation="hardswish",
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        activation: str,
+        stride: int,
+        num_conv_branches: int,
+        groups: int = 1,
     ):
-        """
-        Initialize the PPLCNetDepthwiseSeparableConvLayer module.
-
-        Args:
-            in_channels (int): Number of channels of the input feature map.
-            out_channels (int): Number of channels of the output feature map.
-            stride (int): Stride of the depthwise convolution.
-            reduction (int): Reduction ratio for SE module.
-            depthwise_size (int, optional): Kernel size of depthwise convolution. Defaults to 3.
-            use_squeeze_excitation (bool, optional): Whether to use SE module. Defaults to False.
-            activation (str, optional): Name of activation function. Defaults to "hardswish".
-        """
         super().__init__()
-        self.use_squeeze_excitation = use_squeeze_excitation
-        self.depthwise_convolution = PPLCNetV3ConvLayer(
-            in_channels=in_channels,
-            out_channels=in_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            groups=in_channels,
-            activation=activation,
-        )
-        self.squeeze_excitation_module = (
-            PPLCNetV3SEModule(in_channels, reduction) if use_squeeze_excitation else nn.Identity()
-        )
-        self.pointwise_convolution = PPLCNetV3ConvLayer(
-            in_channels=in_channels,
-            kernel_size=1,
-            out_channels=out_channels,
-            stride=1,
-            activation=activation,
+        self.groups = groups
+        self.stride = stride
+        self.kernel_size = kernel_size
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.num_conv_branches = num_conv_branches
+        self.padding = (kernel_size - 1) // 2
+
+        self.identity = (
+            nn.BatchNorm2d(num_features=in_channels) if out_channels == in_channels and stride == 1 else None
         )
 
-    def forward(self, hidden_state):
+        self.conv_kxk = nn.ModuleList(
+            [
+                PPLCNetV3ConvLayer(
+                    in_channels,
+                    out_channels,
+                    kernel_size,
+                    stride,
+                    groups=groups,
+                    activation=None,
+                )
+                for _ in range(self.num_conv_branches)
+            ]
+        )
+
+        self.conv_1x1 = (
+            PPLCNetV3ConvLayer(in_channels, out_channels, 1, stride, groups=groups, activation=None)
+            if kernel_size > 1
+            else None
+        )
+
+        self.lab = PPLCNetV3LearnableAffineBlock()
+        self.act = PPLCNetV3Act(activation=activation)
+
+    def forward(self, hidden_state: torch.Tensor):
         """
-        Forward propagation logic.
+        Forward pass of the PPLCNetV3LearnableRepLayer, fusing all enabled branches and applying post-processing.
 
         Args:
-            hidden_state (FloatTensor): Input feature map with shape [B, C, H, W].
+            hidden_state (torch.Tensor): Input feature tensor of shape (B, in_channels, H, W).
 
         Returns:
-            FloatTensor: Output feature map with shape [B, out_channels, H', W'].
+            torch.Tensor: Output feature tensor of shape (B, out_channels, H', W').
         """
-        hidden_state = self.depthwise_convolution(hidden_state)
-        hidden_state = self.squeeze_excitation_module(hidden_state)
-        hidden_state = self.pointwise_convolution(hidden_state)
+        output = 0
+        if self.identity is not None:
+            output += self.identity(hidden_state)
+
+        if self.conv_1x1 is not None:
+            output += self.conv_1x1(hidden_state)
+
+        for conv in self.conv_kxk:
+            output += conv(hidden_state)
+
+        hidden_state = self.lab(output)
+        if self.stride != 2:
+            hidden_state = self.act(hidden_state)
         return hidden_state
 
 
@@ -181,42 +260,30 @@ class PPLCNetV3DepthwiseSeparableConvLayer(nn.Module):
         in_channels,
         out_channels,
         stride,
-        reduction: int,
-        kernel_size=3,
-        use_squeeze_excitation=False,
-        activation="hardswish",
+        kernel_size,
+        use_squeeze_excitation,
+        config,
     ):
-        """
-        Initialize the PPLCNetV3DepthwiseSeparableConvLayer module.
-
-        Args:
-            in_channels (int): Number of channels of the input feature map.
-            out_channels (int): Number of channels of the output feature map.
-            stride (int): Stride of the depthwise convolution.
-            reduction (int): Reduction ratio for SE module.
-            depthwise_size (int, optional): Kernel size of depthwise convolution. Defaults to 3.
-            use_squeeze_excitation (bool, optional): Whether to use SE module. Defaults to False.
-            activation (str, optional): Name of activation function. Defaults to "hardswish".
-        """
         super().__init__()
-        self.use_squeeze_excitation = use_squeeze_excitation
-        self.depthwise_convolution = PPLCNetV3ConvLayer(
+        self.depthwise_convolution = PPLCNetV3LearnableRepLayer(
             in_channels=in_channels,
             out_channels=in_channels,
             kernel_size=kernel_size,
             stride=stride,
             groups=in_channels,
-            activation=activation,
+            num_conv_branches=config.conv_kxk_num,
+            activation=config.hidden_act,
         )
         self.squeeze_excitation_module = (
-            PPLCNetV3SEModule(in_channels, reduction) if use_squeeze_excitation else nn.Identity()
+            PPLCNetV3SEModule(in_channels, config.reduction) if use_squeeze_excitation else nn.Identity()
         )
-        self.pointwise_convolution = PPLCNetV3ConvLayer(
+        self.pointwise_convolution = PPLCNetV3LearnableRepLayer(
             in_channels=in_channels,
             kernel_size=1,
             out_channels=out_channels,
             stride=1,
-            activation=activation,
+            num_conv_branches=config.conv_kxk_num,
+            activation=config.hidden_act,
         )
 
     def forward(self, hidden_state):
@@ -233,19 +300,6 @@ class PPLCNetV3DepthwiseSeparableConvLayer(nn.Module):
         hidden_state = self.squeeze_excitation_module(hidden_state)
         hidden_state = self.pointwise_convolution(hidden_state)
         return hidden_state
-
-
-def make_divisible(value: int, divisor: int = 8, min_value: int | None = None) -> int:
-    """
-    Ensure that all layers have a channel count that is divisible by `divisor`.
-    """
-    if min_value is None:
-        min_value = divisor
-    new_value = max(min_value, int(value + divisor / 2) // divisor * divisor)
-    # Make sure that round down does not go down by more than 10%.
-    if new_value < 0.9 * value:
-        new_value += divisor
-    return int(new_value)
 
 
 class PPLCNetV3Block(nn.Module):
@@ -265,9 +319,8 @@ class PPLCNetV3Block(nn.Module):
                 out_channels=scaled_out_channels,
                 kernel_size=kernel_size,
                 stride=stride,
-                reduction=config.reduction,
                 use_squeeze_excitation=use_se,
-                activation=config.hidden_act,
+                config=config,
             )
             self.layers.append(depthwise_block)
 
@@ -296,46 +349,21 @@ class PPLCNetV3PreTrainedModel(PreTrainedModel):
     }
 
 
-class PPLCNetV3Embeddings(nn.Module):
-    """
-    PPLCNetV3 Embeddings (Stem): Initial convolutional layer for processing input images.
-    """
-
+class PPLCNetV3Encoder(PPLCNetV3PreTrainedModel):
     def __init__(self, config: PPLCNetV3Config):
-        super().__init__()
-        self.convolution = PPLCNetV3ConvLayer(
-            in_channels=3,
-            kernel_size=3,
-            out_channels=make_divisible(config.stem_channels * config.scale, config.divisor),
-            stride=config.stem_stride,
-            activation=config.hidden_act,
-        )
-        self.num_channels = 3
-
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        num_channels = pixel_values.shape[1]
-        if num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-            )
-        embedding = self.convolution(pixel_values)
-        return embedding
-
-
-class PPLCNetV3Encoder(nn.Module):
-    def __init__(self, config: PPLCNetV3Config):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self.blocks = nn.ModuleList([])
         for stage_index in range(len(config.block_configs)):
             block = PPLCNetV3Block(config, stage_index)
             self.blocks.append(block)
 
-    def forward(self, hidden_state: torch.Tensor) -> BaseModelOutputWithNoAttention:
+    @capture_outputs
+    def forward(self, hidden_state: torch.Tensor, **kwargs) -> BaseModelOutputWithNoAttention:
         for block in self.blocks:
             hidden_state = block(hidden_state)
 
-        return hidden_state
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_state)
 
 
 @auto_docstring(
@@ -378,12 +406,12 @@ class PPLCNetV3Backbone(BackboneMixin, PPLCNetV3PreTrainedModel):
         >>> list(feature_maps[-1].shape)
         ```"""
         embedding_output = self.embedder(pixel_values)
-        hidden_state = self.encoder(embedding_output)
+        hidden_states = self.encoder(embedding_output, output_hidden_states=True).hidden_states
 
         feature_maps = ()
         for idx, stage in enumerate(self.stage_names):
             if stage in self.out_features:
-                feature_maps += (hidden_state[idx],)
+                feature_maps += (hidden_states[idx],)
 
         return BackboneOutput(feature_maps=feature_maps)
 

@@ -5,6 +5,7 @@
 #                          modular_pp_ocrv5_mobile_det.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
+from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
@@ -15,8 +16,7 @@ from ...utils import auto_docstring
     PPOCRV5 Mobile text detection model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the PPOCRV5 Mobile Det
     [PaddlePaddle/PP-OCRv5-mobile-det](https://huggingface.co/PaddlePaddle/PP-OCRv5-mobile-det) architecture.
-    """,
-    checkpoint="PaddlePaddle/PP-OCRv5-mobile-det",
+    """
 )
 class PPOCRV5MobileDetConfig(PreTrainedConfig):
     r"""
@@ -90,11 +90,20 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         shortcut=True,
         interpolate_mode="nearest",
         kernel_list=[3, 2, 2],
+        layer_list_out_channels=[12, 18, 42, 360],
         **kwargs,
     ):
         super().__init__(**kwargs)
 
         # ---- Backbone ----
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=backbone_config,
+            default_config_type="pp_lcnet_v3",
+            default_config_kwargs={
+                "scale": 0.75,
+            },
+            **kwargs,
+        )
         self.backbone_config = backbone_config
         self.scale = scale
         self.conv_kxk_num = conv_kxk_num
@@ -110,6 +119,7 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
 
         # ---- Head ----
         self.kernel_list = kernel_list
+        self.layer_list_out_channels = layer_list_out_channels
 
 
 __all__ = ["PPOCRV5MobileDetConfig"]

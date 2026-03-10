@@ -141,29 +141,36 @@ class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
 
         # Default block configs for PP-LCNet
         # Each tuple: (kernel_size, in_channels, out_channels, stride, use_squeeze_excitation)
-        self.block_configs = [
-            # Stage 1 (blocks2)
-            [[3, 16, 32, 1, False]],
-            # Stage 2 (blocks3)
-            [[3, 32, 64, 2, False], [3, 64, 64, 1, False]],
-            # Stage 3 (blocks4)
-            [[3, 64, 128, 2, False], [3, 128, 128, 1, False]],
-            # Stage 4 (blocks5)
+        self.block_configs = (
             [
-                [3, 128, 256, 2, False],
-                [5, 256, 256, 1, False],
-                [5, 256, 256, 1, False],
-                [5, 256, 256, 1, False],
-                [5, 256, 256, 1, False],
-                [5, 256, 256, 1, False],
-            ],
-            # Stage 5 (blocks6)
-            [[5, 256, 512, 2, True], [5, 512, 512, 1, True]],
-        ] if block_configs is None else block_configs
+                # Stage 1 (blocks2)
+                [[3, 16, 32, 1, False]],
+                # Stage 2 (blocks3)
+                [[3, 32, 64, 2, False], [3, 64, 64, 1, False]],
+                # Stage 3 (blocks4)
+                [[3, 64, 128, 2, False], [3, 128, 128, 1, False]],
+                # Stage 4 (blocks5)
+                [
+                    [3, 128, 256, 2, False],
+                    [5, 256, 256, 1, False],
+                    [5, 256, 256, 1, False],
+                    [5, 256, 256, 1, False],
+                    [5, 256, 256, 1, False],
+                    [5, 256, 256, 1, False],
+                ],
+                # Stage 5 (blocks6)
+                [[5, 256, 512, 2, True], [5, 512, 512, 1, True]],
+            ]
+            if block_configs is None
+            else block_configs
+        )
 
         self.depths = [len(blocks) for blocks in self.block_configs]
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.block_configs) + 1)]
-
+        stage_out_channels = []
+        for block in self.block_configs:
+            stage_out_channels.append(int(block[-1][2] * self.scale))
+        self.stage_out_channels = stage_out_channels
         self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
         super().__init__(**kwargs)
 
@@ -325,42 +332,28 @@ class PPLCNetDepthwiseSeparableConvLayer(nn.Module):
         in_channels,
         out_channels,
         stride,
-        reduction: int,
-        kernel_size=3,
-        use_squeeze_excitation=False,
-        activation="hardswish",
+        kernel_size,
+        use_squeeze_excitation,
+        config,
     ):
-        """
-        Initialize the PPLCNetDepthwiseSeparableConvLayer module.
-
-        Args:
-            in_channels (int): Number of channels of the input feature map.
-            out_channels (int): Number of channels of the output feature map.
-            stride (int): Stride of the depthwise convolution.
-            reduction (int): Reduction ratio for SE module.
-            depthwise_size (int, optional): Kernel size of depthwise convolution. Defaults to 3.
-            use_squeeze_excitation (bool, optional): Whether to use SE module. Defaults to False.
-            activation (str, optional): Name of activation function. Defaults to "hardswish".
-        """
         super().__init__()
-        self.use_squeeze_excitation = use_squeeze_excitation
         self.depthwise_convolution = PPLCNetConvLayer(
             in_channels=in_channels,
             out_channels=in_channels,
             kernel_size=kernel_size,
             stride=stride,
             groups=in_channels,
-            activation=activation,
+            activation=config.hidden_act,
         )
         self.squeeze_excitation_module = (
-            PPLCNetSEModule(in_channels, reduction) if use_squeeze_excitation else nn.Identity()
+            PPLCNetSEModule(in_channels, config.reduction) if use_squeeze_excitation else nn.Identity()
         )
         self.pointwise_convolution = PPLCNetConvLayer(
             in_channels=in_channels,
             kernel_size=1,
             out_channels=out_channels,
             stride=1,
-            activation=activation,
+            activation=config.hidden_act,
         )
 
     def forward(self, hidden_state):
@@ -438,9 +431,8 @@ class PPLCNetBlock(nn.Module):
                 out_channels=scaled_out_channels,
                 kernel_size=kernel_size,
                 stride=stride,
-                reduction=config.reduction,
                 use_squeeze_excitation=use_se,
-                activation=config.hidden_act,
+                config=config,
             )
             self.layers.append(depthwise_block)
 
@@ -495,20 +487,21 @@ class PPLCNetEmbeddings(nn.Module):
         return embedding
 
 
-class PPLCNetEncoder(nn.Module):
+class PPLCNetEncoder(PPLCNetPreTrainedModel):
     def __init__(self, config: PPLCNetConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self.blocks = nn.ModuleList([])
         for stage_index in range(len(config.block_configs)):
             block = PPLCNetBlock(config, stage_index)
             self.blocks.append(block)
 
-    def forward(self, hidden_state: torch.Tensor) -> BaseModelOutputWithNoAttention:
+    @capture_outputs
+    def forward(self, hidden_state: torch.Tensor, **kwargs) -> BaseModelOutputWithNoAttention:
         for block in self.blocks:
             hidden_state = block(hidden_state)
 
-        return hidden_state
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_state)
 
 
 @auto_docstring(
@@ -551,12 +544,12 @@ class PPLCNetBackbone(BackboneMixin, PPLCNetPreTrainedModel):
         >>> list(feature_maps[-1].shape)
         ```"""
         embedding_output = self.embedder(pixel_values)
-        hidden_state = self.encoder(embedding_output)
+        hidden_states = self.encoder(embedding_output, output_hidden_states=True).hidden_states
 
         feature_maps = ()
         for idx, stage in enumerate(self.stage_names):
             if stage in self.out_features:
-                feature_maps += (hidden_state[idx],)
+                feature_maps += (hidden_states[idx],)
 
         return BackboneOutput(feature_maps=feature_maps)
 
@@ -599,7 +592,6 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -628,9 +620,10 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
         wireless_table
         ```"""
         embedding_output = self.embedder(pixel_values)
-        hidden_state = self.encoder(embedding_output)
+        outputs = self.encoder(embedding_output, **kwargs)
 
-        last_hidden_state = self.avg_pool(hidden_state)
+        hidden_states = outputs.hidden_states
+        last_hidden_state = self.avg_pool(outputs.last_hidden_state)
 
         if self.config.use_last_convolution:
             last_hidden_state = self.last_convolution(last_hidden_state)
@@ -640,7 +633,7 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
         last_hidden_state = self.flatten(last_hidden_state)
         last_hidden_state = self.fc(last_hidden_state)
 
-        return BaseModelOutputWithNoAttention(last_hidden_state=last_hidden_state)
+        return BaseModelOutputWithNoAttention(last_hidden_state=last_hidden_state, hidden_states=hidden_states)
 
 
 __all__ = [
@@ -648,6 +641,5 @@ __all__ = [
     "PPLCNetForImageClassification",
     "PPLCNetImageProcessorFast",
     "PPLCNetConfig",
-    "PPLCNetConvLayer",
     "PPLCNetPreTrainedModel",
 ]

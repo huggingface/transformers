@@ -148,7 +148,10 @@ class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
 
         self.depths = [len(blocks) for blocks in self.block_configs]
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.block_configs) + 1)]
-
+        stage_out_channels = []
+        for block in self.block_configs:
+            stage_out_channels.append(int(block[-1][2] * self.scale))
+        self.stage_out_channels = stage_out_channels
         self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
         super().__init__(**kwargs)
 

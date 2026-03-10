@@ -9,182 +9,13 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor
 
-from ...activations import ACT2FN
-from ...modeling_outputs import BackboneOutput, BaseModelOutputWithNoAttention
+from ...backbone_utils import load_backbone
+from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import auto_docstring, can_return_tuple
 from ...utils.output_capturing import capture_outputs
 from .configuration_pp_ocrv5_mobile_det import PPOCRV5MobileDetConfig
-
-
-class PPOCRV5MobileDetLearnableAffineBlock(nn.Module):
-    def __init__(self, scale_value: float = 1.0, bias_value: float = 0.0):
-        super().__init__()
-        self.scale = nn.Parameter(torch.tensor([scale_value]), requires_grad=True)
-        self.bias = nn.Parameter(torch.tensor([bias_value]), requires_grad=True)
-
-    def forward(self, hidden_state: Tensor) -> Tensor:
-        hidden_state = self.scale * hidden_state + self.bias
-        return hidden_state
-
-
-class PPOCRV5MobileDetAct(nn.Module):
-    """
-    Activation block with a trainable affine transformation applied after the non-linear activation.
-    Supports two activation functions: Hardswish (hswish) for mobile-efficient inference and ReLU.
-    """
-
-    def __init__(self, hidden_act="hswish"):
-        """
-        Initialize the activation block with the specified non-linear activation.
-
-        Args:
-            hidden_act (str, optional): Type of activation function to use. Options are "hswish" and "relu".
-                Defaults to "hswish".
-        """
-        super().__init__()
-        if hidden_act == "hswish":
-            self.act = nn.Hardswish()
-        elif hidden_act == "relu":
-            self.act = nn.ReLU()
-        else:
-            raise ValueError("Act must be hswish or relu.")
-        self.lab = PPOCRV5MobileDetLearnableAffineBlock()
-
-    def forward(self, hidden_state: torch.Tensor):
-        hidden_state = self.act(hidden_state)
-        hidden_state = self.lab(hidden_state)
-        return hidden_state
-
-
-class PPOCRV5MobileDetConvBNLayer(nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        stride: int = 1,
-        groups: int = 1,
-        activation: str = "relu",
-        use_learnable_affine_block: bool = False,
-    ):
-        super().__init__()
-        self.convolution = nn.Conv2d(
-            in_channels,
-            out_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            groups=groups,
-            padding=(kernel_size - 1) // 2,
-            bias=False,
-        )
-        self.normalization = nn.BatchNorm2d(out_channels)
-        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
-        if activation and use_learnable_affine_block:
-            self.lab = PPOCRV5MobileDetLearnableAffineBlock()
-        else:
-            self.lab = nn.Identity()
-
-    def forward(self, input: Tensor) -> Tensor:
-        hidden_state = self.convolution(input)
-        hidden_state = self.normalization(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        hidden_state = self.lab(hidden_state)
-        return hidden_state
-
-
-class PPOCRV5MobileDetLearnableRepLayer(nn.Module):
-    """
-    Learnable Reparameterization Layer (RepLayer) that fuses multiple convolution branches
-    (kxk and 1x1) with an optional identity branch. This layer enables structural reparameterization
-    for efficient inference while maintaining training flexibility.
-    """
-
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        hidden_act: str,
-        stride: int,
-        num_conv_branches: int,
-        groups: int = 1,
-    ):
-        """
-        Initialize the PPOCRV5MobileDetLearnableRepLayer with multiple convolution branches and optional identity connection.
-
-        Args:
-            in_channels (int): Number of input channels.
-            out_channels (int): Number of output channels.
-            kernel_size (int): Size of the kxk convolution kernel.
-            hidden_act (str): Activation function type (passed to PPOCRV5MobileDetAct block).
-            stride (int): Stride of the convolution operations.
-            num_conv_branches (int): Number of kxk convolution branches to stack.
-            groups (int, optional): Number of groups for grouped convolution. Defaults to 1.
-        """
-        super().__init__()
-        self.groups = groups
-        self.stride = stride
-        self.kernel_size = kernel_size
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.num_conv_branches = num_conv_branches
-        self.padding = (kernel_size - 1) // 2
-
-        self.identity = (
-            nn.BatchNorm2d(num_features=in_channels) if out_channels == in_channels and stride == 1 else None
-        )
-
-        self.conv_kxk = nn.ModuleList(
-            [
-                PPOCRV5MobileDetConvBNLayer(
-                    in_channels,
-                    out_channels,
-                    kernel_size,
-                    stride,
-                    groups=groups,
-                    activation=None,
-                )
-                for _ in range(self.num_conv_branches)
-            ]
-        )
-
-        self.conv_1x1 = (
-            PPOCRV5MobileDetConvBNLayer(in_channels, out_channels, 1, stride, groups=groups, activation=None)
-            if kernel_size > 1
-            else None
-        )
-
-        self.lab = PPOCRV5MobileDetLearnableAffineBlock()
-        self.act = PPOCRV5MobileDetAct(hidden_act=hidden_act)
-
-    def forward(self, hidden_state: torch.Tensor):
-        """
-        Forward pass of the PPOCRV5MobileDetLearnableRepLayer, fusing all enabled branches and applying post-processing.
-
-        Args:
-            hidden_state (torch.Tensor): Input feature tensor of shape (B, in_channels, H, W).
-
-        Returns:
-            torch.Tensor: Output feature tensor of shape (B, out_channels, H', W').
-        """
-        output = 0
-        if self.identity is not None:
-            output += self.identity(hidden_state)
-
-        if self.conv_1x1 is not None:
-            output += self.conv_1x1(hidden_state)
-
-        for conv in self.conv_kxk:
-            output += conv(hidden_state)
-
-        hidden_state = self.lab(output)
-        if self.stride != 2:
-            hidden_state = self.act(hidden_state)
-        return hidden_state
 
 
 class PPOCRV5MobileDetSELayer(nn.Module):
@@ -243,104 +74,6 @@ class PPOCRV5MobileDetSELayer(nn.Module):
         return hidden_state
 
 
-class PPOCRV5MobileDetLCNetV3Block(nn.Module):
-    """
-    Lightweight Convolutional Network V3 (LCNetV3) Block, the core building block of the PPOCRV5 Mobile Det backbone.
-    Consists of a depthwise PPOCRV5MobileDetLearnableRepLayer, an optional SE Layer, and a pointwise PPOCRV5MobileDetLearnableRepLayer.
-    Optimized for mobile devices with low computational complexity and high efficiency.
-    """
-
-    def __init__(self, in_channels, out_channels, hidden_act, kernel_size, stride, use_se, conv_kxk_num, reduction):
-        """
-        Initialize the PPOCRV5MobileDetLCNetV3Block with specified parameters for depthwise and pointwise layers.
-
-        Args:
-            in_channels (int): Number of input channels.
-            out_channels (int): Number of output channels.
-            hidden_act (str): Activation function type (passed to PPOCRV5MobileDetAct block).
-            kernel_size (int): Kernel size for the depthwise convolution.
-            stride (int): Stride of the depthwise convolution.
-            use_se (bool): Whether to enable the SE Layer for channel recalibration.
-            conv_kxk_num (int): Number of kxk convolution branches in PPOCRV5MobileDetLearnableRepLayer.
-            reduction (int): Reduction factor for the SE Layer (if enabled).
-        """
-        super().__init__()
-        self.use_se = use_se
-        self.dw_conv = PPOCRV5MobileDetLearnableRepLayer(
-            in_channels=in_channels,
-            out_channels=in_channels,
-            kernel_size=kernel_size,
-            hidden_act=hidden_act,
-            stride=stride,
-            groups=in_channels,
-            num_conv_branches=conv_kxk_num,
-        )
-        if use_se:
-            self.se = PPOCRV5MobileDetSELayer(in_channels, reduction=reduction)
-        self.pw_conv = PPOCRV5MobileDetLearnableRepLayer(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=1,
-            hidden_act=hidden_act,
-            stride=1,
-            num_conv_branches=conv_kxk_num,
-        )
-
-    def forward(self, hidden_state: torch.Tensor):
-        """
-        Forward pass of the PPOCRV5MobileDetLCNetV3Block, applying depthwise convolution, optional SE, and pointwise convolution.
-
-        Args:
-            hidden_state (torch.Tensor): Input feature tensor of shape (B, in_channels, H, W).
-
-        Returns:
-            torch.Tensor: Output feature tensor of shape (B, out_channels, H', W').
-        """
-        hidden_state = self.dw_conv(hidden_state)
-        if self.use_se:
-            hidden_state = self.se(hidden_state)
-        hidden_state = self.pw_conv(hidden_state)
-        return hidden_state
-
-
-def make_divisible(value: int, divisor: int = 8, min_value: int | None = None) -> int:
-    """
-    Ensure that all layers have a channel count that is divisible by `divisor`.
-    """
-    if min_value is None:
-        min_value = divisor
-    new_value = max(min_value, int(value + divisor / 2) // divisor * divisor)
-    # Make sure that round down does not go down by more than 10%.
-    if new_value < 0.9 * value:
-        new_value += divisor
-    return int(new_value)
-
-
-class PPOCRV5MobileDetBlock(nn.Module):
-    def __init__(self, config, block_index):
-        super().__init__()
-        self.config = config
-
-        self.layers = nn.ModuleList()
-        for kernel_size, in_channels, out_channels, stride, squeeze_excitation in config.backbone_config[block_index]:
-            block = PPOCRV5MobileDetLCNetV3Block(
-                in_channels=make_divisible(in_channels * config.scale, config.divisor),
-                out_channels=make_divisible(out_channels * config.scale, config.divisor),
-                hidden_act=config.hidden_act,
-                kernel_size=kernel_size,
-                stride=stride,
-                use_se=squeeze_excitation,
-                conv_kxk_num=config.conv_kxk_num,
-                reduction=config.reduction,
-            )
-            self.layers.append(block)
-
-    def forward(self, hidden_state):
-        for layer in self.layers:
-            hidden_state = layer(hidden_state)
-        return hidden_state
-
-
 @auto_docstring(
     custom_intro="""
     Base class for all PPOCRV5 Mobile Det pre-trained models. Handles model initialization,
@@ -357,9 +90,6 @@ class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
-        if isinstance(module, PPOCRV5MobileDetConvBNLayer):
-            nn.init.kaiming_normal_(module.convolution.weight)
-
         if isinstance(module, PPOCRV5MobileDetHead):
             nn.init.constant_(module.bn1.weight, 1.0)
             nn.init.constant_(module.bn1.bias, 1e-4)
@@ -370,75 +100,6 @@ class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
 
         if isinstance(module, PPOCRV5MobileDetRSELayer):
             nn.init.kaiming_uniform_(module.in_conv.weight)
-
-
-@auto_docstring(
-    custom_intro="""
-    Backbone network for PPOCRV5 Mobile Det, built with LCNetV3Blocks.
-    Extracts multi-scale feature maps from input images, which are passed to the neck network for further fusion.
-    Optimized for mobile devices with lightweight, efficient layers and channel scaling.
-    """
-)
-class PPOCRV5MobileDetBackbone(PPOCRV5MobileDetPreTrainedModel):
-    def __init__(self, config: PPOCRV5MobileDetConfig):
-        super().__init__(config)
-        self.out_channels = make_divisible(config.backbone_out_channels * config.scale, config.divisor)
-        self.conv1 = PPOCRV5MobileDetConvBNLayer(
-            in_channels=3,
-            out_channels=make_divisible(16 * config.scale, config.divisor),
-            kernel_size=3,
-            stride=2,
-            activation=None,
-        )
-        self.blocks = nn.ModuleList([])
-        for block_index in config.backbone_config.keys():
-            if "layer_list_out_channels" in block_index:
-                continue
-            block = PPOCRV5MobileDetBlock(config, block_index)
-            self.blocks.append(block)
-        mv_c = config.backbone_config["layer_list_out_channels"]
-        self.out_channels = [
-            make_divisible(config.backbone_config["blocks3"][-1][2] * config.scale, config.divisor),
-            make_divisible(config.backbone_config["blocks4"][-1][2] * config.scale, config.divisor),
-            make_divisible(config.backbone_config["blocks5"][-1][2] * config.scale, config.divisor),
-            make_divisible(config.backbone_config["blocks6"][-1][2] * config.scale, config.divisor),
-        ]
-        self.layer_list = nn.ModuleList(
-            [
-                nn.Conv2d(self.out_channels[0], int(mv_c[0] * config.scale), 1, 1, 0),
-                nn.Conv2d(self.out_channels[1], int(mv_c[1] * config.scale), 1, 1, 0),
-                nn.Conv2d(self.out_channels[2], int(mv_c[2] * config.scale), 1, 1, 0),
-                nn.Conv2d(self.out_channels[3], int(mv_c[3] * config.scale), 1, 1, 0),
-            ]
-        )
-        self.out_channels = [
-            int(mv_c[0] * config.scale),
-            int(mv_c[1] * config.scale),
-            int(mv_c[2] * config.scale),
-            int(mv_c[3] * config.scale),
-        ]
-
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BackboneOutput:
-        hidden_state = self.conv1(pixel_values)
-        out_list: list[torch.Tensor] = []
-        first_block = True
-        for block in self.blocks:
-            hidden_state = block(hidden_state)
-            if first_block:
-                first_block = False
-            else:
-                out_list.append(hidden_state)
-        if out_list:
-            out_list[0] = self.layer_list[0](out_list[0])
-            out_list[1] = self.layer_list[1](out_list[1])
-            out_list[2] = self.layer_list[2](out_list[2])
-            out_list[3] = self.layer_list[3](out_list[3])
-        feature_maps = tuple(out_list)
-        return feature_maps
 
 
 class PPOCRV5MobileDetSEModule(nn.Module):
@@ -544,13 +205,12 @@ class PPOCRV5MobileDetNeck(nn.Module):
     then concatenates the fused features for input to the head network.
     """
 
-    def __init__(self, config: PPOCRV5MobileDetConfig, in_channels: list[int]):
+    def __init__(self, config: PPOCRV5MobileDetConfig):
         """
         Initialize the PPOCRV5MobileDetNeck with the specified model configuration and input channels.
 
         Args:
             config (PPOCRV5MobileDetConfig): Configuration object containing neck hyperparameters.
-            in_channels (list[int]): List of input channels from the backbone's multi-scale feature maps.
         """
         super().__init__()
         self.interpolate_mode = config.interpolate_mode
@@ -558,10 +218,13 @@ class PPOCRV5MobileDetNeck(nn.Module):
         self.ins_conv = nn.ModuleList()
         self.inp_conv = nn.ModuleList()
 
-        for i in range(len(in_channels)):
+        for i in range(len(config.layer_list_out_channels)):
             self.ins_conv.append(
                 PPOCRV5MobileDetRSELayer(
-                    in_channels[i], config.neck_out_channels, kernel_size=1, shortcut=config.shortcut
+                    config.layer_list_out_channels[i],
+                    config.neck_out_channels,
+                    kernel_size=1,
+                    shortcut=config.shortcut,
                 )
             )
             self.inp_conv.append(
@@ -730,8 +393,14 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
     def __init__(self, config: PPOCRV5MobileDetConfig):
         super().__init__(config)
 
-        self.backbone = PPOCRV5MobileDetBackbone(config)
-        self.neck = PPOCRV5MobileDetNeck(config, self.backbone.out_channels)
+        self.backbone = load_backbone(config)
+
+        out_channels = [self.backbone.config.stage_out_channels[idx] for idx in self.backbone.config.return_idx]
+        self.layer_list = nn.ModuleList()
+        for idx, out_channel in enumerate(out_channels):
+            self.layer_list.append(nn.Conv2d(out_channel, config.layer_list_out_channels[idx], 1, 1, 0))
+
+        self.neck = PPOCRV5MobileDetNeck(config)
         self.post_init()
 
     @capture_outputs
@@ -741,12 +410,14 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
         hidden_state: torch.FloatTensor,
         **kwargs,
     ) -> tuple[torch.FloatTensor] | PPOCRV5MobileDetModelOutput:
-        hidden_state = self.backbone(hidden_state)
-        hidden_state = self.neck(hidden_state)
+        torch.set_printoptions(sci_mode=False)
+        feature_maps = list(self.backbone(hidden_state).feature_maps)
+        for i in range(len(feature_maps)):
+            feature_maps[i] = self.layer_list[i](feature_maps[i])
 
-        return PPOCRV5MobileDetModelOutput(
-            logits=hidden_state,
-        )
+        hidden_state = self.neck(feature_maps)
+
+        return PPOCRV5MobileDetModelOutput(logits=hidden_state)
 
 
 @auto_docstring(

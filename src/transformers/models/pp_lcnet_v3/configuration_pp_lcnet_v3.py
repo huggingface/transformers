@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
@@ -108,8 +107,10 @@ class PPLCNetV3Config(BackboneConfigMixin, PreTrainedConfig):
         class_expand=1280,
         use_last_convolution=True,
         divisor=8,
+        conv_kxk_num=4,
         **kwargs,
     ):
+        self.conv_kxk_num = conv_kxk_num
         self.num_channels = num_channels
         self.scale = scale
         self.hidden_act = hidden_act
@@ -147,7 +148,10 @@ class PPLCNetV3Config(BackboneConfigMixin, PreTrainedConfig):
 
         self.depths = [len(blocks) for blocks in self.block_configs]
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.block_configs) + 1)]
-
+        stage_out_channels = []
+        for block in self.block_configs:
+            stage_out_channels.append(int(block[-1][2] * self.scale))
+        self.stage_out_channels = stage_out_channels
         self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
         super().__init__(**kwargs)
 
