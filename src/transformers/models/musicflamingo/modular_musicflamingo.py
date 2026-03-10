@@ -151,7 +151,7 @@ class MusicFlamingoEncoderConfig(AudioFlamingo3EncoderConfig):
         self.max_position_embeddings = max_position_embeddings
         rope_parameters = {} if rope_parameters is None else dict(rope_parameters)
         rope_parameters.setdefault("rope_type", "default")
-        rope_parameters.setdefault("rope_theta",self.max_position_embeddings / (2 * pi))
+        rope_parameters.setdefault("rope_theta", self.max_position_embeddings / (2 * pi))
         self.rope_parameters = rope_parameters
 
 
@@ -369,84 +369,92 @@ def rotate_half(x):
 
 
 @autocast("cuda", enabled=False)
-def apply_rotary_emb(freqs, t, start_index=0, scale=1.0, seq_dim=-2):
-    ori_dtype = t.dtype
-    embed_dtype = torch.float64
-    t = t.to(embed_dtype)
-    if t.ndim == 3:
-        seq_len = t.shape[seq_dim]
-        if freqs.ndim == 2:
-            freqs = freqs[-seq_len:].to(t)
-        else:
-            freqs = freqs.to(t)
+def apply_rotary_time_emb(hidden_states, cos, sin):
+    """Applies rotary time embeddings to the input tensor.
 
-    rot_dim = freqs.shape[-1]
-    end_index = start_index + rot_dim
+    See (Goel et al., 2024) for more details: https://arxiv.org/abs/2410.12109
 
-    if rot_dim > t.shape[-1]:
+    Args:
+        hidden_states (`torch.Tensor`):
+            The input tensor.
+        cos (`torch.Tensor`):
+            The cosine part of the rotary embedding.
+        sin (`torch.Tensor`):
+            The sine part of the rotary embedding.
+
+    Returns:
+        `torch.Tensor`: The tensor with rotary time embeddings applied.
+    """
+    original_dtype = hidden_states.dtype
+    hidden_states = hidden_states.to(torch.float64)
+    cos = cos.to(hidden_states)
+    sin = sin.to(hidden_states)
+    rot_dim = cos.shape[-1]
+    if rot_dim > hidden_states.shape[-1]:
         raise ValueError(
-            f"feature dimension {t.shape[-1]} is not of sufficient size to rotate in all the positions {rot_dim}"
+            f"feature dimension {hidden_states.shape[-1]} is not of sufficient size to rotate in all the positions {rot_dim}"
         )
 
-    t_left, t, t_right = t[..., :start_index], t[..., start_index:end_index], t[..., end_index:]
-    t = (t * freqs.cos() * scale) + (rotate_half(t) * freqs.sin() * scale)
-    return torch.cat((t_left, t, t_right), dim=-1).to(ori_dtype)
+    rotated = hidden_states[..., :rot_dim]
+    passthrough = hidden_states[..., rot_dim:]
+    rotated = (rotated * cos) + (rotate_half(rotated) * sin)
+    return torch.cat((rotated, passthrough), dim=-1).to(original_dtype)
 
 
 class MusicFlamingoRotaryEmbedding(LlamaRotaryEmbedding):
+    """Rotary time embedding module for computing 2D axial rotary embeddings for batch and time dimensions,
+    with time-based angle modulation.
+
+    See (Goel et al., 2024) for more details: https://arxiv.org/abs/2410.12109
+    """
+
     def __init__(self, config: MusicFlamingoEncoderConfig, device=None):
         super().__init__(config, device=device)
-        position_angles = self._compute_position_angles(self.inv_freq, device=device)
+        position_angles = self._compute_position_angles(self.inv_freq)
         self.register_buffer("position_angles", position_angles, persistent=False)
 
-    def _compute_position_angles(self, inv_freq, device=None, dtype=None):
-        if self.max_seq_len_cached is None:
-            return None
-
-        positions = torch.arange(
-            int(self.max_seq_len_cached), device=device, dtype=dtype if dtype is not None else inv_freq.dtype
-        )
+    def _compute_position_angles(self, inv_freq):
+        positions = torch.arange(int(self.max_seq_len_cached), device=inv_freq.device, dtype=inv_freq.dtype)
         positions = positions / self.max_seq_len_cached * (2 * pi)
         position_angles = positions.unsqueeze(-1) * inv_freq
         position_angles = torch.repeat_interleave(position_angles, 2, dim=-1)
         return position_angles.to(dtype=inv_freq.dtype)
 
     @autocast("cuda", enabled=False)
-    def forward(self, t: Tensor | tuple[int, ...], seq_len=None, offset=0):
-        if isinstance(t, tuple):
-            Colon = slice(None)
-            all_freqs = []
+    def forward(self, audio_times: Tensor, seq_len: int) -> tuple[Tensor, Tensor]:
+        """Compute 2D axial rotary embeddings for batch and time dimensions.
 
-            for ind, dim in enumerate(t):
-                pos = torch.arange(dim, device=self.inv_freq.device)
-                freqs = self.forward(pos, seq_len=dim)
+        Args:
+            audio_times: Tensor of shape (batch_size, seq_len) containing audio timestamps in seconds.
+            seq_len: Sequence length after pooling.
 
-                all_axis = [None] * len(t)
-                all_axis[ind] = Colon
+        Returns:
+            Tuple of (cos, sin) tensors, each of shape (batch_size, seq_len, 2 * head_dim),
+            computed in float64 for numerical precision.
+        """
+        batch_size = audio_times.shape[0]
 
-                new_axis_slice = (Ellipsis, *all_axis, Colon)
-                all_freqs.append(freqs[new_axis_slice])
+        # Use cached position angles for time axis
+        time_freqs = self.position_angles[:seq_len].detach()
 
-            all_freqs = broadcast_tensors(*all_freqs)
-            return torch.cat(all_freqs, dim=-1)
+        # Compute frequencies for batch axis
+        batch_positions = torch.arange(batch_size, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        batch_positions = batch_positions / self.max_seq_len_cached * (2 * pi)
+        batch_freqs = batch_positions.unsqueeze(-1) * self.inv_freq
+        batch_freqs = torch.repeat_interleave(batch_freqs, 2, dim=-1)
 
-        if (
-            seq_len is not None
-            and self.position_angles is not None
-            and (offset + seq_len) <= self.position_angles.shape[0]
-        ):
-            return self.position_angles[offset : (offset + seq_len)].detach()
+        # Broadcasting: batch_freqs (batch, 1, D), time_freqs (1, seq, D)
+        batch_freqs = batch_freqs[:, None, :]
+        time_freqs = time_freqs[None, :, :]
+        batch_freqs, time_freqs = broadcast_tensors(batch_freqs, time_freqs)
+        freqs = torch.cat((batch_freqs, time_freqs), dim=-1)
 
-        inv_freq = self.inv_freq
+        # Apply time-based angle modulation
+        angle = (-audio_times * 2 * pi).to(freqs)
+        freqs = freqs * angle.unsqueeze(-1)
 
-        # Scale time to keep t * freq <= 2pi
-        if self.max_seq_len_cached is not None:
-            t = t / self.max_seq_len_cached * (2 * pi)
-
-        freqs = t.type(inv_freq.dtype).unsqueeze(-1) * inv_freq
-        freqs = torch.repeat_interleave(freqs, 2, dim=-1)
-
-        return freqs
+        # Compute cos/sin in float64 for numerical precision
+        return freqs.double().cos(), freqs.double().sin()
 
 
 class MusicFlamingoPreTrainedModel(AudioFlamingo3PreTrainedModel):
@@ -471,9 +479,7 @@ class MusicFlamingoEncoder(AudioFlamingo3Encoder):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, MusicFlamingoRotaryEmbedding):
-            buffer_value = module._compute_position_angles(
-                module.inv_freq, device=module.inv_freq.device, dtype=module.inv_freq.dtype
-            )
+            buffer_value = module._compute_position_angles(module.inv_freq)
             init.copy_(module.position_angles, buffer_value)
 
     @can_return_tuple
@@ -529,13 +535,8 @@ class MusicFlamingoEncoder(AudioFlamingo3Encoder):
         hidden_states = self.layer_norm(hidden_states)
 
         if audio_times is not None:
-            times = audio_times.to(hidden_states.device)
-            freqs = self.pos_emb((times.shape[0], hidden_states.shape[-2])).to(self.conv1.weight.device)
-            angle = (-times * 2 * pi).to(self.conv1.weight.device)
-            angle_expanded = angle.unsqueeze(2).expand(times.shape[0], hidden_states.shape[-2], freqs.shape[-1])
-            freqs = freqs * angle_expanded
-
-            hidden_states = apply_rotary_emb(freqs, hidden_states)
+            cos, sin = self.pos_emb(audio_times.to(hidden_states.device), seq_len=hidden_states.shape[-2])
+            hidden_states = apply_rotary_time_emb(hidden_states, cos, sin)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -556,14 +557,12 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         input_features_mask: torch.Tensor,
         audio_times: torch.Tensor | None = None,
     ) -> torch.FloatTensor:
-        # Encode audio with audio_times
         encoder_output = self.audio_tower(
             input_features, input_features_mask=input_features_mask, audio_times=audio_times
         )
         audio_embeds = self.multi_modal_projector(encoder_output.last_hidden_state)
 
-        # Mask according to the audio tower output lengths, accounting for both
-        # the conv downsampling and the final avg pooling.
+        # Mask according to the audio tower output lengths, accounting for both conv downsampling and final avg pooling
         _, post_lengths = self.audio_tower._get_feat_extract_output_lengths(input_features_mask.sum(-1).to(torch.long))
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
         audio_embeds = audio_embeds[valid_mask.to(audio_embeds.device)]
@@ -677,18 +676,14 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         )
         return outputs
 
-    def prepare_inputs_for_generation(self, *args, **kwargs):
-        # Do not pass audio inputs during cached decoding.
-
+    def prepare_inputs_for_generation(self, *args, is_first_iteration=False, **kwargs):
         input_features = kwargs.pop("input_features", None)
         input_features_mask = kwargs.pop("input_features_mask", None)
         audio_times = kwargs.pop("audio_times", None)
-        cache_position = kwargs.get("cache_position")
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
-        if cache_position is not None and cache_position[0] == 0:
-            # Pass audio inputs only at the first decoding step.
+        if is_first_iteration:
             if input_features is not None:
                 model_inputs["input_features"] = input_features
             if input_features_mask is not None:
