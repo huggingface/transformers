@@ -1748,9 +1748,10 @@ class ContinuousBatchingConfig:
     ) -> CompileConfig | None:
         """Processes the compile config (or lack thereof) depending on the `compile_.*_path` flags and the availability
         of the decode fast path. After this function is called, `compile_.*_path` flags are set."""
+        logger_ = logging.get_logger("ContinuousBatchingLogger")
         # First catch the case where the user wants to compile the decode fast path but it's not available
         if self.compile_decode_fast_path and not decode_fast_path_available:
-            logger.warning("The decode fast path is not available, so it cannot be compiled.")
+            logger_.warning("The decode fast path is not available, so it cannot be compiled.")
             self.compile_decode_fast_path = False
 
         # If a compile config is provided, resolve the flags automatically if needed
@@ -1758,12 +1759,12 @@ class ContinuousBatchingConfig:
             # Decode fast path cannot be traced, so fullgraph needs to be False
             if self.compile_decode_fast_path is None:
                 self.compile_decode_fast_path = decode_fast_path_available and not compile_config.fullgraph
-                logger.info(f"The decode fast path {'not' * self.compile_decode_fast_path} be compiled.")
+                logger_.info(f"The decode fast path will {'' if self.compile_decode_fast_path else 'not '}be compiled.")
             # Varlen path has 2 dynamic axis, so static shapes are not a great fit for it. But if compile is turned off
             # for decode, it has to be the compiled path, otherwise compile is never used.
             if self.compile_varlen_path is None:
                 self.compile_varlen_path = compile_config.dynamic or not self.compile_decode_fast_path
-                logger.info(f"The normal (varlen) path {'not' * self.compile_varlen_path} be compiled.")
+                logger_.info(f"The normal (varlen) path will {'' if self.compile_varlen_path else 'not '}be compiled.")
             return compile_config
 
         # Otherwise, we first resolve the flags to False if there are not set
