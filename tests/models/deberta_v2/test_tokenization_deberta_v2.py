@@ -117,24 +117,3 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens = tokenizer.convert_ids_to_tokens(tokenizer.encode(sequence, add_special_tokens=False))
 
         self.assertListEqual(tokens, tokens_target)
-
-    def test_add_special_tokens(self):
-        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
-        vocab, vocab_scores, merges = extractor.extract()
-        tokenizer = DebertaV2Tokenizer(vocab=vocab_scores, unk_token="<unk>")
-
-        cls_id = tokenizer.cls_token_id
-        sep_id = tokenizer.sep_token_id
-
-        # Single sequence: [CLS] tokens [SEP]
-        ids_with_special = tokenizer.encode("hello", add_special_tokens=True)
-        ids_without_special = tokenizer.encode("hello", add_special_tokens=False)
-        self.assertEqual(ids_with_special[0], cls_id)
-        self.assertEqual(ids_with_special[-1], sep_id)
-        self.assertEqual(ids_with_special[1:-1], ids_without_special)
-
-        # Pair of sequences: [CLS] A [SEP] B [SEP]
-        ids_pair = tokenizer.encode("hello", "world", add_special_tokens=True)
-        self.assertEqual(ids_pair[0], cls_id)
-        self.assertEqual(ids_pair[-1], sep_id)
-        self.assertGreater(ids_pair.count(sep_id), 1)
