@@ -15,75 +15,29 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="google/recurrentgemma-2b")
 class RecurrentGemmaConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`RecurrentGemmaModel`]. It is used to instantiate a RecurrentGemma
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the RecurrentGemma-7B.
-
-    e.g. [google/recurrentgemma-2b](https://huggingface.co/google/recurrentgemma-2b)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        num_hidden_layers (`int`, *optional*, defaults to 26):
-            The number of hidden layers in the model.
-        vocab_size (`int`, *optional*, defaults to 256000):
-            Vocabulary size of the RecurrentGemma model. Defines the number of
-            different tokens that can be represented by the
-            `inputs_ids` passed when calling [`RecurrentGemmaModel`]
-        hidden_size (`int`, *optional*, defaults to 2560):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 7680):
-            Dimension of the MLP representations.
-        num_attention_heads (`int`, *optional*, defaults to 10):
-            The number of heads for the attention block and the number of
-            heads/blocks for the block-diagonal layers used in the RG-LRU gates.
-            This number must divide `hidden_size` and `lru_width`.
-        lru_width (`int` or `None`, *optional*):
-            Dimension of the hidden representations of the RG-LRU. If `None`
-            this will be set to `hidden_size`.
-            Whether to scale the output of the embeddings by `sqrt(hidden_size)`.
-        attention_window_size (`int`, *optional*, defaults to 2048):
-            The size of the attention window used in the attention block.
-        conv1d_width (`int`, *optional*, defaults to 4):
-            The kernel size of conv1d layers used in the recurrent blocks.
-        logits_soft_cap (`float`, *optional*, defaults to 30.0):
-            The value at which the logits should be soft-capped to after the transformer and LM-head computation in the Causal LM architecture.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether the model should return the last key/values
-            attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*, defaults to 0):
-            Padding token id.
-        eos_token_id (`int`, *optional*, defaults to 1):
-            End of stream token id.
-        bos_token_id (`int`, *optional*, defaults to 2):
-            Beginning of stream token id.
-        hidden_activation (``str` or `function``, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The hidden activation used in the recurrent block as well as the MLP layer of the decoder layers.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        block_types (`list[str]`, *optional*, defaults to `('recurrent', 'recurrent', 'attention')`):
-            List of aleternating blocks that will be repeated to initialize the `temporal_block` layer.
-        attention_dropout (`float`, *optional*, defaults to 0.0): dropout value to use after the attention softmax.
-        num_key_value_heads (`16`, *optional*, defaults to 16): Number of key value heads to use GQA.
-        attention_bias (`bool`, *optional*, defaults to `False`): whether or not the linear q,k,v of the Attention layer should have bias
-        w_init_variance_scale (`float`, *optional*, defaults to 0.01): weight initialization variance.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
+    lru_width (`int` or `None`, *optional*):
+        Dimension of the hidden representations of the RG-LRU. If `None`
+        this will be set to `hidden_size`.
+        Whether to scale the output of the embeddings by `sqrt(hidden_size)`.
+    attention_window_size (`int`, *optional*, defaults to 2048):
+        The size of the attention window used in the attention block.
+    conv1d_width (`int`, *optional*, defaults to 4):
+        The kernel size of conv1d layers used in the recurrent blocks.
+    logits_soft_cap (`float`, *optional*, defaults to 30.0):
+        The value at which the logits should be soft-capped to after the transformer and LM-head computation in the Causal LM architecture.
+    block_types (`list[str]`, *optional*, defaults to `('recurrent', 'recurrent', 'attention')`):
+        List of aleternating blocks that will be repeated to initialize the `temporal_block` layer.
+    w_init_variance_scale (`float`, *optional*, defaults to 0.01):
+        weight initialization variance.
 
     ```python
     >>> from transformers import RecurrentGemmaModel, RecurrentGemmaConfig

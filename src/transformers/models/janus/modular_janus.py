@@ -79,51 +79,13 @@ logger = logging.get_logger(__name__)
 # General docstring
 
 
+@auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
 class JanusVisionConfig(SiglipVisionConfig):
     r"""
-    This is the configuration class to store the configuration of a [`JanusVisionModel`]. It is used to instantiate a
-    `JanusVisionModel` according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        image_size (`int`, *optional*, defaults to 384):
-            The size (resolution) of each image.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for attention weights.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"`, and `"gelu_new"` are supported.
-        mlp_ratio (`float`, *optional*, defaults to 4.0):
-            Ratio of MLP hidden dimensionality to embedding dimensionality.
-        attention_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys, and values in the attention layers.
-        hidden_dropout_rate (`float`, *optional*, defaults to 0.0):
-            The dropout probability for fully connected layers in the encoder.
-        projection_dim (`int`, *optional*, defaults to 2048):
-            Dimensionality of the MLP projection head.
-        projection_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for the projection layer.
-        use_qk_norm (`bool`, *optional*, defaults to `False`):
-            Whether to normalize the query and key matrices.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated normal initializer for initializing all weight matrices.
-        depth (`int`, *optional*, defaults to 2):
-            Number of hidden layers in the aligner module.
-        num_image_tokens (`int`, *optional*, defaults to 576):
-            Number of image tokens.
+    num_image_tokens (`int`, *optional*, defaults to 576):
+        Number of image tokens.
+    projection_dropout (`float`, *optional*, defaults to 0.0):
+        Dropout probability for the projection layer.
     """
 
     model_type = "janus_vision_model"
@@ -176,49 +138,21 @@ class JanusVisionConfig(SiglipVisionConfig):
         self.num_image_tokens = num_image_tokens
 
 
+@auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
 class JanusVQVAEConfig(ChameleonVQVAEConfig):
     r"""
-    This is the configuration class to store the configuration of a [`JanusVQVAEModel`]. It is used to instantiate a
-    `JanusVQVAEModel` according to the specified arguments, defining the model architecture.
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information. Instantiating a
-    configuration with the defaults will yield a similar configuration to the VQModel of the
-    [deepseek-community/Janus-Pro-1B](https://huggingface.co/deepseek-community/Janus-Pro-1B).
-
-    Args:
-        embed_dim (`int`, *optional*, defaults to 8):
-            Dimensionality of each embedding vector.
-        num_embeddings (`int`, *optional*, defaults to 16384):
-            Number of codebook embeddings.
-        double_latent (`bool`, *optional*, defaults to `False`):
-            Whether to use double z channels.
-        latent_channels (`int`, *optional*, defaults to 256):
-            Number of channels for the latent space.
-        num_patches (`int`, *optional*, defaults to 32):
-            Num of patches the input images can be divided into.
-        in_channels (`int`, *optional*, defaults to 3):
-            Number of input channels.
-        out_channels (`int`, *optional*, defaults to 3):
-            Number of out channels.
-        base_channels (`int`, *optional*, defaults to 128):
-            Base channel count.
-        channel_multiplier (`list[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
-            Channel multipliers for each resolution.
-        num_res_blocks (`int`, *optional*, defaults to 2):
-            Number of residual blocks.
-        dropout (`float`, *optional*, defaults to 0.0):
-            Dropout rate.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        projection_dim (`int`, *optional*, defaults to 2048):
-            Dimensionality of the MLP projection head.
-        num_hidden_layers (`int`, *optional*, defaults to 2):
-            Number of hidden layers in VAVAE MLP Connecter module.
-        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        image_token_embed_dim (`int`, *optional*, defaults to 2048):
-            Dimension of image embeddings. It should be same as the dimensionality of text embeddings.
+    image_token_embed_dim (`int`, *optional*, defaults to 2048):
+        Dimension of image embeddings. It should be same as the dimensionality of text embeddings.
+    num_patches (`int`, *optional*, defaults to 32):
+        Num of patches the input images can be divided into.
+    out_channels (`int`, *optional*, defaults to 3):
+        Number of out channels.
+    base_channels (`int`, *optional*, defaults to 128):
+        Base channel count.
+    channel_multiplier (`list[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
+        Channel multipliers for each resolution.
+    num_res_blocks (`int`, *optional*, defaults to 2):
+        Number of residual blocks.
     """
 
     def __init__(
@@ -266,28 +200,9 @@ class JanusVQVAEConfig(ChameleonVQVAEConfig):
         del self.attn_type
 
 
+@auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
 class JanusConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`JanusModel`]. It is used to instantiate an
-    Janus model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Janus-1B or Janus-7B models.
-
-    e.g. [deepseek-community/Janus-Pro-1B](https://huggingface.co/deepseek-community/Janus-Pro-1B) or
-    [deepseek-community/Janus-Pro-7B](https://huggingface.co/deepseek-community/Janus-Pro-7B)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `JanusVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        vq_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `JanusVQVAEConfig`):
-            The config object or dictionary of the VQVAE backbone.
-        image_token_id (`int`, *optional*, defaults to 100581):
-            Token index of a placeholder image token.
-
     Example:
 
     ```python
