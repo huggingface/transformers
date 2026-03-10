@@ -923,7 +923,6 @@ def create_causal_mask(
             config,
             inputs_embeds,
             attention_mask,
-            past_key_values=past_key_values,
             or_mask_function=or_mask_function,
             and_mask_function=and_mask_function,
         )
@@ -1002,7 +1001,6 @@ def create_bidirectional_mask(
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
     encoder_hidden_states: torch.Tensor | None = None,
-    past_key_values: Cache | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
 ) -> torch.Tensor | BlockMask | None:
@@ -1031,7 +1029,7 @@ def create_bidirectional_mask(
     """
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
-        config, inputs_embeds, attention_mask, past_key_values, None, 0, encoder_hidden_states
+        config, inputs_embeds, attention_mask, None, None, 0, encoder_hidden_states
     )
     if early_exit:
         return attention_mask
