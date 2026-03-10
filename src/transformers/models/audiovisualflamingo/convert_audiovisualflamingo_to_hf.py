@@ -36,7 +36,6 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from huggingface_hub import HfApi, create_repo
 from safetensors.torch import safe_open
 
 from transformers import (
@@ -125,7 +124,10 @@ STRING_REPLACEMENTS: tuple[tuple[re.Pattern[str], str], ...] = (
         re.compile(r"\bmodeling_audiovisualflamingo\.AudioVisualFlamingoForCausalLM\b"),
         "modeling_audiovisualflamingo.AudioVisualFlamingoForConditionalGeneration",
     ),
-    (re.compile(r"\bconfiguration_audiovisualflamingo\.VILAConfig\b"), "configuration_audiovisualflamingo.AudioVisualFlamingoConfig"),
+    (
+        re.compile(r"\bconfiguration_audiovisualflamingo\.VILAConfig\b"),
+        "configuration_audiovisualflamingo.AudioVisualFlamingoConfig",
+    ),
     (
         re.compile(r"\bauto_processor\.VILAProcessor\b"),
         "processing_audiovisualflamingo.AudioVisualFlamingoProcessor",
@@ -567,7 +569,9 @@ def _save_model_from_state(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Convert legacy AudioVisualFlamingo/VILA checkpoints to HF-loadable format.")
+    parser = argparse.ArgumentParser(
+        description="Convert legacy AudioVisualFlamingo/VILA checkpoints to HF-loadable format."
+    )
     parser.add_argument(
         "--src_path",
         type=Path,
@@ -626,13 +630,14 @@ def convert_audiovisualflamingo_to_hf(
 
     touched, missing = _rewrite_metadata_jsons(dst_root)
     config_payload = _normalize_top_level_config(dst_root, src_root)
-    _save_processor(src_root, dst_root, config_payload)
+    processor = _save_processor(src_root, dst_root, config_payload)
 
+    model = None
     if not skip_weights:
         state = _collect_component_state(src_root)
         if not state:
             raise FileNotFoundError("No component safetensors found under legacy component directories.")
-        _save_model_from_state(dst_root, config_payload, state)
+        model = _save_model_from_state(dst_root, config_payload, state)
 
     if touched:
         logger.info("Converted %d metadata file(s).", len(touched))
@@ -645,13 +650,11 @@ def convert_audiovisualflamingo_to_hf(
             logger.info("  - %s", path)
 
     if push_to_hub:
-        logger.info("Pushing converted artifacts to the Hub: %s", push_to_hub)
-        repo_id = create_repo(push_to_hub, repo_type="model", exist_ok=True).repo_id
-        HfApi().upload_folder(
-            repo_id=repo_id,
-            repo_type="model",
-            folder_path=str(dst_root),
-        )
+        logger.info("Pushing processor to the Hub: %s", push_to_hub)
+        processor.push_to_hub(push_to_hub)
+        if model is not None:
+            logger.info("Pushing model to the Hub: %s", push_to_hub)
+            model.push_to_hub(push_to_hub)
 
     return dst_root
 
