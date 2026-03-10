@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import torch
 import torch.nn as nn
 import triton
@@ -22,7 +21,7 @@ from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import is_kernels_available, is_torch_available, logging
 from .hub_kernels import get_kernel
-from .moe import ALL_EXPERTS_FUNCTIONS, use_experts_implementation
+from .moe import ExpertsInterface, use_experts_implementation
 
 
 logger = logging.get_logger(__name__)
@@ -400,10 +399,6 @@ def fp8_grouped_mm_experts_forward(
     return final_hidden_states.to(hidden_states.dtype)
 
 
-ALL_EXPERTS_FUNCTIONS["batched_mm"] = fp8_batched_mm_experts_forward
-ALL_EXPERTS_FUNCTIONS["grouped_mm"] = fp8_grouped_mm_experts_forward
-
-
 class FP8Experts(nn.Module):
     def __init__(
         self,
@@ -517,6 +512,18 @@ class FP8Experts(nn.Module):
         return output.to(dtype=input.dtype)
 
 
+class FP8ExpertsInterface(ExpertsInterface):
+    """Interface for registering custom experts implementations."""
+
+    _global_mapping = {
+        "batched_mm": fp8_batched_mm_experts_forward,
+        "grouped_mm": fp8_grouped_mm_experts_forward,
+    }
+
+
+ALL_FP8_EXPERTS_FUNCTIONS = FP8ExpertsInterface()
+
+
 def replace_with_fp8_linear(
     model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False
 ):
@@ -550,7 +557,12 @@ def replace_with_fp8_linear(
                 has_gate = getattr(module, "has_gate", True)
                 has_bias = getattr(module, "has_bias", False)
                 config = getattr(module, "config", model.config.get_text_config())
-                new_class = use_experts_implementation(FP8Experts, has_bias=has_bias, has_gate=has_gate)
+                new_class = use_experts_implementation(
+                    experts_class=FP8Experts,
+                    experts_interface=ALL_FP8_EXPERTS_FUNCTIONS,
+                    has_bias=has_bias,
+                    has_gate=has_gate,
+                )
                 new_module = new_class(
                     config=config,
                     block_size=quantization_config.weight_block_size,

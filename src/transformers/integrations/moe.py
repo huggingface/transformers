@@ -465,6 +465,7 @@ def _default_apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
 def use_experts_implementation(
     experts_class: type[torch.nn.Module] | None = None,
     *,
+    experts_interface: ExpertsInterface = ALL_EXPERTS_FUNCTIONS,
     is_transposed: bool = False,
     has_bias: bool = False,
     has_gate: bool = True,
@@ -497,9 +498,7 @@ def use_experts_implementation(
 
         @wraps(original_forward)
         def forward(self, *args, **kwargs):
-            experts_forward = ALL_EXPERTS_FUNCTIONS.get_interface(
-                self.config._experts_implementation, original_forward
-            )
+            experts_forward = experts_interface.get_interface(self.config._experts_implementation, original_forward)
             return experts_forward(self, *args, **kwargs)
 
         if not hasattr(experts_class, "_apply_gate"):
