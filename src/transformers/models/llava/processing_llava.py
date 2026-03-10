@@ -15,8 +15,6 @@
 Processor class for Llava.
 """
 
-import numpy as np
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...processing_utils import (
@@ -34,7 +32,7 @@ logger = logging.get_logger(__name__)
 
 class LlavaProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {"padding": False, "return_mm_token_type_ids": False},
+        "text_kwargs": {"padding": False, "return_mm_token_type_ids": False, "return_text_replacement_offsets": False},
     }
 
 
@@ -95,37 +93,26 @@ class LlavaProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        if images is not None:
-            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-        else:
-            image_inputs = {}
 
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
-        # try to expand inputs in processing if we have the necessary parts
-        prompt_strings = text
-        if image_inputs.get("pixel_values") is not None:
-            # Replace the image token with the expanded image token sequence
-            pixel_values = image_inputs["pixel_values"]
-            height, width = get_image_size(to_numpy_array(pixel_values[0]))
-            num_image_tokens = (height // self.patch_size) * (
-                width // self.patch_size
-            ) + self.num_additional_image_tokens
-            if self.vision_feature_select_strategy == "default":
-                num_image_tokens -= 1
-
-            prompt_strings = []
-            for sample in text:
-                sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
-                prompt_strings.append(sample)
+        if images is not None:
+            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
+            text, text_replacement_offsets = self.get_text_replacement(text, image_inputs=image_inputs)
+        else:
+            image_inputs = {}
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
-        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
+        return_text_replacement_offsets = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+
+        if return_text_replacement_offsets:
+            text_inputs["text_replacement_offsets"] = text_replacement_offsets
 
         if return_mm_token_type_ids:
             array_ids = np.array(text_inputs["input_ids"])
@@ -134,6 +121,14 @@ class LlavaProcessor(ProcessorMixin):
             text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+
+    def replace_image_token(self, text: str, image_inputs: dict, batch_idx: int, image_index: int) -> str:
+        pixel_values = image_inputs["pixel_values"][batch_idx]
+        height, width = get_image_size(to_numpy_array(pixel_values))
+        num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + self.num_additional_image_tokens
+        if self.vision_feature_select_strategy == "default":
+            num_image_tokens -= 1
+        return self.image_token * num_image_tokens
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """

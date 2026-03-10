@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Union
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image, load_image
+from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
 from ...utils import auto_docstring, logging
@@ -40,50 +40,6 @@ def is_url(val) -> bool:
 
 def is_image_or_image_url(elem):
     return is_url(elem) or is_valid_image(elem)
-
-
-def _prompt_split_image(image_seq_len, image_rows, image_cols, fake_token_around_image, image_token, global_img_token):
-    """Prompt with expanded image tokens for when the image is split into patches."""
-    text_split_images = ""
-    for n_h in range(image_rows):
-        for n_w in range(image_cols):
-            text_split_images += (
-                f"{fake_token_around_image}" + f"<row_{n_h + 1}_col_{n_w + 1}>" + f"{image_token}" * image_seq_len
-            )
-        text_split_images += "\n"
-
-    text_split_images += (
-        f"\n{fake_token_around_image}"
-        + f"{global_img_token}"
-        + f"{image_token}" * image_seq_len
-        + f"{fake_token_around_image}"
-    )
-    return text_split_images
-
-
-def _prompt_single_image(image_seq_len, fake_token_around_image, image_token, global_img_token):
-    """Prompt with expanded image tokens for a single image."""
-    return (
-        f"{fake_token_around_image}"
-        + f"{global_img_token}"
-        + f"{image_token}" * image_seq_len
-        + f"{fake_token_around_image}"
-    )
-
-
-def get_image_prompt_string(
-    image_rows, image_cols, image_seq_len, fake_token_around_image, image_token, global_img_token
-):
-    if image_rows == 0 and image_cols == 0:
-        return _prompt_single_image(
-            image_seq_len,
-            fake_token_around_image=fake_token_around_image,
-            image_token=image_token,
-            global_img_token=global_img_token,
-        )
-    return _prompt_split_image(
-        image_seq_len, image_rows, image_cols, fake_token_around_image, image_token, global_img_token
-    )
 
 
 class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
@@ -139,18 +95,6 @@ class Idefics3Processor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
-    def _extract_images_from_prompts(self, prompts):
-        prompt_images = []
-        for prompt in prompts:
-            images = []
-            for elem in prompt:
-                if is_valid_image(elem):
-                    images.append(elem)
-                elif is_url(elem):
-                    images.append(load_image(elem))
-            prompt_images.append(images)
-        return prompt_images
-
     @auto_docstring
     def __call__(
         self,
@@ -173,7 +117,6 @@ class Idefics3Processor(ProcessorMixin):
             **kwargs,
         )
 
-        image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
 
@@ -217,8 +160,9 @@ class Idefics3Processor(ProcessorMixin):
             n_images_in_images = [len(sample) for sample in images]
 
             # Load images if they are URLs
-            images = [[load_image(im) if is_url(im) else im for im in sample] for sample in images]
+            images = self.image_processor.fetch_images(images)
 
+            output_kwargs["images_kwargs"]["return_row_col_info"] = True
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
             inputs.update(image_inputs)
 
@@ -228,46 +172,9 @@ class Idefics3Processor(ProcessorMixin):
                         f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
                     )
 
-                image_rows = inputs.pop("rows", [[0] * n_images for n_images in n_images_in_text])
-                image_cols = inputs.pop("cols", [[0] * n_images for n_images in n_images_in_text])
-
-                fake_image_token = self.fake_image_token
-                image_token = self.image_token
-                global_img_token = self.global_image_tag
-
-                prompt_strings = []
-                batch_image_seq_lengths = []
-                for sample, sample_rows, sample_cols in zip(text, image_rows, image_cols):
-                    # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
-                    image_prompt_strings = []
-                    image_seq_lengths = []
-                    for n_rows, n_cols in zip(sample_rows, sample_cols):
-                        image_prompt_string = get_image_prompt_string(
-                            n_rows,
-                            n_cols,
-                            image_seq_len,
-                            image_token=image_token,
-                            fake_token_around_image=fake_image_token,
-                            global_img_token=global_img_token,
-                        )
-                        # Add +2 and +3 for special BOI/EOI/fake_image_wrapper tokens
-                        row_length = (self.image_seq_len + 2) * n_cols + 1
-                        image_seq_lengths.append((self.image_seq_len + 3) + row_length * n_rows)
-                        image_prompt_strings.append(image_prompt_string)
-
-                    batch_image_seq_lengths.append(image_seq_lengths)
-                    split_sample = sample.split(image_token)
-                    if len(split_sample) == 0:
-                        raise ValueError("The image token should be present in the text.")
-
-                    # Place in the image prompt strings where the image tokens are
-                    sample = split_sample[0]
-                    for i, image_prompt_string in enumerate(image_prompt_strings):
-                        sample += image_prompt_string + split_sample[i + 1]
-                    prompt_strings.append(sample)
-
-                text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-                self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
+                text, text_replacement_offsets = self.get_text_replacement(text, image_inputs=image_inputs)
+                text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+                self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
                 inputs.update(text_inputs)
 
         elif text is not None:
@@ -279,22 +186,61 @@ class Idefics3Processor(ProcessorMixin):
             inputs.update(text_inputs)
 
         if return_mm_token_type_ids:
-            array_ids = np.array(inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(array_ids)
-            for i, seq_lengths in enumerate(batch_image_seq_lengths):
-                image_start_positions = np.where(array_ids[i] == self.fake_image_token_id)[0]
-                j = 0
-                for seq_len in seq_lengths:
-                    if j >= len(image_start_positions):
-                        break
-                    start = image_start_positions[j]
-                    end = start + seq_len
-                    mm_token_type_ids[i, start:end] = 1
-                    j = np.searchsorted(image_start_positions, end)
-
-            inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
+            batch_image_seq_lengths = None
+            inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(inputs["input_ids"], batch_image_seq_lengths)
         return BatchFeature(data=inputs, tensor_type=return_tensors)
+
+    def replace_image_token(self, text: str, image_inputs: dict, batch_idx: int, image_index: int) -> str:
+        image_rows = image_inputs["rows"][batch_idx][image_index]
+        image_cols = image_inputs["cols"][batch_idx][image_index]
+        if image_rows == 0 and image_cols == 0:
+            return (
+                f"{self.fake_token_around_image}"
+                + f"{self.global_img_token}"
+                + f"{self.image_token}" * self.image_seq_len
+                + f"{self.fake_token_around_image}"
+            )
+        else:
+            text_split_images = ""
+            for n_h in range(image_rows):
+                for n_w in range(image_cols):
+                    text_split_images += (
+                        f"{self.fake_token_around_image}"
+                        + f"<row_{n_h + 1}_col_{n_w + 1}>"
+                        + f"{self.image_token}" * self.image_seq_len
+                    )
+                text_split_images += "\n"
+
+            text_split_images += (
+                f"\n{self.fake_token_around_image}"
+                + f"{self.global_img_token}"
+                + f"{self.image_token}" * self.image_seq_len
+                + f"{self.fake_token_around_image}"
+            )
+            return text_split_images
+
+    def create_mm_token_type_ids(
+        self, input_ids: list | np.array, batch_image_seq_lengths: list[int]
+    ) -> list[list[int]]:
+        # We have to iterate for each list separately because inputs
+        # might be non-padded lists and we can't cast numpy on that!
+        # Then cast numpy as each input for faster indexing
+        mm_token_type_ids = []
+        for i, seq_lengths in enumerate(batch_image_seq_lengths):
+            array_ids = np.array(input_ids[i])
+            mm_token_types = np.zeros_like(array_ids)
+            image_start_positions = np.where(array_ids == self.fake_image_token_id)[0]
+            j = 0
+            for seq_len in seq_lengths:
+                if j >= len(image_start_positions):
+                    break
+                start = image_start_positions[j]
+                end = start + seq_len
+                mm_token_types[start:end] = 1
+                j = np.searchsorted(image_start_positions, end)
+            mm_token_type_ids.append(mm_token_types.tolist())
+
+        return mm_token_type_ids
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """

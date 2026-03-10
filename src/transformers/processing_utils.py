@@ -20,6 +20,7 @@ import copy
 import inspect
 import json
 import os
+import re
 import sys
 import typing
 from dataclasses import dataclass
@@ -571,6 +572,12 @@ class ProcessorMixin(PushToHubMixin):
     def __init__(self, *args, **kwargs):
         # First, extract chat template from kwargs. It can never be a positional arg
         setattr(self, "chat_template", kwargs.pop("chat_template", None))
+
+        # Special ids used per each modality in multimodal models. Models need to
+        # override if they use special BOI/EOI/row/col/etc tokens that have to be marked
+        self.image_ids = [getattr(self, "image_token_ids", None)]
+        self.video_ids = [getattr(self, "video_token_ids", None)]
+        self.audio_ids = [getattr(self, "audio_token_ids", None)]
 
         # Check audio tokenizer for its class but do not treat it as attr to avoid saving weights
         if (audio_tokenizer := kwargs.pop("audio_tokenizer", None)) is not None:
@@ -1606,6 +1613,75 @@ class ProcessorMixin(PushToHubMixin):
             raise ValueError(f"Cannot decode text: {self.__class__.__name__} has no tokenizer.")
         return self.tokenizer.decode(*args, **kwargs)
 
+    def create_mm_token_type_ids(self, input_ids: list) -> list[list[int]]:
+        # We have to iterate for each list separately because inputs
+        # might be non-padded lists and we can't cast numpy on that!
+        # Then cast numpy as each input for faster indexing
+        mm_token_type_ids = []
+        for input in input_ids:
+            input = np.array(input)
+            mm_token_types = np.zeros_like(input)
+            mm_token_types[np.isin(input, self.image_ids)] = 1
+            mm_token_types[np.isin(input, self.video_ids)] = 2
+            mm_token_types[np.isin(input, self.audio_ids)] = 3
+            mm_token_type_ids.append(mm_token_types.tolist())
+        return mm_token_type_ids
+
+    def replace_image_token(
+        self, text: str, image_inputs: dict | None = None, batch_idx: int = 0, image_index: int = 0
+    ) -> str:
+        raise NotImplementedError
+
+    def replace_video_token(
+        self, text: str, video_inputs: dict | None = None, batch_idx: int = 0, video_index: int = 0
+    ) -> str:
+        raise NotImplementedError
+
+    def get_text_replacement(
+        self,
+        text: list[str],
+        image_inputs: dict | None = None,
+        video_inputs: dict | None = None,
+    ) -> tuple[str, list[dict[str, Any]]]:
+        batch_replacement_offsets = []
+        for batch_idx in range(len(text)):
+            last = 0
+            image_index = video_index = 0
+            replacement_offsets = []
+            expanded_sample = []
+            for m in re.finditer(f"({self.image_token}) | ({self.video_token})", text[batch_idx]):
+                start, end = m.span()
+                expanded_sample.append(text[batch_idx][last:start])
+
+                # Case 1: if the image token has match in the text
+                if m.group(0) is not None:
+                    replacement_text = self.replace_image_token(text[batch_idx], image_inputs, batch_idx, image_index)
+                    replacement_offsets.append({"type": "image"})
+                    image_index += 1
+
+                # Case 2: if the video token has match in the text
+                elif m.group(1) is not None:
+                    replacement_text = self.replace_video_token(text[batch_idx], video_inputs, batch_idx, video_index)
+                    replacement_offsets.append({"type": "video"})
+                    video_index += 1
+
+                # update common values such as start-end spans and replacement text
+                replacement_offsets[-1].update(
+                    {
+                        "span": (start, end),
+                        "new_span": (start, start + len(replacement_text)),
+                        "text": m.group(0),
+                        "replacement": replacement_text,
+                    }
+                )
+                expanded_sample.append(replacement_text)
+                last = end
+
+            expanded_sample.append(text[batch_idx][last:])
+            text[batch_idx] = "".join(expanded_sample)
+            batch_replacement_offsets.append(replacement_offsets)
+        return text, batch_replacement_offsets
+
     @property
     def model_input_names(self):
         model_input_names = []
@@ -1852,6 +1928,8 @@ class ProcessorMixin(PushToHubMixin):
                         offsets = offset_mapping[i]
                         offset_starts = [start for start, end in offsets]
                         for assistant_start_char, assistant_end_char in generation_indices[i]:
+                            # assistant_start_char += 4025
+                            # assistant_end_char += 4025
                             start_pos = bisect.bisect_left(offset_starts, assistant_start_char)
                             end_pos = bisect.bisect_left(offset_starts, assistant_end_char)
 
