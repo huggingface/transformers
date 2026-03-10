@@ -1712,9 +1712,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 ]:
                     if device_availability_check():
                         raise ValueError(
-                            f"You are attempting to use Flash Attention {flash_attn_version} with a model not initialized on GPU. Make sure to move the model to GPU "
-                            "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
-                            f"or initialising the model on CPU and then moving it to GPU, e.g. with `model.to('{device_name}')`."
+                            f"You are attempting to use Flash Attention {flash_attn_version} with a model not initialized on GPU. Please make sure to have "
+                            "access to a GPU and either initialise the model on a GPU by passing a device_map or initialising the model on CPU and then "
+                            f"moving it to GPU, e.g. with `model.to('{device_name}')`."
                         )
 
         # If no error raise by this point, we can return `True`
