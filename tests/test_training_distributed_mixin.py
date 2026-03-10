@@ -18,7 +18,6 @@ import logging
 import tempfile
 import time
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from transformers import is_torch_available, set_seed
 from transformers.testing_utils import (
@@ -30,6 +29,7 @@ from transformers.testing_utils import (
 )
 
 from .test_training_mixin import TrainingConfigMixin
+
 
 if is_torch_available():
     import torch
@@ -105,7 +105,7 @@ def _test_training_distributed_overfit_impl(mesh, config_class, model_class, tra
     # Create a shared temp directory for model saving/loading
     # Only rank 0 creates and saves the model, all ranks load with TP
     temp_dir = tempfile.mkdtemp()
-    
+
     # Broadcast the temp_dir path to all ranks
     if is_rank_0:
         temp_dir_bytes = temp_dir.encode('utf-8')
@@ -113,12 +113,12 @@ def _test_training_distributed_overfit_impl(mesh, config_class, model_class, tra
         temp_dir_len = torch.tensor([len(temp_dir_bytes)], dtype=torch.long)
     else:
         temp_dir_len = torch.tensor([0], dtype=torch.long)
-    
+
     dist.broadcast(temp_dir_len, src=0)
-    
+
     if not is_rank_0:
         temp_dir_tensor = torch.zeros(temp_dir_len.item(), dtype=torch.uint8)
-    
+
     dist.broadcast(temp_dir_tensor, src=0)
     temp_dir = bytes(temp_dir_tensor.tolist()).decode('utf-8')
 
@@ -134,17 +134,17 @@ def _test_training_distributed_overfit_impl(mesh, config_class, model_class, tra
 
     # All ranks load with tensor parallelism
     if is_rank_0:
-        logger.info(f"Loading model with tp_plan='auto' and device_mesh")
+        logger.info("Loading model with tp_plan='auto' and device_mesh")
         if hasattr(config, "base_model_tp_plan"):
             logger.info(f"  {Colors.CYAN}base_model_tp_plan:{Colors.RESET} {config.base_model_tp_plan}")
-    
+
     # Load with tensor parallelism using the TP mesh
     model = model_class.from_pretrained(
         temp_dir,
         tp_plan="auto",
         device_mesh=mesh["tp"],
     )
-    
+
     model.train()
 
     load_time = time.perf_counter() - load_start
@@ -170,7 +170,7 @@ def _test_training_distributed_overfit_impl(mesh, config_class, model_class, tra
             logger.info(f"  {Colors.CYAN}num_experts:{Colors.RESET} {config.num_experts}")
         if hasattr(config, "num_experts_per_tok"):
             logger.info(f"  {Colors.CYAN}num_experts_per_tok:{Colors.RESET} {config.num_experts_per_tok}")
-        
+
         # Log TP status
         logger.info(f"  {Colors.GREEN}tensor_parallel:{Colors.RESET} ENABLED (tp_size={tp_size})")
 
@@ -432,7 +432,7 @@ class TrainingDistributedTesterMixin(TrainingConfigMixin, ABC):
         self,
         batch_size: int,
         audio_length: int,
-        feature_size: Optional[int] = None,
+        feature_size: int | None = None,
     ) -> dict[str, torch.Tensor]:
         """Create fixed batch for audio models using a deterministic waveform."""
         pass

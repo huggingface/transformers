@@ -189,6 +189,7 @@ def _gather_ddp_state_dict(model):
 
 def _build_manual_fsdp_plan(config, device, policy_options=None):
     """Build a default manual FSDP2 plan from model structure."""
+    policy_options = policy_options or []
     set_seed(SEED)
     model = AutoModelForCausalLM.from_config(config).to(device)
     named_modules = dict(model.named_modules())
@@ -208,32 +209,27 @@ def _build_manual_fsdp_plan(config, device, policy_options=None):
         and hasattr(output_embed, "weight")
         and input_embed.weight is output_embed.weight
     )
-
-    final_norm = _find_final_norm(model, decoder_layer_names)
     embed_name = id_to_name.get(id(input_embed)) if input_embed is not None else None
     output_name = id_to_name.get(id(output_embed)) if output_embed is not None else None
+    final_norm = _find_final_norm(model, decoder_layer_names)
     norm_name = id_to_name.get(id(final_norm)) if final_norm is not None else None
 
-    fsdp_plan = dict.fromkeys(layer_prefixes, "free_full_weight")
+    module_plan = {name: ["free_full_weight", *policy_options] for name in layer_prefixes}
 
     if norm_name:
-        fsdp_plan[norm_name] = "keep_full_weight"
+        module_plan[norm_name] = ["keep_full_weight", *policy_options]
 
     if weights_tied:
         if embed_name:
-            fsdp_plan[embed_name] = "keep_full_weight"
+            module_plan[embed_name] = ["keep_full_weight", *policy_options]
     else:
         if embed_name:
-            fsdp_plan[embed_name] = "free_full_weight"
+            module_plan[embed_name] = ["free_full_weight", *policy_options]
         if output_name:
-            fsdp_plan[output_name] = "keep_full_weight"
-
-    if policy_options:
-        first_prefix = sorted(layer_prefixes)[0]
-        fsdp_plan[first_prefix] = ["free_full_weight", *policy_options]
+            module_plan[output_name] = ["keep_full_weight", *policy_options]
 
     del model
-    return fsdp_plan
+    return {"mode": "manual", "modules": module_plan}
 
 
 def _create_init_state_dict(config, dtype):
@@ -392,11 +388,12 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
 
     batches = _build_repeated_training_batches(config, device, NUM_STEPS)
 
-    device_map, device_mesh, _ = initialize_fsdp(fsdp_plan="auto")
+    auto_plan = {"mode": "auto"}
+    device_map, device_mesh, _ = initialize_fsdp(fsdp_plan=auto_plan)
 
     _set_determinism(SEED)
     model = AutoModelForCausalLM.from_config(config).to(device_map)
-    model = apply_fsdp2(model, device_mesh, fsdp_plan="auto")
+    model = apply_fsdp2(model, device_mesh, fsdp_plan=auto_plan)
     model.train()
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 
@@ -415,7 +412,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
 
         _set_determinism(SEED + 1234)
         new_model = AutoModelForCausalLM.from_config(config).to(device_map)
-        new_model = apply_fsdp2(new_model, device_mesh, fsdp_plan="auto")
+        new_model = apply_fsdp2(new_model, device_mesh, fsdp_plan=auto_plan)
         new_optimizer = torch.optim.Adam(new_model.parameters(), lr=LR)
 
         _load_checkpoint(new_model, new_optimizer, tmpdir)
@@ -437,12 +434,12 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
         )
 
     if rank == 0:
-        logger.info(f"FSDP2 save/load test passed: all {len(state_dict_before)} parameters match exactly.")
+        logger.debug(f"FSDP2 save/load test passed: all {len(state_dict_before)} parameters match exactly.")
 
 
 def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_word_embeddings):
     """
-    Verify that apply_fsdp2(fsdp_plan="auto") wraps exactly the right modules.
+    Verify that apply_fsdp2(fsdp_plan={"mode": "auto"}) wraps exactly the right modules.
 
     Expected FSDP targets:
     UNTIED                              TIED
@@ -457,7 +454,8 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
     config = config_class.from_dict(config_dict)
     config.tie_word_embeddings = tie_word_embeddings
 
-    device_map, device_mesh, _ = initialize_fsdp(fsdp_plan="auto")
+    auto_plan = {"mode": "auto"}
+    device_map, device_mesh, _ = initialize_fsdp(fsdp_plan=auto_plan)
 
     set_seed(SEED)
     model = AutoModelForCausalLM.from_config(config).to(device_map)
@@ -489,14 +487,14 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
     if not weights_tied:
         expected_targets |= {output_name}
 
-    model = apply_fsdp2(model, device_mesh, fsdp_plan="auto")
+    model = apply_fsdp2(model, device_mesh, fsdp_plan=auto_plan)
 
     actual_targets = {name for name, module in model.named_modules() if type(module).__name__.startswith("FSDP")}
 
     if rank == 0:
-        logger.info(f"  Weights tied: {weights_tied}")
-        logger.info(f"  Expected FSDP targets: {sorted(expected_targets)}")
-        logger.info(f"  Actual FSDP targets:   {sorted(actual_targets)}")
+        logger.debug(f"  Weights tied: {weights_tied}")
+        logger.debug(f"  Expected FSDP targets: {sorted(expected_targets)}")
+        logger.debug(f"  Actual FSDP targets:   {sorted(actual_targets)}")
 
     missing = expected_targets - actual_targets
     extra = actual_targets - expected_targets
@@ -507,7 +505,7 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
     )
 
     if rank == 0:
-        logger.info(f"  FSDP sharding structure OK ({len(actual_targets)} targets)")
+        logger.debug(f"  FSDP sharding structure OK ({len(actual_targets)} targets)")
 
 
 def _test_fsdp2_plan_vs_ddp_impl(
@@ -529,7 +527,11 @@ def _test_fsdp2_plan_vs_ddp_impl(
     config.tie_word_embeddings = tie_word_embeddings
 
     if plan_mode == "auto":
-        fsdp_plan = ["auto", *policy_options] if policy_options else "auto"
+        fsdp_plan = {
+            "mode": "auto",
+            "cpu_offload": "cpu_offload" in policy_options,
+            "mixed_precision": "mixed_precision" in policy_options,
+        }
         test_label = f"FSDP2(auto{'+policies' if policy_options else ''})"
     elif plan_mode == "manual":
         fsdp_plan = _build_manual_fsdp_plan(config, device, policy_options=policy_options)
@@ -583,7 +585,7 @@ def _test_fsdp2_plan_vs_ddp_impl(
         )
 
     if rank == 0:
-        logger.info(f"DDP and {test_label} comparison checks passed.")
+        logger.debug(f"DDP and {test_label} comparison checks passed.")
 
 
 def _test_fsdp2_plan_cpu_offload_mixed_precision(
@@ -606,14 +608,15 @@ def _test_fsdp2_plan_cpu_offload_mixed_precision(
     batches = _build_repeated_training_batches(config, device, num_steps)
 
     if plan_mode == "auto":
-        fsdp_plan = ["auto", *policy_options]
+        fsdp_plan = {
+            "mode": "auto",
+            "cpu_offload": "cpu_offload" in policy_options,
+            "mixed_precision": "mixed_precision" in policy_options,
+        }
         label = "FSDP2(auto + cpu-offload + mixed-precision)"
     elif plan_mode == "manual":
-        fsdp_plan = _build_manual_fsdp_plan(config, device)
-        # Apply mixed/cpu_offload policies across all planned FSDP targets so dtype/offload
-        # behavior is consistent across layer, norm, and embedding/output boundaries.
-        fsdp_plan = {name: [strategy, *policy_options] for name, strategy in fsdp_plan.items()}
-        label = "FSDP2(manual + cpu-offload + mixed-precision)"
+        fsdp_plan = _build_manual_fsdp_plan(config, device, policy_options=policy_options)
+        label = "FSDP2(manual + cpu-offload + mixed-precision"
     else:
         raise ValueError(f"Unsupported plan_mode '{plan_mode}'. Expected 'auto' or 'manual'.")
 
@@ -632,15 +635,15 @@ def _test_fsdp2_plan_cpu_offload_mixed_precision(
     )
 
     if not dist.is_initialized() or dist.get_rank() == 0:
-        logger.info("%s per-step trace:", label)
+        logger.debug("%s per-step trace:", label)
         for step, (loss, grad_norm) in enumerate(zip(fsdp_losses, fsdp_grad_norms)):
-            logger.info("  step=%d loss=%.6f grad_norm=%.6f", step, loss, grad_norm)
+            logger.debug("  step=%d loss=%.6f grad_norm=%.6f", step, loss, grad_norm)
 
     # Assert loss reduction
     initial_loss, final_loss = fsdp_losses[0], fsdp_losses[-1]
     loss_reduction_ratio = (initial_loss - final_loss) / max(abs(initial_loss), 1e-12)
     if not dist.is_initialized() or dist.get_rank() == 0:
-        logger.info(
+        logger.debug(
             "%s reduction summary: loss %.6f -> %.6f (%.2f%%)",
             label,
             initial_loss,
@@ -671,9 +674,9 @@ def _test_fsdp2_plan_cpu_offload_mixed_precision(
         )[0].tolist()
 
     if not dist.is_initialized() or dist.get_rank() == 0:
-        logger.info("Generation prompt tokens: %s", prompt[0].tolist())
-        logger.info("Generation expected tokens: %s", expected_tokens[: len(generated)])
-        logger.info("Generation generated tokens: %s", generated)
+        logger.debug("Generation prompt tokens: %s", prompt[0].tolist())
+        logger.debug("Generation expected tokens: %s", expected_tokens[: len(generated)])
+        logger.debug("Generation generated tokens: %s", generated)
 
     expected_slice = expected_tokens[: len(generated)]
     num_matches = sum(int(a == b) for a, b in zip(generated, expected_slice))
@@ -684,7 +687,7 @@ def _test_fsdp2_plan_cpu_offload_mixed_precision(
         f"got {match_ratio:.2%}"
     )
     if rank == 0:
-        logger.info(f"{label} reduction + generation checks passed.")
+        logger.debug(f"{label} reduction + generation checks passed.")
 
 
 # =============================================================================

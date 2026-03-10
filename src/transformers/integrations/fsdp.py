@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import inspect
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 
 from ..utils import is_torch_available, is_torch_greater_or_equal, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
@@ -24,8 +24,14 @@ from ..utils.quantization_config import QuantizationMethod
 if TYPE_CHECKING:
     import torch.nn as nn
 
+if is_torch_available() and is_torch_greater_or_equal("2.5"):
+    import torch
+    from torch.distributed._composable.fsdp import fully_shard
+    from torch.distributed.fsdp import CPUOffloadPolicy, MixedPrecisionPolicy, OffloadPolicy
+
 logger = logging.get_logger(__name__)
 
+#TODO(3outeille): too many imports, make sure there is no redundant imports
 def is_fsdp_managed_module(module: nn.Module) -> bool:
     if not is_torch_available():
         return False
@@ -52,7 +58,7 @@ def is_fsdp_enabled():
 
 
 def initialize_fsdp(
-    fsdp_plan: str | list | tuple | dict[str, str | list[object] | tuple[object, ...]] | None,
+    fsdp_plan: dict[str, Any] | None,
     device_mesh=None,
     device_map=None,
 ):
@@ -61,7 +67,7 @@ def initialize_fsdp(
     This function is called when the model is loaded and fsdp_plan is set.
 
     Args:
-        fsdp_plan: Either "auto" for automatic sharding or a dict mapping module names to sharding strategies.
+        fsdp_plan: Optional FSDP config dict with an explicit "mode".
         device_mesh: Optional pre-created DeviceMesh for FSDP.
         device_map: Optional device map.
 
@@ -197,9 +203,36 @@ def get_transformer_block_classes(model):
 
     return block_classes
 
+def _get_auto_policy_kwargs(fsdp_plan: dict[str, Any]) -> dict[str, Any]:
+    """Parse auto-mode fsdp_plan into fully_shard policy kwargs."""
+    policy_kwargs = {}
+    if fsdp_plan.get("cpu_offload"):
+        policy_kwargs["offload_policy"] = CPUOffloadPolicy()
+    if fsdp_plan.get("mixed_precision"):
+        # TODO(3outeille): is the output_dtype what we want?
+        policy_kwargs["mp_policy"] = MixedPrecisionPolicy(
+            param_dtype=torch.bfloat16,
+            reduce_dtype=torch.float32,
+            output_dtype=torch.bfloat16,
+        )
+    return policy_kwargs
+
+def _shard_auto_input_embedding(input_embed, is_weights_tied: bool, device_mesh, auto_policy_kwargs):
+    # Shard input embeddings (only when not tied).
+    # When tied, the shared weight is grouped with the final norm in step 3.
+    if input_embed is None or is_weights_tied:
+        return
+    fully_shard(input_embed, mesh=device_mesh, reshard_after_forward=True, **auto_policy_kwargs)
+    logger.debug(f"Applied fully_shard to input embeddings ({type(input_embed).__name__})")
+
+def _shard_auto_transformer_blocks(model, block_classes, device_mesh, auto_policy_kwargs):
+    for name, module in model.named_modules():
+        if type(module) in block_classes:
+            fully_shard(module, mesh=device_mesh, reshard_after_forward=True, **auto_policy_kwargs)
+            logger.debug(f"Applied fully_shard to {name} ({type(module).__name__})")
 
 def _find_final_norm(model, decoder_layer_names):
-    # Find the final normalization layer before the output head.
+    """Find the final normalization layer before the output head."""
     final_norm = None
     for name, module in model.named_modules():
         if "Norm" not in type(module).__name__:
@@ -210,116 +243,186 @@ def _find_final_norm(model, decoder_layer_names):
     return final_norm
 
 
+def _get_auto_tail_modules(model, decoder_layer_names, input_embed, output_embed, is_weights_tied: bool) -> list:
+    # Group final norm + output head.
+    # NOTE(3outeille): Small optimization by forcing reshard_after_forward=False for the final norm and output head.
+    # Otherwise, that would mean reshard/freeing full params after the last forward and immediately re-all-gathering
+    # them in the backward pass, which is wasteful. Better to keep them gathered for reuse.
+    # Untied: [final_norm, lm_head]
+    # Tied:   [final_norm, embed_tokens] - embed_tokens.weight IS lm_head.weight.
+    tail_modules = []
+
+    final_norm = _find_final_norm(model, decoder_layer_names)
+
+    if final_norm is not None:
+        tail_modules.append(final_norm)
+
+    if is_weights_tied:
+        if input_embed is not None:
+            tail_modules.append(input_embed)
+    elif output_embed is not None:
+        tail_modules.append(output_embed)
+
+    return tail_modules
+
+
+def _shard_auto_tail_modules(tail_modules, device_mesh, auto_policy_kwargs):
+    if len(tail_modules) > 1:
+        fully_shard(tail_modules, mesh=device_mesh, reshard_after_forward=False, **auto_policy_kwargs)
+        logger.debug(f"Applied fully_shard to {[type(m).__name__ for m in tail_modules]} grouped (reshard=False)")
+    elif len(tail_modules) == 1:
+        fully_shard(tail_modules[0], mesh=device_mesh, reshard_after_forward=False, **auto_policy_kwargs)
+        logger.debug(f"Applied fully_shard to {type(tail_modules[0]).__name__} (reshard=False)")
+
+
+def _parse_manual_plan_entry(
+    entry: list[str],
+) -> tuple[bool, MixedPrecisionPolicy | None, CPUOffloadPolicy | None]:
+    """
+    Returns:
+        tuple[bool, MixedPrecisionPolicy | None, CPUOffloadPolicy | None]:
+            - bool: whether to reshard after forward
+            - MixedPrecisionPolicy | None: mixed precision policy
+            - CPUOffloadPolicy | None: cpu offload policy
+    """
+
+    if not isinstance(entry, list):
+        raise ValueError(
+            "Manual fsdp_plan values must be a list of strings combining strategy/policies, "
+            f"got {type(entry)}"
+        )
+    items = entry
+
+    strategy: Literal["free_full_weight", "keep_full_weight"] | None = None
+    offload_policy: CPUOffloadPolicy | None = None
+    mp_policy: MixedPrecisionPolicy | None = None
+
+    for item in items:
+        if not isinstance(item, str):
+            raise ValueError(
+                f"fsdp_plan option must be a string, got {type(item)}. "
+                "Supported: 'free_full_weight', 'keep_full_weight', 'cpu_offload', 'mixed_precision'."
+            )
+        token = item.lower()
+        if token in {"free_full_weight", "keep_full_weight"}:
+            strategy = token
+        elif token == "cpu_offload":
+            offload_policy = CPUOffloadPolicy()
+        elif token == "mixed_precision":
+            #TODO(3outeille): add support for different dtypes
+            mp_policy = MixedPrecisionPolicy(
+                param_dtype=torch.bfloat16,
+                reduce_dtype=torch.float32,
+                output_dtype=torch.bfloat16,
+            )
+        else:
+            raise ValueError(
+                "Unknown fsdp_plan option "
+                f"{item!r}. Supported: 'free_full_weight', 'keep_full_weight', 'cpu_offload', 'mixed_precision'."
+            )
+
+    if strategy is None:
+        strategy = "free_full_weight"
+
+    return strategy != "keep_full_weight", mp_policy, offload_policy
+
+
+def _iter_manual_plan_targets(model, pattern, name_to_module, already_sharded_names):
+    if pattern in name_to_module:
+        target = name_to_module[pattern]
+        if isinstance(target, (torch.nn.ModuleList, torch.nn.ModuleDict, torch.nn.Sequential)):
+            # (ModuleList, ModuleDict, Sequential) don't have a forward() that gets called -
+            # the model loops over their children directly. So when a pattern matches a
+            # container, we shard each child instead.
+            for child_name, child in target.named_children():
+                yield f"{pattern}.{child_name}", child
+        else:
+            yield pattern, target
+        return
+
+    # Prefix match: "model.layers" matches "model.layers.0", etc.
+    for name, module in model.named_modules():
+        if name in already_sharded_names or isinstance(module, (torch.nn.ModuleList, torch.nn.ModuleDict, torch.nn.Sequential)):
+            continue
+        if name != pattern and not name.startswith(pattern + "."):
+            continue
+        if any(name.startswith(already_sharded_names_name + ".") for already_sharded_names_name in already_sharded_names):
+            continue
+        yield name, module
+
+
+def _parse_fsdp_plan_mode(fsdp_plan: dict[str, Any]) -> Literal["auto", "manual"]:
+    if not isinstance(fsdp_plan, dict):
+        raise ValueError(f"fsdp_plan must be a dict with a 'mode' key, got {type(fsdp_plan)}")
+
+    mode = fsdp_plan.get("mode")
+    if mode not in {"auto", "manual"}:
+        raise ValueError("fsdp_plan['mode'] must be either 'auto' or 'manual'.")
+
+    return mode
+
+
+def _get_manual_plan_modules(fsdp_plan: dict[str, Any]) -> dict[str, list[str]]:
+    modules = fsdp_plan.get("modules")
+    if not isinstance(modules, dict):
+        raise ValueError("Manual fsdp_plan must define a 'modules' dict.")
+    return modules
+
 def apply_fsdp2(
     model,
     device_mesh,
-    fsdp_plan: str | dict[str, str] | None,
+    fsdp_plan: dict[str, Any] | None,
 ):
     """
     Apply FSDP2 (fully_shard) to a model following TorchTitan's approach.
-    fsdp_plan: Either ``"auto"`` for automatic block detection, a list/tuple
-        starting with ``"auto"`` followed by optional policies, or a dict
-        mapping module name patterns to sharding strategies.
+    fsdp_plan:
+        Explicit FSDP config dict with a required "mode" key.
 
-        **Auto mode** (string or list):
-          - ``"auto"`` — automatic block detection with default settings.
-          - ``["auto", "cpu_offload"]`` — auto with CPU offloading.
-          - ``["auto", "mixed_precision"]`` — auto with mixed precision
-            (bf16 params/output, fp32 reduce).
-          - ``["auto", "cpu_offload", "mixed_precision"]`` — auto with both.
+        Auto mode:
+        fsdp_plan = {"mode": "auto"}
+        
+        Auto mode with optional policies:
+        fsdp_plan = {"mode": "auto", "cpu_offload": False, "mixed_precision": True}
 
-        **Manual mode** (dict):
-        A plan value can be:
-          - ``"free_full_weight"`` (reshard after forward)
-          - ``"keep_full_weight"`` (do not reshard after forward)
-          - a list/tuple combining one of the above with optional policies:
-            ``"cpu_offload"``, ``"mixed_precision"``
-
+        Manual mode:
         fsdp_plan = {
-            "model.embed_tokens": "free_full_weight",        # free full weight after forward
-            "model.layers.0.self_attn": "free_full_weight",  # free full weight after forward
-            "model.layers.0.mlp": "free_full_weight",        # free full weight after forward
-            "model.layers.1.self_attn": "free_full_weight",  # free full weight after forward
-            "model.layers.1.mlp": "free_full_weight",        # free full weight after forward
-            "model.norm": "keep_full_weight",                # keep full weight until backward
-            "lm_head": "keep_full_weight",                   # keep full weight until backward
-            # Optional per-module policies:
-            # "model.layers.0.self_attn": ["free_full_weight", "cpu_offload", "mixed_precision"],
+            "mode": "manual",
+            "modules": {
+                "model.embed_tokens": ["free_full_weight"],
+                "model.layers.0.self_attn": ["free_full_weight", "cpu_offload", "mixed_precision"],
+                "model.layers.0.mlp": ["free_full_weight"],
+                "model.norm": ["keep_full_weight"],
+                "lm_head": ["keep_full_weight"],
+            },
         }
     """
     if not is_torch_available():
         raise ImportError("PyTorch is required for FSDP support")
 
-    import torch
-
     if not is_torch_greater_or_equal("2.5"):
         raise OSError("FSDP2 requires torch>=2.5")
-
-    # Import FSDP2 API
-    from torch.distributed._composable.fsdp import fully_shard
-    from torch.distributed.fsdp import CPUOffloadPolicy, MixedPrecisionPolicy
 
     if device_mesh is None:
         raise ValueError("device_mesh is required for FSDP2")
 
-    # FSDP2 requires contiguous parameters - make them contiguous in-place
-    for name, param in model.named_parameters():
-        if not param.is_contiguous():
-            with torch.no_grad():
-                param.data = param.data.contiguous()
-            logger.debug(f"Made parameter {name} contiguous for FSDP2")
-
     input_embed = getattr(model, "get_input_embeddings", lambda: None)()
     output_embed = getattr(model, "get_output_embeddings", lambda: None)()
-    weights_tied = (
+    is_weights_tied = (
         input_embed is not None
         and output_embed is not None
         and hasattr(input_embed, "weight")
         and hasattr(output_embed, "weight")
         and input_embed.weight is output_embed.weight
     )
-    # Parse list/tuple auto mode: ["auto", "cpu_offload", "mixed_precision", ...]
-    auto_mp_policy = None
-    auto_offload_policy = None
-    if isinstance(fsdp_plan, (list, tuple)) and fsdp_plan and fsdp_plan[0] == "auto":
-        for item in fsdp_plan[1:]:
-            if not isinstance(item, str):
-                raise ValueError(
-                    f"Auto-mode policy options must be strings, got {type(item)}. "
-                    "Supported: 'cpu_offload', 'mixed_precision'."
-                )
-            token = item.lower()
-            if token == "cpu_offload":
-                auto_offload_policy = CPUOffloadPolicy()
-            elif token == "mixed_precision":
-                #TODO(3outeille): is the output_dtype what we want ?
-                auto_mp_policy = MixedPrecisionPolicy(
-                    param_dtype=torch.bfloat16,
-                    reduce_dtype=torch.float32,
-                    output_dtype=torch.bfloat16,
-                )
-            else:
-                raise ValueError(
-                    f"Unknown auto-mode policy {item!r}. Supported: 'cpu_offload', 'mixed_precision'."
-                )
-        fsdp_plan = "auto"
+    
+    mode = _parse_fsdp_plan_mode(fsdp_plan)
 
-    if fsdp_plan == "auto":
-        # Build common kwargs for all fully_shard calls in auto mode
-        auto_policy_kwargs = {}
-        if auto_mp_policy is not None:
-            auto_policy_kwargs["mp_policy"] = auto_mp_policy
-        if auto_offload_policy is not None:
-            auto_policy_kwargs["offload_policy"] = auto_offload_policy
-
+    if mode == "auto":
+        auto_policy_kwargs = _get_auto_policy_kwargs(fsdp_plan)
+       
         block_classes = get_transformer_block_classes(model)
-
-        # Collect decoder layer names (needed for norm detection)
-        decoder_layer_names = set()
-        if block_classes:
-            for name, module in model.named_modules():
-                if type(module) in block_classes:
-                    decoder_layer_names.add(name)
+        # Need to collect decoder layer names for norm detection.
+        decoder_layer_names = {name for name, module in model.named_modules() if type(module) in block_classes}
 
         if not block_classes:
             logger.warning(
@@ -327,156 +430,70 @@ def apply_fsdp2(
                 "Applying FSDP only to root module."
             )
         else:
-            final_norm = _find_final_norm(model, decoder_layer_names)
+            _shard_auto_input_embedding(input_embed, is_weights_tied, device_mesh, auto_policy_kwargs)
+            
+            _shard_auto_transformer_blocks(model, block_classes, device_mesh, auto_policy_kwargs)
+            
+            tail_modules = _get_auto_tail_modules(model, decoder_layer_names, input_embed, output_embed, is_weights_tied)
+            _shard_auto_tail_modules(tail_modules, device_mesh, auto_policy_kwargs)
 
-            # Step 1: Shard input embeddings (only when not tied).
-            # When tied, the shared weight is grouped with the final norm in step 3.
-            if input_embed is not None and not weights_tied:
-                fully_shard(input_embed, mesh=device_mesh, reshard_after_forward=True, **auto_policy_kwargs)
-                logger.debug(f"Applied fully_shard to input embeddings ({type(input_embed).__name__})")
-
-            # Step 2: Shard each decoder layer block
-            for name, module in model.named_modules():
-                if type(module) in block_classes:
-                    fully_shard(module, mesh=device_mesh, reshard_after_forward=True, **auto_policy_kwargs)
-                    logger.debug(f"Applied fully_shard to {name} ({type(module).__name__})")
-
-            # Step 3: Group final norm + output head
-            # NOTE(3outeille): Small optimization by forcing reshard_after_forward=False for the final norm and output head
-            # Otherwise, that would mean reshard/freeing full params after the last forward and immediately re-all-gathering them in the backward pass.
-            # which is wasteful. Better to keep them gathered for reuse
-            # Untied: [final_norm, lm_head]
-            # Tied:   [final_norm, embed_tokens] — embed_tokens.weight IS lm_head.weight,
-            tail_modules = []
-            if final_norm is not None:
-                tail_modules.append(final_norm)
-            if weights_tied:
-                if input_embed is not None:
-                    tail_modules.append(input_embed)
-            else:
-                if output_embed is not None:
-                    tail_modules.append(output_embed)
-
-            if len(tail_modules) > 1:
-                fully_shard(tail_modules, mesh=device_mesh, reshard_after_forward=False, **auto_policy_kwargs)
-                logger.debug(f"Applied fully_shard to {[type(m).__name__ for m in tail_modules]} grouped (reshard=False)")
-            elif len(tail_modules) == 1:
-                fully_shard(tail_modules[0], mesh=device_mesh, reshard_after_forward=False, **auto_policy_kwargs)
-                logger.debug(f"Applied fully_shard to {type(tail_modules[0]).__name__} (reshard=False)")
-
-        # Step 4: Shard root model
-        fully_shard(model, mesh=device_mesh, reshard_after_forward=True, **auto_policy_kwargs)
-
-        # Step 5: Re-tie weights.
-        # fully_shard replaces nn.Parameter objects (swapping data for DTensor shards),
-        # which breaks weight tying (e.g. lm_head.weight is no longer embed_tokens.weight).
-        # Re-tying makes lm_head._parameters["weight"] point to the new DTensor parameter
-        # so gradients accumulate correctly into a single buffer.
-        if weights_tied and hasattr(model, "tie_weights"):
-            model.tie_weights()
+        # Shard root model
+        fully_shard(model, mesh=device_mesh, **auto_policy_kwargs)
 
         logger.info(
             f"FSDP2 applied to model: {len(block_classes)} block type(s), "
             f"{len(decoder_layer_names)} decoder layers"
         )
 
-    elif isinstance(fsdp_plan, dict):
-        # Apply fully_shard based on explicit plan.
-        #
-        # Each key is a module name (or prefix), and the value controls whether
-        # the all-gathered full weight is freed after forward:
-        # (ModuleList, ModuleDict, Sequential) don't have a forward()
-        # that gets called — the model loops over their children directly.
-        # So when a pattern matches a container, we shard each child instead.
-
+    else:
+        # fsdp_plan = {
+        #     "mode": "manual",
+        #     "modules": {
+        #         "model.layers.0.self_attn": ["free_full_weight"],       # reshard_after_forward=True
+        #         "model.norm": ["keep_full_weight"],                      # reshard_after_forward=False
+        #         "model.layers.0.mlp": ["free_full_weight", "cpu_offload", "mixed_precision"],
+        #     },
+        # }
+        
         name_to_module = dict(model.named_modules())
-        sharded: set[str] = set()
+        already_sharded_names: set[str] = set()
+        root_mp_policy = MixedPrecisionPolicy()
+        root_offload_policy = OffloadPolicy()
 
-        def _parse_plan_entry(entry):
-            if isinstance(entry, str):
-                items = [entry]
-            elif isinstance(entry, (list, tuple)):
-                items = list(entry)
-            else:
-                raise ValueError(
-                    "fsdp_plan values must be a strategy string or a list/tuple combining strategy/policies, "
-                    f"got {type(entry)}"
-                )
+        for pattern, entry in _get_manual_plan_modules(fsdp_plan).items():
+            reshard, mp_policy, offload_policy = _parse_manual_plan_entry(entry)
+            if mp_policy is not None:
+                root_mp_policy = mp_policy
+            if offload_policy is not None:
+                root_offload_policy = offload_policy
 
-            strategy = None
-            offload_policy = None
-            mp_policy = None
-
-            for item in items:
-                if not isinstance(item, str):
-                    raise ValueError(
-                        f"fsdp_plan option must be a string, got {type(item)}. "
-                        "Supported: 'free_full_weight', 'keep_full_weight', 'cpu_offload', 'mixed_precision'."
-                    )
-                token = item.lower()
-                if token in {"free_full_weight", "keep_full_weight"}:
-                    strategy = token
-                elif token == "cpu_offload":
-                    offload_policy = CPUOffloadPolicy()
-                elif token == "mixed_precision":
-                    mp_policy = MixedPrecisionPolicy(
-                        param_dtype=torch.bfloat16,
-                        reduce_dtype=torch.float32,
-                        output_dtype=torch.bfloat16,
-                    )
-                else:
-                    raise ValueError(
-                        "Unknown fsdp_plan option "
-                        f"{item!r}. Supported: 'free_full_weight', 'keep_full_weight', 'cpu_offload', 'mixed_precision'."
-                    )
-
-            if strategy is None:
-                strategy = "free_full_weight"
-
-            return strategy != "keep_full_weight", mp_policy, offload_policy
-
-        def _shard(name: str, module, reshard: bool, mp_policy=None, offload_policy=None):
-            if name not in sharded:
+            for name, module in _iter_manual_plan_targets(model, pattern, name_to_module, already_sharded_names):
+                if name in already_sharded_names:
+                    continue
                 shard_kwargs = {"mesh": device_mesh, "reshard_after_forward": reshard}
                 if mp_policy is not None:
                     shard_kwargs["mp_policy"] = mp_policy
                 if offload_policy is not None:
                     shard_kwargs["offload_policy"] = offload_policy
                 fully_shard(module, **shard_kwargs)
-                sharded.add(name)
+                already_sharded_names.add(name)
                 logger.debug(f"Applied fully_shard to {name}")
 
-        for pattern, entry in fsdp_plan.items():
-            reshard, mp_policy, offload_policy = _parse_plan_entry(entry)
-
-            if pattern in name_to_module:
-                target = name_to_module[pattern]
-                if isinstance(target, (torch.nn.ModuleList, torch.nn.ModuleDict, torch.nn.Sequential)):
-                    for child_name, child in target.named_children():
-                        _shard(f"{pattern}.{child_name}", child, reshard, mp_policy, offload_policy)
-                else:
-                    _shard(pattern, target, reshard, mp_policy, offload_policy)
-            else:
-                # Prefix match: "model.layers" matches "model.layers.0", etc.
-                for name, module in model.named_modules():
-                    if name in sharded or isinstance(module, (torch.nn.ModuleList, torch.nn.ModuleDict, torch.nn.Sequential)):
-                        continue
-                    if name != pattern and not name.startswith(pattern + "."):
-                        continue
-                    if any(name.startswith(s + ".") for s in sharded):
-                        continue
-                    _shard(name, module, reshard, mp_policy, offload_policy)
-
-        fully_shard(model, mesh=device_mesh, reshard_after_forward=True)
-
-        # Re-tie weights after fully_shard
-        if hasattr(model, "tie_weights"):
-            model.tie_weights()
-    else:
-        raise ValueError(f"fsdp_plan must be 'auto', a list/tuple starting with 'auto', or a dict, got {type(fsdp_plan)}")
+        # Shard root model with the same policies as sub-modules.
+        # MixedPrecisionPolicy.output_dtype casting happens in post_forward
+        # for every fully_shard-wrapped module, even with no direct parameters.
+        fully_shard(model, mesh=device_mesh, mp_policy=root_mp_policy, offload_policy=root_offload_policy)
 
     # Used by generation code to detect FSDP and enable synced_gpus.
     model._is_fsdp_managed_module = True
+
+    if is_weights_tied and hasattr(model, "tie_weights"):
+        # Re-tie weights.
+        # fully_shard replaces nn.Parameter objects (swapping data for DTensor shards),
+        # which breaks weight tying (e.g. lm_head.weight is no longer embed_tokens.weight).
+        # Re-tying makes lm_head._parameters["weight"] point to the new DTensor parameter
+        # so gradients accumulate correctly into a single buffer.
+        model.tie_weights()
 
     return model
 
@@ -489,7 +506,7 @@ def distribute_fsdp_model(model, fsdp_plan, device_mesh):
 
     Args:
         model: The model to distribute.
-        fsdp_plan: Either "auto" or a dict mapping module patterns to strategies.
+        fsdp_plan: Optional FSDP config dict with an explicit "mode".
         device_mesh: The DeviceMesh for FSDP communication.
 
     Returns:
