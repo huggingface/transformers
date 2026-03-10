@@ -26,7 +26,7 @@ An optimizer updates model weights during training. The scheduler wraps the opti
                                     │ param_groups         |              |
                                     │  └ lr       ◄────────┤              |
                                     │  └ weight_decay      │              │
-                                    └──────┬─────┘         └──────┬───────┘
+                                    └──────┬─────┘         └──────────────┘
                                            │                      
   ┌──── EACH TRAINING STEP ───────────────────────────────────────────┐
   │                                        │                          │
