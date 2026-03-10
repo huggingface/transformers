@@ -18,44 +18,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="lerobot/pi0_base")
 class PI0Config(PreTrainedConfig):
     r"""
-    Configuration class for PI0.
-
-    PI0 is a robot action prediction model that combines a PaliGemma VLM backbone
-    with an action expert Gemma model. It uses flow matching for continuous action generation.
-
-    This model inherits from [`PaliGemmaConfig`]. See the superclass documentation for more details.
-    Example checkpoint: [lerobot/pi0_base](https://huggingface.co/lerobot/pi0_base).
-
-    Args:
-        vlm_config (`dict`, *optional*):
-            Configuration for the vlm backbone (PaliGemmaModel).
-        dit_config (`dict`, *optional*):
-            Configuration for the DiT backbone. Defaults to a Gemma 300M variant.
-        chunk_size (`int`, *optional*, defaults to 50):
-            Number of action steps to predict per chunk.
-        max_state_dim (`int`, *optional*, defaults to 32):
-            Maximum state vector dimension (shorter vectors are zero-padded).
-        max_action_dim (`int`, *optional*, defaults to 32):
-            Maximum action vector dimension (shorter vectors are zero-padded).
-        num_inference_steps (`int`, *optional*, defaults to 10):
-            Number of denoising steps during inference.
-        time_sampling_beta_alpha (`float`, *optional*, defaults to 1.5):
-            Alpha parameter for Beta distribution used to sample diffusion time during training.
-        time_sampling_beta_beta (`float`, *optional*, defaults to 1.0):
-            Beta parameter for Beta distribution used to sample diffusion time during training.
-        time_sampling_scale (`float`, *optional*, defaults to 0.999):
-            Scale factor for sampled time values.
-        time_sampling_offset (`float`, *optional*, defaults to 0.001):
-            Offset added to sampled time values.
-        min_period (`float`, *optional*, defaults to 0.004):
-            Minimum period for sinusoidal time embedding.
-        max_period (`float`, *optional*, defaults to 4.0):
-            Maximum period for sinusoidal time embedding.
+    vlm_config (`dict`, *optional*):
+        Configuration for the vlm backbone (PaliGemmaModel).
+    dit_config (`dict`, *optional*):
+        Configuration for the DiT backbone. Defaults to a Gemma 300M variant.
+    chunk_size (`int`, *optional*, defaults to 50):
+        Number of action steps to predict per chunk.
+    max_state_dim (`int`, *optional*, defaults to 32):
+        Maximum state vector dimension (shorter vectors are zero-padded).
+    max_action_dim (`int`, *optional*, defaults to 32):
+        Maximum action vector dimension (shorter vectors are zero-padded).
+    num_inference_steps (`int`, *optional*, defaults to 10):
+        Number of denoising steps during inference.
+    time_sampling_beta_alpha (`float`, *optional*, defaults to 1.5):
+        Alpha parameter for Beta distribution used to sample diffusion time during training.
+    time_sampling_beta_beta (`float`, *optional*, defaults to 1.0):
+        Beta parameter for Beta distribution used to sample diffusion time during training.
+    time_sampling_scale (`float`, *optional*, defaults to 0.999):
+        Scale factor for sampled time values.
+    time_sampling_offset (`float`, *optional*, defaults to 0.001):
+        Offset added to sampled time values.
+    min_period (`float`, *optional*, defaults to 0.004):
+        Minimum period for sinusoidal time embedding.
+    max_period (`float`, *optional*, defaults to 4.0):
+        Maximum period for sinusoidal time embedding.
 
     Example:
     ```python
@@ -67,18 +60,6 @@ class PI0Config(PreTrainedConfig):
     """
 
     model_type = "pi0"
-
-    # This plan should work with the VLM and DiT modules ig
-    # both have a transformers decoder layer
-    base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-    }
     sub_configs = {"vlm_config": AutoConfig, "dit_config": AutoConfig}
 
     def __init__(

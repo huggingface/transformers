@@ -172,7 +172,7 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
         model = PI0ForConditionalGeneration(config).eval().to(device=torch_device)
         with torch.no_grad():
             outputs = model(**inputs_dict)
-        self.assertEqual(outputs.loss.shape, (2, config.chunk_size, config.max_action_dim))
+        self.assertEqual(outputs.loss.shape, (self.model_tester.batch_size, config.chunk_size, config.max_action_dim))
 
     def test_training(self):
         # Overwrite becasue PI0 returns loss per sample. Needs to apply avg reduction before backward
@@ -198,6 +198,10 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
         " PI0 doesn't create any lm-head. So we added it in conversion mapping"
     )
     def test_reverse_loading_mapping(self):
+        pass
+
+    @unittest.skip("Prefix tuning doesn't work with GC and the model uses prefix tuning to fuse VLM outputs")
+    def test_enable_input_require_grads_with_gradient_checkpointing(self):
         pass
 
     @unittest.skip("Prefix tuning doesn't work with GC and the model uses prefix tuning to fuse VLM outputs")
@@ -229,7 +233,7 @@ class PI0ModelSmokeTest(unittest.TestCase):
         sample_inputs = {k: v for k, v in inputs_dict.items() if k not in ["actions", "timestep"]}
         with torch.no_grad():
             sampled_actions = model.sample_actions(**sample_inputs, num_steps=2)
-        self.assertEqual(sampled_actions.shape, (2, config.chunk_size, config.max_action_dim))
+        self.assertEqual(sampled_actions.shape, (tester.batch_size, config.chunk_size, config.max_action_dim))
         self.assertTrue(torch.isfinite(sampled_actions).all())
 
 
