@@ -1069,7 +1069,7 @@ JOB_TO_TEST_FILE = {
     "tests_hub": r"tests/.*",
     "tests_non_model": r"tests/[^/]*?/test_.*\.py",
     "tests_training_ci": r"tests/models/.*/test_modeling_.*",
-    "tests_tensor_parallel_ci": r"tests/models/.*/test_modeling_.*",
+    "tests_tensor_parallel_ci": r"(tests/models/.*/test_modeling_.*|tests/tensor_parallel(?:/test_tensor_parallel\.py)?)",
 }
 
 

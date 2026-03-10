@@ -15,66 +15,17 @@
 
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="shi-labs/dinat-mini-in1k-224")
 class DinatConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DinatModel`]. It is used to instantiate a Dinat
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Dinat
-    [shi-labs/dinat-mini-in1k-224](https://huggingface.co/shi-labs/dinat-mini-in1k-224) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        patch_size (`int`, *optional*, defaults to 4):
-            The size (resolution) of each patch. NOTE: Only patch size of 4 is supported at the moment.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        embed_dim (`int`, *optional*, defaults to 64):
-            Dimensionality of patch embedding.
-        depths (`list[int]`, *optional*, defaults to `[3, 4, 6, 5]`):
-            Number of layers in each level of the encoder.
-        num_heads (`list[int]`, *optional*, defaults to `[2, 4, 8, 16]`):
-            Number of attention heads in each layer of the Transformer encoder.
-        kernel_size (`int`, *optional*, defaults to 7):
-            Neighborhood Attention kernel size.
-        dilations (`list[list[int]]`, *optional*, defaults to `[[1, 8, 1], [1, 4, 1, 4], [1, 2, 1, 2, 1, 2], [1, 1, 1, 1, 1]]`):
-            Dilation value of each NA layer in the Transformer encoder.
-        mlp_ratio (`float`, *optional*, defaults to 3.0):
-            Ratio of MLP hidden dimensionality to embedding dimensionality.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether or not a learnable bias should be added to the queries, keys and values.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings and encoder.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        drop_path_rate (`float`, *optional*, defaults to 0.1):
-            Stochastic depth rate.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder. If string, `"gelu"`, `"relu"`,
-            `"selu"` and `"gelu_new"` are supported.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        layer_scale_init_value (`float`, *optional*, defaults to 0.0):
-            The initial value for the layer scale. Disabled if <=0.
-        out_features (`list[str]`, *optional*):
-            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
-            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        out_indices (`list[int]`, *optional*):
-            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
-            If unset and `out_features` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
+    dilations (`list[list[int]]`, *optional*, defaults to `[[1, 8, 1], [1, 4, 1, 4], [1, 2, 1, 2, 1, 2], [1, 1, 1, 1, 1]]`):
+        Dilation value of each NA layer in the Transformer encoder.
 
     Example:
 

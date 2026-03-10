@@ -14,56 +14,15 @@
 """CLIPSeg model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="CIDAS/clipseg-rd64")
 class CLIPSegTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to instantiate an
-    CLIPSeg model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the CLIPSeg
-    [CIDAS/clipseg-rd64](https://huggingface.co/CIDAS/clipseg-rd64) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 49408):
-            Vocabulary size of the CLIPSeg text model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`CLIPSegModel`].
-        hidden_size (`int`, *optional*, defaults to 512):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        max_position_embeddings (`int`, *optional*, defaults to 77):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-        pad_token_id (`int`, *optional*, defaults to 1):
-            Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 49406):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 49407):
-            End of stream token id.
-
     Example:
 
     ```python
@@ -118,44 +77,9 @@ class CLIPSegTextConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
 
 
+@auto_docstring(checkpoint="CIDAS/clipseg-rd64")
 class CLIPSegVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to instantiate an
-    CLIPSeg model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the CLIPSeg
-    [CIDAS/clipseg-rd64](https://huggingface.co/CIDAS/clipseg-rd64) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 32):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-
     Example:
 
     ```python
@@ -206,46 +130,19 @@ class CLIPSegVisionConfig(PreTrainedConfig):
         self.hidden_act = hidden_act
 
 
+@auto_docstring(checkpoint="CIDAS/clipseg-rd64")
 class CLIPSegConfig(PreTrainedConfig):
     r"""
-    [`CLIPSegConfig`] is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to
-    instantiate a CLIPSeg model according to the specified arguments, defining the text model and vision model configs.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the CLIPSeg
-    [CIDAS/clipseg-rd64](https://huggingface.co/CIDAS/clipseg-rd64) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`CLIPSegTextConfig`].
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`CLIPSegVisionConfig`].
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of text and vision projection layers.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The initial value of the *logit_scale* parameter. Default is used as per the original CLIPSeg implementation.
-        extract_layers (`list[int]`, *optional*, defaults to `[3, 6, 9]`):
-            Layers to extract when forwarding the query image through the frozen visual backbone of CLIP.
-        reduce_dim (`int`, *optional*, defaults to 64):
-            Dimensionality to reduce the CLIP vision embedding.
-        decoder_num_attention_heads (`int`, *optional*, defaults to 4):
-            Number of attention heads in the decoder of CLIPSeg.
-        decoder_attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        decoder_hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        decoder_intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layers in the Transformer decoder.
-        conditional_layer (`int`, *optional*, defaults to 0):
-            The layer to use of the Transformer encoder whose activations will be combined with the condition
-            embeddings using FiLM (Feature-wise Linear Modulation). If 0, the last layer is used.
-        use_complex_transposed_convolution (`bool`, *optional*, defaults to `False`):
-            Whether to use a more complex transposed convolution in the decoder, enabling more fine-grained
-            segmentation.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+    extract_layers (`list[int]`, *optional*, defaults to `[3, 6, 9]`):
+        Layers to extract when forwarding the query image through the frozen visual backbone of CLIP.
+    reduce_dim (`int`, *optional*, defaults to 64):
+        Dimensionality to reduce the CLIP vision embedding.
+    conditional_layer (`int`, *optional*, defaults to 0):
+        The layer to use of the Transformer encoder whose activations will be combined with the condition
+        embeddings using FiLM (Feature-wise Linear Modulation). If 0, the last layer is used.
+    use_complex_transposed_convolution (`bool`, *optional*, defaults to `False`):
+        Whether to use a more complex transposed convolution in the decoder, enabling more fine-grained
+        segmentation..
 
     Example:
 

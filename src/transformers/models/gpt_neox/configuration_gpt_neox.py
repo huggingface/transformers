@@ -15,67 +15,20 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="EleutherAI/gpt-neox-20b")
 class GPTNeoXConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GPTNeoXModel`]. It is used to instantiate an
-    GPTNeoX model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the GPTNeoX
-    [EleutherAI/gpt-neox-20b](https://huggingface.co/EleutherAI/gpt-neox-20b) architecture.
+    use_parallel_residual (`bool`, *optional*, defaults to `True`):
+        Whether to use a "parallel" formulation in each Transformer layer, which can provide a slight training
+        speedup at large scales (e.g. 20B).
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 50432):
-            Vocabulary size of the GPTNeoX model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`GPTNeoXModel`].
-        hidden_size (`int`, *optional*, defaults to 6144):
-            Dimension of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 44):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 64):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 24576):
-            Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio probability of the attention score.
-        hidden_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio of (1) the word embeddings, (2) the post-attention hidden states, and (3) the post-mlp
-            hidden states.
-        classifier_dropout (`float`, *optional*, defaults to 0.1):
-            Argument used when doing token classification, used in the model [`GPTNeoXForTokenClassification`].
-            The dropout ratio for the c;assifier head.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        initializer_range (`float`, *optional*, defaults to 1e-5):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        use_parallel_residual (`bool`, *optional*, defaults to `True`):
-            Whether to use a "parallel" formulation in each Transformer layer, which can provide a slight training
-            speedup at large scales (e.g. 20B).
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        attention_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-
-        Example:
+    Example:
 
     ```python
     >>> from transformers import GPTNeoXConfig, GPTNeoXModel

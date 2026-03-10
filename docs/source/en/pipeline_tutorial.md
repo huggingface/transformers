@@ -59,17 +59,6 @@ This guide will introduce you to the [`Pipeline`], demonstrate its features, and
 Here are some examples of how to use [`Pipeline`] for different tasks and modalities.
 
 <hfoptions id="tasks">
-<hfoption id="summarization">
-
-```py
-from transformers import pipeline
-
-pipeline = pipeline(task="summarization", model="google/pegasus-billsum")
-pipeline("Section was formerly set out as section 44 of this title. As originally enacted, this section contained two further provisions that 'nothing in this act shall be construed as in any wise affecting the grant of lands made to the State of California by virtue of the act entitled 'An act authorizing a grant to the State of California of the Yosemite Valley, and of the land' embracing the Mariposa Big-Tree Grove, approved June thirtieth, eighteen hundred and sixty-four; or as affecting any bona-fide entry of land made within the limits above described under any law of the United States prior to the approval of this act.' The first quoted provision was omitted from the Code because the land, granted to the state of California pursuant to the Act cite, was receded to the United States. Resolution June 11, 1906, No. 27, accepted the recession.")
-[{'summary_text': 'Instructs the Secretary of the Interior to convey to the State of California all right, title, and interest of the United States in and to specified lands which are located within the Yosemite and Mariposa National Forests, California.'}]
-```
-
-</hfoption>
 <hfoption id="automatic speech recognition">
 
 ```py
