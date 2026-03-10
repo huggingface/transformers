@@ -61,20 +61,44 @@ Use this skill when:
       annotate `self` on methods that need it. Apply this consistently to all methods
       in the mixin. Import under `TYPE_CHECKING` to avoid circular imports.
 
-   d. **Prefer `getattr()` and `setattr()` for dynamic model/config attributes**.
-      For runtime-injected fields (for example config/model flags, backend-specific attrs),
-      use `getattr(obj, "field", default)` for reads and `setattr(obj, "field", value)`
-      for writes before reaching for `cast()` or `# type: ignore`.
+   d. **Use `TypeGuard` functions for dynamic module attributes** (for example
+      `torch.npu`, `torch.xpu`, `torch.compiler`). Instead of `getattr(torch, "npu")`
+      or `hasattr(torch, "npu") and torch.npu.is_available()`, define a type guard
+      function in `src/transformers/_typing.py`:
+      ```python
+      def has_torch_npu(mod: ModuleType) -> TypeGuard[Any]:
+          return hasattr(mod, "npu") and mod.npu.is_available()
+      ```
+      Then use it as a narrowing check: `if has_torch_npu(torch): torch.npu.device_count()`.
+      After the guard, `ty` treats the module as `Any`, allowing attribute access without
+      `getattr()` or `cast()`. See existing guards in `_typing.py` for all device backends.
 
-   e. **Use `cast()` sparingly and locally**. Only use it when the type checker
+      **Key rules for type guards**:
+      - Use `TypeGuard[Any]` (not a Protocol) — this is the simplest form that works
+        with `ty` and avoids losing the original module's known attributes.
+      - The guard function must be called directly in an `if` condition for narrowing
+        to work. `ty` does NOT narrow through `and` conditions or `if not guard: return`.
+      - Import guards with `from .._typing import has_torch_xxx` (not via module
+        attribute `_typing.has_torch_xxx`) — `ty` only resolves `TypeGuard` from
+        direct imports.
+
+   e. **Use `getattr()` / `setattr()` for dynamic model/config attributes**.
+      For runtime-injected fields (for example config/model flags), use
+      `getattr(obj, "field", default)` for reads and `setattr(obj, "field", value)`
+      for writes. Avoid `getattr(torch, "npu")` style — use type guards instead (see above).
+
+   f. **Use `cast()` sparingly and locally**. Only use it when the type checker
       cannot narrow a type that is known to be correct at runtime. Prefer `isinstance()`
-      narrowing when the runtime type is checkable. For model-specific config fields,
-      define small Protocol classes and `cast()` at the use site.
+      narrowing when the runtime type is checkable. Do not use `cast()` for
+      dynamic module attributes — use type guards instead.
 
-   f. **Use `# type: ignore` as a last resort**. Use this for cases where the checker
+   g. **Use `# type: ignore` as a last resort**. Use this for cases where the checker
       cannot prove correctness (for example dynamic dispatch, C extensions, third-party stubs).
 
 5. **Things to never do**:
+   - Do not use `getattr(torch, "backend")` to access dynamic device backends
+     (`npu`, `xpu`, `hpu`, `musa`, `mlu`, `neuron`, `compiler`) — use type guards
+   - Do not use `cast()` for module attribute narrowing — use type guards
    - Do not add helper methods or abstractions just to satisfy the type checker
      (especially for only 1-2 occurrences)
    - Do not pollute base classes with domain-specific fields; use Protocols
@@ -95,3 +119,4 @@ Use this skill when:
 
 8. **Update CI coverage when adding new typed areas**:
    - Update `ty_check_dirs` in `Makefile` to include newly type-checked directories.
+
