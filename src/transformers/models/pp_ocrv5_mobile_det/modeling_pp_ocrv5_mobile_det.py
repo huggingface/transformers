@@ -18,88 +18,12 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_pp_ocrv5_mobile_det import PPOCRV5MobileDetConfig
 
 
-class PPOCRV5MobileDetSELayer(nn.Module):
-    """
-    Squeeze-and-Excitation (SE) Layer for channel-wise feature recalibration.
-    This layer adaptively scales channel features based on their importance,
-    improving the model's ability to capture informative features.
-    """
-
-    def __init__(self, channel, reduction=4):
-        """
-        Initialize the PPOCRV5MobileDetSELayer with channel reduction factor.
-
-        Args:
-            channel (int): Number of input/output channels.
-            reduction (int, optional): Reduction factor for the squeeze operation (controls the size of the hidden layer).
-                Defaults to 4.
-        """
-        super().__init__()
-
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.conv1 = nn.Conv2d(
-            in_channels=channel,
-            out_channels=channel // reduction,
-            kernel_size=1,
-            stride=1,
-            padding=0,
-        )
-        self.relu = nn.ReLU()
-        self.conv2 = nn.Conv2d(
-            in_channels=channel // reduction,
-            out_channels=channel,
-            kernel_size=1,
-            stride=1,
-            padding=0,
-        )
-        self.hardsigmoid = nn.Hardsigmoid()
-
-    def forward(self, hidden_state: torch.Tensor):
-        """
-        Apply squeeze-and-excitation to the input feature tensor.
-
-        Args:
-            hidden_state (torch.Tensor): Input feature tensor of shape (B, C, H, W).
-
-        Returns:
-            torch.Tensor: Recalibrated feature tensor of shape (B, C, H, W).
-        """
-        identity = hidden_state
-        hidden_state = self.avg_pool(hidden_state)
-        hidden_state = self.conv1(hidden_state)
-        hidden_state = self.relu(hidden_state)
-        hidden_state = self.conv2(hidden_state)
-        hidden_state = self.hardsigmoid(hidden_state)
-        hidden_state = torch.multiply(identity, hidden_state)
-        return hidden_state
-
-
-@auto_docstring(
-    custom_intro="""
-    Base class for all PPOCRV5 Mobile Det pre-trained models. Handles model initialization,
-    configuration, and loading of pre-trained weights, following the Transformers library conventions.
-    """
-)
+@auto_docstring
 class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
     config: PPOCRV5MobileDetConfig
     base_model_prefix = "pp_ocrv5_mobile_det"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        super()._init_weights(module)
-        if isinstance(module, PPOCRV5MobileDetHead):
-            nn.init.constant_(module.bn1.weight, 1.0)
-            nn.init.constant_(module.bn1.bias, 1e-4)
-            nn.init.constant_(module.bn2.weight, 1.0)
-            nn.init.constant_(module.bn2.bias, 1e-4)
-            nn.init.kaiming_uniform_(module.conv2.weight)
-            nn.init.kaiming_uniform_(module.conv3.weight)
-
-        if isinstance(module, PPOCRV5MobileDetRSELayer):
-            nn.init.kaiming_uniform_(module.in_conv.weight)
 
 
 class PPOCRV5MobileDetSEModule(nn.Module):
@@ -109,13 +33,6 @@ class PPOCRV5MobileDetSEModule(nn.Module):
     """
 
     def __init__(self, in_channels, reduction=4):
-        """
-        Initialize the PPOCRV5MobileDetSEModule with channel reduction factor.
-
-        Args:
-            in_channels (int): Number of input/output channels.
-            reduction (int, optional): Reduction factor for the squeeze operation. Defaults to 4.
-        """
         super().__init__()
 
         self.avg_pool = nn.AdaptiveAvgPool2d(output_size=1)
@@ -158,7 +75,7 @@ class PPOCRV5MobileDetRSELayer(nn.Module):
     Combines a 1x1/3x3 convolution with an SE Module and an optional residual shortcut connection.
     """
 
-    def __init__(self, in_channels, out_channels, kernel_size, shortcut=True):
+    def __init__(self, in_channels, out_channels, kernel_size, reduction, shortcut=True):
         """
         Initialize the PPOCRV5MobileDetRSELayer with convolution and residual connection parameters.
 
@@ -170,15 +87,15 @@ class PPOCRV5MobileDetRSELayer(nn.Module):
         """
         super().__init__()
         self.out_channels = out_channels
+        self.shortcut = shortcut
         self.in_conv = nn.Conv2d(
             in_channels=in_channels,
-            out_channels=self.out_channels,
+            out_channels=out_channels,
             kernel_size=kernel_size,
             padding=int(kernel_size // 2),
             bias=False,
         )
-        self.se_block = PPOCRV5MobileDetSEModule(self.out_channels)
-        self.shortcut = shortcut
+        self.se_block = PPOCRV5MobileDetSEModule(out_channels, reduction)
 
     def forward(self, hidden_state):
         """
@@ -223,13 +140,14 @@ class PPOCRV5MobileDetNeck(nn.Module):
                 PPOCRV5MobileDetRSELayer(
                     config.layer_list_out_channels[i],
                     config.neck_out_channels,
-                    kernel_size=1,
-                    shortcut=config.shortcut,
+                    1,
+                    config.reduction,
+                    config.shortcut,
                 )
             )
             self.inp_conv.append(
                 PPOCRV5MobileDetRSELayer(
-                    config.neck_out_channels, config.neck_out_channels // 4, kernel_size=3, shortcut=config.shortcut
+                    config.neck_out_channels, config.neck_out_channels // 4, 3, config.reduction, config.shortcut
                 )
             )
 
@@ -346,25 +264,10 @@ class PPOCRV5MobileDetDBHead(nn.Module):
     """
 
     def __init__(self, config: PPOCRV5MobileDetConfig):
-        """
-        Initialize the PPOCRV5MobileDetHead with the specified model configuration.
-
-        Args:
-            config (PPOCRV5MobileDetConfig): Configuration object containing head hyperparameters.
-        """
         super().__init__()
         self.binarize = PPOCRV5MobileDetHead(config.neck_out_channels, config.kernel_list)
 
     def forward(self, hidden_state):
-        """
-        Forward pass of the head network, generating text segmentation (shrink) maps.
-
-        Args:
-            hidden_state (torch.Tensor): Input feature tensor of shape (B, C, H, W) from the neck network.
-
-        Returns:
-            torch.Tensor: Binary segmentation shrink maps of shape (B, 1, H', W').
-        """
         shrink_maps = self.binarize(hidden_state)
         return shrink_maps
 
@@ -401,6 +304,7 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
             self.layer_list.append(nn.Conv2d(out_channel, config.layer_list_out_channels[idx], 1, 1, 0))
 
         self.neck = PPOCRV5MobileDetNeck(config)
+
         self.post_init()
 
     @capture_outputs
@@ -410,7 +314,6 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
         hidden_state: torch.FloatTensor,
         **kwargs,
     ) -> tuple[torch.FloatTensor] | PPOCRV5MobileDetModelOutput:
-        torch.set_printoptions(sci_mode=False)
         feature_maps = list(self.backbone(hidden_state).feature_maps)
         for i in range(len(feature_maps)):
             feature_maps[i] = self.layer_list[i](feature_maps[i])
@@ -449,6 +352,7 @@ class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
         super().__init__(config)
         self.model = PPOCRV5MobileDetModel(config)
         self.head = PPOCRV5MobileDetDBHead(config)
+
         self.post_init()
 
     @can_return_tuple

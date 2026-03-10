@@ -110,6 +110,7 @@ class PPLCNetV3Config(BackboneConfigMixin, PreTrainedConfig):
         conv_kxk_num=4,
         **kwargs,
     ):
+        super().__init__(**kwargs)
         self.conv_kxk_num = conv_kxk_num
         self.num_channels = num_channels
         self.scale = scale
@@ -153,7 +154,6 @@ class PPLCNetV3Config(BackboneConfigMixin, PreTrainedConfig):
             stage_out_channels.append(int(block[-1][2] * self.scale))
         self.stage_out_channels = stage_out_channels
         self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
-        super().__init__(**kwargs)
 
 
 __all__ = ["PPLCNetV3Config"]

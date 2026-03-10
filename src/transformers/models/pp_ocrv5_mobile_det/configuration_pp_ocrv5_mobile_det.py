@@ -44,9 +44,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         divisor (`int`, *optional*, defaults to 16):
             The divisor for adjusting channel dimensions, ensuring that the number of channels meets hardware
             optimization requirements (e.g., for efficient inference on mobile devices).
-        backbone_out_channels (`int`, *optional*, defaults to 512):
-            The number of output channels from the backbone network, which represents the dimension of the final
-            feature maps extracted by the backbone.
         hidden_act (`str`, *optional*, defaults to `"hswish"`):
             The non-linear activation function used in the hidden layers of the model. Supported functions include
             `"hswish"`, `"relu"`, `"silu"`, and `"gelu"`. `"hswish"` is preferred for mobile-friendly efficient
@@ -80,11 +77,8 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
     def __init__(
         self,
         backbone_config=None,
-        scale=1.0,
         conv_kxk_num=4,
         reduction=4,
-        divisor=16,
-        backbone_out_channels=512,
         hidden_act="hswish",
         neck_out_channels=96,
         shortcut=True,
@@ -93,23 +87,22 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         layer_list_out_channels=[12, 18, 42, 360],
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         # ---- Backbone ----
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
             default_config_type="pp_lcnet_v3",
             default_config_kwargs={
                 "scale": 0.75,
+                "out_features": ["stage2", "stage3", "stage4", "stage5"],
+                "out_indices": [2, 3, 4, 5],
+                "return_idx": [1, 2, 3, 4],
+                "divisor": 16,
             },
             **kwargs,
         )
         self.backbone_config = backbone_config
-        self.scale = scale
         self.conv_kxk_num = conv_kxk_num
         self.reduction = reduction
-        self.divisor = divisor
-        self.backbone_out_channels = backbone_out_channels
         self.hidden_act = hidden_act
 
         # ---- Neck ----
@@ -120,6 +113,8 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         # ---- Head ----
         self.kernel_list = kernel_list
         self.layer_list_out_channels = layer_list_out_channels
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["PPOCRV5MobileDetConfig"]

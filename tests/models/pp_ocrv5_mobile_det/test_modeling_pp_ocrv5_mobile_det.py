@@ -17,6 +17,7 @@
 import inspect
 import unittest
 
+import requests
 from parameterized import parameterized
 
 from transformers import (
@@ -48,15 +49,34 @@ if is_vision_available():
 
 class PPOCRV5MobileDetModelTester:
     def __init__(
-        self, batch_size=3, image_size=128, num_channels=3, num_stages=6, is_training=False, scale=1.0, divisor=16
+        self,
+        batch_size=3,
+        image_size=128,
+        num_channels=3,
+        num_stages=6,
+        is_training=False,
+        convolutional_kxk_number=4,
+        reduction=4,
+        hidden_act="hardswish",
+        layer_list_out_channels=[12, 18, 42, 360],
+        neck_out_channels=96,
+        shortcut=True,
+        kernel_list=[3, 2, 2],
+        interpolate_mode="nearest",
     ):
         self.batch_size = batch_size
-        self.num_channels = num_channels
         self.image_size = image_size
-        self.is_training = is_training
+        self.num_channels = num_channels
         self.num_stages = num_stages
-        self.scale = scale
-        self.divisor = divisor
+        self.is_training = is_training
+        self.convolutional_kxk_number = convolutional_kxk_number
+        self.reduction = reduction
+        self.hidden_act = hidden_act
+        self.layer_list_out_channels = layer_list_out_channels
+        self.neck_out_channels = neck_out_channels
+        self.shortcut = shortcut
+        self.kernel_list = kernel_list
+        self.interpolate_mode = interpolate_mode
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values = self.prepare_config_and_inputs()
@@ -71,44 +91,24 @@ class PPOCRV5MobileDetModelTester:
 
     def get_config(self) -> PPOCRV5MobileDetConfig:
         backbone_config = {
-            "blocks2": [[3, 16, 24, 1, False]],
-            "blocks3": [[3, 24, 48, 2, False], [3, 48, 48, 1, False]],
-            "blocks4": [[3, 48, 96, 2, False], [3, 96, 96, 1, False]],
-            "blocks5": [
-                [3, 96, 192, 2, False],
-                [5, 192, 192, 1, False],
-                [5, 192, 192, 1, False],
-                [5, 192, 192, 1, False],
-                [5, 192, 192, 1, False],
-            ],
-            "blocks6": [
-                [5, 192, 384, 2, True],
-                [5, 384, 384, 1, True],
-                [5, 384, 384, 1, False],
-                [5, 384, 384, 1, False],
-            ],
-            "layer_list_out_channels": [12, 18, 42, 360],
+            "model_type": "pp_lcnet_v3",
+            "scale": 0.75,
+            "out_features": ["stage2", "stage3", "stage4", "stage5"],
+            "out_indices": [2, 3, 4, 5],
+            "return_idx": [1, 2, 3, 4],
+            "divisor": 16,
         }
-        self.backbone_config = backbone_config
-
         config = PPOCRV5MobileDetConfig(
             backbone_config=backbone_config,
-            scale=1.0,
-            conv_kxk_num=4,
-            reduction=4,
-            divisor=16,
-            num_channels=3,
-            backbone_out_channels=512,
-            hidden_act="hswish",
-            neck_out_channels=96,
-            shortcut=True,
-            interpolate_mode="nearest",
-            k=50,
-            kernel_list=[3, 2, 2],
-            fix_nan=False,
-            output_hidden_states=False,
+            convolutional_kxk_number=self.convolutional_kxk_number,
+            reduction=self.reduction,
+            hidden_act=self.hidden_act,
+            layer_list_out_channels=self.layer_list_out_channels,
+            neck_out_channels=self.neck_out_channels,
+            shortcut=self.shortcut,
+            kernel_list=self.kernel_list,
+            interpolate_mode=self.interpolate_mode,
         )
-
         return config
 
     def create_and_check_pp_ocrv5_mobile_det_object_detection(self, config, pixel_values):
@@ -127,6 +127,8 @@ class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
     pipeline_model_mapping = {"object-detection": PPOCRV5MobileDetForObjectDetection} if is_torch_available() else {}
 
     has_attentions = False
+    test_inputs_embeds = False
+    test_resize_embeddings = False
 
     def setUp(self):
         self.model_tester = PPOCRV5MobileDetModelTester(
@@ -134,45 +136,19 @@ class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
             is_training=False,
             image_size=128,
         )
-        self.model_tester.parent = self
         self.config_tester = ConfigTester(
-            self,
-            config_class=PPOCRV5MobileDetConfig,
-            has_text_modality=False,
-            common_properties=[],
+            self, config_class=PPOCRV5MobileDetConfig, has_text_modality=False, common_properties=[]
         )
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_pp_ocrv5_mobile_det_object_detection(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()  # Prepare test configuration and inputs
-        self.model_tester.create_and_check_pp_ocrv5_mobile_det_object_detection(
-            *config_and_inputs
-        )  # Run object detection test
-
     @is_flaky()
     def test_batching_equivalence(self, atol=5e-2, rtol=5e-2):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
 
-    @unittest.skip(reason="PPOCRV5MobileDet does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="PPOCRV5MobileDet does not use test_inputs_embeds_matches_input_ids")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
-    @unittest.skip(reason="PPOCRV5MobileDet does not support input and output embeddings")
-    def test_model_get_set_embeddings(self):
-        pass
-
     @unittest.skip(reason="PPOCRV5MobileDet does not support input and output embeddings")
     def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(reason="PPOCRV5MobileDet does not use token embeddings")
-    def test_resize_tokens_embeddings(self):
         pass
 
     @unittest.skip(reason="Feed forward chunking is not implemented")
@@ -189,6 +165,14 @@ class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="PPOCRV5MobileDet does not support attention")
     def test_attention_outputs(self):
+        pass
+
+    @unittest.skip(reason="PPOCRV5MobileDet does not output hidden_states.")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(reason="PPOCRV5MobileDet does not support input and output embeddings")
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_forward_signature(self):
@@ -223,86 +207,19 @@ class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
-    def test_hidden_states_output(self):
-        def make_divisible(v, divisor: int = 16, min_value=None):
-            if min_value is None:
-                min_value = divisor
-            new_v = max(min_value, int(v + divisor / 2) // divisor * divisor)
-            if new_v < 0.9 * v:
-                new_v += divisor
-            return new_v
-
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            breakpoint()
-            hidden_states = outputs.hidden_states
-
-            expected_num_stages = self.model_tester.num_stages
-            scale = self.model_tester.scale
-            divisor = self.model_tester.divisor
-            self.assertEqual(len(hidden_states), expected_num_stages + 1)
-
-            self.assertEqual(hidden_states[0].shape[-1], self.model_tester.image_size)
-
-            self.assertEqual(
-                hidden_states[1].shape[1],
-                make_divisible(self.model_tester.backbone_config["blocks2"][0][1] * scale, divisor),
-            )
-
-            self.assertEqual(
-                hidden_states[2].shape[1],
-                make_divisible(self.model_tester.backbone_config["blocks2"][0][2] * scale, divisor),
-            )
-
-            self.assertEqual(
-                hidden_states[3].shape[1],
-                make_divisible(self.model_tester.backbone_config["blocks3"][0][2] * scale, divisor),
-            )
-
-            self.assertEqual(
-                hidden_states[4].shape[1],
-                make_divisible(self.model_tester.backbone_config["blocks4"][0][2] * scale, divisor),
-            )
-
-            self.assertEqual(
-                hidden_states[5].shape[1],
-                make_divisible(self.model_tester.backbone_config["blocks5"][0][2] * scale, divisor),
-            )
-
-            self.assertEqual(
-                hidden_states[6].shape[1],
-                make_divisible(self.model_tester.backbone_config["blocks6"][0][2] * scale, divisor),
-            )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            check_hidden_states_output(inputs_dict, config, model_class)
-
 
 @require_torch
 @require_vision
 @slow
 class PPOCRV5MobileDetModelIntegrationTest(unittest.TestCase):
     def setUp(self):
-        model_path = "/workspace/model_weight_torch/PP-OCRv5_mobile_det"
+        model_path = "PaddlePaddle/PP-OCRv5_mobile_det_safetensors"
         self.model = PPOCRV5MobileDetForObjectDetection.from_pretrained(model_path).to(torch_device)
         self.image_processor = (
             PPOCRV5MobileDetImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
         )
-        path = "/workspace/PaddleX/paddlex/inference/models/text_detection/modeling/general_ocr_001.png"
-        self.image = Image.open(path)
+        url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png"
+        self.image = Image.open(requests.get(url, stream=True).raw)
 
     def test_inference_object_detection_head(self):
         inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)

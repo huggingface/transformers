@@ -128,6 +128,7 @@ class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
         divisor=8,
         **kwargs,
     ):
+        super().__init__(**kwargs)
         self.num_channels = num_channels
         self.scale = scale
         self.hidden_act = hidden_act
@@ -172,7 +173,6 @@ class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
             stage_out_channels.append(int(block[-1][2] * self.scale))
         self.stage_out_channels = stage_out_channels
         self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
-        super().__init__(**kwargs)
 
 
 @auto_docstring(
