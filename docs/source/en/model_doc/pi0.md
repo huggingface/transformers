@@ -24,15 +24,22 @@ rendered properly in your Markdown viewer.
 
 # PI0
 
-[PI0](https://arxiv.org/abs/2410.24164) is blah-blah
+[PI0](https://arxiv.org/abs/2410.24164) is a vision-language-action model for robotics manipulation. It jointly processes visual observations and language instructions to generate robot actions.
+
+The abstract from the paper is as follows:
+*Robot learning holds tremendous promise to unlock the full potential of flexible, general, and dexterous robot systems, as well as to address some of the deepest questions in artificial intelligence. However, bringing robot learning to the level of generality required for effective real-world systems faces major obstacles in terms of data, generalization, and robustness. In this paper, we discuss how generalist robot policies (i.e., robot foundation models) can address these challenges, and how we can design effective generalist robot policies for complex and highly dexterous tasks. We propose a novel flow matching architecture built on top of a pre-trained vision-language model (VLM) to inherit Internet-scale semantic knowledge. We then discuss how this model can be trained on a large and diverse dataset from multiple dexterous robot platforms, including single-arm robots, dual-arm robots, and mobile manipulators. We evaluate our model in terms of its ability to perform tasks in zero shot after pre-training, follow language instructions from people and from a high-level VLM policy, and its ability to acquire new skills via fine-tuning. Our results cover a wide variety of tasks, such as laundry folding, table cleaning, and assembling boxes.*
+
+
+This model was contributed by [Molbap](https://huggingface.co/Molbap) and [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).
+The original code can be found [here](https://github.com/Physical-Intelligence/openpi).
 
 You can find all the checkpoints under the [PI0](https://huggingface.co/collections/lerobot/pi0) collection.
 
+## Usage examples
 
 ```py
 import torch
-import requests
-from PIL import Image
+from transformers.image_utils import load_image
 from transformers import PI0Processor, PI0ForConditionalGeneration
 
 model = PI0ForConditionalGeneration.from_pretrained(
@@ -44,10 +51,10 @@ model = PI0ForConditionalGeneration.from_pretrained(
 processor = PI0Processor.from_pretrained("google/paligemma2-3b-mix-224")
 
 prompt = "Pick up the object"
-image = f"your-images-from-various-cameras"
+image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/vla_pi0.jpg")
 inputs = processor(image, prompt, return_tensors="pt")
 
-state = "the-robot-state"
+state = torch.randn(1, 32) # change with actual robot state
 actions = model.sample_actions(**inputs, state=state, num_steps=3)
 print(actions)
 ```
