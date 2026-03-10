@@ -1558,7 +1558,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         pkg_availability_check: Callable,
         supported_devices: tuple[tuple[Callable, str]],
         custom_supported_devices: tuple[tuple[Callable, str]] = (),
-        cuda_major_versions: tuple[int] | None = None,
+        cuda_min_major_version: int | None = None,
     ):
         """
         Checks whether the specified Flash Attention version is supported and if not, searches for the specific reason
@@ -1581,8 +1581,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 Essentially a list (for mutable kwargs reasons a tuple) of the custom supported devices in the format of
                 `(device_availability_check, info_message)`. These custom devices have custom logic outside the torch
                 ecosystem either via kernels or other packages and hence have early checks for availability.
-            cuda_major_versions (`tuple[int]`, *optional*):
-                A potential list of major cuda versions supported for this version of Flash Attention. This is mostly
+            cuda_min_major_version (`int`, *optional*):
+                The minimum major cuda version supported for this version of Flash Attention. This is mostly
                 affecting more recent versions which are more specialized to the features of new hardware.
         """
         # Certain devices have custom workarounds e.g. with their own package distribution (NPU) or via kernels (XPU)
@@ -1610,11 +1610,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         f"{preface} FlashAttention{flash_attn_version} is not available on CPU. Please make sure you are on any of the supported devices: {device_names}."
                     )
                 # Cuda major versions (more recent FA versions are specialized to newer cuda devices)
-                elif cuda_major_versions is not None and is_torch_cuda_available():
+                elif cuda_min_major_version is not None and is_torch_cuda_available():
                     major, _ = torch.cuda.get_device_capability()
-                    if major not in cuda_major_versions:
+                    if major < cuda_min_major_version:
                         raise ImportError(
-                            f"{preface} FlashAttention{flash_attn_version} requires compute capability >= {min(cuda_major_versions)}, but found {torch.cuda.get_device_capability()} with compute capability {major}.x"
+                            f"{preface} FlashAttention{flash_attn_version} requires compute capability >= {cuda_min_major_version}, but found {torch.cuda.get_device_capability()} with compute capability {major}.x"
                         )
 
     def _flash_attn_can_dispatch(self, flash_attn_version: int, is_init_check: bool = False) -> bool:
@@ -1666,7 +1666,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 "general_availability_check": is_flash_attn_3_available,
                 "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn_3") is not None,
                 "supported_devices": ((is_torch_cuda_available, "cuda"),),
-                "cuda_major_versions": (8, 9),  # Ampere and Hopper
+                "cuda_min_major_version": 8,  # Ampere
             },
             4: {
                 "flash_attn_version": 4,
@@ -1674,7 +1674,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn") is not None
                 and importlib.util.find_spec("flash_attn.cute") is not None,
                 "supported_devices": ((is_torch_cuda_available, "cuda"),),
-                "cuda_major_versions": (9, 10),  # Hopper and Blackwell
+                "cuda_min_major_version": 9,  # Hopper
             },
         }
 
