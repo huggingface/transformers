@@ -946,6 +946,8 @@
         title: Segment Anything
       - local: model_doc/sam_hq
         title: Segment Anything High Quality
+      - local: model_doc/sarvam_mla
+        title: SarvamMLA
       - local: model_doc/superglue
         title: SuperGlue
       - local: model_doc/superpoint
