@@ -516,7 +516,8 @@ class ParakeetForTDTModelTester:
 
         # Check encoder last hidden state
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.encoder_model_tester.hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.output_seq_length, self.encoder_model_tester.hidden_size),
         )
 
     def prepare_config_and_inputs_for_common(self):
