@@ -44,36 +44,14 @@ class VideoPrismVisionConfig(VivitConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        image_size (`int`, *optional*, defaults to 288):
-            The size of the input image.
         num_frames (`int`, *optional*, defaults to 16):
             The number of frames in the input video.
         tubelet_size (`List[int]`, *optional*, defaults to `[1, 18, 18]`):
             The size of the tubelet patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
         num_spatial_layers (`int`, *optional*, defaults to 12):
             Number of spatial transformer blocks.
         num_temporal_layers (`int`, *optional*, defaults to 4):
             Number of temporal transformer blocks.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_python"`):
-            The non-linear activation function (function or string).
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the qkv projections in attention layers.
         attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
             Softcapping constant for attention logits.
         num_auxiliary_layers (`int`, *optional*, defaults to 2):
@@ -183,8 +161,8 @@ class VideoPrismTextConfig(SiglipTextConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
 
 
-class VideoPrismConfig(SiglipConfig):
-    r"""
+@auto_docstring(
+    custom_intro="""
     This is the configuration class to store the configuration of a [`VideoPrismClipModel`]. It is used to instantiate a
     VideoPrismClipModel according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the VideoPrism
@@ -192,29 +170,9 @@ class VideoPrismConfig(SiglipConfig):
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        text_config (`VideoPrismTextConfig`, *optional*):
-            Configuration for the text model.
-        vision_config (`VideoPrismVisionConfig`, *optional*):
-            Configuration for the vision model.
-
-    Example:
-
-    ```python
-    >>> from transformers import VideoPrismConfig, VideoPrismModel
-
-    >>> # Initializing a VideoPrismConfig with default values
-    >>> configuration = VideoPrismConfig()
-
-    >>> # Initializing a VideoPrismClipModel with the configuration
-    >>> model = VideoPrismClipModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
-    """
-
+    """,
+)
+class VideoPrismConfig(SiglipConfig):
     def __init__(self, text_config=None, vision_config=None, **kwargs):
         super().__init__(**kwargs)
         del self.initializer_factor
@@ -226,31 +184,6 @@ class VideoPrismTokenizer(T5Tokenizer):
 
     This tokenizer inherits from [`T5Tokenizer`] which contains most of the main methods. Users should refer to this
     superclass for more information regarding those methods.
-
-    Args:
-        vocab (`Union[str, List[Tuple[str, float]]], *optional*`):
-            Path to the vocabulary file or a list of token-score pairs.
-        eos_token (`str`, *optional*, defaults to `"</s>"`):
-            The end of sequence token.
-        unk_token (`str`, *optional*, defaults to `"<unk>"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
-        pad_token (`str`, *optional*, defaults to `"<pad>"`):
-            The token used for padding, for example when batching sequences of different lengths.
-        extra_ids (`int`, *optional*, defaults to 100):
-            Add `extra_ids` additional tokens to the end of the vocabulary.
-        additional_special_tokens (`List[str]`, *optional*):
-            Additional special tokens used by the tokenizer.
-
-    Example:
-
-    ```python
-    >>> from transformers import VideoPrismTokenizer
-
-    >>> tokenizer = VideoPrismTokenizer.from_pretrained("google/videoprism-lvt-base-f16r288")
-    >>> encoded = tokenizer("Hello, my dog is cute", return_tensors="pt")
-    >>> print(encoded)
-    ```
     """
 
     def __init__(
@@ -278,21 +211,13 @@ class VideoPrismTokenizer(T5Tokenizer):
         self._tokenizer.post_processor = None
 
 
-@auto_docstring(checkpoint="google/videoprism-base-f16r288")
+@auto_docstring
 class VideoPrismVideoProcessor(LlavaOnevisionVideoProcessor):
     r"""
     Constructs a VideoPrism video processor.
 
     This processor inherits from [`LlavaOnevisionVideoProcessor`] and sets default parameters for VideoPrism models.
     Video frames are resized to 288x288 using bicubic resampling without normalization.
-
-    Args:
-        size (`Dict[str, int]`, *optional*, defaults to `{"height": 288, "width": 288}`):
-            The size to resize the video frames to.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-            The resampling filter to use when resizing images.
-        do_normalize (`bool`, *optional*, defaults to `False`):
-            Whether to normalize the video frames.
     """
 
     size = {"height": 288, "width": 288}
@@ -313,20 +238,15 @@ class VideoPrismProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-class VideoPrismProcessor(ProcessorMixin):
-    r"""
+@auto_docstring(
+    custom_intro="""
     Constructs a VideoPrism processor which wraps a VideoPrism video processor and a VideoPrism tokenizer into a single processor.
 
     [`VideoPrismProcessor`] offers all the functionalities of [`VideoPrismVideoProcessor`] and [`VideoPrismTokenizer`]. See the
     [`~VideoPrismProcessor.__call__`] for more information.
-
-    Args:
-        video_processor ([`VideoPrismVideoProcessor`], *optional*):
-            An instance of [`VideoPrismVideoProcessor`].
-        tokenizer ([`VideoPrismTokenizer`], *optional*):
-            An instance of [`VideoPrismTokenizer`].
     """
-
+)
+class VideoPrismProcessor(ProcessorMixin):
     valid_processor_kwargs = VideoPrismProcessorKwargs
 
     def __init__(self, video_processor=None, tokenizer=None):
@@ -334,22 +254,18 @@ class VideoPrismProcessor(ProcessorMixin):
 
 
 @dataclass
+@auto_docstring
 class BaseModelOutputWithSpatialAndTemporalStates(ModelOutput):
     r"""
     Base class for model outputs that include spatial and temporal states.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor`):
-            The last hidden state of the model, typically of shape
-            (batch_size, num_patches * num_frames, hidden_size).
+    temporal_hidden_state (`torch.FloatTensor`, *optional*):
+        The last hidden state of the temporal encoder, typically of shape
+        `(batch_size * num_patches, num_frames, hidden_size)`.
 
-        temporal_hidden_state (`torch.FloatTensor`, *optional*):
-            The last hidden_state of the temporal encoder, typically of shape
-            (batch_size * num_patches, num_frames, hidden_size).
-
-        spatial_hidden_state (`torch.FloatTensor`, *optional*):
-            The last hidden_state of the spatial encoder, typically of shape
-            (batch_size * num_frames, num_patches, hidden_size).
+    spatial_hidden_state (`torch.FloatTensor`, *optional*):
+        The last hidden state of the spatial encoder, typically of shape
+        `(batch_size * num_frames, num_patches, hidden_size)`.
     """
 
     last_hidden_state: torch.FloatTensor
@@ -358,24 +274,21 @@ class BaseModelOutputWithSpatialAndTemporalStates(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 class VideoPrismVideoOutput(ModelOutput):
     r"""
     Base class for VideoPrismVideo model outputs.
 
-    Args:
-        video_last_hidden_state (`torch.FloatTensor`):
-            The pooled video embeddings after the attention pooling head, typically of shape
-            `(batch_size, 1, hidden_size)`.
-
-        auxiliary_output (`BaseModelOutput`, *optional*):
-            The output of the auxiliary encoder. Its `last_hidden_state` is typically of shape
-            `(batch_size, num_patches * num_frames, hidden_size)`.
-
-        attention_pooling_output (`tuple(torch.FloatTensor, torch.FloatTensor)`, *optional*):
-            The output tuple of [`VideoPrismMultiheadAttentionPoolingHead`] containing:
-            - the pooled tensor of shape `(batch_size, 1, hidden_size)`, and
-            - the attention probabilities of shape
-            `(batch_size, num_attention_heads, 1, num_patches * num_frames)`.
+    video_last_hidden_state (`torch.FloatTensor`):
+        The pooled video embeddings after the attention pooling head, typically of shape
+        `(batch_size, 1, hidden_size)`.
+    auxiliary_output (`BaseModelOutput`, *optional*):
+        The output of the auxiliary encoder. Its `last_hidden_state` is typically of shape
+        `(batch_size, num_patches * num_frames, hidden_size)`.
+    attention_pooling_output (`tuple(torch.FloatTensor, torch.FloatTensor)`, *optional*):
+        The output tuple of [`VideoPrismMultiheadAttentionPoolingHead`] containing the pooled tensor of shape
+        `(batch_size, 1, hidden_size)` and the attention probabilities of shape
+        `(batch_size, num_attention_heads, 1, num_patches * num_frames)`.
     """
 
     video_last_hidden_state: torch.FloatTensor
@@ -388,22 +301,22 @@ class VideoPrismVideoOutput(ModelOutput):
 class VideoPrismClipOutput(ModelOutput):
     r"""
     Base class for VideoPrismClip model outputs.
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        Contrastive loss for video-text similarity.
     logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
         The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
         similarity scores.
     logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, video_batch_size)`):
         The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-video
         similarity scores.
-    video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+    video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`):
         The video embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismVideoModel`].
-    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`):
         The text embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismTextModel`].
     video_model_output (`VideoPrismVideoOutput`):
         The output of the [`VideoPrismVideoModel`].
     text_model_output (`BaseModelOutput`):
         The output of the [`VideoPrismTextModel`].
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-        Contrastive loss for video-text similarity.
     """
 
     logits_per_video: torch.FloatTensor | None = None
@@ -837,28 +750,6 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithSpatialAndTemporalStates:
-        r"""
-        pixel_values_videos (`torch.FloatTensor`):
-            Pixel values of the video frames of shape (batch_size, num_frames, num_channels, height, width).
-        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-            Whether to interpolate positional encodings to match input size.
-
-        Example:
-
-        ```python
-        >>> from transformers import VideoPrismVideoProcessor, VideoPrismVisionModel
-        >>> import torch
-
-        >>> processor = VideoPrismVideoProcessor.from_pretrained("google/videoprism-base-f16r288")
-        >>> model = VideoPrismVisionModel.from_pretrained("google/videoprism-base-f16r288")
-
-        >>> video = "sample_video.mp4"
-        >>> inputs = processor(videos=video)
-        >>> with torch.no_grad():
-        ...     outputs = model(**inputs)
-        ...     features = outputs.last_hidden_state
-        ```
-        """
         if pixel_values_videos is None:
             raise ValueError("You have to specify pixel_values_videos")
 
