@@ -207,10 +207,13 @@ def get_max_memory(max_memory: dict[int | str, int | str] | None = None):
     # Adjust for allocated but free memory
     for device_name in final_max_memory:
         if isinstance(device_name, int):  # it's a GPU device
+            # Only cuda and xpu use caching memory allocator
             if is_torch_xpu_available():
                 unused_memory = torch.xpu.memory_reserved(device_name) - torch.xpu.memory_allocated(device_name)
-            else:
+            elif torch.cuda.is_available():
                 unused_memory = torch.cuda.memory_reserved(device_name) - torch.cuda.memory_allocated(device_name)
+            else:
+                unused_memory = 0
             # Add the pre-allocated but unused device memory
             final_max_memory[device_name] += unused_memory
         # Still respect the `max_memory` passed by the user if any
