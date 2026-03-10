@@ -223,10 +223,7 @@ class TextToAudioPipeline(Pipeline):
 
         if self.vocoder is not None:
             # in that case, the output is a spectrogram that needs to be converted into a waveform
-            vocoder_output = self.vocoder(output)
-            output = (
-                vocoder_output.last_hidden_state if hasattr(vocoder_output, "last_hidden_state") else vocoder_output
-            )
+            output = self.vocoder(output)
 
         return output
 
