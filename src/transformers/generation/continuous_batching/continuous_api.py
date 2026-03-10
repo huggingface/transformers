@@ -136,7 +136,6 @@ class ContinuousBatchProcessor:
         self.use_cuda_graph = use_cuda_graph
         # Compile-related arguments
         self.compile_config: CompileConfig | None = getattr(generation_config, "compile_config", None)
-        self._forward_process_and_sample_is_compiled = False
 
         self._pad_inputs = use_cuda_graph or (self.compile_config is not None and not self.compile_config.dynamic)
 
@@ -146,6 +145,19 @@ class ContinuousBatchProcessor:
 
         # If the user turned on the decode fast path (ie. using a block table), check if it is available
         self._ensure_decode_fast_path_is_available()  # this needs to happen before self.inputs_and_outputs is created
+        # If block table is available and compile is on, compile the static wrapper around the block table path.
+        # When max_blocks_per_request <= 0, the block table path is never used, so no compilation is needed.
+        if self.cache.max_blocks_per_request > 0 and self.compile_config is not None:
+            self._compiled_static_forward = torch.compile(
+                self._forward_static_wrapper,
+                fullgraph=False,  # flash_attn_with_kvcache cannot be traced, so fullgraph needs to be False
+                mode=self.compile_config.mode,
+                dynamic=False,
+                backend=self.compile_config.backend,
+                options=self.compile_config.options,
+            )
+        else:
+            self._compiled_static_forward = None
 
         # Setup inputs and outputs
         self.use_async_batching = use_async_batching
@@ -186,7 +198,7 @@ class ContinuousBatchProcessor:
                     self.cache.num_sliding_attention_groups == 0,  # TODO: add support for sliding window layers
                     torch.cuda.is_available(),  # Block table is only supported on CUDA
                     flash_attn_with_kvcache is not None,  # The `flash_attn_with_kvcache` fn is needed
-                    self.compile_config is None,  # TODO: add support for the decode fast path with compile
+                    # self.compile_config is None,  # TODO: add support for the decode fast path with compile
                 ]
                 if not all(conditions):
                     logger.warning(
@@ -418,27 +430,25 @@ class ContinuousBatchProcessor:
     def _generation_step(self, model: nn.Module, logit_processor: LogitsProcessorList, do_sample: bool) -> None:
         """Perform a single generation step."""
 
-        # If a compile config is specified, we compile the forward pass once in a wrapper
-        if self.compile_config is not None and not self._forward_process_and_sample_is_compiled:
-            self._forward_process_and_sample = torch.compile(
-                self._forward_process_and_sample,
-                fullgraph=self.compile_config.fullgraph,
-                mode=self.compile_config.mode,
-                dynamic=self.compile_config.dynamic,
-                backend=self.compile_config.backend,
-                options=self.compile_config.options,
-            )
-            self._forward_process_and_sample_is_compiled = True
+        # NOTE: in the future, we want to give the user the option to compile everything. This would happen either here
+        # or at init time.
 
         # Retrieve the model kwargs with or without padding
         batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=self._pad_inputs)
+        carry_over_ids, prev_output_ids, output_ids = self.inputs_and_outputs.get_cb_kwargs()
         compute_stream = self.inputs_and_outputs.compute_stream
+
+        # Get the appropriate forward function (compiled or not, based on block table usage)
+        if self.inputs_and_outputs.use_block_table and self._compiled_static_forward is not None:
+            forward_fn = self._compiled_static_forward
+        else:
+            forward_fn = self._forward_process_and_sample
 
         # If we are not using cuda graphs, we perform the generation step and return
         if not self.use_cuda_graph:
             maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
             with maybe_stream:
-                self._forward_process_and_sample(model, batch_data, logit_processor, do_sample)
+                forward_fn(model, batch_data, logit_processor, do_sample, carry_over_ids, prev_output_ids, output_ids)
 
         # Otherwise, we use create or replay the graph (cuda is available in this path)
         else:
@@ -453,17 +463,38 @@ class ContinuousBatchProcessor:
                 # compute_stream.wait_stream(torch.cuda.current_stream())
                 # Warmup
                 with torch.cuda.stream(compute_stream):
-                    self._forward_process_and_sample(model, batch_data, logit_processor, do_sample)
+                    forward_fn(
+                        model, batch_data, logit_processor, do_sample, carry_over_ids, prev_output_ids, output_ids
+                    )
                 # torch.cuda.current_stream().wait_stream(compute_stream)
                 # Capture
                 graph = torch.cuda.CUDAGraph()
                 with torch.cuda.graph(graph, stream=compute_stream, pool=self.graph_pool):
-                    self._forward_process_and_sample(model, batch_data, logit_processor, do_sample)
+                    forward_fn(
+                        model, batch_data, logit_processor, do_sample, carry_over_ids,   prev_output_ids, output_ids
+                    )
                 # Store
                 self.inputs_and_outputs.set_graph(graph)
 
         # In any case, we transfer the outputs to the host
         self.inputs_and_outputs.retrieve_device_outputs()
+
+    def _forward_static_wrapper(
+        self,
+        model: nn.Module,
+        batch_data: dict,
+        logit_processor: LogitsProcessorList,
+        do_sample: bool,
+        carry_over_ids: torch.Tensor,
+        prev_output_ids: torch.Tensor,
+        output_ids: torch.Tensor,
+    ) -> None:
+        """Wrapper for static compilation (block table path). This separate function is needed because dynamo treats
+        different function objects distinctly, preventing recompilation between the compiled block table path and the
+        uncompiled varlen path."""
+        self._forward_process_and_sample(
+            model, batch_data, logit_processor, do_sample, carry_over_ids, prev_output_ids, output_ids
+        )
 
     @traced
     def _forward_process_and_sample(
@@ -472,14 +503,17 @@ class ContinuousBatchProcessor:
         batch_data: dict,
         logit_processor: LogitsProcessorList,
         do_sample: bool,
+        carry_over_ids: torch.Tensor,
+        prev_output_ids: torch.Tensor,
+        output_ids: torch.Tensor,
     ) -> None:
         """This function performs the forward pass, logits processing, and sampling; which are broken down into smaller
         function to be easier to trace with OpenTelemetry."""
-        self.inputs_and_outputs.carry_over_tokens(batch_data["input_ids"])
+        self.inputs_and_outputs.carry_over_tokens(batch_data["input_ids"], carry_over_ids, prev_output_ids)
         logits = self._model_forward(model, batch_data)
         # if self.log_prob_generation:    batch_processor.output_probs.copy_(logits)  # TODO
         probs = self._process_logit(batch_data, logits, logit_processor)
-        self._sample(probs, batch_data, do_sample)
+        self._sample(probs, batch_data, do_sample, output_ids)
 
     @traced(span_name="model_forward")
     def _model_forward(self, model: nn.Module, batch_data: dict) -> torch.Tensor:
@@ -504,7 +538,7 @@ class ContinuousBatchProcessor:
         return processed_logits_2d.view(batch_size, seq_len, vocab_size)
 
     @traced(span_name="sampling")
-    def _sample(self, probs: torch.Tensor, batch_data: dict, do_sample: bool) -> None:
+    def _sample(self, probs: torch.Tensor, batch_data: dict, do_sample: bool, output_ids: torch.Tensor) -> None:
         if do_sample:
             probs = nn.functional.softmax(probs, dim=-1)
             # probs[0] has shape [seq_len, vocab_size], multinomial returns [seq_len, 1]
@@ -516,7 +550,7 @@ class ContinuousBatchProcessor:
         #
         indices = batch_data["logits_indices"][:tokens]
         next_tokens = next_tokens[indices]
-        self.inputs_and_outputs.output_ids[:tokens].copy_(next_tokens)
+        output_ids[:tokens].copy_(next_tokens)
 
 
 # Manager Class (User Interface)

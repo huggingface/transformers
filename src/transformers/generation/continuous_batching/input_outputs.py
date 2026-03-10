@@ -282,7 +282,9 @@ class ContinuousBatchingIOs:
         """Get the cumulative sequence lengths for the current batch."""
         return self.cumulative_seqlens_q, self.cumulative_seqlens_k
 
-    def carry_over_tokens(self, input_ids: torch.Tensor) -> None:
+    def carry_over_tokens(
+        self, input_ids: torch.Tensor, carry_over_ids: torch.Tensor, prev_output_ids: torch.Tensor
+    ) -> None:
         pass
 
     def retrieve_device_outputs(self) -> None:
@@ -417,12 +419,14 @@ class ContinuousBatchingIOs:
         kv_size = self.max_kv_read + self.num_q_tokens
         batch_size = self.num_q_tokens if use_padding else self.true_batch_size
 
-        # Prepare the kwargs, the attributes that are either tensors or dict of tensors are initialized to empty dicts
+        # Prepare the kwargs, the attributes that are either tensors or dict of tensors are initialized to empty dicts.
+        # When using block table, max_seqlen_q and max_seqlen_k are not used by flash_attn_with_kvcache, so we set them
+        # to constant `1` to avoid dynamo guards on these changing integer values. This applies throughout this method.
         kwargs = PagedAttentionArgs(
             input_ids=self.input_ids[:q_size].unsqueeze(0),
             position_ids=self.position_ids[:q_size].unsqueeze(0),
             cu_seq_lens_q=self.cumulative_seqlens_q[: batch_size + 1],
-            max_seqlen_q=self.max_seqlen_q,
+            max_seqlen_q=1 if self.use_block_table else self.max_seqlen_q,
             logits_indices=self.logits_indices[:q_size],
             cu_seq_lens_k={},
             max_seqlen_k={},
@@ -451,6 +455,7 @@ class ContinuousBatchingIOs:
             kwargs.write_index.append(self.write_index_storage[i, :write_index_size])
 
         # For the attributes that are dict of tensors, we replace the dict with a tensor if there is only one entry
+        # When using block table, max_seqlen_k is not used, so we set it to a constant to avoid dynamo guards
         layer_types = list(self.cumulative_seqlens_k.keys())
         if len(layer_types) > 1:
             kwargs.max_seqlen_k: dict[str, int] = {}
@@ -458,14 +463,14 @@ class ContinuousBatchingIOs:
             kwargs.attention_mask: dict[str, torch.Tensor] = {}
             for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
                 kwargs.cu_seq_lens_k[layer_type] = seqlens_k[: batch_size + 1]
-                kwargs.max_seqlen_k[layer_type] = self.max_seqlen_k[layer_type]
+                kwargs.max_seqlen_k[layer_type] = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
                 if self.attention_mask is not None:
                     k_len = kv_size if use_padding else seqlens_k[batch_size]
                     kwargs.attention_mask[layer_type] = self.attention_mask[layer_type][..., :q_size, :k_len]
         else:
             layer_type = layer_types[0]
             kwargs.cu_seq_lens_k = self.cumulative_seqlens_k[layer_type][: batch_size + 1]
-            kwargs.max_seqlen_k = self.max_seqlen_k[layer_type]
+            kwargs.max_seqlen_k = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
             if self.attention_mask is not None:
                 k_len = kv_size if use_padding else self.cumulative_seqlens_k[layer_type][batch_size]
                 kwargs.attention_mask = self.attention_mask[layer_type][..., :q_size, :k_len]
@@ -473,6 +478,12 @@ class ContinuousBatchingIOs:
         if self.attention_mask is None:
             kwargs.attention_mask = None
         return kwargs.asdict()  # TODO: this is imperfect, check if there is no better way to juggle dict / dataclass
+
+    def get_cb_kwargs(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Returns the tensors used inside the generation step that are not inputs to the model forward pass. In
+        synchronous batching, there is no carry over, so the only tensor that will be used is output_ids, but we still
+        return 3 tensors to have the same interface as when using async batching."""
+        return self.output_ids, self.output_ids, self.carry_over_ids
 
     def get_graph(self) -> torch.cuda.CUDAGraph | None:
         graph = self.graphs.get_graph(self.num_q_tokens, self.max_kv_read)
@@ -627,14 +638,28 @@ class ContinuousBatchingAsyncIOs:
         self.compute_stream.wait_event(io_pair.h2d_over)
         return io_pair.device_io.get_model_kwargs(use_padding=use_padding)
 
-    def carry_over_tokens(self, input_ids: torch.Tensor) -> None:
+    def get_cb_kwargs(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Returns the tensors used inside the generation step that are not inputs to the model forward pass. Those
+        tensors could be retrieved using this object, but it would trigger a recompile if using torch.compile. They are:
+        - output_ids: the output ids of the current batch
+        - prev_output_ids: the output ids of the previous batch, required to carry over outputs tokens of the previous
+            batch to the input tokens of the next batch.
+        - carry_over_ids: a mask representing how to carry over tokens.
+        """
+        current_pair = self.io_pairs[self.current_pair]
+        previous_pair = self.io_pairs[1 - self.current_pair]
+        return (
+            current_pair.device_io.carry_over_ids,
+            previous_pair.device_io.output_ids,
+            current_pair.device_io.output_ids,
+        )
+
+    def carry_over_tokens(
+        self, input_ids: torch.Tensor, carry_over_ids: torch.Tensor, prev_output_ids: torch.Tensor
+    ) -> None:
         """As explained in the infer_carry_over_ids method, we might need to carry over tokens just predicted in batch N
         before launching the forwar pass of batch N+1. This method performs the carry over, and is recorded in CUDA
         graphs if they are enabled."""
-        # Retrieve previous batch output ids
-        prev_output_ids = self.io_pairs[1 - self.current_pair].device_io.output_ids
-        # Retrieve the carry over ids and mask
-        carry_over_ids = self.io_pairs[self.current_pair].device_io.carry_over_ids
         # Compute tokens to carry over and the corresponding mask
         carried_over_ids = prev_output_ids[carry_over_ids]
         carried_over_mask = (carry_over_ids != -1).int()
