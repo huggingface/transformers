@@ -3132,6 +3132,7 @@ class Qwen3TTSTokenizerV1Encoder(Qwen3TTSTokenizerV1EncoderPreTrainedModel):
         )
         self.padding = True
         self.audio_vq_ds_rate = self.tokenizer.audio_vq_ds_rate
+        self.post_init()
 
     def speech2mel(self, speechs):
         return [
