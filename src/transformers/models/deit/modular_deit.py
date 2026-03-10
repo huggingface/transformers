@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -76,7 +75,7 @@ class DeiTEmbeddings(ViTEmbeddings):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
         _, _, height, width = pixel_values.shape
@@ -108,7 +107,7 @@ class DeiTEmbeddings(ViTEmbeddings):
 class DeiTPreTrainedModel(ViTPreTrainedModel):
     _no_split_modules = ["DeiTLayer"]
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
@@ -138,10 +137,10 @@ class DeiTForMaskedImageModeling(ViTForMaskedImageModeling):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        pixel_values: torch.Tensor | None = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
         interpolate_pos_encoding: bool = False,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MaskedImageModelingOutput:
         r"""
@@ -235,11 +234,11 @@ class DeiTForImageClassificationWithTeacherOutput(ModelOutput):
         distillation token).
     """
 
-    logits: Optional[torch.FloatTensor] = None
-    cls_logits: Optional[torch.FloatTensor] = None
-    distillation_logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    logits: torch.FloatTensor | None = None
+    cls_logits: torch.FloatTensor | None = None
+    distillation_logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(
@@ -275,9 +274,9 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
+        pixel_values: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> DeiTForImageClassificationWithTeacherOutput:
         outputs: BaseModelOutputWithPooling = self.deit(

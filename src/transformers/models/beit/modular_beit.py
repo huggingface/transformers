@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,6 @@
 import collections.abc
 import warnings
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import Tensor, nn
@@ -109,8 +107,8 @@ class BeitEmbeddings(ViTEmbeddings):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
+        interpolate_pos_encoding: bool | None = None,
     ) -> torch.Tensor:
         if self.position_embeddings is not None and interpolate_pos_encoding is not None:
             warnings.warn(
@@ -239,7 +237,7 @@ class BeitMLP(ViTMLP):
 class BeitLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: BeitConfig, window_size: Optional[tuple] = None):
+    def __init__(self, config: BeitConfig, window_size: tuple | None = None):
         super().__init__()
         self.config = config
         self.attention = BeitAttention(config)
@@ -260,9 +258,9 @@ class BeitLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
-        resolution: Optional[tuple[int, int]] = None,
+        resolution: tuple[int, int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         # Compute per-layer relative position bias if present
@@ -298,7 +296,7 @@ class BeitLayer(GradientCheckpointingLayer):
 
 
 class BeitEncoder(nn.Module):
-    def __init__(self, config: BeitConfig, window_size: Optional[tuple] = None) -> None:
+    def __init__(self, config: BeitConfig, window_size: tuple | None = None) -> None:
         super().__init__()
         self.config = config
         self.has_relative_position_bias = config.use_shared_relative_position_bias
@@ -317,10 +315,10 @@ class BeitEncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         interpolate_pos_encoding: bool = False,
-        resolution: Optional[tuple[int, int]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        resolution: tuple[int, int] | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> tuple | BaseModelOutput:
         # Compute shared relative position bias once if enabled
         encoder_attention_mask = attention_mask
         if self.has_relative_position_bias:
@@ -430,9 +428,9 @@ class BeitModel(BeitPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
         interpolate_pos_encoding: bool = False,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BeitModelOutputWithPooling:
         r"""
@@ -510,13 +508,13 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        pixel_values: torch.Tensor | None = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
+        labels: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, MaskedLMOutput]:
+    ) -> tuple | MaskedLMOutput:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -598,11 +596,11 @@ class BeitForImageClassification(BeitPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        pixel_values: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, ImageClassifierOutput]:
+    ) -> tuple | ImageClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -643,10 +641,10 @@ class BeitConvModule(nn.Module):
         self,
         in_channels: int,
         out_channels: int,
-        kernel_size: Union[int, tuple[int, int]],
-        padding: Union[int, tuple[int, int], str] = 0,
+        kernel_size: int | tuple[int, int],
+        padding: int | tuple[int, int] | str = 0,
         bias: bool = False,
-        dilation: Union[int, tuple[int, int]] = 1,
+        dilation: int | tuple[int, int] = 1,
     ) -> None:
         super().__init__()
         self.conv = nn.Conv2d(
@@ -823,7 +821,7 @@ class BeitFCNHead(nn.Module):
     """
 
     def __init__(
-        self, config: BeitConfig, in_index: int = 2, kernel_size: int = 3, dilation: Union[int, tuple[int, int]] = 1
+        self, config: BeitConfig, in_index: int = 2, kernel_size: int = 3, dilation: int | tuple[int, int] = 1
     ) -> None:
         super().__init__()
         self.in_channels = config.hidden_size
@@ -923,11 +921,11 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        pixel_values: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, SemanticSegmenterOutput]:
+    ) -> tuple | SemanticSegmenterOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
