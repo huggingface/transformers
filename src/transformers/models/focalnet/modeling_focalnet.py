@@ -26,7 +26,8 @@ from ...backbone_utils import BackboneMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
+from ...utils.output_capturing import capture_outputs
 from .configuration_focalnet import FocalNetConfig
 
 
@@ -516,15 +517,14 @@ class FocalNetEncoder(nn.Module):
 
         self.gradient_checkpointing = False
 
+    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
         input_dimensions: tuple[int, int],
         output_hidden_states: bool | None = False,
         output_hidden_states_before_downsampling: bool | None = False,
-        return_dict: bool | None = True,
-    ) -> tuple | FocalNetEncoderOutput:
-        all_hidden_states = () if output_hidden_states else None
+    ) -> FocalNetEncoderOutput:
         all_reshaped_hidden_states = () if output_hidden_states else None
 
         if output_hidden_states:
@@ -532,12 +532,10 @@ class FocalNetEncoder(nn.Module):
             # rearrange b (h w) c -> b c h w
             reshaped_hidden_state = hidden_states.view(batch_size, *input_dimensions, hidden_size)
             reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
-            all_hidden_states += (hidden_states,)
             all_reshaped_hidden_states += (reshaped_hidden_state,)
 
         for i, stage_module in enumerate(self.stages):
             stage_outputs = stage_module(hidden_states, input_dimensions)
-
             hidden_states = stage_outputs[0]
             hidden_states_before_downsampling = stage_outputs[1]
             output_dimensions = stage_outputs[2]
@@ -552,22 +550,16 @@ class FocalNetEncoder(nn.Module):
                     batch_size, *(output_dimensions[0], output_dimensions[1]), hidden_size
                 )
                 reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
-                all_hidden_states += (hidden_states_before_downsampling,)
                 all_reshaped_hidden_states += (reshaped_hidden_state,)
             elif output_hidden_states and not output_hidden_states_before_downsampling:
                 batch_size, _, hidden_size = hidden_states.shape
                 # rearrange b (h w) c -> b c h w
                 reshaped_hidden_state = hidden_states.view(batch_size, *input_dimensions, hidden_size)
                 reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
-                all_hidden_states += (hidden_states,)
                 all_reshaped_hidden_states += (reshaped_hidden_state,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
         return FocalNetEncoderOutput(
             last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
             reshaped_hidden_states=all_reshaped_hidden_states,
         )
 
@@ -579,6 +571,7 @@ class FocalNetPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["FocalNetStage"]
+    _can_record_outputs = {"hidden_states": FocalNetStage}
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -620,22 +613,17 @@ class FocalNetModel(FocalNetPreTrainedModel):
         return self.embeddings.patch_embeddings
 
     @auto_docstring
+    @capture_outputs
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
         bool_masked_pos: torch.BoolTensor | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | FocalNetModelOutput:
+    ) -> FocalNetModelOutput:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -645,8 +633,7 @@ class FocalNetModel(FocalNetPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             input_dimensions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            output_hidden_states=kwargs.get("output_hidden_states", self.config.output_hidden_states),
         )
 
         sequence_output = encoder_outputs[0]
@@ -657,15 +644,9 @@ class FocalNetModel(FocalNetPreTrainedModel):
             pooled_output = self.pooler(sequence_output.transpose(1, 2))
             pooled_output = torch.flatten(pooled_output, 1)
 
-        if not return_dict:
-            output = (sequence_output, pooled_output) + encoder_outputs[1:]
-
-            return output
-
         return FocalNetModelOutput(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
             reshaped_hidden_states=encoder_outputs.reshaped_hidden_states,
         )
 
@@ -703,14 +684,13 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
         bool_masked_pos: torch.BoolTensor | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | FocalNetMaskedImageModelingOutput:
+    ) -> FocalNetMaskedImageModelingOutput:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -741,13 +721,11 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
         >>> list(reconstructed_pixel_values.shape)
         [1, 3, 192, 192]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.focalnet(
             pixel_values,
             bool_masked_pos=bool_masked_pos,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -772,10 +750,6 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
             )
             reconstruction_loss = nn.functional.l1_loss(pixel_values, reconstructed_pixel_values, reduction="none")
             masked_im_loss = (reconstruction_loss * mask).sum() / (mask.sum() + 1e-5) / self.config.num_channels
-
-        if not return_dict:
-            output = (reconstructed_pixel_values,) + outputs[2:]
-            return ((masked_im_loss,) + output) if masked_im_loss is not None else output
 
         return FocalNetMaskedImageModelingOutput(
             loss=masked_im_loss,
@@ -808,12 +782,11 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | FocalNetImageClassifierOutput:
         r"""
@@ -822,12 +795,10 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.focalnet(
             pixel_values,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         pooled_output = outputs[1]
@@ -837,10 +808,6 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
         loss = None
         if labels is not None:
             loss = self.loss_function(labels, logits, self.config)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return FocalNetImageClassifierOutput(
             loss=loss,
@@ -868,11 +835,10 @@ class FocalNetBackbone(BackboneMixin, FocalNetPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.Tensor,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> BackboneOutput:
         r"""
@@ -895,13 +861,8 @@ class FocalNetBackbone(BackboneMixin, FocalNetPreTrainedModel):
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
 
         outputs = self.focalnet(pixel_values, output_hidden_states=True, return_dict=True)
-
         hidden_states = outputs.reshaped_hidden_states
 
         feature_maps = ()
@@ -909,15 +870,9 @@ class FocalNetBackbone(BackboneMixin, FocalNetPreTrainedModel):
             if stage in self.out_features:
                 feature_maps += (hidden_states[idx],)
 
-        if not return_dict:
-            output = (feature_maps,)
-            if output_hidden_states:
-                output += (outputs.hidden_states,)
-            return output
-
         return BackboneOutput(
             feature_maps=feature_maps,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=outputs.hidden_states if kwargs.get("output_hidden_states") else None,
             attentions=None,
         )
 
