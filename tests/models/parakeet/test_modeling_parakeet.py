@@ -63,7 +63,7 @@ class TDTLossTest(unittest.TestCase):
         max_u = self.fixture["max_u"]
         vocab_size = self.fixture["vocab_size"]
         num_durations = len(self.fixture["durations"])
-        blank = vocab_size
+        blank_token_id = vocab_size
 
         combined_logits = torch.randn(batch_size, max_t, max_u + 1, vocab_size + 1 + num_durations)
         targets = torch.randint(0, vocab_size, (batch_size, max_u))
@@ -76,7 +76,7 @@ class TDTLossTest(unittest.TestCase):
             "targets": targets,
             "logit_lengths": logit_lengths,
             "target_lengths": target_lengths,
-            "blank": blank,
+            "blank_token_id": blank_token_id,
             "durations": self.fixture["durations"],
         }
 
@@ -94,17 +94,19 @@ class TDTLossTest(unittest.TestCase):
 
     def test_tdt_loss_none(self):
         inputs = self._make_inputs()
-        losses = tdt_loss(**inputs, reduction="none")
-        self.assertEqual(losses.shape, (self.fixture["batch_size"],))
-        expected_sum = torch.tensor(self.fixture["expected_loss_sum"])
-        torch.testing.assert_close(losses.sum(), expected_sum)
+        losses = tdt_loss(**inputs, reduction=None)
+        expected = torch.tensor(self.fixture["expected_loss_none"])
+        torch.testing.assert_close(losses, expected)
 
     def test_tdt_loss_with_sigma(self):
         inputs = self._make_inputs()
-        loss_no_sigma = tdt_loss(**inputs, sigma=0.0, reduction="sum")
-        loss_with_sigma = tdt_loss(**inputs, sigma=0.05, reduction="sum")
+        loss_no_sigma = tdt_loss(**inputs, sigma=0.0, reduction="mean")
+        loss_with_sigma = tdt_loss(**inputs, sigma=0.05, reduction="mean")
         self.assertFalse(torch.allclose(loss_no_sigma, loss_with_sigma))
         self.assertGreater(loss_with_sigma.item(), loss_no_sigma.item())
+
+        expected = torch.tensor(self.fixture["expected_loss_mean_sigma_0p05"])
+        torch.testing.assert_close(loss_with_sigma, expected)
 
     def test_tdt_loss_gradient_flows(self):
         inputs = self._make_inputs()
@@ -512,9 +514,9 @@ class ParakeetForTDTModelTester:
         with torch.no_grad():
             result = model(input_features, attention_mask=attention_mask)
 
-        # forward() returns encoder hidden states as logits
+        # Check encoder last hidden state
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.output_seq_length, self.encoder_model_tester.hidden_size)
+            result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.encoder_model_tester.hidden_size)
         )
 
     def prepare_config_and_inputs_for_common(self):

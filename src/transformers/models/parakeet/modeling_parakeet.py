@@ -664,36 +664,6 @@ class ParakeetCTCGenerateOutput(ModelOutput):
     hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
 
 
-@dataclass
-class ParakeetTDTGenerateOutput(ModelOutput):
-    """
-    Outputs of Parakeet TDT model generation.
-
-    Args:
-        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
-            if all batches finished early due to the `eos_token_id`.
-        token_timestamps (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Token-level timestamps in seconds indicating when each token was emitted. Only returned when
-            `return_timestamps=True` is passed to `generate()`.
-        token_durations (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Token-level durations in frames indicating how many frames each token spans. Only returned when
-            `return_timestamps=True` is passed to `generate()`.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
-            Tuple of tuples (one element for each layer of the encoder) of `torch.FloatTensor` of shape
-            `(batch_size, num_heads, sequence_length, sequence_length)`. Attentions from the encoder.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
-            Tuple of tuples (one element for each layer of the encoder) of `torch.FloatTensor` of shape
-            `(batch_size, sequence_length, hidden_size)`. Hidden states from the encoder.
-    """
-
-    sequences: torch.LongTensor
-    token_timestamps: torch.FloatTensor | None = None
-    token_durations: torch.LongTensor | None = None
-    attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
-
-
 @auto_docstring(
     custom_intro="""
     Parakeet Encoder with a Connectionist Temporal Classification (CTC) head.
@@ -901,6 +871,61 @@ class ParakeetTDTJointNetwork(nn.Module):
         return self.token_head(joint_output), self.duration_head(joint_output)
 
 
+@dataclass
+class ParakeetTDTGenerateOutput(ModelOutput):
+    """
+    Outputs of Parakeet TDT model generation.
+
+    Args:
+        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
+        token_timestamps (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Token-level timestamps in seconds indicating when each token was emitted. Only returned when
+            `return_timestamps=True` is passed to `generate()`.
+        token_durations (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Token-level durations in frames indicating how many frames each token spans. Only returned when
+            `return_timestamps=True` is passed to `generate()`.
+        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
+            Tuple of tuples (one element for each layer of the encoder) of `torch.FloatTensor` of shape
+            `(batch_size, num_heads, sequence_length, sequence_length)`. Attentions from the encoder.
+        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
+            Tuple of tuples (one element for each layer of the encoder) of `torch.FloatTensor` of shape
+            `(batch_size, sequence_length, hidden_size)`. Hidden states from the encoder.
+    """
+
+    sequences: torch.LongTensor
+    token_timestamps: torch.FloatTensor | None = None
+    token_durations: torch.LongTensor | None = None
+    attentions: tuple[tuple[torch.FloatTensor]] | None = None
+    hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
+
+
+@dataclass
+class ParakeetTDTOutput(ModelOutput):
+    """
+    Output structure for Parakeet TDT forward pass.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Last hidden state from the encoder.
+        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
+            Hidden states from the encoder.
+        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
+            Attention mask for the encoder.
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, vocab_size + num_durations)`, *optional*):
+            Joint token and duration logits computed from the encoder and decoder outputs. Only returned when `labels` are provided to the forward pass.
+        loss (`torch.FloatTensor`, *optional*):
+            The loss computed from the TDT loss function. Only returned when `labels` are provided to the forward pass.
+    """
+
+    last_hidden_state: torch.Tensor
+    hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
+    attentions: tuple[tuple[torch.FloatTensor]] | None = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+
+
 # TODO (ebezzam) eventually move to audio_utils or loss_utils for common usage?
 def tdt_loss(
     token_logits: torch.Tensor,
@@ -908,7 +933,7 @@ def tdt_loss(
     targets: torch.Tensor,
     logit_lengths: torch.Tensor,
     target_lengths: torch.Tensor,
-    blank: int,
+    blank_token_id: int,
     durations: list[int],
     sigma: float = 0.0,
     reduction: str = "mean",
@@ -916,10 +941,9 @@ def tdt_loss(
     """
     Compute TDT (Token-and-Duration Transducer) loss (https://arxiv.org/abs/2304.06795).
 
-    Ported from NeMo's `TDTLossPytorch`. Unlike standard RNNT loss, this loss trains both
-    the token prediction head and the duration prediction head. Uses vectorized anti-diagonal
-    processing for efficiency: all (t, u) pairs on each anti-diagonal t+u=n are computed in
-    parallel as batched tensor operations.
+    Ported from NeMo's `TDTLossPytorch` with anti-diagonal processing. Unlike standard RNNT loss, this loss trains both
+    the token prediction head and the duration prediction head. It uses vectorized anti-diagonal processing for
+    efficiency: all (t, u) pairs on each anti-diagonal t+u=n are computed in parallel as batched tensor operations.
 
     Args:
         token_logits: Token logits of shape `(batch, T, U+1, vocab_size+1)`.
@@ -927,7 +951,7 @@ def tdt_loss(
         targets: Target labels of shape `(batch, U)`.
         logit_lengths: Encoder output lengths of shape `(batch,)`.
         target_lengths: Target lengths of shape `(batch,)`.
-        blank: Blank token id.
+        blank_token_id: Blank token id.
         durations: List of duration values (e.g., `[0, 1, 2, 3, 4]`).
         sigma: Logit undernormalization constant (see TDT paper). Defaults to `0.0`.
         reduction: Loss reduction method. One of `"mean"`, `"sum"`, or `"none"`. Defaults to `"mean"`.
@@ -947,7 +971,7 @@ def tdt_loss(
     log_alpha[:, 0, 0] = 0.0
 
     # Precompute blank and label log-probs for vectorized access
-    blank_log_probs = token_log_probs[:, :, :, blank]
+    blank_log_probs = token_log_probs[:, :, :, blank_token_id]
 
     if max_u > 1:
         targets_expanded = targets.unsqueeze(1).expand(-1, max_t, -1)  # (batch, T, U_labels)
@@ -962,17 +986,14 @@ def tdt_loss(
         u_start = max(0, n - max_t + 1)
         u_end = min(n + 1, max_u)
         u_indices = torch.arange(u_start, u_end, device=device)
+
         t_indices = n - u_indices
-
         all_candidates = []
-
         for i, dur in enumerate(durations):
             t_prev = t_indices - dur
             valid_t = t_prev >= 0
-
             if not valid_t.any():
                 continue
-
             t_src = t_prev.clamp(min=0)
 
             # Blank arcs (dur > 0): from (t-dur, u) to (t, u)
@@ -1018,7 +1039,7 @@ def tdt_loss(
         t_clamped = t_final.clamp(min=0)
         terminal = (
             log_alpha[batch_idx, t_clamped, target_lengths]
-            + token_log_probs[batch_idx, t_clamped, target_lengths, blank]
+            + token_log_probs[batch_idx, t_clamped, target_lengths, blank_token_id]
             + duration_log_probs[batch_idx, t_clamped, target_lengths, i]
         )
         combined = torch.stack([log_probs, terminal], dim=0)
@@ -1030,10 +1051,7 @@ def tdt_loss(
         return (losses / target_lengths.float()).mean()
     elif reduction == "sum":
         return losses.sum()
-    elif reduction == "none":
-        return losses
-    else:
-        return (losses / target_lengths.float()).mean()
+    return losses
 
 
 @auto_docstring(
@@ -1059,9 +1077,17 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         input_features: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
+        compute_loss: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutput:
+    ) -> ParakeetTDTOutput:
         r"""
+        Args:
+            compute_loss (`bool`, *optional*, defaults to `False`):
+                Whether to compute the loss when the `labels` argument is provided. If `False`, the model will compute
+                the joint token and duration logits but will not compute the TDT loss, even if `labels` are provided.
+                This can be useful for cases where you want to compute the loss separately, e.g. with NeMo's TDT loss
+                implementation.
+
         Example:
 
         ```python
@@ -1085,10 +1111,11 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             **kwargs,
         )
 
-        encoder_hidden_states = encoder_outputs.last_hidden_state
-
-        loss = None
+        loss, logits = None, None
         if labels is not None:
+            if compute_loss is None:
+                compute_loss = True
+
             # Compute encoder output lengths
             attention_mask = (
                 attention_mask
@@ -1108,23 +1135,26 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             decoder_output, _, _ = self.decoder(decoder_input)
             token_logits, duration_logits = self.joint(
                 decoder_output=decoder_output.unsqueeze(1),
-                encoder_output=encoder_hidden_states.unsqueeze(2),
+                encoder_output=encoder_outputs.last_hidden_state.unsqueeze(2),
             )
+            logits = torch.cat([token_logits, duration_logits], dim=-1)
 
-            loss = tdt_loss(
-                token_logits=token_logits.float(),
-                duration_logits=duration_logits.float(),
-                targets=labels.to(token_logits.device).int(),
-                logit_lengths=encoder_lengths.to(token_logits.device).int(),
-                target_lengths=target_lengths.to(token_logits.device).int(),
-                blank=self.config.blank_token_id,
-                durations=self.config.durations,
-                reduction="mean",
-            )
+            if compute_loss:
+                loss = tdt_loss(
+                    token_logits=token_logits.float(),
+                    duration_logits=duration_logits.float(),
+                    targets=labels.to(token_logits.device).int(),
+                    logit_lengths=encoder_lengths.to(token_logits.device).int(),
+                    target_lengths=target_lengths.to(token_logits.device).int(),
+                    blank_token_id=self.config.blank_token_id,
+                    durations=self.config.durations,
+                    reduction="mean",
+                )
 
-        return CausalLMOutput(
+        return ParakeetTDTOutput(
             loss=loss,
-            logits=encoder_hidden_states,
+            logits=logits,
+            last_hidden_state=encoder_outputs.last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
@@ -1176,14 +1206,14 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         kwargs["return_dict"] = True
         if return_timestamps:
             return_dict_in_generate = True
-        outputs: CausalLMOutput = self.forward(
+        outputs = self.forward(
             input_features=input_features,
             attention_mask=attention_mask,
             **kwargs,
         )
 
         # greedy TDT decoding, `GreedyBatchedTDTLabelLoopingComputer.torch_impl` in NeMo
-        encoder_hidden_states = outputs.logits
+        encoder_hidden_states = outputs.last_hidden_state
         batch_size, sequence_length = encoder_hidden_states.shape[:2]
         device = encoder_hidden_states.device
         if attention_mask is not None:
