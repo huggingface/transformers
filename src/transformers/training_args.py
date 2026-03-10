@@ -511,7 +511,7 @@ class TrainingArguments:
             Load the best checkpoint at the end of training. Requires `eval_strategy` to be set.
             When enabled, the best checkpoint is always saved (see `save_total_limit`).
             <Tip>
-            When `True`, `save_strategy` must match `eval_strategy`, and if using `"steps"`,
+            When `True`, `save_strategy` must match `eval_strategy` (unless `save_strategy` is `"best"`), and if using `"steps"`,
             `save_steps` must be a multiple of `eval_steps`.
             </Tip>
         metric_for_best_model (`str`, *optional*):
