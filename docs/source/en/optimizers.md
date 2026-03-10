@@ -23,21 +23,21 @@ An optimizer updates model weights during training. The scheduler wraps the opti
                                     │ Optimizer  │         │  Scheduler   │
                                     │ (adamw_torch_fused)◄─│  (linear)    │
                                     │            │         │              │
-                                    │ param_groups         │ lr_lambda()  │
-                                    │  └ lr       ◄────────┤ step counter │
+                                    │ param_groups         |              |
+                                    │  └ lr       ◄────────┤              |
                                     │  └ weight_decay      │              │
                                     └──────┬─────┘         └──────┬───────┘
-                                           │                      │
+                                           │                      
   ┌──── EACH TRAINING STEP ───────────────────────────────────────────┐
-  │                                        │                      │   │
-  │   model(batch)                         │                      │   │
-  │       │                                │                      │   │
-  │       ▼                                │                      │   │
-  │     loss ──► loss.backward() ──► param.grad                   │   │
-  │                                        │                      │   │
-  │                          ┌─────────────┘                      │   │
-  │                          ▼                                    │   │
-  │              optimizer.step() ◄── reads lr ◄──────────────────┘   │
+  │                                        │                          │
+  │   model(batch)                         │                          │
+  │       │                                │                          │
+  │       ▼                                │                          │
+  │     loss ──► loss.backward() ──► param.grad                       │
+  │                                        │                          │
+  │                          ┌─────────────┘                          │
+  │                          ▼                                        │
+  │              optimizer.step()                                     │
   │                          │                                        │
   │                          ▼                                        │
   │                   param.data updated                              │
@@ -46,7 +46,7 @@ An optimizer updates model weights during training. The scheduler wraps the opti
   │              lr_scheduler.step()  ──► recalculates lr             │
   │                          │            writes to optimizer         │
   │                          ▼            .param_groups['lr']         │
-  │              optimizer.zero_grad()                                │
+  │              model.zero_grad()                                    │
   │                                                                   │
   └───────────────────────────────────────────────────────────────────┘
 ```
@@ -67,7 +67,7 @@ args = TrainingArguments(
     adam_epsilon=1e-8,
     # Scheduler
     lr_scheduler_type="cosine",   # "linear", "cosine", "constant_with_warmup", etc.
-    warmup_steps=500,             # or warmup_ratio=0.06 (fraction of total steps)
+    warmup_steps=500,
     lr_scheduler_kwargs={"num_cycles": 3},  # scheduler-specific extras
 )
 ```
@@ -159,7 +159,6 @@ pip install lomo-optim
 ```diff
 args = TrainingArguments(
 +   optim="adalomo",
-+   gradient_checkpointing=True,
     learning_rate=2e-6,
     ...  # remaining args from the TrainingArguments intro config
 )
@@ -182,7 +181,6 @@ Pair SFO with `lr_scheduler_type="constant"`. Other scheduler types work but aff
 args = TrainingArguments(
 +   optim="schedule_free_radam",
 +   lr_scheduler_type="constant",
-+   gradient_checkpointing=True,
     learning_rate=2e-6,
     ...  # remaining args from the TrainingArguments intro config
 )
@@ -203,7 +201,6 @@ pip install torch-optimi
 ```diff
 args = TrainingArguments(
 +   optim="stable_adamw",
-+   gradient_checkpointing=True,
     learning_rate=2e-6,
     ...  # remaining args from the TrainingArguments intro config
 )
@@ -228,7 +225,6 @@ args = SFTConfig(
     optim="galore_adamw",
     optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
     optim_args="rank=64, update_proj_gap=100, scale=0.10",
-    gradient_checkpointing=True,
 )
 ```
 
@@ -243,7 +239,6 @@ args = SFTConfig(
     optim="galore_adamw_layerwise",
     optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
     optim_args="rank=64, update_proj_gap=100, scale=0.10",
-    gradient_checkpointing=True,
 )
 ```
 
@@ -255,6 +250,24 @@ Layerwise mode is experimental. It only runs on a [single GPU](https://github.co
 ## Customizing optimizer and scheduler
 
 Create a custom optimizer and scheduler to use an optimizer not yet integrated, adjust per-layer learning rates, or apply custom logic.
+
+### Pass a class and kwargs
+
+[`~Trainer.optimizer_cls_and_kwargs`] accepts a custom optimizer class while delegating parameter grouping and device placement to [`Trainer`].
+
+[`Trainer`] defers building the optimizer until [`~Trainer.create_optimizer`] runs, so the model is already on the correct device.
+
+```py
+import torch
+
+trainer = Trainer(
+    ...
+    optimizer_cls_and_kwargs=(
+        torch.optim.SGD,
+        {"momentum": 0.9, "nesterov": True}
+    ),
+)
+```
 
 ### Pass prebuilt instances
 
@@ -280,26 +293,6 @@ trainer = Trainer(
 
 Prebuilt instances bypass [`~Trainer.create_optimizer`] and [`~Trainer.create_scheduler`], so you need to specify your own parameter groups.
 
-### Pass a class and kwargs
-
-[`~Trainer.optimizer_cls_and_kwargs`] accepts a custom optimizer class while delegating parameter grouping and device placement to [`Trainer`].
-
-[`Trainer`] defers building the optimizer until [`~Trainer.create_optimizer`] runs, so the model is already on the correct device.
-
-```py
-import torch
-
-trainer = Trainer(
-    ...
-    optimizer_cls_and_kwargs=(
-        torch.optim.SGD,
-        {"momentum": 0.9, "nesterov": True}
-    ),
-)
-```
-
-[`~Trainer.optimizer_cls_and_kwargs`] doesn't allow a custom scheduler and can't be combined with [`~Trainer.optimizers`].
-
 ### Override optimizer and scheduler methods
 
 Subclass [`~Trainer.create_optimizer`] and [`~Trainer.create_scheduler`] for full control. Both methods run *during* [`~Trainer.train`].
@@ -307,10 +300,6 @@ Subclass [`~Trainer.create_optimizer`] and [`~Trainer.create_scheduler`] for ful
 Override [`~Trainer.create_scheduler`] to use a scheduler like [OneCycleLR](https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.OneCycleLR.html) that isn't available in [`SchedulerType`].
 
 For each method, make sure to assign to `self` and return it.
-
-1. Assign `OneCycleLR` to `self.lr_scheduler`.
-2. Set `self._created_lr_scheduler = True`, otherwise [`Trainer`] rebuilds the scheduler and overwrites `OneCycleLR`.
-3. Return `self.lr_scheduler`.
 
 ```py
 import torch
@@ -325,7 +314,6 @@ class MyTrainer(Trainer):
             max_lr=0.1,
             total_steps=num_training_steps,
         )
-        self._created_lr_scheduler = True
         return self.lr_scheduler
 ```
 

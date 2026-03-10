@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Trainer recipes
+# Trainer features
 
 Each recipe below demonstrates a specific [`Trainer`] feature: custom loss functions, memory-efficient evaluation, checkpointing strategies, and more.
 
@@ -28,23 +28,17 @@ Pass [compute_loss_func](https://huggingface.co/docs/transformers/en/main_classe
 The custom loss function must have the following signature:
 
 ```py
-import torch
 import torch.nn.functional as F
-from transformers import Trainer, TrainingArguments
 
-def my_loss_fn(outputs, labels, num_items_in_batch=None):
+def my_loss_fn(outputs, labels, num_items_in_batch):
     logits = outputs["logits"]
-    if num_items_in_batch is not None:
-        loss = F.cross_entropy(logits, labels, reduction="sum")
-        loss = loss / num_items_in_batch
-    else:
-        loss = F.cross_entropy(logits, labels, reduction="mean")
-    return loss
+    loss = F.cross_entropy(logits, labels, reduction="sum")
+    return loss / num_items_in_batch
 ```
 
 - `outputs` is the raw model output (`outputs.logits` has shape `(batch, seq_len, vocab_size)`).
 - `labels` is the token ids popped from the input batch by [`Trainer`] before the forward pass.
-- `num_items_in_batch` is the total non-padding token count across the full accumulated batch. [`Trainer`] skips automatic loss normalization for gradient accumulation when a custom loss function is provided, so your function should handle normalization directly.
+- `num_items_in_batch` is the total non-padding token count across the full accumulated batch. [`Trainer`] skips automatic loss normalization when a custom loss function is provided, so your function must handle normalization directly.
 
 ```py
 trainer = Trainer(

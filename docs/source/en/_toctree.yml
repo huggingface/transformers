@@ -169,7 +169,7 @@
     - local: hpo_train
       title: Hyperparameter search
     - local: trainer_recipes
-      title: Trainer recipes
+      title: Trainer features
     title: Customization
   - local: peft
     title: Parameter-efficient fine-tuning
