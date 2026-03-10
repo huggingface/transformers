@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import time
+from copy import deepcopy
 from itertools import cycle
 
 import datasets
@@ -335,10 +336,12 @@ if __name__ == "__main__":
 
     # Run warmup batch generation if log level is above DEBUG # TODO: understand why warmup incurs a large overhead during cache creation
     if logger.level > logging.DEBUG:
+        gen_cfg = deepcopy(generation_cfg)
+        gen_cfg.max_new_tokens = min(gen_cfg.max_new_tokens, args.block_size + 1)
         batch_generate(
             model,
             batched_inputs,
-            generation_cfg,
+            gen_cfg,
             cb_config,
             tokenizer,
             displayed_samples=-1,
