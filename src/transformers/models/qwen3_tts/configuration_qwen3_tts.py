@@ -108,6 +108,8 @@ class Qwen3TTSTalkerCodePredictorConfig(PreTrainedConfig):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie word embedding weights with output projection weights.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -118,15 +120,13 @@ class Qwen3TTSTalkerCodePredictorConfig(PreTrainedConfig):
             Sliding window attention window size.
         max_window_layers (`int`, *optional*, defaults to 28):
             The number of layers using full attention.
+        layer_types (`list[str]`, *optional*):
+            List of attention layer types for each hidden layer. Defaults to alternating between `"full_attention"`
+            and `"sliding_attention"` based on `max_window_layers`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         num_code_groups (`int`, *optional*, defaults to 32):
             Number of code groups (codebooks).
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie word embedding weights with output projection weights.
-        layer_types (`list[str]`, *optional*):
-            List of attention layer types for each hidden layer. Defaults to alternating between `"full_attention"`
-            and `"sliding_attention"` based on `max_window_layers`.
         pad_token_id (`int`, *optional*):
             Padding token ID.
     """
@@ -206,6 +206,8 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
     defining the model architecture.
 
     Args:
+        code_predictor_config (`Qwen3TTSTalkerCodePredictorConfig`, *optional*):
+            Configuration for the code predictor sub-model.
         vocab_size (`int`, *optional*, defaults to 3072):
             Vocabulary size of the Qwen3-TTS talker model.
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -228,6 +230,8 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie word embedding weights with output projection weights.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -242,16 +246,8 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
             Number of code groups (codebooks).
         text_hidden_size (`int`, *optional*, defaults to 2048):
             The dimension of the text embedding in the talker.
-        code_predictor_config (`Qwen3TTSTalkerCodePredictorConfig`, *optional*):
-            Configuration for the code predictor sub-model.
         codec_eos_token_id (`int`, *optional*, defaults to 4198):
             The end-of-sequence token ID for codec tokens.
-        codec_pad_id (`int`, *optional*, defaults to 4196):
-            The padding token ID for codec tokens.
-        codec_bos_id (`int`, *optional*, defaults to 4197):
-            The beginning-of-sequence token ID for codec tokens.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie word embedding weights with output projection weights.
         codec_think_id (`int`, *optional*, defaults to 4202):
             Token ID used to signal thinking mode in codec generation.
         codec_nothink_id (`int`, *optional*, defaults to 4203):
@@ -260,6 +256,10 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
             Beginning-of-sequence token ID for codec thinking mode.
         codec_think_eos_id (`int`, *optional*, defaults to 4205):
             End-of-sequence token ID for codec thinking mode.
+        codec_pad_id (`int`, *optional*, defaults to 4196):
+            The padding token ID for codec tokens.
+        codec_bos_id (`int`, *optional*, defaults to 4197):
+            The beginning-of-sequence token ID for codec tokens.
         spk_id (`int`, *optional*):
             Speaker ID for built-in voice presets.
         spk_is_dialect (`bool`, *optional*):
@@ -454,7 +454,7 @@ class Qwen3TTSTokenizerV2Code2WavConfig(PreTrainedConfig):
             MLP intermediate dimension.
         hidden_act (`str`, *optional*, defaults to `"silu"`):
             Activation function.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-5):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             Epsilon for RMS norm.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use bias in attention projections.
