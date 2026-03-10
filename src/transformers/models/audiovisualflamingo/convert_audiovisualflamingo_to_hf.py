@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Convert legacy OmniVinci/VILA checkpoints to native HF OmniVinci artifacts.
+"""Convert legacy AudioVisualFlamingo/VILA checkpoints to native HF AudioVisualFlamingo artifacts.
 
 This conversion script:
-1) rewrites legacy VILA class strings to canonical OmniVinci names,
+1) rewrites legacy VILA class strings to canonical AudioVisualFlamingo names,
 2) normalizes a single top-level config for local HF loading,
 3) loads the native HF model/processor and saves with `save_pretrained`.
 
@@ -43,9 +43,9 @@ from transformers import (
     AutoImageProcessor,
     AutoTokenizer,
     GenerationConfig,
-    OmniVinciConfig,
-    OmniVinciForConditionalGeneration,
-    OmniVinciProcessor,
+    AudioVisualFlamingoConfig,
+    AudioVisualFlamingoForConditionalGeneration,
+    AudioVisualFlamingoProcessor,
     WhisperFeatureExtractor,
 )
 
@@ -53,7 +53,7 @@ from transformers import (
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-DEFAULT_SRC_PATH = Path("/fs/nexus-projects/JSALT_workshop/lasha/Dev/omnivinci")
+DEFAULT_SRC_PATH = Path("/fs/nexus-projects/JSALT_workshop/lasha/Dev/audiovisualflamingo")
 DEFAULT_DST_PATH = Path("/fs/nexus-projects/JSALT_workshop/lasha/Dev/comni")
 
 JSON_FILES_TO_REWRITE = (
@@ -104,42 +104,42 @@ WEIGHT_FILE_PATTERNS = (
 )
 
 STRING_REPLACEMENTS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"\bmodeling_vila\.VILAConfig\b"), "configuration_omnivinci.OmniVinciConfig"),
+    (re.compile(r"\bmodeling_vila\.VILAConfig\b"), "configuration_audiovisualflamingo.AudioVisualFlamingoConfig"),
     (
         re.compile(r"\bmodeling_vila\.VILAForCausalLM\b"),
-        "modeling_omnivinci.OmniVinciForConditionalGeneration",
+        "modeling_audiovisualflamingo.AudioVisualFlamingoForConditionalGeneration",
     ),
     (
         re.compile(r"\bmodeling_vila\.VILAForConditionalGeneration\b"),
-        "modeling_omnivinci.OmniVinciForConditionalGeneration",
+        "modeling_audiovisualflamingo.AudioVisualFlamingoForConditionalGeneration",
     ),
     (
-        re.compile(r"\bmodeling_omnivinci\.VILAForCausalLM\b"),
-        "modeling_omnivinci.OmniVinciForConditionalGeneration",
+        re.compile(r"\bmodeling_audiovisualflamingo\.VILAForCausalLM\b"),
+        "modeling_audiovisualflamingo.AudioVisualFlamingoForConditionalGeneration",
     ),
     (
-        re.compile(r"\bmodeling_omnivinci\.VILAForConditionalGeneration\b"),
-        "modeling_omnivinci.OmniVinciForConditionalGeneration",
+        re.compile(r"\bmodeling_audiovisualflamingo\.VILAForConditionalGeneration\b"),
+        "modeling_audiovisualflamingo.AudioVisualFlamingoForConditionalGeneration",
     ),
     (
-        re.compile(r"\bmodeling_omnivinci\.OmniVinciForCausalLM\b"),
-        "modeling_omnivinci.OmniVinciForConditionalGeneration",
+        re.compile(r"\bmodeling_audiovisualflamingo\.AudioVisualFlamingoForCausalLM\b"),
+        "modeling_audiovisualflamingo.AudioVisualFlamingoForConditionalGeneration",
     ),
-    (re.compile(r"\bconfiguration_omnivinci\.VILAConfig\b"), "configuration_omnivinci.OmniVinciConfig"),
+    (re.compile(r"\bconfiguration_audiovisualflamingo\.VILAConfig\b"), "configuration_audiovisualflamingo.AudioVisualFlamingoConfig"),
     (
         re.compile(r"\bauto_processor\.VILAProcessor\b"),
-        "processing_omnivinci.OmniVinciProcessor",
+        "processing_audiovisualflamingo.AudioVisualFlamingoProcessor",
     ),
     (
-        re.compile(r"\bprocessing_omnivinci\.VILAProcessor\b"),
-        "processing_omnivinci.OmniVinciProcessor",
+        re.compile(r"\bprocessing_audiovisualflamingo\.VILAProcessor\b"),
+        "processing_audiovisualflamingo.AudioVisualFlamingoProcessor",
     ),
-    (re.compile(r"\bVILAProcessorKwargs\b"), "OmniVinciProcessorKwargs"),
-    (re.compile(r"\bVILAProcessor\b"), "OmniVinciProcessor"),
-    (re.compile(r"\bVILAForCausalLM\b"), "OmniVinciForConditionalGeneration"),
-    (re.compile(r"\bVILAForConditionalGeneration\b"), "OmniVinciForConditionalGeneration"),
-    (re.compile(r"\bOmniVinciForCausalLM\b"), "OmniVinciForConditionalGeneration"),
-    (re.compile(r"\bVILAConfig\b"), "OmniVinciConfig"),
+    (re.compile(r"\bVILAProcessorKwargs\b"), "AudioVisualFlamingoProcessorKwargs"),
+    (re.compile(r"\bVILAProcessor\b"), "AudioVisualFlamingoProcessor"),
+    (re.compile(r"\bVILAForCausalLM\b"), "AudioVisualFlamingoForConditionalGeneration"),
+    (re.compile(r"\bVILAForConditionalGeneration\b"), "AudioVisualFlamingoForConditionalGeneration"),
+    (re.compile(r"\bAudioVisualFlamingoForCausalLM\b"), "AudioVisualFlamingoForConditionalGeneration"),
+    (re.compile(r"\bVILAConfig\b"), "AudioVisualFlamingoConfig"),
 )
 
 
@@ -235,7 +235,7 @@ def _copy_llm_metadata_to_root(src_root: Path, dst_root: Path) -> None:
             continue
         if item.name == "config.json":
             continue
-        # Legacy OmniVinci loads generation defaults from Python/runtime, not llm/generation_config.json.
+        # Legacy AudioVisualFlamingo loads generation defaults from Python/runtime, not llm/generation_config.json.
         # We export the effective runtime config explicitly in `_export_effective_generation_config`.
         if item.name == "generation_config.json":
             continue
@@ -279,7 +279,7 @@ def _ensure_processor_config(dst_root: Path, config: dict[str, Any] | None = Non
     if processor_path.exists():
         payload = _load_json(processor_path)
 
-    payload["processor_class"] = "OmniVinciProcessor"
+    payload["processor_class"] = "AudioVisualFlamingoProcessor"
     if config is not None:
         payload["config"] = config
     _save_json(processor_path, payload)
@@ -375,7 +375,7 @@ def _populate_token_id_fields(cfg: dict[str, Any], src_root: Path, dst_root: Pat
 
 def _export_effective_generation_config(src_root: Path, dst_root: Path) -> None:
     """
-    Export a minimal generation config for OmniVinci.
+    Export a minimal generation config for AudioVisualFlamingo.
 
     Keep this intentionally small and rely on HF `GenerationConfig` defaults
     (greedy decoding unless users override sampling/beam settings).
@@ -484,8 +484,8 @@ def _normalize_top_level_config(dst_root: Path, src_root: Path) -> dict[str, Any
         elif field in OPTIONAL_COMPONENT_FIELDS:
             cfg[field] = None
 
-    cfg["model_type"] = "omnivinci"
-    cfg["architectures"] = ["OmniVinciForConditionalGeneration"]
+    cfg["model_type"] = "audiovisualflamingo"
+    cfg["architectures"] = ["AudioVisualFlamingoForConditionalGeneration"]
     cfg["_name_or_path"] = str(dst_root)
     cfg["resume_path"] = None
     _populate_token_id_fields(cfg, src_root, dst_root)
@@ -520,7 +520,7 @@ def _save_processor(
     src_root: Path,
     dst_root: Path,
     config_payload: dict[str, Any],
-) -> OmniVinciProcessor:
+) -> AudioVisualFlamingoProcessor:
     tokenizer_src = _resolve_tokenizer_source_dir(src_root, dst_root)
     image_processor_src = _resolve_image_processor_source_dir(src_root, dst_root)
     feature_extractor_src = _resolve_feature_extractor_source_dir(src_root, dst_root)
@@ -529,8 +529,8 @@ def _save_processor(
     image_processor = AutoImageProcessor.from_pretrained(str(image_processor_src), use_fast=False)
     feature_extractor = WhisperFeatureExtractor.from_pretrained(str(feature_extractor_src))
 
-    config = OmniVinciConfig(**config_payload)
-    processor = OmniVinciProcessor(
+    config = AudioVisualFlamingoConfig(**config_payload)
+    processor = AudioVisualFlamingoProcessor(
         image_processor=image_processor,
         feature_extractor=feature_extractor,
         tokenizer=tokenizer,
@@ -545,17 +545,17 @@ def _save_model_from_state(
     dst_root: Path,
     config_payload: dict[str, Any],
     state_dict: dict[str, Any],
-) -> OmniVinciForConditionalGeneration:
-    config = OmniVinciConfig(**config_payload)
-    model = OmniVinciForConditionalGeneration(config).to(dtype=torch.bfloat16)
+) -> AudioVisualFlamingoForConditionalGeneration:
+    config = AudioVisualFlamingoConfig(**config_payload)
+    model = AudioVisualFlamingoForConditionalGeneration(config).to(dtype=torch.bfloat16)
 
     load_res = model.load_state_dict(state_dict, strict=True)
     if load_res.missing_keys:
         missing = load_res.missing_keys
-        raise ValueError(f"Missing keys when loading converted OmniVinci checkpoint: {missing[:10]}")
+        raise ValueError(f"Missing keys when loading converted AudioVisualFlamingo checkpoint: {missing[:10]}")
     if load_res.unexpected_keys:
         unexpected = load_res.unexpected_keys
-        raise ValueError(f"Unexpected keys when loading converted OmniVinci checkpoint: {unexpected[:10]}")
+        raise ValueError(f"Unexpected keys when loading converted AudioVisualFlamingo checkpoint: {unexpected[:10]}")
 
     generation_config_path = dst_root / "generation_config.json"
     if generation_config_path.exists():
@@ -567,7 +567,7 @@ def _save_model_from_state(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Convert legacy OmniVinci/VILA checkpoints to HF-loadable format.")
+    parser = argparse.ArgumentParser(description="Convert legacy AudioVisualFlamingo/VILA checkpoints to HF-loadable format.")
     parser.add_argument(
         "--src_path",
         type=Path,
@@ -602,12 +602,12 @@ def parse_args() -> argparse.Namespace:
         "--push_to_hub",
         type=str,
         default=None,
-        help="Optional Hub repo id to push converted assets, e.g. `username/omnivinci`.",
+        help="Optional Hub repo id to push converted assets, e.g. `username/audiovisualflamingo`.",
     )
     return parser.parse_args()
 
 
-def convert_omnivinci_to_hf(
+def convert_audiovisualflamingo_to_hf(
     model_dir: Path,
     output_dir: Path | None = None,
     skip_weights: bool = False,
@@ -668,7 +668,7 @@ def main() -> None:
             "Use a different --dst_path (recommended) or pass --allow_inplace explicitly."
         )
 
-    convert_omnivinci_to_hf(
+    convert_audiovisualflamingo_to_hf(
         src_path,
         output_dir=dst_path,
         skip_weights=args.skip_weights,

@@ -1,7 +1,7 @@
 from transformers import AutoModel, AutoProcessor
 
 
-model_path = "SreyanG-NVIDIA/omnivinci-hf"
+model_path = "SreyanG-NVIDIA/audiovisualflamingo-hf"
 
 model = AutoModel.from_pretrained(
     model_path,

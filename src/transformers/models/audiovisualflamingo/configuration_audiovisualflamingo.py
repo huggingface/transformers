@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""OmniVinci configuration (HF-style canonical config file)."""
+"""AudioVisualFlamingo configuration (HF-style canonical config file)."""
 
 from copy import deepcopy
 
@@ -42,13 +42,13 @@ MM_BOS_EOS_TOKENS = {
 }
 
 
-class OmniVinciConfig(PretrainedConfig):
-    """Configuration class for OmniVinci models.
+class AudioVisualFlamingoConfig(PretrainedConfig):
+    """Configuration class for AudioVisualFlamingo models.
 
-    `model_type` is canonicalized to `"omnivinci"` for native Auto* integration.
+    `model_type` is canonicalized to `"audiovisualflamingo"` for native Auto* integration.
     """
 
-    model_type = "omnivinci"
+    model_type = "audiovisualflamingo"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -154,7 +154,7 @@ class OmniVinciConfig(PretrainedConfig):
 
 
 __all__ = [
-    "OmniVinciConfig",
+    "AudioVisualFlamingoConfig",
     "IGNORE_INDEX",
     "DEFAULT_IMAGE_TOKEN",
     "DEFAULT_SOUND_TOKEN",

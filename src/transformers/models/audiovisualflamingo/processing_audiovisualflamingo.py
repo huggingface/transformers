@@ -30,10 +30,10 @@ from transformers.image_utils import load_image
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.video_utils import load_video
 
-from .configuration_omnivinci import MEDIA_TOKENS, MM_BOS_EOS_TOKENS, OmniVinciConfig
+from .configuration_audiovisualflamingo import MEDIA_TOKENS, MM_BOS_EOS_TOKENS, AudioVisualFlamingoConfig
 
 
-_OMNIVINCI_CHAT_TEMPLATE = (
+_AUDIOVISUALFLAMINGO_CHAT_TEMPLATE = (
     "{% if messages[0]['role'] != 'system' %}"
     "{{ '<|im_start|>system\\nYou are a helpful assistant<|im_end|>\\n' }}"
     "{% endif %}"
@@ -189,7 +189,7 @@ def _process_image(image_file, data_args, image_folder, enable_dynamic_s2=False)
     if crop_size is None:
         crop_size = getattr(data_args.image_processor, "size", None)
     if crop_size is None:
-        raise ValueError("OmniVinci image processor must define either `crop_size` or `size`.")
+        raise ValueError("AudioVisualFlamingo image processor must define either `crop_size` or `size`.")
     if "dynamic_s2" in data_args.image_aspect_ratio and enable_dynamic_s2:
         assert crop_size["height"] == crop_size["width"]
         images, block_size = _dynamic_s2_preprocess(
@@ -519,7 +519,7 @@ def _extract_video_hf(
             if total_num_frames <= 0:
                 return np.array([], dtype=int)
 
-            # Match legacy OmniVinci sampling by locating the last readable frame first.
+            # Match legacy AudioVisualFlamingo sampling by locating the last readable frame first.
             last_valid_frame_count = total_num_frames
             if isinstance(video_source_for_sampling, str):
                 import cv2
@@ -543,7 +543,7 @@ def _extract_video_hf(
     unpacked_frames, unpacked_metadata = _unpack_video_item(video_input)
     unpacked_source = _resolve_video_source(video_input, unpacked_metadata)
     if unpacked_metadata is not None:
-        # Re-run OmniVinci's native frame sampling path when source is available.
+        # Re-run AudioVisualFlamingo's native frame sampling path when source is available.
         # This keeps parity with string-path inputs and avoids downstream drift when
         # upstream loaders return fewer frames due terminal-frame decode failures.
         if isinstance(unpacked_source, str) and unpacked_source:
@@ -573,7 +573,7 @@ def _extract_video_hf(
     frames_array = np.asarray(frames_array)
     if frames_array.ndim == 0:
         raise TypeError(
-            "Unsupported video payload for OmniVinci video extraction: "
+            "Unsupported video payload for AudioVisualFlamingo video extraction: "
             f"video_input_type={type(video_input)!r}, "
             f"unpacked_type={type(unpacked_frames)!r}, "
             f"unpacked_metadata_type={type(unpacked_metadata)!r}, "
@@ -591,7 +591,7 @@ def _extract_video_hf(
     metadata_total_frames = _meta_get(metadata, "total_num_frames", None) if metadata is not None else None
     frame_count = int(frame_indices[-1] + 1) if frame_indices else int(metadata_total_frames or len(output_frames))
     video_duration = float(frame_count / fps if fps > 0 else len(output_frames))
-    # Keep np.float64 timestamps for parity with legacy timing dtype used by the original OmniVinci path.
+    # Keep np.float64 timestamps for parity with legacy timing dtype used by the original AudioVisualFlamingo path.
     output_frame_times = list(np.asarray(frame_indices, dtype=np.float64) / np.float64(fps if fps > 0 else 1.0))
 
     video_source = _resolve_video_source(video_input, metadata)
@@ -670,7 +670,7 @@ def _extract_video_hf(
     return output_frames, video_info
 
 
-class OmniVinciProcessorKwargs(ProcessingKwargs, total=False):
+class AudioVisualFlamingoProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -678,7 +678,7 @@ class OmniVinciProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-class OmniVinciProcessor(ProcessorMixin):
+class AudioVisualFlamingoProcessor(ProcessorMixin):
     attributes = ["image_processor", "feature_extractor", "tokenizer"]
     image_processor_class = "AutoImageProcessor"
     feature_extractor_class = "WhisperFeatureExtractor"
@@ -696,9 +696,9 @@ class OmniVinciProcessor(ProcessorMixin):
         **kwargs,
     ):
         if isinstance(config, dict):
-            config = OmniVinciConfig(**config)
+            config = AudioVisualFlamingoConfig(**config)
         if chat_template is None:
-            chat_template = _OMNIVINCI_CHAT_TEMPLATE
+            chat_template = _AUDIOVISUALFLAMINGO_CHAT_TEMPLATE
         self.image_token = MEDIA_TOKENS["image"]
         self.video_token = MEDIA_TOKENS["video"]
         self.sound_token = MEDIA_TOKENS["sound"]
@@ -752,7 +752,7 @@ class OmniVinciProcessor(ProcessorMixin):
 
     def __repr__(self):
         return (
-            f"OmniVinciProcessor(image_processor=SigLip, feature_extractor={self.feature_extractor}, "
+            f"AudioVisualFlamingoProcessor(image_processor=SigLip, feature_extractor={self.feature_extractor}, "
             f"tokenizer={self.tokenizer}, config={self.config})"
         )
 
@@ -762,7 +762,7 @@ class OmniVinciProcessor(ProcessorMixin):
         images=None,
         videos=None,
         audio=None,
-        **kwargs: Unpack[OmniVinciProcessorKwargs],
+        **kwargs: Unpack[AudioVisualFlamingoProcessorKwargs],
     ) -> BatchFeature:
         if text is None:
             raise ValueError("`text` is required.")
@@ -916,7 +916,7 @@ class OmniVinciProcessor(ProcessorMixin):
             audio_batches = [[audio]] if not isinstance(audio, (list, tuple)) else [list(audio)]
         else:
             raise ValueError(
-                "Batched `audio` with native `apply_chat_template(tokenize=True)` is not supported in OmniVinciProcessor yet."
+                "Batched `audio` with native `apply_chat_template(tokenize=True)` is not supported in AudioVisualFlamingoProcessor yet."
             )
 
         padding_side = kwargs.get("padding_side", self.padding_side)
@@ -988,6 +988,6 @@ class OmniVinciProcessor(ProcessorMixin):
 
 
 __all__ = [
-    "OmniVinciProcessor",
-    "OmniVinciProcessorKwargs",
+    "AudioVisualFlamingoProcessor",
+    "AudioVisualFlamingoProcessorKwargs",
 ]

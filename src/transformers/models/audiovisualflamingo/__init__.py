@@ -19,9 +19,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_omnivinci import *
-    from .modeling_omnivinci import *
-    from .processing_omnivinci import *
+    from .configuration_audiovisualflamingo import *
+    from .modeling_audiovisualflamingo import *
+    from .processing_audiovisualflamingo import *
 else:
     import sys
 

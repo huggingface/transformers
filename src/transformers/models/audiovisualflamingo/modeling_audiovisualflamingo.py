@@ -41,7 +41,7 @@ from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
 from transformers.models.siglip.modeling_siglip import SiglipVisionModel
 from transformers.utils import ModelOutput
 
-from .configuration_omnivinci import IGNORE_INDEX, OmniVinciConfig
+from .configuration_audiovisualflamingo import IGNORE_INDEX, AudioVisualFlamingoConfig
 from .media_encoder import BasicImageEncoder, BasicSoundEncoder, TSPVideoEncoder
 
 
@@ -242,20 +242,20 @@ class SiglipVisionTowerDynamicS2(nn.Module):
         return self.config.hidden_size * len(self.scales)
 
 
-class OmniVinciPretrainedModel(PreTrainedModel):
-    config_class = OmniVinciConfig
+class AudioVisualFlamingoPretrainedModel(PreTrainedModel):
+    config_class = AudioVisualFlamingoConfig
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _no_split_modules = ["Qwen2DecoderLayer", "SiglipEncoderLayer"]
 
-    def __init__(self, config: OmniVinciConfig, *args, **kwargs):
+    def __init__(self, config: AudioVisualFlamingoConfig, *args, **kwargs):
         _ = (args, kwargs)
         super().__init__(config)
         self.config = config
 
-    def _init_omnivinci_components(self, *args, **kwargs):
+    def _init_audiovisualflamingo_components(self, *args, **kwargs):
         _ = args
         config = self.config
         llm_spec = config.llm_cfg
@@ -265,7 +265,7 @@ class OmniVinciPretrainedModel(PreTrainedModel):
         self.mm_projector = MultimodalProjector(config)
 
         if not getattr(config, "dynamic_s2", False):
-            raise NotImplementedError("Current OmniVinci checkpoint requires `dynamic_s2=True`.")
+            raise NotImplementedError("Current AudioVisualFlamingo checkpoint requires `dynamic_s2=True`.")
         self.vision_tower = SiglipVisionTowerDynamicS2(vision_tower_spec, config)
         config.mm_hidden_size = self.vision_tower.hidden_size
 
@@ -311,7 +311,7 @@ class OmniVinciPretrainedModel(PreTrainedModel):
         encoder_text_token_ids = getattr(self.config, "encoder_text_token_ids", None)
         if encoder_text_token_ids is None:
             raise ValueError(
-                "Missing `config.encoder_text_token_ids`. Construct inputs with `OmniVinciProcessor` before calling "
+                "Missing `config.encoder_text_token_ids`. Construct inputs with `AudioVisualFlamingoProcessor` before calling "
                 "generation so encoder boundary token ids are populated on the config."
             )
         return encoder_text_token_ids
@@ -329,7 +329,7 @@ class OmniVinciPretrainedModel(PreTrainedModel):
         media_token_ids = getattr(self.config, "media_token_ids", None)
         if not media_token_ids:
             raise ValueError(
-                "Missing `config.media_token_ids`. Build inputs with `OmniVinciProcessor` so media token ids are "
+                "Missing `config.media_token_ids`. Build inputs with `AudioVisualFlamingoProcessor` so media token ids are "
                 "populated on the config."
             )
         return media_token_ids
@@ -387,10 +387,10 @@ class OmniVinciPretrainedModel(PreTrainedModel):
                 sound_mm_projector.eval()
 
 
-class OmniVinciForConditionalGeneration(OmniVinciPretrainedModel, GenerationMixin):
-    def __init__(self, config: OmniVinciConfig, *args, **kwargs):
+class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedModel, GenerationMixin):
+    def __init__(self, config: AudioVisualFlamingoConfig, *args, **kwargs):
         super().__init__(config)
-        self._init_omnivinci_components(*args, **kwargs)
+        self._init_audiovisualflamingo_components(*args, **kwargs)
         self.post_init()
 
     def merge_features_for_dynamic_s2(self, image_features, block_sizes):
@@ -514,7 +514,7 @@ class OmniVinciForConditionalGeneration(OmniVinciPretrainedModel, GenerationMixi
     ):
         _ = (mm_info, num_frames)
         if not getattr(self.config, "dynamic_s2", False):
-            raise NotImplementedError("Current OmniVinci checkpoint requires `dynamic_s2=True`.")
+            raise NotImplementedError("Current AudioVisualFlamingo checkpoint requires `dynamic_s2=True`.")
 
         inp_block_sizes = block_sizes
         if len(inp) > 0:
@@ -567,7 +567,7 @@ class OmniVinciForConditionalGeneration(OmniVinciPretrainedModel, GenerationMixi
     ):
         _ = (mm_info, num_frames)
         if not getattr(self.config, "dynamic_s2", False):
-            raise NotImplementedError("Current OmniVinci checkpoint requires `dynamic_s2=True`.")
+            raise NotImplementedError("Current AudioVisualFlamingo checkpoint requires `dynamic_s2=True`.")
 
         if block_sizes is None:
             block_sizes = [None] * len(images)
@@ -819,7 +819,7 @@ class OmniVinciForConditionalGeneration(OmniVinciPretrainedModel, GenerationMixi
                 ):
                     raise ValueError(
                         "Expected pre-extracted sound features in `media['sound']`. "
-                        "Run audio preprocessing through `OmniVinciProcessor`."
+                        "Run audio preprocessing through `AudioVisualFlamingoProcessor`."
                     )
 
             if len(media[name]) > 0:
@@ -1071,4 +1071,4 @@ class OmniVinciForConditionalGeneration(OmniVinciPretrainedModel, GenerationMixi
         )
 
 
-__all__ = ["OmniVinciForConditionalGeneration", "OmniVinciPretrainedModel"]
+__all__ = ["AudioVisualFlamingoForConditionalGeneration", "AudioVisualFlamingoPretrainedModel"]
