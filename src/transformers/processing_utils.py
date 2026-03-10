@@ -572,6 +572,10 @@ class ProcessorMixin(PushToHubMixin):
         # First, extract chat template from kwargs. It can never be a positional arg
         setattr(self, "chat_template", kwargs.pop("chat_template", None))
 
+        self.image_ids = [getattr(self, "image_token_id", None)]
+        self.video_ids = [getattr(self, "video_token_id", None)]
+        self.audio_ids = [getattr(self, "audio_token_id", None)]
+
         # Check audio tokenizer for its class but do not treat it as attr to avoid saving weights
         if (audio_tokenizer := kwargs.pop("audio_tokenizer", None)) is not None:
             proper_class = self.check_argument_for_proper_class("audio_tokenizer", audio_tokenizer)
