@@ -1,81 +1,74 @@
-<!--Copyright 2020 The HuggingFace Team. All rights reserved.
+<!--Copyright 2024 The HuggingFace Team. All rights reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License"); 
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
-
 -->
-*This model was released on 2018-10-11 and added to Hugging Face Transformers on 2020-11-16.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
     </div>
 </div>
 
 # BERT
 
-[BERT](https://huggingface.co/papers/1810.04805) is a bidirectional transformer pretrained on unlabeled text to predict masked tokens in a sentence and to predict whether one sentence follows another. The main idea is that by randomly masking some tokens, the model can train on text to the left and right, giving it a more thorough understanding. BERT is also very versatile because its learned language representations can be adapted for other NLP tasks by fine-tuning an additional layer or head.
+[BERT](https://huggingface.co/papers/1810.04805) (Bidirectional Encoder Representations 
+from Transformers) is a transformer model pretrained by Google on a large corpus of English 
+text. Unlike previous models that read text left-to-right or right-to-left, BERT reads in 
+both directions at once, giving it a deeper understanding of language context.
 
-You can find all the original BERT checkpoints under the [BERT](https://huggingface.co/collections/google/bert-release-64ff5e7a4be99045d1896dbc) collection.
+BERT is pretrained using two objectives: Masked Language Modeling (MLM), where it learns 
+to predict missing words in a sentence, and Next Sentence Prediction (NSP), where it learns 
+to understand relationships between sentences. This makes BERT extremely versatile and it 
+can be fine-tuned for many NLP tasks like classification, question answering, and named 
+entity recognition.
+
+You can find all the original BERT checkpoints under the 
+[BERT](https://huggingface.co/collections/google/bert-release-66f0885277ffe4568ef9ee45) 
+collection.
 
 > [!TIP]
-> Click on the BERT models in the right sidebar for more examples of how to apply BERT to different language tasks.
+> This model was contributed by the 
+> [Hugging Face team](https://huggingface.co/huggingface).
+>
+> Click on the BERT models in the right sidebar for more examples of how to use 
+> BERT for different NLP tasks like classification and question answering.
 
-The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
+The example below demonstrates how to use BERT for masked language modeling with 
+[`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
-
 ```py
-import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="fill-mask",
-    model="google-bert/bert-base-uncased",
-    dtype=torch.float16,
-    device=0
-)
-pipeline("Plants create [MASK] through a process known as photosynthesis.")
+pipe = pipeline("fill-mask", model="google-bert/bert-base-uncased")
+result = pipe("Paris is the [MASK] of France.")
+print(result)
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
-
 ```py
 import torch
-from transformers import AutoModelForMaskedLM, AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForMaskedLM
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "google-bert/bert-base-uncased",
-)
-model = AutoModelForMaskedLM.from_pretrained(
-    "google-bert/bert-base-uncased",
-    dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="sdpa"
-)
-inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt").to(model.device)
+tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+model = AutoModelForMaskedLM.from_pretrained("google-bert/bert-base-uncased")
+
+inputs = tokenizer("Paris is the [MASK] of France.", return_tensors="pt")
 
 with torch.no_grad():
     outputs = model(**inputs)
-    predictions = outputs.logits
 
-masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
-predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
-predicted_token = tokenizer.decode(predicted_token_id)
-
-print(f"The predicted token is: {predicted_token}")
+logits = outputs.logits
+mask_token_index = (inputs.input_ids == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
+predicted_token_id = logits[0, mask_token_index].argmax(axis=-1)
+print(tokenizer.decode(predicted_token_id))
 ```
 
 </hfoption>
@@ -83,72 +76,22 @@ print(f"The predicted token is: {predicted_token}")
 
 ## Notes
 
-- Inputs should be padded on the right because BERT uses absolute position embeddings.
+- BERT uses `[CLS]` token at the start and `[SEP]` token to separate sentences.
+- Use `bert-base-uncased` for lowercase text and `bert-base-cased` if your text has 
+  important capitalization.
+- BERT has a maximum input length of 512 tokens.
+```py
+from transformers import AutoTokenizer
 
-## BertConfig
+tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+print(tokenizer.model_max_length)  # 512
+```
 
-[[autodoc]] BertConfig
-    - all
+## Resources
 
-## BertTokenizer
-
-[[autodoc]] BertTokenizer
-    - get_special_tokens_mask
-    - save_vocabulary
-
-## BertTokenizerLegacy
-
-[[autodoc]] BertTokenizerLegacy
-
-## BertTokenizerFast
-
-[[autodoc]] BertTokenizerFast
-
-## BertModel
-
-[[autodoc]] BertModel
-    - forward
-
-## BertForPreTraining
-
-[[autodoc]] BertForPreTraining
-    - forward
-
-## BertLMHeadModel
-
-[[autodoc]] BertLMHeadModel
-    - forward
-
-## BertForMaskedLM
-
-[[autodoc]] BertForMaskedLM
-    - forward
-
-## BertForNextSentencePrediction
-
-[[autodoc]] BertForNextSentencePrediction
-    - forward
-
-## BertForSequenceClassification
-
-[[autodoc]] BertForSequenceClassification
-    - forward
-
-## BertForMultipleChoice
-
-[[autodoc]] BertForMultipleChoice
-    - forward
-
-## BertForTokenClassification
-
-[[autodoc]] BertForTokenClassification
-    - forward
-
-## BertForQuestionAnswering
-
-[[autodoc]] BertForQuestionAnswering
-    - forward
-
-## Bert specific outputs
-
-[[autodoc]] models.bert.modeling_bert.BertForPreTrainingOutput
+- [BERT original paper](https://arxiv.org/abs/1810.04805)
+- [Google BERT GitHub repository](https://github.com/google-research/bert)
+- [Text classification task guide](../tasks/sequence_classification)
+- [Token classification task guide](../tasks/token_classification)
+- [Question answering task guide](../tasks/question_answering)
+- [Masked language modeling task guide](../tasks/masked_language_modeling)
