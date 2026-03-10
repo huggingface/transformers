@@ -294,7 +294,17 @@ def write_processor(
         image_processor=image_processor,
         feature_extractor=feature_extractor,
         tokenizer=tokenizer,
-        config=config,
+        image_aspect_ratio=config.image_aspect_ratio,
+        s2_scales=config.s2_scales,
+        max_tiles=config.max_tiles,
+        num_video_frames=config.num_video_frames,
+        load_audio_in_video=config.load_audio_in_video,
+        interleaved_vis_aud_in_video=config.interleaved_vis_aud_in_video,
+        interleaved_video_segment_duration=config.interleaved_video_segment_duration,
+        mm_use_bos_eos_tokens=getattr(config, "mm_use_bos_eos_tokens", False),
+        audio_sampling_rate=config.audio_sampling_rate,
+        audio_chunk_length=config.audio_chunk_length,
+        audio_hop_length=config.audio_hop_length,
     )
     processor.save_pretrained(str(dst_root))
     logger.info("processor (tokenizer + preprocessors)")

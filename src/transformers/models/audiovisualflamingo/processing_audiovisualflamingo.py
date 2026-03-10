@@ -30,7 +30,7 @@ from transformers.image_utils import load_image
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.video_utils import load_video
 
-from .configuration_audiovisualflamingo import MEDIA_TOKENS, MM_BOS_EOS_TOKENS, AudioVisualFlamingoConfig
+from .configuration_audiovisualflamingo import MEDIA_TOKENS, MM_BOS_EOS_TOKENS
 
 
 _AUDIOVISUALFLAMINGO_CHAT_TEMPLATE = (
@@ -683,7 +683,20 @@ class AudioVisualFlamingoProcessor(ProcessorMixin):
     image_processor_class = "AutoImageProcessor"
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
-    valid_kwargs = []
+    valid_kwargs = [
+        "padding_side",
+        "image_aspect_ratio",
+        "s2_scales",
+        "max_tiles",
+        "num_video_frames",
+        "load_audio_in_video",
+        "interleaved_vis_aud_in_video",
+        "interleaved_video_segment_duration",
+        "mm_use_bos_eos_tokens",
+        "audio_sampling_rate",
+        "audio_chunk_length",
+        "audio_hop_length",
+    ]
 
     def __init__(
         self,
@@ -691,69 +704,61 @@ class AudioVisualFlamingoProcessor(ProcessorMixin):
         feature_extractor=None,
         tokenizer=None,
         chat_template=None,
-        config=None,
         padding_side="left",
+        image_aspect_ratio=None,
+        s2_scales=None,
+        max_tiles=12,
+        num_video_frames=None,
+        load_audio_in_video=True,
+        interleaved_vis_aud_in_video=True,
+        interleaved_video_segment_duration=30,
+        mm_use_bos_eos_tokens=False,
+        audio_sampling_rate=16000,
+        audio_chunk_length=120,
+        audio_hop_length=60,
         **kwargs,
     ):
-        if isinstance(config, dict):
-            config = AudioVisualFlamingoConfig(**config)
         if chat_template is None:
             chat_template = _AUDIOVISUALFLAMINGO_CHAT_TEMPLATE
         self.image_token = MEDIA_TOKENS["image"]
         self.video_token = MEDIA_TOKENS["video"]
         self.sound_token = MEDIA_TOKENS["sound"]
-        self.config = config
+        self.image_aspect_ratio = image_aspect_ratio
+        self.s2_scales = s2_scales
+        self.max_tiles = max_tiles
+        self.num_video_frames = num_video_frames
+        self.load_audio_in_video = load_audio_in_video
+        self.interleaved_vis_aud_in_video = interleaved_vis_aud_in_video
+        self.interleaved_video_segment_duration = interleaved_video_segment_duration
+        self.mm_use_bos_eos_tokens = mm_use_bos_eos_tokens
+        self.audio_sampling_rate = audio_sampling_rate
+        self.audio_chunk_length = audio_chunk_length
+        self.audio_hop_length = audio_hop_length
         self.image_processor = image_processor
         if feature_extractor is None:
-            default_chunk_length = getattr(config, "audio_chunk_length", 30) if config is not None else 30
-            if not isinstance(default_chunk_length, int):
-                default_chunk_length = 30
+            chunk_length = audio_chunk_length if isinstance(audio_chunk_length, int) else 30
             feature_extractor = WhisperFeatureExtractor(
-                feature_size=_resolve_sound_feature_size(config) if config is not None else 80,
-                chunk_length=default_chunk_length,
-                sampling_rate=getattr(config, "audio_sampling_rate", 16000) if config is not None else 16000,
-                hop_length=getattr(config, "audio_hop_length", 160) if config is not None else 160,
+                feature_size=128,
+                chunk_length=chunk_length,
+                sampling_rate=audio_sampling_rate,
+                hop_length=audio_hop_length,
             )
         self.feature_extractor = feature_extractor
         self.tokenizer = tokenizer
         self.padding_side = padding_side
-        self.tokenizer.padding_side = padding_side
-
-        # Use <|endoftext|> token as padding token for Qwen models
-        self.pad_token_id = self.tokenizer("<|endoftext|>").input_ids[0]
-        self.eos_token_id = self.tokenizer.eos_token_id
-
-        if self.config is not None:
-            self.config.padding_side = self.padding_side
-            self.config.pad_token_id = self.pad_token_id
-            self.config.eos_token_id = self.eos_token_id
-            if getattr(self.config, "bos_token_id", None) is None:
-                self.config.bos_token_id = self.tokenizer.bos_token_id
-            if getattr(self.config, "model_max_length", None) is None:
-                self.config.model_max_length = getattr(self.tokenizer, "model_max_length", 2048)
-
-            media_token_ids = {}
-            for name, token in self.config.media_tokens.items():
-                token_id = self.tokenizer.convert_tokens_to_ids(token)
-                if token_id is None or token_id < 0:
-                    tokenized = self.tokenizer(token, add_special_tokens=False).input_ids
-                    if len(tokenized) != 1:
-                        raise ValueError(f"Media token `{token}` must map to a single tokenizer id.")
-                    token_id = tokenized[0]
-                media_token_ids[name] = int(token_id)
-            self.config.media_token_ids = media_token_ids
-
-            self.config.encoder_text_token_ids = {
-                token_text: [int(token_id) for token_id in self.tokenizer(token_text).input_ids]
-                for token_text in _collect_encoder_boundary_tokens(self.config)
-            }
-
+        if tokenizer is not None:
+            self.tokenizer.padding_side = padding_side
+            self.pad_token_id = self.tokenizer("<|endoftext|>").input_ids[0]
+            self.eos_token_id = self.tokenizer.eos_token_id
+        else:
+            self.pad_token_id = 0
+            self.eos_token_id = 0
         super().__init__(image_processor, feature_extractor, tokenizer, chat_template=chat_template)
 
     def __repr__(self):
         return (
             f"AudioVisualFlamingoProcessor(image_processor=SigLip, feature_extractor={self.feature_extractor}, "
-            f"tokenizer={self.tokenizer}, config={self.config})"
+            f"tokenizer={self.tokenizer})"
         )
 
     def __call__(
@@ -826,46 +831,45 @@ class AudioVisualFlamingoProcessor(ProcessorMixin):
         video_infos = []
 
         if images:
-            if len(images) == 1 and self.config.image_aspect_ratio == "dynamic_s2":
-                self.config.image_processor = self.image_processor
-                if isinstance(self.config.s2_scales, str):
-                    self.config.s2_scales = list(map(int, self.config.s2_scales.split(",")))
-                image_tensor, block_sizes = _process_image(images[0], self.config, None, enable_dynamic_s2=True)
+            if len(images) == 1 and self.image_aspect_ratio == "dynamic_s2":
+                if isinstance(self.s2_scales, str):
+                    self.s2_scales = list(map(int, self.s2_scales.split(",")))
+                image_tensor, block_sizes = _process_image(images[0], self, None, enable_dynamic_s2=True)
                 media["image"] = list(image_tensor.half())
                 media_config["image"]["block_sizes"] = [block_sizes]
             else:
-                media["image"] = list(_process_images(images, self.image_processor, self.config).half())
+                media["image"] = list(_process_images(images, self.image_processor, self).half())
 
         audio_info_list = []
         if videos:
             for video in videos:
-                if self.config.load_audio_in_video:
-                    frames, audio_waveform, video_info = _extract_video_hf(video, self.config)
+                if self.load_audio_in_video:
+                    frames, audio_waveform, video_info = _extract_video_hf(video, self)
                     if audio_waveform is not None:
                         raw_sounds.append(audio_waveform)
                         audio_info_list.append(video_info["audio_info"])
                 else:
-                    frames, video_info = _extract_video_hf(video, self.config)
-                media["video"].append(_process_images(frames, self.image_processor, self.config).half())
+                    frames, video_info = _extract_video_hf(video, self)
+                media["video"].append(_process_images(frames, self.image_processor, self).half())
                 video_infos.append(video_info)
             media["video_info"] = [video_infos]
 
         explicit_audio_count = len(audio) if audio else 0
         if audio:
             for audio_item in audio:
-                audio_waveform, audio_info = _load_audio_hf_with_info(audio_item, self.config)
+                audio_waveform, audio_info = _load_audio_hf_with_info(audio_item, self)
                 raw_sounds.append(audio_waveform)
                 audio_info_list.append(audio_info)
 
         if raw_sounds:
             media["sound"] = _extract_sound_features(
-                raw_sounds, audio_info_list, self.config, feature_extractor=self.feature_extractor
+                raw_sounds, audio_info_list, self, feature_extractor=self.feature_extractor
             )
 
         if audio_info_list:
             media["audio_info"] = [audio_info_list]
 
-        if video_infos and self.config.load_audio_in_video:
+        if video_infos and self.load_audio_in_video:
             expected_sound_tokens = explicit_audio_count + sum(
                 1 for video_info in video_infos if video_info.get("has_audio", False)
             )
@@ -886,7 +890,7 @@ class AudioVisualFlamingoProcessor(ProcessorMixin):
                 rebuilt.append(text[cursor:])
                 text = "".join(rebuilt)
 
-        if getattr(self.config, "mm_use_bos_eos_tokens", False):
+        if self.mm_use_bos_eos_tokens:
             text = _add_mm_bos_eos_tokens(text)
 
         tokenized = self.tokenizer(text, return_tensors="pt")
