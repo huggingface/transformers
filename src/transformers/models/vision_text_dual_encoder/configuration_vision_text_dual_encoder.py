@@ -14,7 +14,7 @@
 """VisionTextDualEncoder model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto.configuration_auto import AutoConfig
 from ..chinese_clip.configuration_chinese_clip import ChineseCLIPVisionConfig
 from ..clip.configuration_clip import CLIPVisionConfig
@@ -30,23 +30,9 @@ VISION_MODEL_CONFIGS = {
 }
 
 
+@auto_docstring
 class VisionTextDualEncoderConfig(PreTrainedConfig):
     r"""
-    [`VisionTextDualEncoderConfig`] is the configuration class to store the configuration of a
-    [`VisionTextDualEncoderModel`]. It is used to instantiate [`VisionTextDualEncoderModel`] model according to the
-    specified arguments, defining the text model and vision model configs.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of text and vision projection layers.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The initial value of the *logit_scale* parameter. Default is used as per the original CLIP implementation.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
-
     Examples:
 
     ```python

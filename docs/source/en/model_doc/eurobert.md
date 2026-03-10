@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-03-07 and added to Hugging Face Transformers on 2026-03-02.*
+*This model was released on 2025-03-07 and added to Hugging Face Transformers on 2026-03-04.*
 
 # EuroBERT
 
@@ -76,13 +76,6 @@ predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
 predicted_token = tokenizer.decode(predicted_token_id)
 
 print(f"The predicted token is: {predicted_token}")
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create <|mask|> through a process known as photosynthesis." | transformers run --task fill-mask --model EuroBERT/EuroBERT-210m --device 0
 ```
 
 </hfoption>

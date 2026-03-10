@@ -14,63 +14,34 @@
 """LongT5 model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="google/long-t5-local-base")
 class LongT5Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LongT5Model`]. It is
-    used to instantiate a LongT5 model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the LongT5
-    [google/long-t5-local-base](https://huggingface.co/google/long-t5-local-base) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Arguments:
-        vocab_size (`int`, *optional*, defaults to 32128):
-            Vocabulary size of the LongT5 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`LongT5Model`].
-        d_model (`int`, *optional*, defaults to 512):
-            Size of the encoder layers and the pooler layer.
-        d_kv (`int`, *optional*, defaults to 64):
-            Size of the key, query, value projections per attention head. `d_kv` has to be equal to `d_model //
-            num_heads`.
-        d_ff (`int`, *optional*, defaults to 2048):
-            Size of the intermediate feed forward layer in each `LongT5Block`.
-        num_layers (`int`, *optional*, defaults to 6):
-            Number of hidden layers in the Transformer encoder.
-        num_decoder_layers (`int`, *optional*):
-            Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
-        num_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        local_radius (`int`, *optional*, defaults to 127)
-            Number of tokens to the left/right for each token to locally self-attend in a local attention mechanism.
-        global_block_size (`int`, *optional*, defaults to 16)
-            Length of blocks an input sequence is divided into for a global token representation. Used only for
-            `encoder_attention_type = "transient-global"`.
-        relative_attention_num_buckets (`int`, *optional*, defaults to 32):
-            The number of buckets to use for each attention layer.
-        relative_attention_max_distance (`int`, *optional*, defaults to 128):
-            The maximum distance of the longer sequences for the bucket separation.
-        dropout_rate (`float`, *optional*, defaults to 0.1):
-            The ratio for all dropout layers.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
-            The epsilon used by the layer normalization layers.
-        initializer_factor (`float`, *optional*, defaults to 1):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-        feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
-            Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. LongT5v1.1 uses the
-            `"gated-gelu"` feed forward projection. Original LongT5 implementation uses `"gated-gelu"`.
-        encoder_attention_type (`string`, *optional*, defaults to `"local"`):
-            Type of encoder attention to be used. Should be one of `"local"` or `"transient-global"`, which are
-            supported by LongT5 implementation.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
+    d_ff (`int`, *optional*, defaults to 2048):
+        Size of the intermediate feed forward layer in each `LongT5Block`.
+    local_radius (`int`, *optional*, defaults to 127):
+        Number of tokens to the left/right for each token to locally self-attend in a local attention mechanism.
+    global_block_size (`int`, *optional*, defaults to 16):
+        Length of blocks an input sequence is divided into for a global token representation. Used only for
+        `encoder_attention_type = "transient-global"`.
+    relative_attention_num_buckets (`int`, *optional*, defaults to 32):
+        The number of buckets to use for each attention layer.
+    relative_attention_max_distance (`int`, *optional*, defaults to 128):
+        The maximum distance of the longer sequences for the bucket separation.
+    dropout_rate (`float`, *optional*, defaults to 0.1):
+        The ratio for all dropout layers.
+    feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
+        Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. LongT5v1.1 uses the
+        `"gated-gelu"` feed forward projection. Original LongT5 implementation uses `"gated-gelu"`.
+    encoder_attention_type (`string`, *optional*, defaults to `"local"`):
+        Type of encoder attention to be used. Should be one of `"local"` or `"transient-global"`, which are
+        supported by LongT5 implementation.
     """
 
     model_type = "longt5"
