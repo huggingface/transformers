@@ -175,6 +175,9 @@ class Gemma3nAudioProcessor(NumpyAudioBackend):
         if truncation and max_length is not None:
             audio = [a[..., :max_length] for a in audio]
 
+        # Record original audio lengths before padding (for computing the frame mask)
+        original_lengths = [a.shape[-1] for a in audio]
+
         pad_length = max(a.shape[-1] for a in audio)
         if pad_to_multiple_of is not None and (pad_length % pad_to_multiple_of != 0):
             pad_length = ((pad_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
@@ -186,9 +189,24 @@ class Gemma3nAudioProcessor(NumpyAudioBackend):
         else:
             features = audio
 
-        output_key = self.model_input_names[0]
+        output_key = "audio_features"
         stacked = np.stack(features, axis=0)
-        return BatchFeature(data={output_key: stacked}, tensor_type=return_tensors)
+
+        # Compute per-sample spectrogram frame counts from original (pre-padding) audio lengths
+        frame_size_for_unfold = spectrogram_config.stft_config.win_length + 1  # 513
+        hop_length = spectrogram_config.stft_config.hop_length  # 160
+        frame_counts = [(orig_len - frame_size_for_unfold) // hop_length + 1 for orig_len in original_lengths]
+
+        # Build mask: 1 for real frames, 0 for padded frames
+        max_frames = stacked.shape[1]
+        input_features_mask = np.array(
+            [[1] * fc + [0] * (max_frames - fc) for fc in frame_counts], dtype=np.int32
+        )
+
+        return BatchFeature(
+            data={output_key: stacked, "input_features_mask": input_features_mask},
+            tensor_type=return_tensors,
+        )
 
 
 __all__ = ["Gemma3nAudioProcessor"]

@@ -94,9 +94,7 @@ class UnivNetAudioProcessor(NumpyAudioBackend):
     def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
         # Pad raw audio
         if padding:
-            audio = self.pad_values(
-                audio, max_length=max_length, truncation=truncation, pad_to_multiple_of=pad_to_multiple_of
-            )
+            audio = self.pad(audio, padding=True, max_length=max_length)
 
         # Extract mel spectrograms
         features = self.extract_spectrogram(audio, spectrogram_config=None)
@@ -110,7 +108,7 @@ class UnivNetAudioProcessor(NumpyAudioBackend):
                 f = np.pad(f, ((0, pad_amount), (0, 0)), mode="constant", constant_values=0.0)
             padded.append(f)
 
-        output_key = self.model_input_names[0]
+        output_key = "audio_features"
         stacked = np.stack(padded, axis=0)
         return BatchFeature(data={output_key: stacked}, tensor_type=return_tensors)
 

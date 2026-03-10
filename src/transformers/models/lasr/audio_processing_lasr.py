@@ -62,7 +62,7 @@ class LasrAudioProcessor(TorchAudioBackend):
             upper_edge_hertz=7500.0,
         )
 
-    def extract_spectrogram(self, audio, *, spectrogram_config):
+    def extract_spectrogram(self, audio, *, spectrogram_config, **kwargs):
         import torch
 
         stft_cfg = spectrogram_config.stft_config

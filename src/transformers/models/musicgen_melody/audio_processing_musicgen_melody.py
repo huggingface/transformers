@@ -82,9 +82,7 @@ class MusicgenMelodyAudioProcessor(TorchAudioBackend):
 
         # Pad raw audio
         if padding:
-            audio = self.pad_values(
-                audio, max_length=max_length, truncation=truncation, pad_to_multiple_of=pad_to_multiple_of
-            )
+            audio = self.pad(audio, padding=True, max_length=max_length)
 
         # Extract chroma features
         features = self.extract_spectrogram(audio, spectrogram_config=None)
@@ -98,7 +96,7 @@ class MusicgenMelodyAudioProcessor(TorchAudioBackend):
                 f = torch.nn.functional.pad(f, (0, 0, 0, pad_amount), mode="constant", value=0.0)
             padded.append(f)
 
-        output_key = self.model_input_names[0]
+        output_key = "audio_features"
         stacked = torch.stack(padded, dim=0)
         return BatchFeature(data={output_key: stacked}, tensor_type=return_tensors)
 

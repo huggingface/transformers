@@ -89,7 +89,7 @@ class SeamlessM4tAudioProcessor(NumpyAudioBackend):
 
         stacked = stacked.reshape(batch_size, num_frames // self.stride, num_channels * self.stride)
 
-        output_key = self.model_input_names[0]
+        output_key = "audio_features"
         return BatchFeature(data={output_key: stacked}, tensor_type=return_tensors)
 
 

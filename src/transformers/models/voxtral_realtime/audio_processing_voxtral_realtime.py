@@ -34,5 +34,27 @@ class VoxtralRealtimeAudioProcessor(TorchAudioBackend):
         global_log_mel_max=1.5,
     )
 
+    def extract_spectrogram(self, audio, **kwargs):
+        import torch
+
+        features = super().extract_spectrogram(audio, **kwargs)
+        spectrogram_config = kwargs.get("spectrogram_config", self.spectrogram_config)
+        global_log_mel_max = spectrogram_config.global_log_mel_max
+
+        processed = []
+        for spec in features:
+            if global_log_mel_max is not None:
+                spec_max = torch.tensor(
+                    global_log_mel_max,
+                    device=spec.device,
+                    dtype=spec.dtype,
+                )
+            else:
+                spec_max = spec.max()
+            spec = torch.maximum(spec, spec_max - 8.0)
+            spec = (spec + 4.0) / 4.0
+            processed.append(spec)
+        return processed
+
 
 __all__ = ["VoxtralRealtimeAudioProcessor"]

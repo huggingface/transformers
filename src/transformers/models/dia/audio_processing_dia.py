@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import numpy as np
+
 from ...audio_processing_backends import NumpyAudioBackend
+from ...feature_extraction_utils import BatchFeature
 
 
 class DiaAudioProcessor(NumpyAudioBackend):
@@ -20,6 +23,17 @@ class DiaAudioProcessor(NumpyAudioBackend):
     force_mono = True
     add_channel_dim = True
     pad_to_multiple_of = 512
+
+    def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
+        if pad_to_multiple_of is None:
+            pad_to_multiple_of = self.pad_to_multiple_of
+        lengths = [a.shape[-1] for a in audio]
+        audio = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
+        padded_length = max(a.shape[-1] for a in audio)
+        padding_mask = np.array([[1] * l + [0] * (padded_length - l) for l in lengths])
+        stacked = np.stack(audio)[:, np.newaxis, :]  # (batch, 1, length)
+        output = BatchFeature({"audio_values": stacked, "padding_mask": padding_mask}, tensor_type=return_tensors)
+        return output
 
 
 __all__ = ["DiaAudioProcessor"]

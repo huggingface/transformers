@@ -39,15 +39,12 @@ class WhisperAudioProcessor(TorchAudioBackend):
         import torch
 
         features = super().extract_spectrogram(audio, **kwargs)
-        spectrogram_config = kwargs.get("spectrogram_config", self.spectrogram_config)
-        mel_floor = spectrogram_config.mel_floor
         processed = []
         for spec in features:
-            log_spec = torch.clamp(spec, min=mel_floor).log10()
-            max_val = log_spec.max()
-            log_spec = torch.maximum(log_spec, max_val - 8.0)
-            log_spec = (log_spec + 4.0) / 4.0
-            processed.append(log_spec)
+            max_val = spec.max()
+            spec = torch.maximum(spec, max_val - 8.0)
+            spec = (spec + 4.0) / 4.0
+            processed.append(spec)
         return processed
 
 

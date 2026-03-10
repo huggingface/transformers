@@ -31,10 +31,8 @@ class AudioProcessingKwargs(AudioKwargs, total=False):
     """Extended keyword arguments for the audio processing pipeline."""
 
     do_pad_values: bool | None
-    do_values_normalize: bool | None
     spectrogram_config: dict | SpectrogramConfig | None
     do_extract_spectrogram: bool | None
-    do_feature_normalize: bool | None
     do_pad_features: bool | None
     do_resample: bool | None
 
@@ -55,8 +53,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
     force_mono: bool = None
 
     # Pipeline stage defaults
-    do_pad_values = None
-    do_values_normalize = None
     normalize_before_pad = True
     spectrogram_config = None
     do_extract_spectrogram = None
@@ -261,10 +257,12 @@ class BaseAudioProcessor(AudioProcessingMixin):
             features = self._extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
             if spectrogram_config.mel_scale_config is not None:
                 features = self._apply_mel_scale(features, spectrogram_config=spectrogram_config, **kwargs)
+            features = self._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
         else:
             features = [self._extract_spectrogram(audio_el, spectrogram_config=spectrogram_config, **kwargs) for audio_el in audio]
             if spectrogram_config.mel_scale_config is not None:
                 features = [self._apply_mel_scale(feature_el, spectrogram_config=spectrogram_config, **kwargs) for feature_el in features]
+            features = [self._normalize_magnitude(feature_el, spectrogram_config=spectrogram_config, **kwargs) for feature_el in features]
         return features
 
     def _extract_spectrogram(self, *args, **kwargs):
@@ -278,6 +276,14 @@ class BaseAudioProcessor(AudioProcessingMixin):
     def _apply_mel_scale(self, *args, **kwargs):
         """
         Apply mel filterbank to a spectrogram.
+
+        Implemented by backend subclasses (e.g., ``TorchAudioBackend``).
+        """
+        raise NotImplementedError
+
+    def _normalize_magnitude(self, *args, **kwargs):
+        """
+        Apply magnitude normalization (log, log10, or dB scaling) to spectrogram features.
 
         Implemented by backend subclasses (e.g., ``TorchAudioBackend``).
         """

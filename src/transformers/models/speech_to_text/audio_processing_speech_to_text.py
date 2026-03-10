@@ -87,7 +87,7 @@ class SpeechToTextAudioProcessor(NumpyAudioBackend):
             for f, length in zip(padded, lengths)
         ]
 
-        output_key = self.model_input_names[0]
+        output_key = "audio_features"
         stacked = np.stack(normalized, axis=0)
         return BatchFeature(data={output_key: stacked}, tensor_type=return_tensors)
 
