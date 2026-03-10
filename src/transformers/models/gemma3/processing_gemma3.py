@@ -127,7 +127,7 @@ class Gemma3Processor(ProcessorMixin):
         self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
         if return_mm_token_type_ids:
-            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
+            text_inputs["token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
