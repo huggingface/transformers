@@ -23,7 +23,7 @@ import torch.nn as nn
 from ...backbone_utils import load_backbone
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring
+from ...utils import auto_docstring, can_return_tuple
 from ...utils.generic import torch_int
 from .configuration_prompt_depth_anything import PromptDepthAnythingConfig
 
@@ -382,6 +382,7 @@ class PromptDepthAnythingForDepthEstimation(PromptDepthAnythingPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
