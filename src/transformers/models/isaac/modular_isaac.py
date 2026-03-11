@@ -1031,6 +1031,82 @@ class IsaacModel(Qwen3PreTrainedModel):
         pos[text_mask] = text_positions.expand(-1, pos.shape[-1])
         return pos.permute(2, 0, 1).contiguous()
 
+    def get_image_features(
+        self,
+        vision_patches: torch.Tensor,
+        vision_token_grids: torch.Tensor,
+        vision_patch_attention_mask: torch.Tensor | None = None,
+        vision_token_offsets: torch.Tensor | None = None,
+        vision_token_lengths: torch.Tensor | None = None,
+        vision_image_attention_mask: torch.Tensor | None = None,
+        device: torch.device | None = None,
+    ) -> torch.Tensor:
+        device = device if device is not None else self.text_model.embed_tokens.weight.device
+        vision_patches = vision_patches.to(device=device)
+        vision_token_grids = vision_token_grids.to(device=device, dtype=torch.long)
+        image_attention_mask = (
+            vision_image_attention_mask.to(device=device, dtype=torch.bool)
+            if vision_image_attention_mask is not None
+            else torch.ones(vision_token_grids.shape[:2], device=device, dtype=torch.bool)
+        )
+        patch_attention_mask = (
+            vision_patch_attention_mask.to(device=device, dtype=torch.long)
+            if vision_patch_attention_mask is not None
+            else torch.ones(vision_patches.shape[:3], device=device, dtype=torch.long)
+        )
+        offsets = (
+            vision_token_offsets.to(device=device, dtype=torch.long)
+            if vision_token_offsets is not None
+            else torch.zeros(vision_token_grids.shape[:2], device=device, dtype=torch.long)
+        )
+        reduction_factor = int(self.config.vision_config.pixel_shuffle_scale_factor) ** 2
+        lengths = (
+            vision_token_lengths.to(device=device, dtype=torch.long)
+            if vision_token_lengths is not None
+            else vision_token_grids.prod(-1).div(reduction_factor, rounding_mode="floor").to(dtype=torch.long)
+        )
+
+        flat_vision_patches = vision_patches[image_attention_mask]
+        if flat_vision_patches.shape[0] == 0:
+            hidden_size = self.config.hidden_size
+            return vision_patches.new_zeros((0, hidden_size))
+
+        flat_patch_attention_mask = patch_attention_mask[image_attention_mask]
+        flat_token_grids = vision_token_grids[image_attention_mask]
+        flat_offsets = offsets[image_attention_mask]
+        flat_lengths = lengths[image_attention_mask]
+
+        vision_embeddings = self.vision_embedding(
+            vision_patches=flat_vision_patches,
+            vision_token_grids=flat_token_grids,
+            vision_patch_attention_mask=flat_patch_attention_mask,
+        )
+        token_positions = torch.arange(flat_lengths.max(), device=vision_embeddings.device, dtype=torch.long)
+        gather_positions = flat_offsets[:, None] + token_positions[None, :]
+        gather_mask = token_positions[None, :] < flat_lengths[:, None]
+        image_features = vision_embeddings[
+            torch.arange(vision_embeddings.shape[0], device=vision_embeddings.device, dtype=torch.long)[:, None],
+            gather_positions,
+        ][gather_mask]
+        return image_features
+
+    def get_placeholder_mask(
+        self,
+        modality_tensor: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        image_features: torch.FloatTensor,
+    ) -> torch.BoolTensor:
+        image_token_mask = (
+            modality_tensor.to(device=inputs_embeds.device, dtype=torch.long) == ModalityType.image.value
+        )
+        n_image_tokens = image_token_mask.sum()
+        image_token_mask = image_token_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        torch_compilable_check(
+            inputs_embeds[image_token_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
+        )
+        return image_token_mask
+
     def embed_multimodal_inputs(
         self,
         input_ids: torch.Tensor,
@@ -1049,47 +1125,22 @@ class IsaacModel(Qwen3PreTrainedModel):
         if not torch.any(image_token_mask):
             return embeds, modality
 
-        image_attention_mask = (
-            vision_image_attention_mask.to(device=embeds.device, dtype=torch.bool)
-            if vision_image_attention_mask is not None
-            else torch.ones(vision_token_grids.shape[:2], device=embeds.device, dtype=torch.bool)
-        )
-        patch_attention_mask = (
-            vision_patch_attention_mask.to(device=embeds.device, dtype=torch.long)
-            if vision_patch_attention_mask is not None
-            else torch.ones(vision_patches.shape[:3], device=embeds.device, dtype=torch.long)
-        )
-        offsets = (
-            vision_token_offsets.to(device=embeds.device, dtype=torch.long)
-            if vision_token_offsets is not None
-            else torch.zeros(vision_token_grids.shape[:2], device=embeds.device, dtype=torch.long)
-        )
-        reduction_factor = int(self.config.vision_config.pixel_shuffle_scale_factor) ** 2
-        lengths = (
-            vision_token_lengths.to(device=embeds.device, dtype=torch.long)
-            if vision_token_lengths is not None
-            else vision_token_grids.prod(-1).div(reduction_factor, rounding_mode="floor").to(dtype=torch.long)
+        image_features = self.get_image_features(
+            vision_patches=vision_patches,
+            vision_token_grids=vision_token_grids,
+            vision_patch_attention_mask=vision_patch_attention_mask,
+            vision_token_offsets=vision_token_offsets,
+            vision_token_lengths=vision_token_lengths,
+            vision_image_attention_mask=vision_image_attention_mask,
+            device=embeds.device,
         )
 
-        flat_vision_patches = vision_patches[image_attention_mask]
-        flat_patch_attention_mask = patch_attention_mask[image_attention_mask]
-        flat_token_grids = vision_token_grids[image_attention_mask]
-        flat_offsets = offsets[image_attention_mask]
-        flat_lengths = lengths[image_attention_mask]
-
-        vision_embeddings = self.vision_embedding(
-            vision_patches=flat_vision_patches,
-            vision_token_grids=flat_token_grids,
-            vision_patch_attention_mask=flat_patch_attention_mask,
+        image_features = image_features.to(device=embeds.device, dtype=embeds.dtype)
+        scatter_mask = self.get_placeholder_mask(
+            modality_tensor=modality,
+            inputs_embeds=embeds,
+            image_features=image_features,
         )
-        token_positions = torch.arange(flat_lengths.max(), device=embeds.device, dtype=torch.long)
-        gather_positions = flat_offsets[:, None] + token_positions[None, :]
-        gather_mask = token_positions[None, :] < flat_lengths[:, None]
-        image_features = vision_embeddings[
-            torch.arange(vision_embeddings.shape[0], device=embeds.device, dtype=torch.long)[:, None],
-            gather_positions,
-        ][gather_mask]
-        scatter_mask = image_token_mask.unsqueeze(-1).expand_as(embeds)
         embeds = embeds.masked_scatter(scatter_mask, image_features)
 
         return embeds, modality
