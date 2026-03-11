@@ -4213,8 +4213,11 @@ class ModelTesterMixin:
                 except NotImplementedError:
                     continue
 
+                # Filter out non-tensor inputs for ONNX Runtime, which does not support them.
+                onnx_inputs = {k: v for k, v in inputs_dict if not isinstance(v, (bool, int, float, str))}
+
                 set_seed(1234)
-                onnx_outputs = onnx_program(**copy.deepcopy(inputs_dict))
+                onnx_outputs = onnx_program(**onnx_inputs)
                 onnx_names = (re.sub(r"^output\.", "", node.name) for node in onnx_program.model_proto.graph.output)
                 onnx_outputs = dict(zip(onnx_names, onnx_outputs))
                 self.assertTrue(onnx_outputs, "ONNX outputs is empty.")
