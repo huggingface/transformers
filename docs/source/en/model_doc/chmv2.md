@@ -66,11 +66,6 @@ depth = processor.post_process_depth_estimation(
     - preprocess
     - post_process_depth_estimation
 
-## CHMv2Model
-
-[[autodoc]] CHMv2Model
-    - forward
-
 ## CHMv2ForDepthEstimation
 
 [[autodoc]] CHMv2ForDepthEstimation
