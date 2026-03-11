@@ -16,6 +16,8 @@ import gc
 import tempfile
 import unittest
 
+import torch
+
 from transformers import AutoModelForCausalLM, AutoTokenizer, FPQuantConfig
 from transformers.testing_utils import (
     backend_empty_cache,
@@ -151,6 +153,10 @@ class FPQuantMXFP4PseudoquantTest(FPQuantBaseTest):
         return FPQuantConfig(forward_dtype="mxfp4", pseudoquantization=True)
 
 
+@unittest.skipUnless(
+    torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 9,
+    "NVFP4 pseudoquantization requires compute capability >= 9.0 (Hopper or newer)",
+)
 class FPQuantNVFP4PseudoquantTest(FPQuantBaseTest):
     @classmethod
     def getQuantizationConfig(cls):
