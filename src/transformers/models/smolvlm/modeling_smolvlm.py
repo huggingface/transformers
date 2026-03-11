@@ -603,7 +603,6 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         pixel_attention_mask: torch.BoolTensor | None = None,
         image_hidden_states: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | SmolVLMBaseModelOutputWithPast:
         r"""
@@ -655,7 +654,6 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 

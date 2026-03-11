@@ -558,6 +558,8 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
     def forward(
         self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
+        target_dtype = self.convs[0].conv.weight.dtype
+        hidden_states = hidden_states.to(dtype=target_dtype)
         for conv, block in zip(self.convs, self.blocks):
             hidden_states = conv(hidden_states)
             for layer in block:
@@ -737,7 +739,6 @@ class Florence2Model(Florence2PreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | Florence2Seq2SeqModelOutput:
         if encoder_outputs is None:
@@ -774,7 +775,6 @@ class Florence2Model(Florence2PreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -860,7 +860,6 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Florence2Seq2SeqLMOutput:
@@ -913,7 +912,6 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -948,7 +946,6 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         inputs_embeds=None,
         pixel_values=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -960,7 +957,6 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,

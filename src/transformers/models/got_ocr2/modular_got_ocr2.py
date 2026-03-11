@@ -280,7 +280,6 @@ class GotOcr2Model(LlavaModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GotOcr2ModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -306,7 +305,6 @@ class GotOcr2Model(LlavaModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -332,7 +330,6 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GotOcr2CausalLMOutputWithPast:
@@ -381,7 +378,6 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )

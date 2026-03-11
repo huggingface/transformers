@@ -124,7 +124,6 @@ class VipLlavaModel(LlavaModel):
         inputs_embeds: torch.FloatTensor | None = None,
         vision_feature_layers: int | list[int] | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **lm_kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VipLlavaModelOutputWithPast:
         r"""
@@ -158,7 +157,6 @@ class VipLlavaModel(LlavaModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **lm_kwargs,
         )
 
@@ -204,7 +202,6 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
         vision_feature_layers: int | list[int] | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **lm_kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VipLlavaCausalLMOutputWithPast:
@@ -257,7 +254,6 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             vision_feature_layers=vision_feature_layers,
-            cache_position=cache_position,
             **lm_kwargs,
         )
 

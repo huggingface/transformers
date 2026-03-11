@@ -64,12 +64,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-```bash
-echo -e "人とAIが協調するためには、" | transformers run --task text-generation --model abeja/gpt-neox-japanese-2.7b --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.

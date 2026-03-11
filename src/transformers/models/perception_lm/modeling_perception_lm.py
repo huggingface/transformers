@@ -250,7 +250,6 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **lm_kwargs,
     ) -> tuple | PerceptionLMModelOutputWithPast:
@@ -289,7 +288,6 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **lm_kwargs,
         )
@@ -336,7 +334,6 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **lm_kwargs,
     ) -> tuple | PerceptionLMCausalLMOutputWithPast:
@@ -397,7 +394,6 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **lm_kwargs,
         )
@@ -434,7 +430,6 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         pixel_values=None,
         pixel_values_videos=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -446,7 +441,6 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,

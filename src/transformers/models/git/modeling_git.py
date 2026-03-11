@@ -119,7 +119,6 @@ def create_causal_mask_mapping(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    cache_position: torch.Tensor,
     past_key_values: Cache | None,
     position_ids: torch.Tensor | None,
     token_type_ids: torch.Tensor | None = None,
@@ -141,7 +140,6 @@ def create_causal_mask_mapping(
         "config": config.get_text_config(),
         "inputs_embeds": inputs_embeds,
         "attention_mask": attention_mask,
-        "cache_position": cache_position,
         "past_key_values": past_key_values,
         "position_ids": position_ids,
     }
@@ -159,13 +157,13 @@ def create_causal_mask_mapping(
 
         # First find where a new image block starts: 1 if image and previous not image
         # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
-        is_image = (token_type_ids == 1).to(cache_position.device)
+        is_image = (token_type_ids == 1).to(inputs_embeds.device)
         is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
         new_image_start = is_image & ~is_previous_image
         image_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
         image_group_ids = torch.where(is_image, image_group_ids, -1)
         mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
-            token_type_ids.to(cache_position.device), image_group_ids
+            token_type_ids.to(inputs_embeds.device), image_group_ids
         )
 
     return create_masks_for_generate(**mask_kwargs)
@@ -250,7 +248,6 @@ class GitSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         batch_size = hidden_states.shape[0]
@@ -271,9 +268,7 @@ class GitSelfAttention(nn.Module):
             .transpose(1, 2)
         )
         if past_key_values is not None:
-            key_layer, value_layer = past_key_values.update(
-                key_layer, value_layer, self.layer_idx, cache_kwargs={"cache_position": cache_position}
-            )
+            key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -330,14 +325,12 @@ class GitAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         attn_output, _ = self.self(
             hidden_states,
             attention_mask,
             past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         attention_output = self.output(attn_output, hidden_states)
@@ -389,14 +382,12 @@ class GitLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         attention_output = self.attention(
             hidden_states,
             attention_mask,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -424,7 +415,6 @@ class GitEncoder(nn.Module):
         attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         for layer_module in self.layer:
@@ -432,7 +422,6 @@ class GitEncoder(nn.Module):
                 hidden_states,
                 attention_mask,
                 past_key_values,
-                cache_position,
                 **kwargs,
             )
 
@@ -904,7 +893,6 @@ class GitModel(GitPreTrainedModel):
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         interpolate_pos_encoding: bool = False,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPooling:
         r"""
@@ -956,13 +944,6 @@ class GitModel(GitPreTrainedModel):
             past_key_values_length=past_key_values_length,
         )
 
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length,
-                past_key_values_length + embedding_output.shape[1],
-                device=embedding_output.device,
-            )
-
         # Always create `token_type_ids` so we can re-use Gemma3 style mask preparation fn
         token_type_ids = torch.zeros_like(embedding_output, dtype=torch.int)[..., 0]
 
@@ -1000,15 +981,11 @@ class GitModel(GitPreTrainedModel):
             embedding_output = torch.cat((projected_visual_features, embedding_output), dim=1)
             image_token_type_ids = torch.ones_like(projected_visual_features, dtype=torch.int)[..., 0]
             token_type_ids = torch.cat([image_token_type_ids, token_type_ids], dim=-1)
-            cache_position = torch.arange(embedding_output.shape[1], device=embedding_output.device, dtype=torch.int)
             if attention_mask is not None:
                 attention_mask = torch.cat([torch.ones_like(image_token_type_ids), attention_mask], dim=-1)
         elif past_key_values is not None and input_ids.shape[1] == 1:
             # Expand attention mask and cache position with image tokens because GIT doesn't add image
             # placeholder tokens when processing. Doesn't worth the refactor, low usage!
-            cache_position = torch.tensor(
-                [past_key_values_length], dtype=cache_position.dtype, device=cache_position.device
-            )
             extended_attention_mask = torch.ones(
                 (attention_mask.shape[0], past_key_values_length - attention_mask.shape[1] + 1),
                 dtype=attention_mask.dtype,
@@ -1021,7 +998,6 @@ class GitModel(GitPreTrainedModel):
             self.config,
             embedding_output,
             attention_mask,
-            cache_position,
             past_key_values,
             None,
             token_type_ids,
@@ -1035,7 +1011,6 @@ class GitModel(GitPreTrainedModel):
             attention_mask=causal_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1083,7 +1058,6 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         interpolate_pos_encoding: bool = False,
         logits_to_keep: int | torch.Tensor = 0,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | CausalLMOutputWithPast:
         r"""
@@ -1231,7 +1205,6 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             use_cache=use_cache,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1268,7 +1241,6 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         pixel_values=None,
         attention_mask=None,
         use_cache=None,
-        cache_position=None,
         is_first_iteration=False,
         **kwargs,
     ):
@@ -1279,7 +1251,6 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             use_cache=use_cache,
-            cache_position=cache_position,
             is_first_iteration=is_first_iteration,
             **kwargs,
         )

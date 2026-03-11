@@ -97,7 +97,6 @@ class BioGptDecoderLayer(BartDecoderLayer):
         past_key_values: Cache | None = None,
         use_cache: bool | None = True,
         position_ids: torch.LongTensor | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
@@ -106,9 +105,6 @@ class BioGptDecoderLayer(BartDecoderLayer):
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             past_key_values (`Cache`): cached past key and value projection states
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence. It is used to update the
-                cache in the correct position and to infer the complete sequence length.
         """
         residual = hidden_states
 
@@ -120,7 +116,6 @@ class BioGptDecoderLayer(BartDecoderLayer):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -188,7 +183,6 @@ class BioGptModel(BioGptPreTrainedModel):
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -203,10 +197,6 @@ class BioGptModel(BioGptPreTrainedModel):
 
         batch_size, seq_length = inputs_embeds.size()[:-1]
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
-            )
 
         if attention_mask is None:
             # required mask seq length can be calculated via length of past cache
@@ -219,13 +209,13 @@ class BioGptModel(BioGptPreTrainedModel):
             config=self.config,
             input_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=self_attn_cache,
         )
 
         # embed positions
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            position_ids = torch.arange(seq_length, device=inputs_embeds.device) + past_key_values_length
+            position_ids = position_ids.unsqueeze(0)
 
         positions = self.embed_positions(attention_mask, past_key_values_length, position_ids=position_ids)
         hidden_states = inputs_embeds + positions
@@ -243,7 +233,6 @@ class BioGptModel(BioGptPreTrainedModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 position_ids=position_ids,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -289,7 +278,6 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithCrossAttentions:
@@ -306,7 +294,6 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             use_cache=use_cache,
             position_ids=position_ids,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -356,7 +343,6 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | TokenClassifierOutput:
         r"""
@@ -372,7 +358,6 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             position_ids=position_ids,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -436,7 +421,6 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple | SequenceClassifierOutputWithPast:
@@ -453,7 +437,6 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             position_ids=position_ids,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = transformer_outputs[0]

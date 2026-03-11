@@ -21,7 +21,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen2-7B-beta")
+@auto_docstring(checkpoint="Qwen/Qwen2-7B")
 class Qwen2Config(PreTrainedConfig):
     r"""
     Example:

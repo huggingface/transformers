@@ -113,7 +113,6 @@ class PLBartModel(PLBartPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | Seq2SeqModelOutput:
         r"""
@@ -165,7 +164,6 @@ class PLBartModel(PLBartPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -232,7 +230,6 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel, GenerationMixin):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | Seq2SeqLMOutput:
         r"""
@@ -296,7 +293,6 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
         lm_logits = self.lm_head(outputs.last_hidden_state)

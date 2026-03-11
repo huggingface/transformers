@@ -226,7 +226,6 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         vision_feature_layers: int | list[int] | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **lm_kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VipLlavaModelOutputWithPast:
         r"""
@@ -260,7 +259,6 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **lm_kwargs,
         )
 
@@ -334,7 +332,6 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         vision_feature_layers: int | list[int] | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **lm_kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VipLlavaCausalLMOutputWithPast:
@@ -387,7 +384,6 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             vision_feature_layers=vision_feature_layers,
-            cache_position=cache_position,
             **lm_kwargs,
         )
 
@@ -416,7 +412,6 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         inputs_embeds=None,
         pixel_values=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -428,7 +423,6 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,

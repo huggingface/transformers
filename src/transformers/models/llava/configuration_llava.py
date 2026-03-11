@@ -20,7 +20,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="llava-hf/llava-9b")
+@auto_docstring(checkpoint="llava-hf/llava-1.5-7b-hf")
 class LlavaConfig(PreTrainedConfig):
     r"""
     Example:

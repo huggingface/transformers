@@ -160,7 +160,6 @@ class BigBirdSelfAttention(nn.Module):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         past_key_values=None,
-        cache_position=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         batch_size, seq_length, _ = hidden_states.shape
@@ -1172,7 +1171,6 @@ class BigBirdAttention(nn.Module):
         to_mask=None,
         from_blocked_mask=None,
         to_blocked_mask=None,
-        cache_position=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         # fp16 compatibility
@@ -1189,7 +1187,6 @@ class BigBirdAttention(nn.Module):
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
         else:
@@ -1276,7 +1273,6 @@ class BigBirdLayer(GradientCheckpointingLayer):
         to_mask=None,
         blocked_encoder_mask=None,
         past_key_values=None,
-        cache_position=None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
@@ -1291,7 +1287,6 @@ class BigBirdLayer(GradientCheckpointingLayer):
             to_mask=to_mask,
             from_blocked_mask=blocked_encoder_mask,
             to_blocked_mask=blocked_encoder_mask,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1307,7 +1302,6 @@ class BigBirdLayer(GradientCheckpointingLayer):
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -1358,7 +1352,6 @@ class BigBirdEncoder(nn.Module):
         from_mask=None,
         to_mask=None,
         blocked_encoder_mask=None,
-        cache_position=None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
         if use_cache and past_key_values is None:
@@ -1375,7 +1368,6 @@ class BigBirdEncoder(nn.Module):
                 to_mask=to_mask,
                 blocked_encoder_mask=blocked_encoder_mask,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -1599,7 +1591,6 @@ class BigBirdModel(BigBirdPreTrainedModel):
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPoolingAndCrossAttentions:
         if not self.config.is_decoder:
@@ -1719,7 +1710,6 @@ class BigBirdModel(BigBirdPreTrainedModel):
             from_mask=from_mask,
             to_mask=to_mask,
             blocked_encoder_mask=blocked_encoder_mask,
-            cache_position=cache_position,
             **kwargs,
         )
         sequence_output = encoder_outputs.last_hidden_state
@@ -2074,7 +2064,6 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
         past_key_values: Cache | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithCrossAttentions:
@@ -2094,7 +2083,6 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 

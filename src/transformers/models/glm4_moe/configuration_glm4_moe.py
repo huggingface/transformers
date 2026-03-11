@@ -23,7 +23,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="THUDM/GLM-4-100B-A10B")
+@auto_docstring(checkpoint="zai-org/GLM-4.5")
 class Glm4MoeConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):

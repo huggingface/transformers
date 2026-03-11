@@ -152,7 +152,6 @@ class AyaVisionModel(LlavaModel):
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | AyaVisionModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -180,7 +179,6 @@ class AyaVisionModel(LlavaModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -205,7 +203,6 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -256,7 +253,6 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
             labels=labels,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             image_sizes=image_sizes,
             **kwargs,

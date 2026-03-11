@@ -689,8 +689,8 @@ class NemotronForCausalLM(NemotronPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, NemotronForCausalLM
 
-        >>> model = NemotronForCausalLM.from_pretrained("nvidia/nemotron-3-8b-base-4k-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("nvidia/nemotron-3-8b-base-4k-hf")
+        >>> model = NemotronForCausalLM.from_pretrained("thhaus/nemotron3-8b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("thhaus/nemotron3-8b")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")

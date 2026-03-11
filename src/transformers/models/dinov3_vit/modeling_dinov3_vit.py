@@ -20,6 +20,7 @@
 
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -37,6 +38,23 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_dinov3_vit import DINOv3ViTConfig
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Output type of [`DINOv3ViTBackbone`], extending [`BackboneOutput`] with optional CLS tokens from
+    each selected feature stage (used when `config.return_class_token=True`).
+    """
+)
+class DINOv3ViTBackboneOutput(BackboneOutput):
+    r"""
+    cls_tokens (`tuple(torch.FloatTensor)`, *optional*):
+        CLS token from each selected feature stage, each of shape `(batch_size, hidden_size)`.
+        Only present when `config.return_class_token=True`.
+    """
+
+    cls_tokens: tuple[torch.FloatTensor] | None = None
 
 
 class DINOv3ViTEmbeddings(nn.Module):
@@ -561,7 +579,7 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BackboneOutput:
+    ) -> DINOv3ViTBackboneOutput:
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_states = self.embeddings(pixel_values)
         position_embeddings = self.rope_embeddings(pixel_values)
@@ -576,8 +594,9 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
         num_patches_width = image_width // patch_size
 
         num_prefix = 1 + getattr(self.config, "num_register_tokens", 0)
+        return_class_token = getattr(self.config, "return_class_token", False)
 
-        feature_maps = []
+        feature_maps, cls_tokens = [], []
         sequence_output = None
         last_stage_idx = len(self.stage_names) - 1
         for idx, (stage_name, hidden_state) in enumerate(zip(self.stage_names, stage_hidden_states)):
@@ -588,6 +607,8 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
                 hidden_state = self.norm(hidden_state)
 
             if stage_name in self.out_features:
+                if return_class_token:
+                    cls_tokens.append(hidden_state[:, 0, :])
                 patch_tokens = hidden_state[:, num_prefix:, :]
                 if self.config.reshape_hidden_states:
                     fmap = (

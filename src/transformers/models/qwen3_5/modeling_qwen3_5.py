@@ -1382,7 +1382,7 @@ class Qwen3_5TextModel(Qwen3_5PreTrainedModel):
             2. Attending to all inputs
         """
         linear_attn_mask = attention_mask
-        if (past_key_values is not None and past_key_values.get_seq_length() > 0) or (
+        if (past_key_values is not None and past_key_values.has_previous_state) or (
             attention_mask is not None and torch.all(attention_mask == 1)
         ):
             linear_attn_mask = None
@@ -1479,24 +1479,8 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Calculate the 3D rope index based on image and video's sizes. The utility expects a `vision + text`
-        sequence and will error out otherwise. For pure text sequence, please rely on model's auto-inferred
-        position ids. In a mixed vision + text sequence, vision tokens use 3D RoPE (temporal, height, width)
-        while text tokens use standard 1D RoPE.
-
-        Example:
-            Temporal patches: 3; Height patches: 2; Width patches: 2
-            Each vision input results in (temporal x height × width) positions. Here: 3 x 2 × 2 = 12 positions total.
-
-            Temporal position IDs are spaced by:
-                `interval = tokens_per_second * temporal_patch_size / fps`
-
-                If fps = 1; tokens_per_second = 25; temporal_patch_size = 2, temporal IDs increase by 50 for each temporal patch:
-                `[0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]`
-
-            Height IDs repeat per row: `[0, 0, 1, 1, ...]`
-            Width IDs alternate per column: `[0, 1, 0, 1, ...]`
-            Text tokens follow standard 1D RoPE and the position IDs grow consequently with a step of `1`
+        Difference from Qwen2VL/Qwen2.5VL's get_rope_index:
+        - Since Qwen3.5 use timestamps to seperate videos, like <t1> <vision_start> <frame1> <vision_end> <t2> <vision_start> <frame2> <vision_end>, the video_grid_thw should also be split too.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1518,6 +1502,11 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
+
+        # Separate video grid thw into multiple grids because timestamps are used to seperate videos.
+        if video_grid_thw is not None:
+            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
+            video_grid_thw[:, 0] = 1
         spatial_merge_size = self.config.vision_config.spatial_merge_size
 
         mrope_position_deltas = []

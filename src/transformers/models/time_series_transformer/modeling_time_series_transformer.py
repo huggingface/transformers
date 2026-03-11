@@ -348,7 +348,6 @@ class TimeSeriesTransformerAttention(nn.Module):
         key_value_states: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
-        cache_position: torch.Tensor | None = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -393,11 +392,7 @@ class TimeSeriesTransformerAttention(nn.Module):
             value_states = value_states.view(*kv_input_shape).transpose(1, 2)
 
             if past_key_values is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
@@ -516,7 +511,6 @@ class TimeSeriesTransformerDecoderLayer(GradientCheckpointingLayer):
         encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = True,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -526,7 +520,6 @@ class TimeSeriesTransformerDecoderLayer(GradientCheckpointingLayer):
             hidden_states,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -542,7 +535,6 @@ class TimeSeriesTransformerDecoderLayer(GradientCheckpointingLayer):
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -700,7 +692,6 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         r"""
@@ -736,21 +727,11 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
                 Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
                 This is useful if you want more control over how to convert `input_ids` indices into associated vectors
                 than the model's internal embedding lookup matrix.
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence. It is used to update the
-                cache in the correct position and to infer the complete sequence length.
         """
 
-        input_shape = inputs_embeds.size()[:-1]
         # initialize `past_key_values`
         if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + input_shape[1], device=inputs_embeds.device
-            )
 
         self_attn_cache = (
             past_key_values.self_attention_cache
@@ -762,7 +743,6 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=self_attn_cache,
         )
         encoder_attention_mask = create_bidirectional_mask(
@@ -791,7 +771,6 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
         return BaseModelOutputWithPastAndCrossAttentions(
@@ -955,7 +934,6 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         encoder_outputs: list[torch.FloatTensor] | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqTSModelOutput | tuple:
         r"""
@@ -1115,7 +1093,6 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             encoder_hidden_states=encoder_outputs[0],
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1186,7 +1163,6 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         encoder_outputs: list[torch.FloatTensor] | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqTSModelOutput | tuple:
         r"""
@@ -1346,7 +1322,6 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 

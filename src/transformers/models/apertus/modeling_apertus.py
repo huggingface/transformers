@@ -459,8 +459,8 @@ class ApertusForCausalLM(ApertusPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, ApertusForCausalLM
 
-        >>> model = ApertusForCausalLM.from_pretrained("swiss-ai/Apertus-8B")
-        >>> tokenizer = AutoTokenizer.from_pretrained("swiss-ai/Apertus-8B")
+        >>> model = ApertusForCausalLM.from_pretrained("swiss-ai/Apertus-8B-Instruct-2509")
+        >>> tokenizer = AutoTokenizer.from_pretrained("swiss-ai/Apertus-8B-Instruct-2509")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")

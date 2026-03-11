@@ -279,7 +279,6 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
         return_dict: bool | None = None,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> ColQwen2ForRetrievalOutput:
         r"""
@@ -325,7 +324,6 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         vlm_hidden_states = vlm_output.hidden_states if output_hidden_states else None

@@ -161,7 +161,6 @@ class BlenderbotSmallAttention(nn.Module):
         key_value_states: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
-        cache_position: torch.Tensor | None = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -206,11 +205,7 @@ class BlenderbotSmallAttention(nn.Module):
             value_states = value_states.view(*kv_input_shape).transpose(1, 2)
 
             if past_key_values is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
@@ -329,7 +324,6 @@ class BlenderbotSmallDecoderLayer(GradientCheckpointingLayer):
         encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = True,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -339,7 +333,6 @@ class BlenderbotSmallDecoderLayer(GradientCheckpointingLayer):
             hidden_states,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -355,7 +348,6 @@ class BlenderbotSmallDecoderLayer(GradientCheckpointingLayer):
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -539,7 +531,6 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
         past_key_values=None,
         inputs_embeds=None,
         use_cache=None,
-        cache_position=None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -558,10 +549,7 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
 
         batch_size, seq_length = inputs_embeds.size()[:-1]
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
-            )
+        position_ids = torch.arange(seq_length, device=inputs_embeds.device) + past_key_values_length
 
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past cache
@@ -578,7 +566,6 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=self_attn_cache,
         )
         encoder_attention_mask = create_bidirectional_mask(
@@ -590,7 +577,7 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
 
         # embed positions
         position_ids = self.embed_positions(
-            (batch_size, seq_length), past_key_values_length, position_ids=cache_position
+            (batch_size, seq_length), past_key_values_length, position_ids=position_ids
         )
 
         # BlenderbotSmall applies layer norm on hidden_states
@@ -612,7 +599,6 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -662,7 +648,6 @@ class BlenderbotSmallModel(BlenderbotSmallPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqModelOutput:
         r"""
@@ -720,7 +705,6 @@ class BlenderbotSmallModel(BlenderbotSmallPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -787,7 +771,6 @@ class BlenderbotSmallForConditionalGeneration(BlenderbotSmallPreTrainedModel, Ge
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqLMOutput:
         r"""
@@ -861,7 +844,6 @@ class BlenderbotSmallForConditionalGeneration(BlenderbotSmallPreTrainedModel, Ge
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -938,7 +920,6 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel, GenerationMixin
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithCrossAttentions:
@@ -973,7 +954,6 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel, GenerationMixin
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 

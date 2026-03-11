@@ -1522,7 +1522,6 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
         audio_embed_sizes=None,
         audio_attention_mask=None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPast:
         r"""
@@ -1559,20 +1558,16 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
                 audio_attention_mask=audio_attention_mask,
             )
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
         causal_mask = mask_function(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -1587,7 +1582,6 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -1631,7 +1625,6 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
         audio_attention_mask=None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> CausalLMOutputWithPast:
@@ -1682,7 +1675,6 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
             audio_embed_sizes=audio_embed_sizes,
             audio_attention_mask=audio_attention_mask,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1715,7 +1707,6 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
         audio_input_features=None,
         audio_embed_sizes=None,
         audio_attention_mask=None,
-        cache_position=None,
         position_ids=None,
         use_cache=True,
         logits_to_keep=0,
@@ -1731,7 +1722,7 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
             and self.config.rope_parameters
             and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1
         ):
-            past_length = cache_position[0]
+            past_length = past_key_values.get_seq_length()
             if past_length <= self.config.original_max_position_embeddings:
                 past_key_values = None
 
@@ -1746,7 +1737,6 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
             audio_input_features=audio_input_features,
             audio_embed_sizes=audio_embed_sizes,
             audio_attention_mask=audio_attention_mask,
-            cache_position=cache_position,
             position_ids=position_ids,
             use_cache=use_cache,
             logits_to_keep=logits_to_keep,

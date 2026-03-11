@@ -190,7 +190,6 @@ class PLBartAttention(nn.Module):
         key_value_states: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
-        cache_position: torch.Tensor | None = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -235,11 +234,7 @@ class PLBartAttention(nn.Module):
             value_states = value_states.view(*kv_input_shape).transpose(1, 2)
 
             if past_key_values is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
@@ -445,7 +440,6 @@ class PLBartDecoderLayer(GradientCheckpointingLayer):
         encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = True,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -455,7 +449,6 @@ class PLBartDecoderLayer(GradientCheckpointingLayer):
             hidden_states,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -471,7 +464,6 @@ class PLBartDecoderLayer(GradientCheckpointingLayer):
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -541,7 +533,6 @@ class PLBartDecoder(PLBartPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -560,10 +551,7 @@ class PLBartDecoder(PLBartPreTrainedModel):
 
         batch_size, seq_length = inputs_embeds.size()[:-1]
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
-            )
+        position_ids = torch.arange(seq_length, device=inputs_embeds.device) + past_key_values_length
 
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past cache
@@ -580,7 +568,6 @@ class PLBartDecoder(PLBartPreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=self_attn_cache,
         )
         encoder_attention_mask = create_bidirectional_mask(
@@ -591,7 +578,7 @@ class PLBartDecoder(PLBartPreTrainedModel):
         )
 
         # embed positions
-        positions = self.embed_positions(input, past_key_values_length, position_ids=cache_position)
+        positions = self.embed_positions(input, past_key_values_length, position_ids=position_ids)
         positions = positions.to(inputs_embeds.device)
 
         hidden_states = inputs_embeds + positions
@@ -613,7 +600,6 @@ class PLBartDecoder(PLBartPreTrainedModel):
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -684,7 +670,6 @@ class PLBartModel(PLBartPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | Seq2SeqModelOutput:
         r"""
@@ -736,7 +721,6 @@ class PLBartModel(PLBartPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -803,7 +787,6 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel, GenerationMixin):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | Seq2SeqLMOutput:
         r"""
@@ -867,7 +850,6 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
         lm_logits = self.lm_head(outputs.last_hidden_state)
@@ -951,7 +933,6 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Seq2SeqSequenceClassifierOutput:
         r"""
@@ -996,7 +977,6 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = outputs[0]  # last hidden state
@@ -1103,7 +1083,6 @@ class PLBartForCausalLM(PLBartPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithCrossAttentions:
@@ -1138,7 +1117,6 @@ class PLBartForCausalLM(PLBartPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 

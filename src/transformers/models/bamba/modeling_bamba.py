@@ -593,7 +593,6 @@ class BambaMixer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         cache_params: HybridMambaAttentionDynamicCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         seq_idx: torch.IntTensor | None = None,
     ):
@@ -612,8 +611,6 @@ class BambaMixer(nn.Module):
             and cache_params.conv_states[self.layer_idx].shape[0]
             == cache_params.ssm_states[self.layer_idx].shape[0]
             == batch_size
-            and cache_position is not None
-            and cache_position[0] > 0
         )
 
         # getting projected states from cache if it exists
@@ -763,7 +760,6 @@ class BambaMixer(nn.Module):
         self,
         input_states,
         cache_params: HybridMambaAttentionDynamicCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
     ):
         batch_size, seq_len, _ = input_states.shape
@@ -783,8 +779,6 @@ class BambaMixer(nn.Module):
             and cache_params.conv_states[self.layer_idx].shape[0]
             == cache_params.ssm_states[self.layer_idx].shape[0]
             == batch_size
-            and cache_position is not None
-            and cache_position[0] > 0
         )
 
         # 2. Convolution sequence transformation
@@ -970,13 +964,12 @@ class BambaMixer(nn.Module):
         self,
         hidden_states,
         cache_params: HybridMambaAttentionDynamicCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         seq_idx: torch.IntTensor | None = None,
         **kwargs,
     ):
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type and not is_torchdynamo_compiling():
-            return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask, seq_idx)
+            return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask, seq_idx)
         if seq_idx is not None:
             raise NotImplementedError(
                 "`seq_idx` support requires fast path support. Please install `mamba_ssm` and `causal_conv1d`"
@@ -986,7 +979,7 @@ class BambaMixer(nn.Module):
             # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
             hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
-        return self.torch_forward(hidden_states, cache_params, cache_position, attention_mask)
+        return self.torch_forward(hidden_states, cache_params, attention_mask)
 
 
 class BambaMLP(nn.Module):
@@ -1051,7 +1044,6 @@ class BambaDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: HybridMambaAttentionDynamicCache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[BambaFlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
@@ -1063,7 +1055,6 @@ class BambaDecoderLayer(GradientCheckpointingLayer):
             hidden_states = self.mamba(
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
-                cache_position=cache_position,
                 attention_mask=attention_mask,
                 **kwargs,
             )
@@ -1075,7 +1066,6 @@ class BambaDecoderLayer(GradientCheckpointingLayer):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -1146,7 +1136,6 @@ class BambaModel(BambaPreTrainedModel):
         past_key_values: HybridMambaAttentionDynamicCache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[BambaFlashAttentionKwargs],
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -1162,20 +1151,17 @@ class BambaModel(BambaPreTrainedModel):
                 "provided, so no cache will be returned."
             )
 
-        if cache_position is None:
-            cache_position = torch.arange(hidden_states.shape[1], device=hidden_states.device)
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
-        mamba_mask = self._update_mamba_mask(attention_mask, cache_position)
+        mamba_mask = self._update_mamba_mask(attention_mask, past_key_values)
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers:
@@ -1187,7 +1173,6 @@ class BambaModel(BambaPreTrainedModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -1204,14 +1189,16 @@ class BambaModel(BambaPreTrainedModel):
             past_key_values=next_cache,
         )
 
-    def _update_mamba_mask(self, attention_mask, cache_position):
+    def _update_mamba_mask(self, attention_mask, past_key_values):
         """
         No need for zeroing states when
             1. Cached forward
             2. Attending to all inputs
         """
         mamba_mask = attention_mask
-        if cache_position[0] > 0 or (attention_mask is not None and torch.all(attention_mask == 1)):
+        if (past_key_values is not None and past_key_values.has_previous_state) or (
+            attention_mask is not None and torch.all(attention_mask == 1)
+        ):
             mamba_mask = None
         return mamba_mask
 
@@ -1243,7 +1230,6 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> CausalLMOutputWithPast:
@@ -1276,7 +1262,6 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1305,7 +1290,6 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         position_ids=None,
         use_cache=True,
         is_first_iteration=False,
@@ -1324,7 +1308,6 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             position_ids=position_ids,
             use_cache=use_cache,
             is_first_iteration=is_first_iteration,

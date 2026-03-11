@@ -898,6 +898,11 @@ def set_param_for_module(
     module_path, _, param_name = target_name.rpartition(".")
     module_obj = model.get_submodule(module_path) if module_path else model
 
+    if param_name == torch.nn.modules.module._EXTRA_STATE_KEY_SUFFIX:
+        module_obj.set_extra_state(param_value)
+        loading_info.missing_keys.discard(target_name)
+        return
+
     ref = getattr(module_obj, param_name)
     if ref is None:
         loading_info.unexpected_keys.add(target_name)
@@ -1174,7 +1179,7 @@ def convert_and_load_state_dict_in_model(
 
             # 4. Handle TP sharding or device_map placement
             future_or_tensor = None
-            if device_mesh:
+            if device_mesh and tp_plan:
                 if matched_tp_pattern := tp_plan_alt.search(renamed_key):
                     matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
                     if getattr(mapping, "distributed_operation", None) is None:

@@ -429,7 +429,6 @@ class LlavaNextVideoModel(LlavaNextModel):
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | LlavaNextVideoModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -478,7 +477,6 @@ class LlavaNextVideoModel(LlavaNextModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -538,7 +536,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | LlavaNextVideoCausalLMOutputWithPast:
@@ -618,7 +615,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
             use_cache=use_cache,
-            cache_position=cache_position,
             image_sizes=image_sizes,
             **kwargs,
         )
@@ -653,7 +649,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         pixel_values_videos=None,
         image_sizes=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -665,7 +660,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,

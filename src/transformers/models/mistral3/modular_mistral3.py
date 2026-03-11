@@ -173,7 +173,6 @@ class Mistral3Model(LlavaModel):
         inputs_embeds: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Mistral3ModelOutputWithPast:
@@ -202,7 +201,6 @@ class Mistral3Model(LlavaModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -246,7 +244,6 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -283,7 +280,6 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             image_sizes=image_sizes,
             **kwargs,
         )

@@ -1251,7 +1251,6 @@ class Zamba2Model(Zamba2PreTrainedModel):
         past_key_values: Zamba2HybridDynamicCache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -1271,27 +1270,24 @@ class Zamba2Model(Zamba2PreTrainedModel):
             batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
             past_key_values = Zamba2HybridDynamicCache(self.config, batch_size, dtype=self.dtype, device=self.device)
 
-        if cache_position is None:
-            past_seen_tokens = (
-                past_key_values.get_seq_length(layer_idx=self.first_transformer_layer_id)
-                if past_key_values is not None
-                else 0
-            )
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
-        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
+
+        # create position embeddings to be shared across the decoder layers
+        if self.config.use_mem_rope:
+            position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
+        else:
+            position_embeddings = None
 
         for layer_idx, layer in enumerate(self.layers):
             hidden_states = layer(
