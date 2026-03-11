@@ -282,6 +282,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("ministral3", "Ministral3Model"),
         ("mistral", "MistralModel"),
         ("mistral3", "Mistral3Model"),
+        ("mistral4", "Mistral4Model"),
         ("mixtral", "MixtralModel"),
         ("mlcd", "MLCDVisionModel"),  # Keep this to make some original hub repositories (from `DeepGlint-AI`) works
         ("mlcd_vision_model", "MLCDVisionModel"),
@@ -541,6 +542,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("mamba2", "Mamba2ForCausalLM"),
         ("megatron-bert", "MegatronBertForPreTraining"),
         ("mistral3", "Mistral3ForConditionalGeneration"),
+        ("mistral4", "Mistral4ForCausalLM"),
         ("mllama", "MllamaForConditionalGeneration"),
         ("mobilebert", "MobileBertForPreTraining"),
         ("mpnet", "MPNetForMaskedLM"),
@@ -981,6 +983,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("llava_next_video", "LlavaNextVideoForConditionalGeneration"),
         ("llava_onevision", "LlavaOnevisionForConditionalGeneration"),
         ("mistral3", "Mistral3ForConditionalGeneration"),
+        ("mistral4", "Mistral4ForCausalLM"),
         ("mllama", "MllamaForConditionalGeneration"),
         ("ovis2", "Ovis2ForConditionalGeneration"),
         ("paddleocr_vl", "PaddleOCRVLForConditionalGeneration"),
