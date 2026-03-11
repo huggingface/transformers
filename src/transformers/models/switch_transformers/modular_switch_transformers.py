@@ -264,7 +264,6 @@ class SwitchTransformersLayerCrossAttention(T5LayerCrossAttention):
 class SwitchTransformersBlock(GradientCheckpointingLayer):
     def __init__(self, config, has_relative_attention_bias=False, is_sparse=False, layer_idx: int | None = None):
         super().__init__()
-        self.layer_idx = layer_idx
         self.is_decoder = config.is_decoder
         self.is_sparse = is_sparse
         self.layer = nn.ModuleList()
@@ -305,15 +304,12 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
 
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
         if do_cross_attention:
-            past_seen_tokens = past_key_values.get_seq_length(self.layer_idx) if past_key_values is not None else 0
             hidden_states, _ = self.layer[1](
                 hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
                 past_key_values=past_key_values,
-                query_length=past_seen_tokens + hidden_states.shape[1],
-                use_cache=use_cache,
             )
 
             # clamp inf values to enable fp16 training
