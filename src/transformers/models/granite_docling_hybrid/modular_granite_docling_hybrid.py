@@ -344,7 +344,6 @@ class GraniteDoclingHybridModel(Idefics3Model):
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | GraniteDoclingHybridBaseModelOutputWithPast:
         r"""
@@ -398,7 +397,6 @@ class GraniteDoclingHybridModel(Idefics3Model):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -436,7 +434,6 @@ class GraniteDoclingHybridForConditionalGeneration(Idefics3ForConditionalGenerat
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GraniteDoclingHybridCausalLMOutputWithPast:
@@ -469,7 +466,6 @@ class GraniteDoclingHybridForConditionalGeneration(Idefics3ForConditionalGenerat
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -499,11 +495,12 @@ class GraniteDoclingHybridForConditionalGeneration(Idefics3ForConditionalGenerat
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         pixel_values=None,
         pixel_attention_mask=None,
         image_hidden_states=None,
         logits_to_keep=None,
+        is_first_iteration=False,
+        use_cache=False,
         **kwargs,
     ):
         # Overwritten to handle HybridMambaAttentionDynamicCache initialization
@@ -514,11 +511,12 @@ class GraniteDoclingHybridForConditionalGeneration(Idefics3ForConditionalGenerat
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             pixel_values=pixel_values,
             pixel_attention_mask=pixel_attention_mask,
             image_hidden_states=image_hidden_states,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=False,
+            use_cache=use_cache,
             **kwargs,
         )
 
@@ -552,11 +550,7 @@ class GraniteDoclingHybridForConditionalGeneration(Idefics3ForConditionalGenerat
                 device=device,
             )
 
-        cache_position = model_inputs.get("cache_position", cache_position)
-        if cache_position is None:
-            cache_position = torch.zeros(1, dtype=torch.long, device=self.device)
-
-        if image_hidden_states is not None or cache_position[0] != 0:
+        if image_hidden_states is not None or (use_cache and not is_first_iteration):
             model_inputs["pixel_values"] = None
             model_inputs["pixel_attention_mask"] = None
 
