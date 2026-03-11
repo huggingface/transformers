@@ -106,6 +106,8 @@ class TimesFm2_5ResidualBlock(nn.Module):
         use_bias = use_bias if use_bias is not None else config.use_bias
 
     def forward(self, x):
+        # Align activations to block parameter dtype for mixed precision stability
+        x = x.to(self.input_layer.weight.dtype)
         hidden = self.input_layer(x)
         hidden = self.activation(hidden)
         output = self.output_layer(hidden)
@@ -841,12 +843,18 @@ class TimesFm2_5ModelForPrediction(TimesFm2_5PreTrainedModel):
 
         loss = None
         if future_values is not None:
-            mse_loss = F.mse_loss(mean_predictions, future_values)
-            quantile_indices = [i for i in range(full_predictions.shape[-1]) if i != decode_index]
+            target_len = future_values.shape[1]
+            # Compute loss in normalized space for scale-invariant training.
+            # full_forecast is already in normalized space (before denormalization).
+            normalized_preds = full_forecast[:, :target_len]
+            normalized_targets = self.model._revin(future_values, mu_global, sigma_global, reverse=False)
+            normalized_mean_preds = normalized_preds[:, :, decode_index]
+            mse_loss = F.mse_loss(normalized_mean_preds, normalized_targets)
+            quantile_indices = [i for i in range(normalized_preds.shape[-1]) if i != decode_index]
             if quantile_indices:
-                index_tensor = torch.tensor(quantile_indices, device=full_predictions.device, dtype=torch.long)
-                quantile_tensor = torch.index_select(full_predictions, dim=-1, index=index_tensor)
-                quantile_loss = self._quantile_loss(quantile_tensor, future_values)
+                index_tensor = torch.tensor(quantile_indices, device=normalized_preds.device, dtype=torch.long)
+                quantile_tensor = torch.index_select(normalized_preds, dim=-1, index=index_tensor)
+                quantile_loss = self._quantile_loss(quantile_tensor, normalized_targets)
                 loss = mse_loss + quantile_loss
             else:
                 loss = mse_loss
