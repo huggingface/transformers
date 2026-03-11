@@ -113,11 +113,15 @@ class MusicFlamingoEncoderConfig(AudioFlamingo3EncoderConfig):
             **kwargs,
         )
 
+        if rope_parameters is None:
+            rope_parameters = {
+                "rope_type": "default",
+                "rope_theta": max_position_embeddings / (2 * pi),
+            }
+        rope_parameters["rope_theta"] = max_position_embeddings
+
         self.head_dim = head_dim
         self.max_position_embeddings = max_position_embeddings
-        rope_parameters = {} if rope_parameters is None else dict(rope_parameters)
-        rope_parameters.setdefault("rope_type", "default")
-        rope_parameters.setdefault("rope_theta", self.max_position_embeddings / (2 * pi))
         self.rope_parameters = rope_parameters
 
 
@@ -201,6 +205,7 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
         max_audio_len (`int`, *optional*, defaults to 1200):
             Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
     """
+
     def __init__(
         self,
         feature_extractor,
@@ -405,20 +410,17 @@ class MusicFlamingoRotaryEmbedding(LlamaRotaryEmbedding):
             Tuple of (cos, sin) tensors, each of shape (batch_size, seq_len, 2 * head_dim),
             computed in float64 for numerical precision.
         """
-        batch_size = audio_times.shape[0]
-
-        # Use cached position angles for time axis
-        time_freqs = self.position_angles[:seq_len].detach()
 
         # Compute frequencies for batch axis
-        batch_positions = torch.arange(batch_size, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        batch_positions = batch_positions / self.max_seq_len_cached * (2 * pi)
+        batch_positions = torch.arange(audio_times.shape[0], device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        # batch_positions = batch_positions / self.max_seq_len_cached * (2 * pi)
+        batch_positions = batch_positions / self.max_seq_len_cached
         batch_freqs = batch_positions.unsqueeze(-1) * self.inv_freq
         batch_freqs = torch.repeat_interleave(batch_freqs, 2, dim=-1)
 
         # Broadcasting: batch_freqs (batch, 1, D), time_freqs (1, seq, D)
         batch_freqs = batch_freqs[:, None, :]
-        time_freqs = time_freqs[None, :, :]
+        time_freqs = self.position_angles[:seq_len][None, :, :]
         batch_freqs, time_freqs = broadcast_tensors(batch_freqs, time_freqs)
         freqs = torch.cat((batch_freqs, time_freqs), dim=-1)
 
@@ -427,7 +429,8 @@ class MusicFlamingoRotaryEmbedding(LlamaRotaryEmbedding):
         freqs = freqs * angle.unsqueeze(-1)
 
         # Compute cos/sin in float64 for numerical precision
-        return freqs.double().cos(), freqs.double().sin()
+        # return freqs.double().cos(), freqs.double().sin()
+        return freqs.cos(), freqs.sin()
 
 
 class MusicFlamingoPreTrainedModel(AudioFlamingo3PreTrainedModel):

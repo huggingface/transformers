@@ -116,20 +116,17 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
             Tuple of (cos, sin) tensors, each of shape (batch_size, seq_len, 2 * head_dim),
             computed in float64 for numerical precision.
         """
-        batch_size = audio_times.shape[0]
-
-        # Use cached position angles for time axis
-        time_freqs = self.position_angles[:seq_len].detach()
 
         # Compute frequencies for batch axis
-        batch_positions = torch.arange(batch_size, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        batch_positions = batch_positions / self.max_seq_len_cached * (2 * pi)
+        batch_positions = torch.arange(audio_times.shape[0], device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        # batch_positions = batch_positions / self.max_seq_len_cached * (2 * pi)
+        batch_positions = batch_positions / self.max_seq_len_cached
         batch_freqs = batch_positions.unsqueeze(-1) * self.inv_freq
         batch_freqs = torch.repeat_interleave(batch_freqs, 2, dim=-1)
 
         # Broadcasting: batch_freqs (batch, 1, D), time_freqs (1, seq, D)
         batch_freqs = batch_freqs[:, None, :]
-        time_freqs = time_freqs[None, :, :]
+        time_freqs = self.position_angles[:seq_len][None, :, :]
         batch_freqs, time_freqs = broadcast_tensors(batch_freqs, time_freqs)
         freqs = torch.cat((batch_freqs, time_freqs), dim=-1)
 
@@ -138,7 +135,8 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
         freqs = freqs * angle.unsqueeze(-1)
 
         # Compute cos/sin in float64 for numerical precision
-        return freqs.double().cos(), freqs.double().sin()
+        # return freqs.double().cos(), freqs.double().sin()
+        return freqs.cos(), freqs.sin()
 
     def _compute_position_angles(self, inv_freq):
         positions = torch.arange(int(self.max_seq_len_cached), device=inv_freq.device, dtype=inv_freq.dtype)

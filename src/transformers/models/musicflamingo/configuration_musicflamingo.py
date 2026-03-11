@@ -104,11 +104,15 @@ class MusicFlamingoEncoderConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding
         self.max_source_positions = max_source_positions
 
+        if rope_parameters is None:
+            rope_parameters = {
+                "rope_type": "default",
+                "rope_theta": max_position_embeddings / (2 * pi),
+            }
+        rope_parameters["rope_theta"] = max_position_embeddings
+
         self.head_dim = head_dim
         self.max_position_embeddings = max_position_embeddings
-        rope_parameters = {} if rope_parameters is None else dict(rope_parameters)
-        rope_parameters.setdefault("rope_type", "default")
-        rope_parameters.setdefault("rope_theta", self.max_position_embeddings / (2 * pi))
         self.rope_parameters = rope_parameters
 
 

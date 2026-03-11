@@ -278,7 +278,7 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = MusicFlamingoForConditionalGeneration.from_pretrained(
-            self.checkpoint, device_map=torch_device, dtype=torch.bfloat16
+            self.checkpoint, device_map="auto", dtype=torch.bfloat16
         ).eval()
 
         batch = self.processor.apply_chat_template(
@@ -337,7 +337,7 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = MusicFlamingoForConditionalGeneration.from_pretrained(
-            self.checkpoint, device_map=torch_device, dtype=torch.bfloat16
+            self.checkpoint, device_map="auto", dtype=torch.bfloat16
         ).eval()
 
         batch = self.processor.apply_chat_template(
