@@ -38,185 +38,6 @@ if is_cv2_available():
     import cv2
 
 
-def unclip(box, unclip_ratio):
-    """
-    Expands (dilates) a detected text bounding box to recover the full text region.
-
-    Args:
-        box (np.ndarray): Input contour of shape (N, 2), where N is the number of points.
-        unclip_ratio (float): Expansion ratio, typically greater than 1.0.
-
-    Returns:
-        np.ndarray: Expanded contour of shape (M, 2).
-    """
-    box = np.array(box).reshape(-1, 2)
-
-    area = cv2.contourArea(box)
-    length = cv2.arcLength(box, True)
-    if length == 0:
-        return box
-    distance = area * unclip_ratio / length
-
-    points = np.concatenate([box, box[0:1]], axis=0)
-    new_points = []
-
-    for i in range(len(box)):
-        p1 = points[i]
-        p0 = points[i - 1]
-        p2 = points[i + 1]
-
-        def get_normal(pa, pb):
-            direction = pb - pa
-            norm = np.linalg.norm(direction)
-            if norm == 0:
-                return np.array([0, 0])
-            return np.array([direction[1], -direction[0]]) / norm
-
-        v1 = get_normal(p0, p1)
-        v2 = get_normal(p1, p2)
-        combined_v = v1 + v2
-        cos_theta = np.dot(v1, v2)
-
-        denom = 1 + cos_theta
-        if denom < 1e-6:
-            scale = distance
-        else:
-            scale = distance * np.sqrt(2 / denom)
-
-        new_point = p1 + combined_v * (scale / (np.linalg.norm(combined_v) + 1e-6))
-        new_points.append(new_point)
-
-    return np.array(new_points, dtype=np.float32)
-
-
-def get_mini_boxes(contour):
-    """
-    Computes the minimum-area bounding rectangle for a given contour and returns
-    its four corners in a consistent order (top-left, bottom-left, bottom-right, top-right).
-
-    Args:
-        contour (np.ndarray): Input contour of shape (N, 1, 2).
-
-    Returns:
-        tuple:
-            - box (list): List of four corner points in order.
-            - sside (float): Length of the shorter side of the bounding rectangle.
-    """
-    bounding_box = cv2.minAreaRect(contour)
-    points = sorted(cv2.boxPoints(bounding_box), key=lambda x: x[0])
-
-    index_1, index_2, index_3, index_4 = 0, 1, 2, 3
-    if points[1][1] > points[0][1]:
-        index_1 = 0
-        index_4 = 1
-    else:
-        index_1 = 1
-        index_4 = 0
-    if points[3][1] > points[2][1]:
-        index_2 = 2
-        index_3 = 3
-    else:
-        index_2 = 3
-        index_3 = 2
-
-    box = [points[index_1], points[index_2], points[index_3], points[index_4]]
-    return box, min(bounding_box[1])
-
-
-def get_box_score(bitmap: np.ndarray, _box: np.ndarray) -> float:
-    """
-    Computes the mean score of a bounding box region in the prediction map using
-    a fast approach with axis-aligned bounding boxes.
-
-    Args:
-        bitmap (np.ndarray): Binary or float prediction map of shape (H, W).
-        _box (np.ndarray): Bounding box polygon of shape (N, 2).
-
-    Returns:
-        float: Mean score within the bounding box region.
-    """
-    h, w = bitmap.shape[:2]
-    box = _box.copy()
-    xmin = max(0, min(math.floor(box[:, 0].min()), w - 1))
-    xmax = max(0, min(math.ceil(box[:, 0].max()), w - 1))
-    ymin = max(0, min(math.floor(box[:, 1].min()), h - 1))
-    ymax = max(0, min(math.ceil(box[:, 1].max()), h - 1))
-
-    mask = np.zeros((ymax - ymin + 1, xmax - xmin + 1), dtype=np.uint8)
-    box[:, 0] = box[:, 0] - xmin
-    box[:, 1] = box[:, 1] - ymin
-    cv2.fillPoly(mask, box.reshape(1, -1, 2).astype(np.int32), 1)
-    return cv2.mean(bitmap[ymin : ymax + 1, xmin : xmax + 1], mask)[0]
-
-
-def boxes_from_bitmap(
-    pred: np.ndarray,
-    _bitmap: np.ndarray,
-    dest_width: int,
-    dest_height: int,
-    box_thresh: float,
-    unclip_ratio: float,
-    min_size: int,
-    max_candidates: int,
-) -> tuple[list[np.ndarray] | np.ndarray, list[float]]:
-    """
-    Extracts axis-aligned or rotated bounding boxes from a binary segmentation map.
-
-    Args:
-        pred (np.ndarray): Raw prediction map of shape (H, W).
-        _bitmap (np.ndarray): Binarized segmentation map of shape (H, W).
-        dest_width (int): Original image width for scaling back.
-        dest_height (int): Original image height for scaling back.
-        box_thresh (float): Score threshold for filtering low-confidence boxes.
-        unclip_ratio (float): Expansion ratio for contour unclipping.
-        min_size (int): Minimum side length of valid boxes.
-        max_candidates (int): Maximum number of contours to process.
-
-    Returns:
-        tuple:
-            - boxes (np.ndarray): Array of boxes, each of shape (4, 2).
-            - scores (list): List of corresponding scores.
-    """
-
-    bitmap = _bitmap
-    height, width = bitmap.shape
-    width_scale = dest_width / width
-    height_scale = dest_height / height
-
-    outs = cv2.findContours((bitmap * 255).astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    if len(outs) == 3:
-        _, contours, _ = outs[0], outs[1], outs[2]
-    elif len(outs) == 2:
-        contours, _ = outs[0], outs[1]
-
-    num_contours = min(len(contours), max_candidates)
-
-    boxes = []
-    scores = []
-    for index in range(num_contours):
-        contour = contours[index]
-        points, sside = get_mini_boxes(contour)
-        if sside < min_size:
-            continue
-        points = np.array(points)
-        score = get_box_score(pred, points.reshape(-1, 2))
-        if box_thresh > score:
-            continue
-        box = unclip(points, unclip_ratio).reshape(-1, 1, 2)
-        box, sside = get_mini_boxes(box)
-        if sside < min_size + 2:
-            continue
-
-        box = np.array(box)
-        for i in range(box.shape[0]):
-            box[i, 0] = max(0, min(round(box[i, 0] * width_scale), dest_width))
-            box[i, 1] = max(0, min(round(box[i, 1] * height_scale), dest_height))
-
-        boxes.append(box.astype(np.int16))
-        scores.append(score)
-    return np.array(boxes, dtype=np.int16), scores
-
-
 @auto_docstring(
     custom_intro="""
     """
@@ -239,7 +60,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
     max_side_limit = 4000
     valid_kwargs = PPOCRV5ServerDetImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[PPOCRV5ServerDetImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[PPOCRV5ServerDetImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _preprocess(
@@ -297,6 +118,183 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
             tensor_type=return_tensors,
         )
 
+    def _unclip(self, contour_box, unclip_ratio):
+        """
+        Expands (dilates) a detected text bounding box to recover the full text region.
+
+        Args:
+            contour_box (np.ndarray): Input contour of shape (N, 2), where N is the number of points.
+            unclip_ratio (float): Expansion ratio, typically greater than 1.0.
+
+        Returns:
+            np.ndarray: Expanded contour of shape (M, 2).
+        """
+        contour_box = np.array(contour_box).reshape(-1, 2)
+
+        contour_area = cv2.contourArea(contour_box)
+        contour_perimeter = cv2.arcLength(contour_box, True)
+
+        if contour_perimeter == 0:
+            return contour_box
+
+        expansion_distance = contour_area * unclip_ratio / contour_perimeter
+
+        closed_contour = np.concatenate([contour_box, contour_box[0:1]], axis=0)
+        expanded_points = []
+
+        for point_idx in range(len(contour_box)):
+            current_point = closed_contour[point_idx]
+            prev_point = closed_contour[point_idx - 1]
+            next_point = closed_contour[point_idx + 1]
+
+            def get_normal_vector(point_a, point_b):
+                direction = point_b - point_a
+                direction_norm = np.linalg.norm(direction)
+                if direction_norm == 0:
+                    return np.array([0, 0])
+                return np.array([direction[1], -direction[0]]) / direction_norm
+
+            normal_prev_current = get_normal_vector(prev_point, current_point)
+            normal_current_next = get_normal_vector(current_point, next_point)
+
+            combined_normal = normal_prev_current + normal_current_next
+            cos_angle = np.dot(normal_prev_current, normal_current_next)
+
+            denominator = 1 + cos_angle
+            if denominator < 1e-6:
+                scale_factor = expansion_distance
+            else:
+                scale_factor = expansion_distance * np.sqrt(2 / denominator)
+
+            combined_norm = np.linalg.norm(combined_normal) + 1e-6
+            new_point = current_point + combined_normal * (scale_factor / combined_norm)
+            expanded_points.append(new_point)
+
+        return np.array(expanded_points, dtype=np.float32)
+
+    def _get_mini_boxes(self, contour):
+        """
+        Computes the minimum-area bounding rectangle for a given contour and returns
+        its four corners in a consistent order (top-left, bottom-left, bottom-right, top-right).
+
+        Args:
+            contour (np.ndarray): Input contour of shape (N, 1, 2).
+
+        Returns:
+            tuple:
+                - box (list): List of four corner points in order.
+                - short_side_length (float): Length of the shorter side of the bounding rectangle.
+        """
+        bounding_box = cv2.minAreaRect(contour)
+        points = sorted(cv2.boxPoints(bounding_box), key=lambda x: x[0])
+
+        index_1, index_2, index_3, index_4 = 0, 1, 2, 3
+        if points[1][1] > points[0][1]:
+            index_1 = 0
+            index_4 = 1
+        else:
+            index_1 = 1
+            index_4 = 0
+        if points[3][1] > points[2][1]:
+            index_2 = 2
+            index_3 = 3
+        else:
+            index_2 = 3
+            index_3 = 2
+
+        box = [points[index_1], points[index_2], points[index_3], points[index_4]]
+        return box, min(bounding_box[1])
+
+    def _get_box_score(self, bitmap: np.ndarray, polygon_bounding_box: np.ndarray) -> float:
+        """
+        Computes the mean score of a bounding box region in the prediction map using
+        a fast approach with axis-aligned bounding boxes.
+
+        Args:
+            bitmap (np.ndarray): Binary or float prediction map of shape (H, W).
+            polygon_bounding_box (np.ndarray): Bounding box polygon of shape (N, 2).
+
+        Returns:
+            float: Mean score within the bounding box region.
+        """
+        height, width = bitmap.shape[:2]
+        box = polygon_bounding_box.copy()
+        xmin = max(0, min(math.floor(box[:, 0].min()), width - 1))
+        xmax = max(0, min(math.ceil(box[:, 0].max()), width - 1))
+        ymin = max(0, min(math.floor(box[:, 1].min()), height - 1))
+        ymax = max(0, min(math.ceil(box[:, 1].max()), height - 1))
+
+        mask = np.zeros((ymax - ymin + 1, xmax - xmin + 1), dtype=np.uint8)
+        box[:, 0] = box[:, 0] - xmin
+        box[:, 1] = box[:, 1] - ymin
+        cv2.fillPoly(mask, box.reshape(1, -1, 2).astype(np.int32), 1)
+        return cv2.mean(bitmap[ymin : ymax + 1, xmin : xmax + 1], mask)[0]
+
+    def _boxes_from_bitmap(
+        self,
+        prediction: np.ndarray,
+        bitmap: np.ndarray,
+        dest_width: int,
+        dest_height: int,
+        box_threshold: float,
+        unclip_ratio: float,
+        min_size: int,
+        max_candidates: int,
+    ) -> tuple[list[np.ndarray] | np.ndarray, list[float]]:
+        """
+        Extracts axis-aligned or rotated bounding boxes from a binary segmentation map.
+
+        Args:
+            prediction (np.ndarray): Raw prediction map of shape (H, W).
+            bitmap (np.ndarray): Binarized segmentation map of shape (H, W).
+            dest_width (int): Original image width for scaling back.
+            dest_height (int): Original image height for scaling back.
+            box_threshold (float): Score threshold for filtering low-confidence boxes.
+            unclip_ratio (float): Expansion ratio for contour unclipping.
+            min_size (int): Minimum side length of valid boxes.
+            max_candidates (int): Maximum number of contours to process.
+
+        Returns:
+            tuple:
+                - boxes (np.ndarray): Array of boxes, each of shape (4, 2).
+                - scores (list): List of corresponding scores.
+        """
+
+        height, width = bitmap.shape
+        width_scale = dest_width / width
+        height_scale = dest_height / height
+
+        outs = cv2.findContours((bitmap * 255).astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+        contours = outs[1] if len(outs) == 3 else outs[0]
+
+        num_contours = min(len(contours), max_candidates)
+
+        boxes = []
+        scores = []
+        for index in range(num_contours):
+            contour = contours[index]
+            points, short_side_length = self._get_mini_boxes(contour)
+            if short_side_length < min_size:
+                continue
+            points = np.array(points)
+            score = self._get_box_score(prediction, points.reshape(-1, 2))
+            if box_threshold > score:
+                continue
+            box = self._unclip(points, unclip_ratio).reshape(-1, 1, 2)
+            box, short_side_length = self._get_mini_boxes(box)
+            if short_side_length < min_size + 2:
+                continue
+
+            box = np.array(box)
+            for i in range(box.shape[0]):
+                box[i, 0] = max(0, min(round(box[i, 0] * width_scale), dest_width))
+                box[i, 1] = max(0, min(round(box[i, 1] * height_scale), dest_height))
+
+            boxes.append(box.astype(np.int16))
+            scores.append(score)
+        return np.array(boxes, dtype=np.int16), scores
+
     def get_image_size(
         self,
         image: np.ndarray,
@@ -334,7 +332,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         elif limit_type == "resize_long":
             ratio = float(limit_side_len) / max(height, width)
         else:
-            raise Exception(f"not support limit type: {limit_type}")
+            raise Exception(f"PPOCRV5ServerDetImageProcessorFast does not support limit type: {limit_type}")
 
         resize_height = int(height * ratio)
         resize_width = int(width * ratio)
@@ -359,10 +357,10 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
 
     def post_process_object_detection(
         self,
-        preds,
+        predictions,
         threshold: float = 0.3,
         target_sizes: list[tuple[int, int]] | torch.Tensor | None = None,
-        box_thresh: float = 0.6,
+        box_threshold: float = 0.6,
         max_candidates: int = 1000,
         min_size: int = 3,
         unclip_ratio: float = 1.5,
@@ -371,10 +369,10 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         Converts model outputs into detected text boxes in corners format (xmin, ymin, xmax, ymax).
 
         Args:
-            preds: Model outputs with `logits` attribute (probability maps of shape `(batch_size, 1, H, W)`).
+            predictions: Model outputs with `logits` attribute (probability maps of shape `(batch_size, 1, H, W)`).
             threshold (float): Binarization threshold.
             target_sizes: Original image sizes (height, width) per image.
-            box_thresh (float): Box score threshold.
+            box_threshold (float): Box score threshold.
             max_candidates (int): Maximum number of boxes.
             min_size (int): Minimum box size.
             unclip_ratio (float): Expansion ratio.
@@ -388,15 +386,15 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         if target_sizes is None:
             raise ValueError("target_sizes must be provided for post_process_object_detection")
 
-        device = preds.logits.device
+        device = predictions.logits.device
         results = []
-        for pred, size in zip(preds.logits, target_sizes):
-            pred = pred[0, :, :].cpu().detach().numpy()
+        for prediction, size in zip(predictions.logits, target_sizes):
+            prediction = prediction[0, :, :].cpu().detach().numpy()
             size = size.cpu().detach().numpy()
-            src_h, src_w = size
-            mask = pred > threshold
-            boxes_polygon, scores = boxes_from_bitmap(
-                pred, mask, src_w, src_h, box_thresh, unclip_ratio, min_size, max_candidates
+            src_height, src_width = size
+            mask = prediction > threshold
+            boxes_polygon, scores = self._boxes_from_bitmap(
+                prediction, mask, src_width, src_height, box_threshold, unclip_ratio, min_size, max_candidates
             )
 
             # Convert polygon (N, 4, 2) to axis-aligned corners [xmin, ymin, xmax, ymax]

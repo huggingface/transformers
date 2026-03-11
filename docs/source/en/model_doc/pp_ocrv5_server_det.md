@@ -1,4 +1,4 @@
-<!--Copyright 2025 The HuggingFace Team. All rights reserved.
+<!--Copyright 2026 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -34,7 +34,7 @@ PP-OCRv5_server_det is one of the PP-OCRv5_det series, the latest generation of 
 
 ### Single input inference
 
-The example below demonstrates how to detect text with PP-OCRV5_Server_Det using the [`AutoModel`].
+The example below demonstrates how to detect text with PP-OCRV5_Server_Det using [`Pipeline`] or the [`AutoModel`].
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -85,7 +85,7 @@ for result in results:
 
 ### Batched inference
 
-Here is how you can do it with PP-OCRV5_Server_Det using the [`AutoModel`]:
+Here is how you can do it with PP-OCRV5_Server_Det using [`Pipeline`] or the [`AutoModel`].
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">

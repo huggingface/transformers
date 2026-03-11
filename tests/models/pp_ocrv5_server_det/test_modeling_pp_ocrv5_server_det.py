@@ -91,7 +91,7 @@ class PPOCRV5ServerDetModelTester:
             "embedding_size": 16,
         }
 
-        intraclblock_config = {
+        intraclass_block_config = {
             "reduce_channel": [1, 1, 0],
             "return_channel": [1, 1, 0],
             "v_layer_7x1": [[7, 1], [1, 1], [3, 0]],
@@ -110,7 +110,7 @@ class PPOCRV5ServerDetModelTester:
             interpolate_mode="nearest",
             neck_out_channels=32,
             reduce_factor=2,
-            intraclblock_config=intraclblock_config,
+            intraclass_block_config=intraclass_block_config,
             mode="large",
             scale_factor=2,
             hidden_act="relu",
