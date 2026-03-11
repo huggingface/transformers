@@ -371,7 +371,8 @@ class PI0ModelIntegrationTest(unittest.TestCase):
             args = TrainingArguments(
                 tmp_dir,
                 max_steps=5,
-                learning_rate=2e-4,
+                learning_rate=1e-4,
+                logging_steps=1,
                 disable_tqdm=True,
             )
             loss_callback = StoreLossCallback()
@@ -385,4 +386,4 @@ class PI0ModelIntegrationTest(unittest.TestCase):
             trainer.train()
 
         # Loss is steadily decreasing
-        self.assertTrue(sorted(loss_callback.losses, reverse=True) == loss_callback)
+        self.assertTrue(sorted(loss_callback.losses, reverse=True) == loss_callback.losses)
