@@ -37,7 +37,14 @@ from ...image_utils import (
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_cv2_available, logging
+from ...utils import (
+    TransformersKwargs, 
+    auto_docstring, 
+    can_return_tuple, 
+    is_cv2_available, 
+    logging, 
+    requires_backends,
+)
 from ...utils.generic import TensorType
 from ..auto import AutoConfig
 
@@ -194,9 +201,6 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
     max_side_limit = 4000
     valid_kwargs = PPOCRV5ServerDetImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[PPOCRV5ServerDetImageProcessorKwargs]):
-        super().__init__(**kwargs)
-
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -217,9 +221,13 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
     ) -> BatchFeature:
         target_sizes = []
 
-        # Group images by size for batched resizing
+        # Group images by their original spatial shape to enable batched resizing (optimization for efficiency)
+        # [Key Change] Unlike the original implementation, we now track target shapes for each original shape group
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        # Store resized image batches mapped to their original shape keys
         resized_images_grouped = {}
+        # [Key Change] Core addition: Mapping from original image shape to target resize shape
+        # This dict ensures consistent target shape handling across all subsequent operations (resize/processing)
         target_shape_per_shape = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -341,7 +349,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         return box, min(bounding_box[1])
 
 
-    def _get_box_score(self, bitmap: np.ndarray, polygon_bounding_box: np.ndarray) -> float:
+    def _get_box_score(self, bitmap: np.ndarray, polygon_bounding_box: np.ndarray):
         """
         Computes the mean score of a bounding box region in the prediction map using
         a fast approach with axis-aligned bounding boxes.
@@ -377,7 +385,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         unclip_ratio: float,
         min_size: int,
         max_candidates: int,
-    ) -> tuple[list[np.ndarray] | np.ndarray, list[float]]:
+    ):
         """
         Extracts axis-aligned or rotated bounding boxes from a binary segmentation map.
 
@@ -434,11 +442,11 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
 
     def get_image_size(
         self,
-        image: np.ndarray,
+        image: torch.Tensor,
         limit_side_len: int,
         limit_type: str,
         max_side_limit: int,
-    ) -> tuple[dict, np.ndarray]:
+    ):
         """
         Computes the target size for resizing an image while preserving aspect ratio.
 
@@ -484,13 +492,13 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
 
         if resize_height == height and resize_width == width:
             return SizeDict(height=resize_height, width=resize_width), torch.tensor(
-                [height, width], dtype=torch.float32
+                [height, width], dtype=torch.float32, device=image.device
             )
 
         if resize_width <= 0 or resize_height <= 0:
             return None, (None, None)
 
-        return SizeDict(height=resize_height, width=resize_width), torch.tensor([height, width], dtype=torch.float32)
+        return SizeDict(height=resize_height, width=resize_width), torch.tensor([height, width], dtype=torch.float32, device=image.device)
 
     def post_process_object_detection(
         self,
@@ -523,6 +531,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         if target_sizes is None:
             raise ValueError("target_sizes must be provided for post_process_object_detection")
 
+        requires_backends(self, ["torch", "cv2"])
         device = predictions.logits.device
         results = []
         for prediction, size in zip(predictions.logits, target_sizes):
@@ -648,7 +657,7 @@ class PPOCRV5ServerDetDepthwiseSeparableConvolution(nn.Module):
 
 class PPOCRV5ServerDetIntraclassBlock(nn.Module):
     """
-    Intra-Class Relationship Block. It uses multi-scale convolutions (7x7, 5x5, 3x3)
+    Intra-Class Relationship Block. It uses multi-scale convolution (7x7, 5x5, 3x3)
     and asymmetric kernels (e.g., 7x1, 1x7) to capture long-range spatial dependencies
     within text regions.
 
@@ -669,17 +678,17 @@ class PPOCRV5ServerDetIntraclassBlock(nn.Module):
         self.conv_reduce_channel = nn.Conv2d(in_channels, reduced_channels, *intraclass_block_config["reduce_channel"])
         self.conv_return_channel = nn.Conv2d(reduced_channels, in_channels, *intraclass_block_config["return_channel"])
 
-        self.v_layer_7x1 = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["v_layer_7x1"])
-        self.v_layer_5x1 = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["v_layer_5x1"])
-        self.v_layer_3x1 = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["v_layer_3x1"])
+        self.vertical_long_to_small_conv_longratio = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["v_layer_7x1"])
+        self.vertical_long_to_small_conv_midratio = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["v_layer_5x1"])
+        self.vertical_long_to_small_conv_shortratio = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["v_layer_3x1"])
 
-        self.q_layer_1x7 = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["q_layer_1x7"])
-        self.q_layer_1x5 = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["q_layer_1x5"])
-        self.q_layer_1x3 = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["q_layer_1x3"])
+        self.horizontal_small_to_long_conv_longratior = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["q_layer_1x7"])
+        self.horizontal_small_to_long_conv_midratio = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["q_layer_1x5"])
+        self.horizontal_small_to_long_conv_shortratio = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["q_layer_1x3"])
 
-        self.c_layer_7x7 = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["c_layer_7x7"])
-        self.c_layer_5x5 = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["c_layer_5x5"])
-        self.c_layer_3x3 = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["c_layer_3x3"])
+        self.symmetric_conv_long_longratior = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["c_layer_7x7"])
+        self.symmetric_conv_long_midratio = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["c_layer_5x5"])
+        self.symmetric_conv_long_shortratio = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["c_layer_3x3"])
 
         self.normalization = nn.BatchNorm2d(in_channels)
         self.activation = ACT2FN[hidden_act]
@@ -689,9 +698,9 @@ class PPOCRV5ServerDetIntraclassBlock(nn.Module):
         residual = hidden_states
         hidden_states = self.conv_reduce_channel(hidden_states)
 
-        hidden_states = self.c_layer_7x7(hidden_states) + self.v_layer_7x1(hidden_states) + self.q_layer_1x7(hidden_states)
-        hidden_states = self.c_layer_5x5(hidden_states) + self.v_layer_5x1(hidden_states) + self.q_layer_1x5(hidden_states)
-        hidden_states = self.c_layer_3x3(hidden_states) + self.v_layer_3x1(hidden_states) + self.q_layer_1x3(hidden_states)
+        hidden_states = self.symmetric_conv_long_longratior(hidden_states) + self.vertical_long_to_small_conv_longratio(hidden_states) + self.horizontal_small_to_long_conv_longratior(hidden_states)
+        hidden_states = self.symmetric_conv_long_midratio(hidden_states) + self.vertical_long_to_small_conv_midratio(hidden_states) + self.horizontal_small_to_long_conv_midratio(hidden_states)
+        hidden_states = self.symmetric_conv_long_shortratio(hidden_states) + self.vertical_long_to_small_conv_shortratio(hidden_states) + self.horizontal_small_to_long_conv_shortratio(hidden_states)
 
         hidden_states = self.conv_return_channel(hidden_states)
         hidden_states = self.normalization(hidden_states)
@@ -700,48 +709,49 @@ class PPOCRV5ServerDetIntraclassBlock(nn.Module):
         return residual + hidden_states
 
 
-class PPOCRV5ServerDetLKPAN(nn.Module):
+class PPOCRV5ServerDetNeck(nn.Module):
     """
-    Large Kernel Path Aggregation Network (Neck).
-    It fuses features from multiple backbone stages (C2-C5) using a combination of
-    top-down and bottom-up paths, enhanced by large kernel convolutions.
-
-    Args:
-        config (`PPOCRV5ServerDetConfig`):
-            Configuration object containing `neck_out_channels`, `mode`, and `interpolate_mode`.
+    Large Kernel Path Aggregation Network (Neck) for PPOCRV5 Server Detection.
+    Fuses multi-scale features from backbone stages (stage 2 to stage 5) via top-down and bottom-up paths,
+    enhanced with large kernel convolution for better spatial dependency modeling.
     """
 
     def __init__(self, config):
         super().__init__()
-        self.interpolate_mode = config.interpolate_mode
+        self.interpolate_mode = config.interpolate_mode 
+        
+        if config.mode == "small":
+            self.convolution_class = PPOCRV5ServerDetDepthwiseSeparableConvolution
+        else:
+            self.convolution_class = nn.Conv2d
 
-        layer = PPOCRV5ServerDetDepthwiseSeparableConvolution if config.mode == "small" else nn.Conv2d
+        self.input_channel_adjustment_convolution = nn.ModuleList()
+        self.input_feature_projection_convolution = nn.ModuleList()
+        self.path_aggregation_head_convolution = nn.ModuleList()
+        self.path_aggregation_lateral_convolution = nn.ModuleList()
 
-        self.ins_conv = nn.ModuleList()
-        self.inp_conv = nn.ModuleList()
-        self.pan_head_conv = nn.ModuleList()
-        self.pan_lat_conv = nn.ModuleList()
-
-        in_channels = config.backbone_config.stage_out_channels
-        for i in range(len(in_channels)):
-            convolution = nn.Conv2d(
-                in_channels=in_channels[i], out_channels=config.neck_out_channels, kernel_size=1, bias=False
+        backbone_stage_output_channels = config.backbone_config.stage_out_channels
+        
+        for backbone_stage_index in range(len(backbone_stage_output_channels)):
+            channel_adjustment_convolution = nn.Conv2d(
+                in_channels=backbone_stage_output_channels[backbone_stage_index],
+                out_channels=config.neck_out_channels,
+                kernel_size=1,
+                bias=False
             )
+            self.input_channel_adjustment_convolution.append(channel_adjustment_convolution)
 
-            self.ins_conv.append(convolution)
-
-            inp_conv = layer(
+            feature_projection_convolution = self.convolution_class(
                 in_channels=config.neck_out_channels,
                 out_channels=config.neck_out_channels // 4,
                 kernel_size=9,
                 padding=4,
                 bias=False,
             )
+            self.input_feature_projection_convolution.append(feature_projection_convolution)
 
-            self.inp_conv.append(inp_conv)
-
-            if i > 0:
-                pan_head = nn.Conv2d(
+            if backbone_stage_index > 0:
+                pan_head_convolution = nn.Conv2d(
                     in_channels=config.neck_out_channels // 4,
                     out_channels=config.neck_out_channels // 4,
                     kernel_size=3,
@@ -749,68 +759,97 @@ class PPOCRV5ServerDetLKPAN(nn.Module):
                     stride=2,
                     bias=False,
                 )
-                self.pan_head_conv.append(pan_head)
+                self.path_aggregation_head_convolution.append(pan_head_convolution)
 
-            pan_lat = layer(
+            pan_lateral_convolution = self.convolution_class(
                 in_channels=config.neck_out_channels // 4,
                 out_channels=config.neck_out_channels // 4,
                 kernel_size=9,
                 padding=4,
                 bias=False,
             )
-            self.pan_lat_conv.append(pan_lat)
+            self.path_aggregation_lateral_convolution.append(pan_lateral_convolution)
 
-        self.intraclass1 = PPOCRV5ServerDetIntraclassBlock(
-            config.intraclass_block_config, config.neck_out_channels // 4, reduce_factor=config.reduce_factor
+        self.intraclass_block_stage2 = PPOCRV5ServerDetIntraclassBlock(
+            config.intraclass_block_config,
+            config.neck_out_channels // 4,
+            reduce_factor=config.reduce_factor
         )
-        self.intraclass2 = PPOCRV5ServerDetIntraclassBlock(
-            config.intraclass_block_config, config.neck_out_channels // 4, reduce_factor=config.reduce_factor
+        self.intraclass_block_stage3 = PPOCRV5ServerDetIntraclassBlock(
+            config.intraclass_block_config,
+            config.neck_out_channels // 4,
+            reduce_factor=config.reduce_factor
         )
-        self.intraclass3 = PPOCRV5ServerDetIntraclassBlock(
-            config.intraclass_block_config, config.neck_out_channels // 4, reduce_factor=config.reduce_factor
+        self.intraclass_block_stage4 = PPOCRV5ServerDetIntraclassBlock(
+            config.intraclass_block_config,
+            config.neck_out_channels // 4,
+            reduce_factor=config.reduce_factor
         )
-        self.intraclass4 = PPOCRV5ServerDetIntraclassBlock(
-            config.intraclass_block_config, config.neck_out_channels // 4, reduce_factor=config.reduce_factor
+        self.intraclass_block_stage5 = PPOCRV5ServerDetIntraclassBlock(
+            config.intraclass_block_config,
+            config.neck_out_channels // 4,
+            reduce_factor=config.reduce_factor
         )
 
-    def forward(self, hidden_states: list[torch.Tensor], **kwargs) -> torch.Tensor:
+    def forward(self, backbone_stage_feature_maps: list[torch.Tensor], **kwargs) -> torch.Tensor:
 
-        c2, c3, c4, c5 = hidden_states
+        backbone_stage2_feature = backbone_stage_feature_maps[0]
+        backbone_stage3_feature = backbone_stage_feature_maps[1]
+        backbone_stage4_feature = backbone_stage_feature_maps[2]
+        backbone_stage5_feature = backbone_stage_feature_maps[3]
 
-        in5 = self.ins_conv[3](c5)
-        in4 = self.ins_conv[2](c4)
-        in3 = self.ins_conv[1](c3)
-        in2 = self.ins_conv[0](c2)
+        channel_adjusted_stage2_feature = self.input_channel_adjustment_convolution[0](backbone_stage2_feature)
+        channel_adjusted_stage3_feature = self.input_channel_adjustment_convolution[1](backbone_stage3_feature)
+        channel_adjusted_stage4_feature = self.input_channel_adjustment_convolution[2](backbone_stage4_feature)
+        channel_adjusted_stage5_feature = self.input_channel_adjustment_convolution[3](backbone_stage5_feature)
 
-        out4 = in4 + F.interpolate(in5, scale_factor=2, mode=self.interpolate_mode)
-        out3 = in3 + F.interpolate(out4, scale_factor=2, mode=self.interpolate_mode)
-        out2 = in2 + F.interpolate(out3, scale_factor=2, mode=self.interpolate_mode)
+        top_down_fused_stage4_feature = channel_adjusted_stage4_feature + F.interpolate(
+            channel_adjusted_stage5_feature, scale_factor=2, mode=self.interpolate_mode
+        )
+        top_down_fused_stage3_feature = channel_adjusted_stage3_feature + F.interpolate(
+            top_down_fused_stage4_feature, scale_factor=2, mode=self.interpolate_mode
+        )
+        top_down_fused_stage2_feature = channel_adjusted_stage2_feature + F.interpolate(
+            top_down_fused_stage3_feature, scale_factor=2, mode=self.interpolate_mode
+        )
 
-        f5 = self.inp_conv[3](in5)
-        f4 = self.inp_conv[2](out4)
-        f3 = self.inp_conv[1](out3)
-        f2 = self.inp_conv[0](out2)
+        projected_stage2_feature = self.input_feature_projection_convolution[0](top_down_fused_stage2_feature)
+        projected_stage3_feature = self.input_feature_projection_convolution[1](top_down_fused_stage3_feature)
+        projected_stage4_feature = self.input_feature_projection_convolution[2](top_down_fused_stage4_feature)
+        projected_stage5_feature = self.input_feature_projection_convolution[3](channel_adjusted_stage5_feature)
 
-        pan3 = f3 + self.pan_head_conv[0](f2)
-        pan4 = f4 + self.pan_head_conv[1](pan3)
-        pan5 = f5 + self.pan_head_conv[2](pan4)
+        bottom_up_fused_stage3_feature = projected_stage3_feature + self.path_aggregation_head_convolution[0](projected_stage2_feature)
+        bottom_up_fused_stage4_feature = projected_stage4_feature + self.path_aggregation_head_convolution[1](bottom_up_fused_stage3_feature)
+        bottom_up_fused_stage5_feature = projected_stage5_feature + self.path_aggregation_head_convolution[2](bottom_up_fused_stage4_feature)
 
-        p2 = self.pan_lat_conv[0](f2)
-        p3 = self.pan_lat_conv[1](pan3)
-        p4 = self.pan_lat_conv[2](pan4)
-        p5 = self.pan_lat_conv[3](pan5)
+        lateral_refined_stage2_feature = self.path_aggregation_lateral_convolution[0](projected_stage2_feature)
+        lateral_refined_stage3_feature = self.path_aggregation_lateral_convolution[1](bottom_up_fused_stage3_feature)
+        lateral_refined_stage4_feature = self.path_aggregation_lateral_convolution[2](bottom_up_fused_stage4_feature)
+        lateral_refined_stage5_feature = self.path_aggregation_lateral_convolution[3](bottom_up_fused_stage5_feature)
 
-        p5 = self.intraclass4(p5)
-        p4 = self.intraclass3(p4)
-        p3 = self.intraclass2(p3)
-        p2 = self.intraclass1(p2)
+        intraclass_refined_stage2_feature = self.intraclass_block_stage2(lateral_refined_stage2_feature)
+        intraclass_refined_stage3_feature = self.intraclass_block_stage3(lateral_refined_stage3_feature)
+        intraclass_refined_stage4_feature = self.intraclass_block_stage4(lateral_refined_stage4_feature)
+        intraclass_refined_stage5_feature = self.intraclass_block_stage5(lateral_refined_stage5_feature)
 
-        p5 = F.interpolate(p5, scale_factor=8, mode=self.interpolate_mode)
-        p4 = F.interpolate(p4, scale_factor=4, mode=self.interpolate_mode)
-        p3 = F.interpolate(p3, scale_factor=2, mode=self.interpolate_mode)
+        upsampled_stage3_feature = F.interpolate(
+            intraclass_refined_stage3_feature, scale_factor=2, mode=self.interpolate_mode
+        )
+        upsampled_stage4_feature = F.interpolate(
+            intraclass_refined_stage4_feature, scale_factor=4, mode=self.interpolate_mode
+        )
+        upsampled_stage5_feature = F.interpolate(
+            intraclass_refined_stage5_feature, scale_factor=8, mode=self.interpolate_mode
+        )
 
-        fuse = torch.cat([p5, p4, p3, p2], dim=1)
-        return fuse
+        fused_multi_scale_feature = torch.cat([
+            upsampled_stage5_feature,
+            upsampled_stage4_feature,
+            upsampled_stage3_feature,
+            intraclass_refined_stage2_feature
+        ], dim=1)
+
+        return fused_multi_scale_feature
 
 
 class PPOCRV5ServerDetConvBNLayer(nn.Module):
@@ -863,11 +902,11 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
 class PPOCRV5ServerDetHead(nn.Module):
     """
     Standard segmentation head for generating probability maps. It uses transposed
-    convolutions to upsample the feature map back to the original image size.
+    convolution to upsample the feature map back to the original image size.
 
     Args:
         in_channels (`int`):
-            Number of input channels from the neck (e.g., PPOCRV5ServerDetLKPAN).
+            Number of input channels from the neck (e.g., PPOCRV5ServerDetNeck).
         kernel_list (`List[int]`, *optional*, defaults to `[3, 2, 2]`):
             List of kernel sizes for the sequence of [Conv2d, ConvTranspose2d, ConvTranspose2d].
     """
@@ -1022,7 +1061,7 @@ class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
             nn.init.kaiming_uniform_(module.convolution2.weight)
             nn.init.kaiming_uniform_(module.convolution3.weight)
 
-        if isinstance(module, PPOCRV5ServerDetLKPAN):
+        if isinstance(module, PPOCRV5ServerDetNeck):
             for sub_module in module.modules():
                 if isinstance(sub_module, nn.ModuleList):
                     for m in sub_module:
@@ -1032,14 +1071,14 @@ class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
 @auto_docstring(
     custom_intro="""
     Core PPOCRV5 Server Det model.
-    Integration of HGNetV2 (Backbone), PPOCRV5ServerDetLKPAN (Neck), and PPOCRV5ServerDetPFHeadLocal (Head).
+    Integration of HGNetV2 (Backbone), PPOCRV5ServerDetNeck (Neck), and PPOCRV5ServerDetPFHeadLocal (Head).
     """
 )
 class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
     def __init__(self, config: PPOCRV5ServerDetConfig):
         super().__init__(config)
         self.backbone = load_backbone(config)
-        self.neck = PPOCRV5ServerDetLKPAN(config)
+        self.neck = PPOCRV5ServerDetNeck(config)
         self.post_init()
 
     @can_return_tuple

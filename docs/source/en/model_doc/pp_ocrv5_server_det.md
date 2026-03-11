@@ -48,7 +48,11 @@ image = Image.open(
     requests.get(
         "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True
     ).raw)
-detector = pipeline("object-detection", model="PaddlePaddle/PP-OCRV5_server_det_safetensors")
+detector = pipeline(
+    task="object-detection", 
+    model="PaddlePaddle/PP-OCRV5_server_det_safetensors",
+    device=0
+)
 results = detector(image)
 
 for result in results:
@@ -66,7 +70,10 @@ from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
 model_path = "PaddlePaddle/PP-OCRV5_server_det_safetensors"
-model = AutoModelForObjectDetection.from_pretrained(model_path)
+model = AutoModelForObjectDetection.from_pretrained(
+    model_path,
+    device_map="auto"
+)
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True).raw).convert("RGB")
@@ -99,7 +106,11 @@ image = Image.open(
     requests.get(
         "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True
     ).raw)
-detector = pipeline("object-detection", model="PaddlePaddle/PP-OCRV5_server_det_safetensors")
+detector = pipeline(
+    task="object-detection", 
+    model="PaddlePaddle/PP-OCRV5_server_det_safetensors",
+    device=0
+)
 results = detector([image, image])
 
 for result in results:
@@ -117,7 +128,10 @@ from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
 model_path = "PaddlePaddle/PP-OCRV5_server_det_safetensors"
-model = AutoModelForObjectDetection.from_pretrained(model_path)
+model = AutoModelForObjectDetection.from_pretrained(
+    model_path，
+    device_map="auto",
+)
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True).raw).convert("RGB")

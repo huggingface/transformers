@@ -28,8 +28,7 @@ import torchvision.transforms.v2.functional as tvF
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import SizeDict
-from ...processing_utils import Unpack
-from ...utils import auto_docstring, is_cv2_available
+from ...utils import auto_docstring, is_cv2_available, requires_backends
 from ...utils.generic import TensorType
 from .image_processing_pp_ocrv5_server_det import PPOCRV5ServerDetImageProcessorKwargs
 
@@ -60,9 +59,6 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
     max_side_limit = 4000
     valid_kwargs = PPOCRV5ServerDetImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[PPOCRV5ServerDetImageProcessorKwargs]):
-        super().__init__(**kwargs)
-
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -83,9 +79,13 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
     ) -> BatchFeature:
         target_sizes = []
 
-        # Group images by size for batched resizing
+        # Group images by their original spatial shape to enable batched resizing (optimization for efficiency)
+        # [Key Change] Unlike the original implementation, we now track target shapes for each original shape group
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        # Store resized image batches mapped to their original shape keys
         resized_images_grouped = {}
+        # [Key Change] Core addition: Mapping from original image shape to target resize shape
+        # This dict ensures consistent target shape handling across all subsequent operations (resize/processing)
         target_shape_per_shape = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -205,7 +205,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         box = [points[index_1], points[index_2], points[index_3], points[index_4]]
         return box, min(bounding_box[1])
 
-    def _get_box_score(self, bitmap: np.ndarray, polygon_bounding_box: np.ndarray) -> float:
+    def _get_box_score(self, bitmap: np.ndarray, polygon_bounding_box: np.ndarray):
         """
         Computes the mean score of a bounding box region in the prediction map using
         a fast approach with axis-aligned bounding boxes.
@@ -240,7 +240,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         unclip_ratio: float,
         min_size: int,
         max_candidates: int,
-    ) -> tuple[list[np.ndarray] | np.ndarray, list[float]]:
+    ):
         """
         Extracts axis-aligned or rotated bounding boxes from a binary segmentation map.
 
@@ -297,11 +297,11 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
 
     def get_image_size(
         self,
-        image: np.ndarray,
+        image: torch.Tensor,
         limit_side_len: int,
         limit_type: str,
         max_side_limit: int,
-    ) -> tuple[dict, np.ndarray]:
+    ):
         """
         Computes the target size for resizing an image while preserving aspect ratio.
 
@@ -347,13 +347,15 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
 
         if resize_height == height and resize_width == width:
             return SizeDict(height=resize_height, width=resize_width), torch.tensor(
-                [height, width], dtype=torch.float32
+                [height, width], dtype=torch.float32, device=image.device
             )
 
         if resize_width <= 0 or resize_height <= 0:
             return None, (None, None)
 
-        return SizeDict(height=resize_height, width=resize_width), torch.tensor([height, width], dtype=torch.float32)
+        return SizeDict(height=resize_height, width=resize_width), torch.tensor(
+            [height, width], dtype=torch.float32, device=image.device
+        )
 
     def post_process_object_detection(
         self,
@@ -386,6 +388,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         if target_sizes is None:
             raise ValueError("target_sizes must be provided for post_process_object_detection")
 
+        requires_backends(self, ["torch", "cv2"])
         device = predictions.logits.device
         results = []
         for prediction, size in zip(predictions.logits, target_sizes):
