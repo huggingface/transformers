@@ -336,6 +336,24 @@ class GenerationConfig(PushToHubMixin):
             Whether to disable the automatic compilation of the forward pass. Automatic compilation happens when
             specific criteria are met, including using a compilable cache. Please open an issue if you find the
             need to use this flag.
+
+        > Parameters related to the generation scheduler
+
+        scheduler_mode (`str`, *optional*, defaults to `None`):
+            The scheduler operating mode. When set to `None` (default), no scheduler is created.
+            Accepted values:
+            - `None` or `"none"`: No scheduler, 100% original HF behavior.
+            - `"internal"`: LLM-driven scheduling — the model generates control tokens that the scheduler
+              intercepts and executes.
+            - `"force"`: External scheduling — external code controls the generation pipeline via the scheduler API.
+            Note: when a ``GenerationScheduler`` object is passed directly to ``generate(scheduler=...)``,
+            it takes priority over this config field.
+        scheduler_check_interval (`int`, *optional*):
+            How often (in decoding steps) to enter the CHECKING phase. 0 or `None` means never.
+            Only effective when ``scheduler_mode`` is not `None`/`"none"`.
+        scheduler_step_budget (`int`, *optional*):
+            Maximum number of decoding steps. `None` means unlimited.
+            Only effective when ``scheduler_mode`` is not `None`/`"none"`.
     """
 
     extra_output_flags = ("output_attentions", "output_hidden_states", "output_scores", "output_logits")
@@ -428,6 +446,11 @@ class GenerationConfig(PushToHubMixin):
         # Performance
         self.compile_config = kwargs.pop("compile_config", None)
         self.disable_compile = kwargs.pop("disable_compile", None)
+
+        # Generation scheduler
+        self.scheduler_mode = kwargs.pop("scheduler_mode", None)
+        self.scheduler_check_interval = kwargs.pop("scheduler_check_interval", None)
+        self.scheduler_step_budget = kwargs.pop("scheduler_step_budget", None)
 
         # Deprecated (moved to the Hub). TODO remove for v5
         self.low_memory = kwargs.pop("low_memory", None)

@@ -98,6 +98,8 @@ from .logits_process import (
     TypicalLogitsWarper,
     UnbatchedClassifierFreeGuidanceLogitsProcessor,
 )
+from .generation_scheduler import GenerationScheduler, SchedulerContext
+from .state_machine import GenerationPhase, GenerationState, SchedulerMode
 from .stopping_criteria import (
     ConfidenceCriteria,
     EosTokenCriteria,
@@ -2153,6 +2155,7 @@ class GenerationMixin(ContinuousMixin):
         negative_prompt_ids: torch.Tensor | None = None,
         negative_prompt_attention_mask: torch.Tensor | None = None,
         custom_generate: str | Callable | None = None,
+        scheduler: Optional[GenerationScheduler] = None,
         **kwargs,
     ) -> GenerateOutput | torch.LongTensor:
         r"""
@@ -2551,16 +2554,34 @@ class GenerationMixin(ContinuousMixin):
         # Set model_kwargs `use_cache` so we can use it later in forward runs
         model_kwargs["use_cache"] = generation_config.use_cache
 
-        # 9. Call generation mode
+        # 9. Prepare the generation scheduler (if provided or configured)
+        if scheduler is None and generation_config.scheduler_mode is not None and generation_config.scheduler_mode != "none":
+            # Create a scheduler from generation_config
+            scheduler = GenerationScheduler(mode=generation_config.scheduler_mode)
+
+        if scheduler is not None and scheduler.is_enabled:
+            # Apply generation_config scheduler settings to the scheduler context
+            if generation_config.scheduler_check_interval is not None:
+                scheduler.context.check_interval = generation_config.scheduler_check_interval
+            if generation_config.scheduler_step_budget is not None:
+                scheduler.context.step_budget = generation_config.scheduler_step_budget
+            scheduler._activate()
+
+        # 10. Call generation mode
         result = decoding_method(
             self,
             input_ids,
             logits_processor=prepared_logits_processor,
             stopping_criteria=prepared_stopping_criteria,
             generation_config=generation_config,
+            scheduler=scheduler,
             **generation_mode_kwargs,
             **model_kwargs,
         )
+
+        # Deactivate scheduler after generation
+        if scheduler is not None and scheduler.is_enabled:
+            scheduler._deactivate()
 
         return result
 
@@ -2675,6 +2696,7 @@ class GenerationMixin(ContinuousMixin):
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
+        scheduler: Optional[GenerationScheduler] = None,
         **model_kwargs,
     ) -> GenerateNonBeamOutput | torch.LongTensor:
         r"""
@@ -2719,6 +2741,9 @@ class GenerationMixin(ContinuousMixin):
         has_eos_stopping_criteria = any(hasattr(criteria, "eos_token_id") for criteria in stopping_criteria)
         do_sample = generation_config.do_sample
 
+        # Determine if scheduler is active (non-None and enabled)
+        scheduler_active = scheduler is not None and scheduler.is_enabled
+
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and output_scores) else None
         raw_logits = () if (return_dict_in_generate and output_logits) else None
@@ -2752,7 +2777,72 @@ class GenerationMixin(ContinuousMixin):
             is_first_iteration=not generation_config.is_assistant,
         )
 
+        # --- Scheduler: INIT → PREFILL → DECODING phase transitions ---
+        if scheduler_active:
+            gen_state = GenerationState(
+                phase=GenerationPhase.IDLE,
+                step=0,
+                input_ids=input_ids,
+                unfinished_sequences=unfinished_sequences,
+                batch_control_mask=torch.ones(batch_size, dtype=torch.long, device=input_ids.device),
+                model_kwargs=model_kwargs,
+            )
+            scheduler.state_machine.current_state = gen_state
+            scheduler._notify_phase_transition(GenerationPhase.IDLE, GenerationPhase.INIT, gen_state)
+            scheduler._notify_phase_transition(GenerationPhase.INIT, GenerationPhase.PREFILL, gen_state)
+            scheduler._notify_phase_transition(GenerationPhase.PREFILL, GenerationPhase.DECODING, gen_state)
+
+        decode_step = 0
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
+            # --- Scheduler: step_begin hook (outside torch.compile region) ---
+            if scheduler_active:
+                gen_state.step = decode_step
+                gen_state.input_ids = input_ids
+                gen_state.unfinished_sequences = unfinished_sequences
+
+                # Check step budget
+                if not scheduler._check_step_budget(decode_step):
+                    scheduler.context.should_pause = True
+                    scheduler.context.custom_data["pause_reason"] = "step_budget_exceeded"
+
+                # Check if paused
+                if scheduler._should_pause():
+                    break
+
+                # Check interval → CHECKING phase
+                if scheduler._should_check(decode_step):
+                    scheduler._notify_phase_transition(GenerationPhase.DECODING, GenerationPhase.CHECKING, gen_state)
+                    # After CHECKING, return to DECODING
+                    scheduler._notify_phase_transition(GenerationPhase.CHECKING, GenerationPhase.DECODING, gen_state)
+                    if scheduler._should_pause():
+                        break
+
+                # Notify step begin
+                if not scheduler._notify_step_begin(gen_state):
+                    break
+
+                # Handle token injection (FORCE / INTERNAL mode)
+                if scheduler._has_injection():
+                    tokens_to_inject = scheduler._consume_injection()
+                    if tokens_to_inject:
+                        inject_tensor = torch.tensor(
+                            tokens_to_inject, dtype=torch.long, device=input_ids.device
+                        ).unsqueeze(0).expand(batch_size, -1)
+                        input_ids = torch.cat([input_ids, inject_tensor], dim=-1)
+                        # Re-prefill to update KV cache
+                        scheduler._notify_phase_transition(
+                            GenerationPhase.DECODING, GenerationPhase.INJECTING, gen_state
+                        )
+                        outputs = self._prefill(
+                            input_ids, generation_config, model_kwargs,
+                            is_first_iteration=True,
+                        )
+                        prefill_consumed = False
+                        scheduler._notify_phase_transition(
+                            GenerationPhase.INJECTING, GenerationPhase.DECODING, gen_state
+                        )
+                        gen_state.input_ids = input_ids
+
             if prefill_consumed:
                 next_sequence_length = 1 if model_kwargs["use_cache"] else None
                 model_inputs = self.prepare_inputs_for_generation(
@@ -2772,6 +2862,15 @@ class GenerationMixin(ContinuousMixin):
             # Copy is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
             # (the clone itself is always small)
             next_token_logits = outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=input_ids.device)
+
+            # --- Scheduler: logits_ready hook (outside torch.compile region) ---
+            if scheduler_active:
+                gen_state.next_token_logits = next_token_logits
+                next_token_logits = scheduler._notify_logits_ready(next_token_logits, gen_state)
+
+                # Apply context logits_modifier if set
+                if scheduler.context.logits_modifier is not None:
+                    next_token_logits = scheduler.context.logits_modifier(next_token_logits, gen_state)
 
             # pre-process distribution
             next_token_scores = logits_processor(input_ids, next_token_logits)
@@ -2796,17 +2895,42 @@ class GenerationMixin(ContinuousMixin):
                         else (outputs.hidden_states,)
                     )
 
-            # token selection
-            if do_sample:
-                probs = nn.functional.softmax(next_token_scores, dim=-1)
-                # TODO (joao): this OP throws "skipping cudagraphs due to ['incompatible ops']", find solution
-                next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+            # --- Scheduler: forced token override ---
+            if scheduler_active and scheduler._has_forced_token():
+                forced_token_id = scheduler._consume_forced_token()
+                next_tokens = torch.full(
+                    (batch_size,), forced_token_id, dtype=torch.long, device=input_ids.device
+                )
             else:
-                next_tokens = torch.argmax(next_token_scores, dim=-1)
+                # token selection
+                if do_sample:
+                    probs = nn.functional.softmax(next_token_scores, dim=-1)
+                    # TODO (joao): this OP throws "skipping cudagraphs due to ['incompatible ops']", find solution
+                    next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+                else:
+                    next_tokens = torch.argmax(next_token_scores, dim=-1)
 
             # finished sentences should have their next token be a padding token
             if has_eos_stopping_criteria:
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
+
+            # --- Scheduler: token_generated hook ---
+            if scheduler_active:
+                gen_state.next_tokens = next_tokens
+                gen_state.next_token_scores = next_token_scores
+
+                # Handle internal mode control token detection
+                if scheduler.mode == SchedulerMode.INTERNAL:
+                    for b in range(batch_size):
+                        tid = next_tokens[b].item()
+                        scheduler._handle_internal_token(tid, gen_state)
+
+                if not scheduler._notify_token_generated(next_tokens, gen_state):
+                    # Callback requested pause — still append the token before breaking
+                    input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+                    if streamer is not None:
+                        streamer.put(next_tokens.cpu())
+                    break
 
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
@@ -2816,12 +2940,35 @@ class GenerationMixin(ContinuousMixin):
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
             this_peer_finished = unfinished_sequences.max() == 0
 
+            # --- Scheduler: step_end hook ---
+            if scheduler_active:
+                gen_state.input_ids = input_ids
+                gen_state.unfinished_sequences = unfinished_sequences
+                if not scheduler._notify_step_end(gen_state):
+                    break
+
+            decode_step += 1
+
             # This is needed to properly delete outputs.logits which may be very large for first iteration
             # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
             del outputs
 
         if streamer is not None:
             streamer.end()
+
+        # --- Scheduler: POSTPROCESS → COMPLETE phase transitions ---
+        if scheduler_active:
+            gen_state.input_ids = input_ids
+            try:
+                scheduler._notify_phase_transition(
+                    GenerationPhase.DECODING, GenerationPhase.POSTPROCESS, gen_state
+                )
+                scheduler._notify_phase_transition(
+                    GenerationPhase.POSTPROCESS, GenerationPhase.COMPLETE, gen_state
+                )
+                scheduler._notify_generation_complete(gen_state)
+            except Exception as e:
+                scheduler._notify_error(e, gen_state)
 
         if return_dict_in_generate:
             cache = None
@@ -3092,6 +3239,7 @@ class GenerationMixin(ContinuousMixin):
         stopping_criteria: StoppingCriteriaList,
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
+        scheduler: Optional[GenerationScheduler] = None,
         **model_kwargs,
     ) -> GenerateBeamOutput | torch.LongTensor:
         r"""
@@ -3442,6 +3590,7 @@ class GenerationMixin(ContinuousMixin):
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
+        scheduler: Optional[GenerationScheduler] = None,
         inputs_tensor: torch.FloatTensor | None = None,
         assistant_model: Optional["PreTrainedModel"] = None,
         assistant_tokenizer: Optional["PreTrainedTokenizerBase"] = None,

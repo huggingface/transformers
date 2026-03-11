@@ -92,6 +92,28 @@ else:
         "PrefillFirstScheduler",
         "Scheduler",
     ]
+    _import_structure["state_machine"] = [
+        "GenerationPhase",
+        "GenerationState",
+        "GenerationStateMachine",
+        "SchedulerMode",
+        "VALID_TRANSITIONS",
+    ]
+    _import_structure["generation_scheduler"] = [
+        "ControlTokenParser",
+        "GenerationScheduler",
+        "SchedulerCallback",
+        "SchedulerContext",
+    ]
+    _import_structure["scheduler_callbacks"] = [
+        "EntropyMonitorCallback",
+        "GenerationLoggerCallback",
+        "InternalSchedulerCallback",
+        "RepetitionDetectorCallback",
+        "StepBudgetCallback",
+        "StreamingSchedulerCallback",
+        "TokenPatternCallback",
+    ]
     _import_structure["utils"] = [
         "GenerationMixin",
         "GenerateBeamDecoderOnlyOutput",
@@ -181,6 +203,28 @@ if TYPE_CHECKING:
             StoppingCriteriaList,
             StopStringCriteria,
             validate_stopping_criteria,
+        )
+        from .generation_scheduler import (
+            ControlTokenParser,
+            GenerationScheduler,
+            SchedulerCallback,
+            SchedulerContext,
+        )
+        from .scheduler_callbacks import (
+            EntropyMonitorCallback,
+            GenerationLoggerCallback,
+            InternalSchedulerCallback,
+            RepetitionDetectorCallback,
+            StepBudgetCallback,
+            StreamingSchedulerCallback,
+            TokenPatternCallback,
+        )
+        from .state_machine import (
+            GenerationPhase,
+            GenerationState,
+            GenerationStateMachine,
+            SchedulerMode,
+            VALID_TRANSITIONS,
         )
         from .utils import (
             GenerateBeamDecoderOnlyOutput,
