@@ -21,16 +21,11 @@ from ...file_utils import ModelOutput
 from ...utils import auto_docstring
 from ..eomt.configuration_eomt import EomtConfig
 from ..eomt.modeling_eomt import (
-    EomtAttention,
-    EomtDropPath,
     EomtEmbeddings,
     EomtForUniversalSegmentation,
-    EomtHungarianMatcher,
     EomtLayer,
     EomtLayerNorm2d,
     EomtLayerScale,
-    EomtLoss,
-    EomtMaskHead,
     EomtMLP,
     EomtPreTrainedModel,
     EomtScaleBlock,
@@ -41,10 +36,6 @@ from ..eomt.modeling_eomt import (
 
 class VideomtConfig(EomtConfig):
     model_type = "videomt"
-
-
-class VideomtAttention(EomtAttention):
-    pass
 
 
 class VideomtEmbeddings(EomtEmbeddings):
@@ -97,10 +88,6 @@ class VideomtEmbeddings(EomtEmbeddings):
         return embeddings
 
 
-class VideomtDropPath(EomtDropPath):
-    pass
-
-
 class VideomtMLP(EomtMLP):
     pass
 
@@ -114,14 +101,6 @@ class VideomtLayer(EomtLayer):
 
 
 class VideomtLayerScale(EomtLayerScale):
-    pass
-
-
-class VideomtHungarianMatcher(EomtHungarianMatcher):
-    pass
-
-
-class VideomtLoss(EomtLoss):
     pass
 
 
@@ -154,8 +133,6 @@ class VideomtForUniversalSegmentationOutput(ModelOutput):
     attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
         Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Self and Cross Attentions weights from transformer decoder.
-    patch_offsets (`list[torch.Tensor]`, *optional*):
-        list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
     """
 
     loss: torch.FloatTensor | None = None
@@ -164,11 +141,10 @@ class VideomtForUniversalSegmentationOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor | None = None
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
-    patch_offsets: list[torch.Tensor] | None = None
 
 
 class VideomtPreTrainedModel(EomtPreTrainedModel):
-    pass
+    input_modalities = ("video",)
 
 
 class VideomtLayerNorm2d(EomtLayerNorm2d):
@@ -183,39 +159,42 @@ class VideomtScaleBlock(EomtScaleBlock):
     pass
 
 
-class VideomtMaskHead(EomtMaskHead):
-    pass
-
-
 class VideomtForUniversalSegmentation(EomtForUniversalSegmentation):
     def __init__(self, config: VideomtConfig):
         super().__init__(config)
         self.query_updater = nn.Linear(config.hidden_size, config.hidden_size)
+
+    @staticmethod
+    def _disable_attention_mask(attn_mask, *args, **kwargs):
+        return attn_mask
 
     def forward(
         self,
         pixel_values: torch.Tensor,
         mask_labels: list[torch.Tensor] | None = None,
         class_labels: list[torch.Tensor] | None = None,
-        patch_offsets: list[torch.Tensor] | None = None,
         **kwargs,
     ) -> VideomtForUniversalSegmentationOutput:
+        r"""
+        pixel_values (`torch.Tensor`):
+            Video inputs of shape `(batch_size, num_frames, num_channels, height, width)`.
+        mask_labels (`list[torch.Tensor]`, *optional*):
+            Not supported for 5D video inputs.
+        class_labels (`list[torch.LongTensor]`, *optional*):
+            Not supported for 5D video inputs.
+        """
+        kwargs.pop("patch_offsets", None)
+
         if pixel_values.ndim != 5:
             raise ValueError(
-                f"Expected 5D pixel_values (batch_size, num_frames, channels, height, width), "
-                f"but got {pixel_values.ndim}D input. For image segmentation, use EomtForUniversalSegmentation instead."
+                "VideomtForUniversalSegmentation only supports 5D video inputs of shape "
+                "(batch_size, num_frames, channels, height, width)."
             )
 
         if mask_labels is not None or class_labels is not None:
             raise ValueError(
-                "Video training labels are not supported yet for `VideomtForUniversalSegmentation`; "
-                "please provide flattened frame batches for training."
-            )
-
-        if patch_offsets is not None:
-            raise ValueError(
-                "Video-shaped `patch_offsets` are not supported yet for `VideomtForUniversalSegmentation`; "
-                "please provide flattened frame batches with matching patch offsets."
+                "Training with 5D video inputs is not supported in `VideomtForUniversalSegmentation`. "
+                "Flatten frames and use `EomtForUniversalSegmentation` instead."
             )
 
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
@@ -225,7 +204,7 @@ class VideomtForUniversalSegmentation(EomtForUniversalSegmentation):
         query_start_idx = self.num_hidden_layers - self.config.num_blocks
 
         for layer_module in self.layers[:query_start_idx]:
-            hidden_states = layer_module(hidden_states, attention_mask=None)
+            hidden_states = layer_module(hidden_states)
 
         hidden_states = hidden_states.view(batch_size, num_frames, hidden_states.shape[1], hidden_states.shape[2])
 
@@ -244,7 +223,7 @@ class VideomtForUniversalSegmentation(EomtForUniversalSegmentation):
             frame_hidden_states = torch.cat((query_tokens.to(frame_hidden_states.device), frame_hidden_states), dim=1)
 
             for layer_module in self.layers[query_start_idx:]:
-                frame_hidden_states = layer_module(frame_hidden_states, attention_mask=None)
+                frame_hidden_states = layer_module(frame_hidden_states)
 
             sequence_output = self.layernorm(frame_hidden_states)
             masks_queries_logits, class_queries_logits = self.predict(sequence_output)
@@ -259,7 +238,6 @@ class VideomtForUniversalSegmentation(EomtForUniversalSegmentation):
             masks_queries_logits=torch.cat(all_masks_queries_logits, dim=0),
             class_queries_logits=torch.cat(all_class_queries_logits, dim=0),
             last_hidden_state=torch.cat(all_last_hidden_states, dim=0),
-            patch_offsets=patch_offsets,
         )
 
 

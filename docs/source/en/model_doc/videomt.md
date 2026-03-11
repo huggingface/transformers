@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-02-19 and added to Hugging Face Transformers on 2026-03-02.*
+*This model was released on 2026-02-19 and added to Hugging Face Transformers on 2026-03-11.*
 
 
 # VidEoMT
@@ -27,7 +27,7 @@ limitations under the License.
 
 ## Overview
 
-The VidEoMT model was proposed in [Your ViT is Secretly Also a Video Segmentation Model](https://huggingface.co/papers/2602.17807) by Narges Norouzi, Idil Esen Zulfikar, Niccolò Cavagnero, Tommie Kerssies, Bastian Leibe, Gijs Dubbelman, Daan de Geus. Video Encoder-only Mask Transformer (VidEoMT) is a lightweight encoder-only model for online video segmentation built on a plain [Vision Transformer (ViT)](vit). It is a minimal extension of [EoMT](eomt) to video which performs both spatial and temporal reasoning within the ViT encoder, without relying on dedicated tracking modules or heavy task-specific heads.
+The VidEoMT model was proposed in [Your ViT is Secretly Also a Video Segmentation Model](https://huggingface.co/papers/2602.17807) by Narges Norouzi, Idil Esen Zulfikar, Niccolò Cavagnero, Tommie Kerssies, Bastian Leibe, Gijs Dubbelman, Daan de Geus. Video Encoder-only Mask Transformer (VidEoMT) is a lightweight encoder-only model for online video segmentation built on a plain [Vision Transformer (ViT)](vit). It is a minimal extension of [EoMT](./eomt) to video which performs both spatial and temporal reasoning within the ViT encoder, without relying on dedicated tracking modules or heavy task-specific heads.
 
 The abstract from the paper is the following:
 
@@ -36,7 +36,7 @@ The abstract from the paper is the following:
 Tips:
 
 - VidEoMT currently only supports a DINOv2 backbone (with register tokens). Available model sizes are ViT-S, ViT-B, and ViT-L.
-- The model accepts video input as a 5D tensor of shape `(batch_size, num_frames, 3, height, width)`. If a 4D tensor is provided, it falls back to single-image segmentation mode (inherited from [EoMT](eomt)).
+- The model accepts video input as a 5D tensor of shape `(batch_size, num_frames, 3, height, width)`.
 - VidEoMT supports three video segmentation tasks: **instance**, **semantic**, and **panoptic** segmentation, each with a dedicated post-processing method on the video processor.
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
@@ -44,7 +44,7 @@ The original code can be found [here](https://github.com/tue-mps/videomt).
 
 ## Architecture Info
 
-VidEoMT builds on [EoMT](eomt), which repurposes a plain DINOv2-pretrained Vision Transformer with **register tokens** as a segmentation model. EoMT introduces learned **object queries** and a lightweight **mask prediction head** directly inside the ViT encoder, eliminating the need for task-specific decoders.
+VidEoMT builds on [EoMT](./eomt), which repurposes a plain DINOv2-pretrained Vision Transformer with **register tokens** as a segmentation model. EoMT introduces learned **object queries** and a lightweight **mask prediction head** directly inside the ViT encoder, eliminating the need for task-specific decoders.
 
 VidEoMT extends this to video with two key additions:
 
@@ -73,6 +73,7 @@ processor = VideomtVideoProcessor.from_pretrained(model_id)
 model = VideomtForUniversalSegmentation.from_pretrained(model_id)
 
 video_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/videos/pexels-allan-mas-5362370.mp4"
+# Sample 8 frames to keep the example lightweight.
 video_frames, _ = load_video(video_url, num_frames=8)
 
 inputs = processor(videos=[video_frames], return_tensors="pt")
@@ -116,6 +117,7 @@ processor = VideomtVideoProcessor.from_pretrained(model_id)
 model = VideomtForUniversalSegmentation.from_pretrained(model_id)
 
 video_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/videos/pexels-allan-mas-5362370.mp4"
+# Sample 8 frames to keep the example lightweight.
 video_frames, _ = load_video(video_url, num_frames=8)
 
 inputs = processor(videos=[video_frames], return_tensors="pt")
@@ -158,6 +160,7 @@ processor = VideomtVideoProcessor.from_pretrained(model_id)
 model = VideomtForUniversalSegmentation.from_pretrained(model_id)
 
 video_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/videos/pexels-allan-mas-5362370.mp4"
+# Sample 8 frames to keep the example lightweight.
 video_frames, _ = load_video(video_url, num_frames=8)
 
 inputs = processor(videos=[video_frames], return_tensors="pt")

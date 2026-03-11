@@ -11,18 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch VideoMT model."""
+"""Testing suite for the PyTorch VidEoMT model."""
 
 import unittest
 
-import requests
+import numpy as np
 
-from transformers import AutoImageProcessor, VideomtConfig, VideomtForUniversalSegmentation, pipeline
+from transformers import VideomtConfig, VideomtForUniversalSegmentation
 from transformers.testing_utils import (
-    Expectations,
-    require_deterministic_for_xpu,
     require_torch,
-    require_torch_accelerator,
+    require_torch_gpu,
+    require_vision,
     slow,
     torch_device,
 )
@@ -35,10 +34,13 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+    from torch import nn
 
 
 if is_vision_available():
     from PIL import Image
+
+    from transformers import AutoVideoProcessor
 
 
 class VideomtForUniversalSegmentationTester:
@@ -105,7 +107,7 @@ class VideomtForUniversalSegmentationTester:
 @require_torch
 class VideomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (VideomtForUniversalSegmentation,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-segmentation": VideomtForUniversalSegmentation} if is_torch_available() else {}
+    pipeline_model_mapping = {}
     is_encoder_decoder = False
     test_missing_keys = False
     test_torch_exportable = False
@@ -121,9 +123,14 @@ class VideomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin,
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="VideoMT does not have a get_input_embeddings method")
     def test_model_get_set_embeddings(self):
-        pass
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), nn.Module)
+            output_embeddings = model.get_output_embeddings()
+            self.assertTrue(output_embeddings is None or isinstance(output_embeddings, nn.Linear))
 
     @unittest.skip(reason="VideoMT is not a generative model")
     def test_generate_without_input_ids(self):
@@ -149,292 +156,78 @@ class VideomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin,
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
+    def test_image_inputs_raise(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = VideomtForUniversalSegmentation(config).to(torch_device)
+        model.eval()
+
+        with self.assertRaisesRegex(ValueError, "only supports 5D video inputs"):
+            model(inputs_dict["pixel_values"][:, 0])
+
 
 @slow
 @require_torch
+@require_vision
 class VideomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        self.model_id = "tue-mps/eomt-dinov3-coco-panoptic-large-640"
+    instance_model_id = "tue-mps/videomt-dinov2-small-ytvis2019"
 
-    def test_inference(self):
-        model = VideomtForUniversalSegmentation.from_pretrained(self.model_id, device_map="auto")
-        processor = AutoImageProcessor.from_pretrained(self.model_id)
+    def prepare_video(self, num_frames=2):
+        frame = np.array(Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").convert("RGB"))
+        return [frame.copy() for _ in range(num_frames)]
 
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+    def prepare_model_and_inputs(self, model_id, num_frames=2, dtype=None):
+        model_kwargs = {"device_map": "auto"}
+        if dtype is not None:
+            model_kwargs["dtype"] = dtype
 
-        inputs = processor(images=image, return_tensors="pt").to(model.device)
+        model = VideomtForUniversalSegmentation.from_pretrained(model_id, **model_kwargs)
+        processor = AutoVideoProcessor.from_pretrained(model_id)
+        video_frames = self.prepare_video(num_frames=num_frames)
+        inputs = processor(videos=[video_frames], return_tensors="pt").to(model.device)
+        return model, processor, video_frames, inputs
 
-        with torch.inference_mode():
-            outputs = model(**inputs)
-
-        self.assertEqual(outputs.class_queries_logits.shape, (1, 200, 134))
-        self.assertEqual(outputs.masks_queries_logits.shape, (1, 200, 160, 160))
-
-        self.assertTrue(torch.isfinite(outputs.masks_queries_logits).all())
-        self.assertTrue(torch.isfinite(outputs.class_queries_logits).all())
-
-        # fmt: off
-        expected_class_logits_slice = torch.tensor([
-            [-0.3180, -5.6188, -0.7154],
-            [ 0.0837, -6.8066, -2.1033],
-            [-1.4065, -5.9924, -5.4660]
-        ], device=model.device)
-        expected_masks_logits_slice = torch.tensor([
-            [-1.6251, -1.1417, -1.0285],
-            [ 2.5673,  5.3380,  6.2132],
-            [ 3.7562,  7.1667,  8.1707]
-        ], device=model.device)
-        # fmt: on
-
-        torch.testing.assert_close(
-            outputs.class_queries_logits[0, :3, :3].float(), expected_class_logits_slice, rtol=1e-3, atol=1e-3
-        )
-        torch.testing.assert_close(
-            outputs.masks_queries_logits[0, 0, :3, :3].float(), expected_masks_logits_slice, rtol=1e-3, atol=1e-3
+    def assert_common_video_outputs(self, outputs, model, num_frames):
+        expected_mask_size = (
+            (model.config.image_size // model.config.patch_size) * (2**model.config.num_upscale_blocks),
+            (model.config.image_size // model.config.patch_size) * (2**model.config.num_upscale_blocks),
         )
 
-    @require_torch_accelerator
-    @require_deterministic_for_xpu
-    def test_inference_bf16(self):
-        model = VideomtForUniversalSegmentation.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map="auto")
-        processor = AutoImageProcessor.from_pretrained(self.model_id)
-
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-
-        inputs = processor(images=image, return_tensors="pt").to(model.device)
-
-        torch.manual_seed(42)
-
-        with torch.inference_mode():
-            outputs = model(**inputs)
-
-        self.assertTrue(outputs.class_queries_logits.shape == (1, 200, 134))
-        self.assertTrue(outputs.masks_queries_logits.shape == (1, 200, 160, 160))
-
-        # fmt: off
-        class_expectations = Expectations(
-            {
-                ("xpu", 3): [
-                    [-0.3125, -5.6562, -0.7148],
-                    [ 0.0693, -6.8125, -2.1562],
-                    [-1.4141, -6.0000, -5.4688]
-                ],
-                ("cuda", 8): [
-                    [-0.3145, -5.6562, -0.7422],
-                    [ 0.0542, -6.8438, -2.1875],
-                    [-1.4062, -6.0000, -5.4688]
-                ],
-            }
+        self.assertEqual(
+            outputs.class_queries_logits.shape, (num_frames, model.config.num_queries, model.config.num_labels + 1)
         )
-        masks_expectations = Expectations(
-            {
-                ("xpu", 3): [
-                    [-1.5859, -1.1406, -1.0156],
-                    [ 2.5938,  5.3125,  6.1875],
-                    [ 3.7812,  7.1250,  8.1250]
-                ],
-                ("cuda", 8): [
-                    [-1.5859, -1.1406, -1.0234],
-                    [ 2.5625,  5.3438,  6.2188],
-                    [ 3.7500,  7.1562,  8.1875]
-                ],
-            }
+        self.assertEqual(
+            outputs.masks_queries_logits.shape, (num_frames, model.config.num_queries, *expected_mask_size)
         )
-        expected_class_logits_slice = torch.tensor(class_expectations.get_expectation(), device=model.device)
-        expected_masks_logits_slice = torch.tensor(masks_expectations.get_expectation(), device=model.device)
-        # fmt: on
-
-        torch.testing.assert_close(
-            outputs.class_queries_logits[0, :3, :3].float(), expected_class_logits_slice, rtol=1e-3, atol=1e-3
-        )
-        torch.testing.assert_close(
-            outputs.masks_queries_logits[0, 0, :3, :3].float(), expected_masks_logits_slice, rtol=1e-3, atol=1e-3
-        )
-
-    def test_semantic_segmentation_inference(self):
-        model_id = "tue-mps/eomt-dinov3-ade-semantic-large-512"
-        model = VideomtForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
-        processor = AutoImageProcessor.from_pretrained(model_id)
-
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-
-        inputs = processor(images=image, return_tensors="pt").to(model.device)
-
-        with torch.inference_mode():
-            outputs = model(**inputs)
-
-        self.assertEqual(outputs.class_queries_logits.shape, (1, 100, 151))
-        self.assertEqual(outputs.masks_queries_logits.shape, (1, 100, 128, 128))
-
-        # fmt: off
-        expected_class_logits_slice = torch.tensor([
-            [-0.8774, -3.2156, -3.5122],
-            [-0.8454, -4.5418, -4.2628],
-            [ 2.5385, -4.1147, -3.1046]
-        ], device=model.device)
-        expected_masks_logits_slice = torch.tensor([
-            [-37.6081, -37.5875, -38.8876],
-            [-38.2850, -51.4408, -51.4456],
-            [-42.4620, -53.7380, -66.6535]
-        ], device=model.device)
-        # fmt: on
-
-        torch.testing.assert_close(
-            outputs.class_queries_logits[0, :3, :3].float(), expected_class_logits_slice, rtol=1e-3, atol=1e-3
-        )
-        torch.testing.assert_close(
-            outputs.masks_queries_logits[0, 0, :3, :3].float(), expected_masks_logits_slice, rtol=1e-3, atol=1e-3
-        )
-
-        preds = processor.post_process_semantic_segmentation(outputs, target_sizes=[(image.size[1], image.size[0])])[0]
-
-        self.assertEqual(preds.shape, (image.size[1], image.size[0]))
-
-        # fmt: off
-        expected_preds_slice = torch.tensor([
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        ], device=model.device)
-        # fmt: on
-
-        output_slice = preds[:10, :10]
-        torch.testing.assert_close(output_slice, expected_preds_slice, rtol=1e-3, atol=1e-3)
-
-    def test_panoptic_segmentation_inference(self):
-        model = VideomtForUniversalSegmentation.from_pretrained(self.model_id, device_map="auto")
-        processor = AutoImageProcessor.from_pretrained(self.model_id)
-
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-
-        inputs = processor(images=image, return_tensors="pt").to(model.device)
-
-        with torch.inference_mode():
-            outputs = model(**inputs)
-
-        self.assertTrue(outputs.class_queries_logits.shape == (1, 200, 134))
-        self.assertTrue(outputs.masks_queries_logits.shape == (1, 200, 160, 160))
-
-        # fmt: off
-        expected_class_logits_slice = torch.tensor([
-            [-0.3180, -5.6188, -0.7154],
-            [ 0.0837, -6.8066, -2.1033],
-            [-1.4065, -5.9924, -5.4660]
-        ], device=model.device)
-        expected_masks_logits_slice = torch.tensor([
-            [-1.6251, -1.1417, -1.0285],
-            [ 2.5673,  5.3380,  6.2132],
-            [ 3.7562,  7.1667,  8.1707]
-        ], device=model.device)
-        # fmt: on
-
-        torch.testing.assert_close(
-            outputs.class_queries_logits[0, :3, :3].float(), expected_class_logits_slice, rtol=1e-3, atol=1e-3
-        )
-        torch.testing.assert_close(
-            outputs.masks_queries_logits[0, 0, :3, :3].float(), expected_masks_logits_slice, rtol=1e-3, atol=1e-3
-        )
-
-        preds = processor.post_process_panoptic_segmentation(outputs, target_sizes=[(image.size[1], image.size[0])])[0]
-        segmentation, segments_info = preds["segmentation"], preds["segments_info"]
-
-        output_slice = segmentation[:10, :10]
-        self.assertGreaterEqual(output_slice.unique().numel(), 2)
-        self.assertGreaterEqual(len(segments_info), 3)
-        for info in segments_info:
-            self.assertIn("label_id", info)
-            self.assertIn("score", info)
-            self.assertTrue(0.0 <= info["score"] <= 1.0)
+        self.assertTrue(torch.isfinite(outputs.class_queries_logits.float()).all())
+        self.assertTrue(torch.isfinite(outputs.masks_queries_logits.float()).all())
 
     def test_instance_segmentation_inference(self):
-        model_id = "tue-mps/eomt-dinov3-coco-instance-large-640"
-        model = VideomtForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
-        processor = AutoImageProcessor.from_pretrained(model_id)
-
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-
-        inputs = processor(images=image, return_tensors="pt").to(model.device)
+        model, processor, video_frames, inputs = self.prepare_model_and_inputs(self.instance_model_id)
 
         with torch.inference_mode():
             outputs = model(**inputs)
 
-        self.assertEqual(outputs.class_queries_logits.shape, (1, 200, 81))
-        self.assertEqual(outputs.masks_queries_logits.shape, (1, 200, 160, 160))
+        self.assert_common_video_outputs(outputs, model, len(video_frames))
 
-        # fmt: off
-        expected_class_logits_slice = torch.tensor([
-            [-1.3013, -6.0043, -2.2048],
-            [ 1.9109, -2.3819, -3.3945],
-            [-0.9235, -4.5945, -0.4908]
-        ], device=model.device)
-        expected_masks_logits_slice = torch.tensor([
-            [-11.2059, -11.1473, -10.5228],
-            [-10.6254,  -9.2761,  -9.8643],
-            [-10.3746, -11.5448, -10.9008]
-        ], device=model.device)
-        # fmt: on
+        target_sizes = [frame.shape[:2] for frame in video_frames]
+        results = processor.post_process_instance_segmentation(outputs, target_sizes=target_sizes)
 
-        torch.testing.assert_close(
-            outputs.class_queries_logits[0, :3, :3].float(), expected_class_logits_slice, rtol=1e-3, atol=1e-3
-        )
-        torch.testing.assert_close(
-            outputs.masks_queries_logits[0, 0, :3, :3].float(), expected_masks_logits_slice, rtol=1e-3, atol=1e-3
-        )
+        self.assertEqual(len(results), len(video_frames))
+        for frame, result in zip(video_frames, results):
+            self.assertEqual(result["segmentation"].shape, frame.shape[:2])
+            self.assertGreaterEqual(len(result["segments_info"]), 1)
+            for info in result["segments_info"]:
+                self.assertIn("label_id", info)
+                self.assertIn("score", info)
+                self.assertTrue(0.0 <= info["score"] <= 1.0)
 
-        preds = processor.post_process_instance_segmentation(outputs, target_sizes=[(image.size[1], image.size[0])])[0]
-        segmentation, segments_info = preds["segmentation"], preds["segments_info"]
-
-        output_slice = segmentation[:10, :10]
-        self.assertGreaterEqual(output_slice.unique().numel(), 2)
-        self.assertGreaterEqual(len(segments_info), 3)
-        for info in segments_info:
-            self.assertIn("label_id", info)
-            self.assertIn("score", info)
-            self.assertTrue(0.0 <= info["score"] <= 1.0)
-
-    def test_segmentation_pipeline(self):
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-
-        model = VideomtForUniversalSegmentation.from_pretrained(self.model_id, device_map="auto")
-        processor = AutoImageProcessor.from_pretrained(self.model_id)
-
-        inputs = processor(images=image, return_tensors="pt").to(model.device)
+    @require_torch_gpu
+    def test_instance_segmentation_inference_bf16(self):
+        model, _, video_frames, inputs = self.prepare_model_and_inputs(self.instance_model_id, dtype=torch.bfloat16)
 
         with torch.inference_mode():
             outputs = model(**inputs)
 
-        # fmt: off
-        expected_class_logits_slice = torch.tensor([
-            [-0.3180, -5.6188, -0.7154],
-            [ 0.0837, -6.8066, -2.1033],
-            [-1.4065, -5.9924, -5.4660]
-        ], device=model.device)
-        expected_masks_logits_slice = torch.tensor([
-            [-1.6251, -1.1417, -1.0285],
-            [ 2.5673,  5.3380,  6.2132],
-            [ 3.7562,  7.1667,  8.1707]
-        ], device=model.device)
-        # fmt: on
-
-        torch.testing.assert_close(
-            outputs.class_queries_logits[0, :3, :3].float(), expected_class_logits_slice, rtol=1e-3, atol=1e-3
-        )
-        torch.testing.assert_close(
-            outputs.masks_queries_logits[0, 0, :3, :3].float(), expected_masks_logits_slice, rtol=1e-3, atol=1e-3
-        )
-
-        pipe = pipeline(model=self.model_id, subtask="panoptic", device=torch_device)
-        output = pipe(image)
-
-        self.assertTrue(len(output) > 0)
-        for segment in output:
-            self.assertIn("score", segment)
-            self.assertIn("label", segment)
-            self.assertTrue(0.0 <= segment["score"] <= 1.0)
+        self.assert_common_video_outputs(outputs, model, len(video_frames))
+        self.assertEqual(outputs.class_queries_logits.dtype, torch.bfloat16)
+        self.assertEqual(outputs.masks_queries_logits.dtype, torch.bfloat16)

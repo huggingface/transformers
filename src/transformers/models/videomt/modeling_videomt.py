@@ -47,91 +47,6 @@ if is_accelerate_available():
     from accelerate.utils import reduce
 
 
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-class VideomtAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
-        self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
-        self.is_causal = False
-
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Input shape: Batch x Time x Channel"""
-
-        batch_size, seq_length, embed_dim = hidden_states.shape
-
-        queries = self.q_proj(hidden_states)
-        keys = self.k_proj(hidden_states)
-        values = self.v_proj(hidden_states)
-
-        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            queries,
-            keys,
-            values,
-            attention_mask,
-            is_causal=self.is_causal,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
-        )
-
-        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights
-
-
 class VideomtPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -232,35 +147,6 @@ class VideomtEmbeddings(nn.Module):
         return embeddings
 
 
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-class VideomtDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
-
-
 class VideomtMLP(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
@@ -295,6 +181,120 @@ class VideomtGatedMLP(nn.Module):
         x1, x2 = hidden_state.chunk(2, dim=-1)
         hidden = nn.functional.silu(x1) * x2
         return self.weights_out(hidden)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class VideomtAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
+            )
+        self.scale = self.head_dim**-0.5
+        self.dropout = config.attention_dropout
+        self.is_causal = False
+
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Input shape: Batch x Time x Channel"""
+
+        batch_size, seq_length, embed_dim = hidden_states.shape
+
+        queries = self.q_proj(hidden_states)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
+
+        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attention_mask,
+            is_causal=self.is_causal,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
+        )
+
+        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, attn_weights
+
+
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+    """
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+
+    """
+    if drop_prob == 0.0 or not training:
+        return input
+    keep_prob = 1 - drop_prob
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    random_tensor.floor_()  # binarize
+    output = input.div(keep_prob) * random_tensor
+    return output
+
+
+class VideomtDropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+
+    def __init__(self, drop_prob: float | None = None) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
 
 
 class VideomtSwiGLUFFN(nn.Module):
@@ -363,6 +363,45 @@ class VideomtLayerScale(nn.Module):
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         return hidden_state * self.lambda1
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Class for outputs of [`VideomtForUniversalSegmentationOutput`].
+
+    This output can be directly passed to [`~VideomtVideoProcessor.post_process_semantic_segmentation`] or
+    [`~VideomtVideoProcessor.post_process_instance_segmentation`] or
+    [`~VideomtVideoProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
+    [`~VideomtVideoProcessor`] for details regarding usage.
+    """
+)
+class VideomtForUniversalSegmentationOutput(ModelOutput):
+    r"""
+    loss (`torch.Tensor`, *optional*):
+        The computed loss, returned when labels are present.
+    class_queries_logits (`torch.FloatTensor`):
+        A tensor of shape `(batch_size, num_queries, num_labels + 1)` representing the proposed classes for each
+        query. Note the `+ 1` is needed because we incorporate the null class.
+    masks_queries_logits (`torch.FloatTensor`):
+        A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
+        query.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        Last hidden states (final feature map) of the last layer.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        shape `(batch_size, sequence_length, hidden_size)`. Hidden-states all layers of the model.
+    attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Self and Cross Attentions weights from transformer decoder.
+    """
+
+    loss: torch.FloatTensor | None = None
+    class_queries_logits: torch.FloatTensor | None = None
+    masks_queries_logits: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 # Adapted from https://github.com/facebookresearch/detectron2/blob/main/projects/PointRend/point_rend/point_features.py
@@ -916,48 +955,6 @@ class VideomtLoss(nn.Module):
         return num_masks
 
 
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Class for outputs of [`VideomtForUniversalSegmentationOutput`].
-
-    This output can be directly passed to [`~VideomtVideoProcessor.post_process_semantic_segmentation`] or
-    [`~VideomtVideoProcessor.post_process_instance_segmentation`] or
-    [`~VideomtVideoProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
-    [`~VideomtVideoProcessor`] for details regarding usage.
-    """
-)
-class VideomtForUniversalSegmentationOutput(ModelOutput):
-    r"""
-    loss (`torch.Tensor`, *optional*):
-        The computed loss, returned when labels are present.
-    class_queries_logits (`torch.FloatTensor`):
-        A tensor of shape `(batch_size, num_queries, num_labels + 1)` representing the proposed classes for each
-        query. Note the `+ 1` is needed because we incorporate the null class.
-    masks_queries_logits (`torch.FloatTensor`):
-        A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
-        query.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-        Last hidden states (final feature map) of the last layer.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-        shape `(batch_size, sequence_length, hidden_size)`. Hidden-states all layers of the model.
-    attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Self and Cross Attentions weights from transformer decoder.
-    patch_offsets (`list[torch.Tensor]`, *optional*):
-        list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
-    """
-
-    loss: torch.FloatTensor | None = None
-    class_queries_logits: torch.FloatTensor | None = None
-    masks_queries_logits: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    patch_offsets: list[torch.Tensor] | None = None
-
-
 @auto_docstring
 class VideomtPreTrainedModel(PreTrainedModel):
     """
@@ -968,7 +965,7 @@ class VideomtPreTrainedModel(PreTrainedModel):
     config: VideomtConfig
     base_model_prefix = "videomt"
     main_input_name = "pixel_values"
-    input_modalities = ("image",)
+    input_modalities = ("video",)
     supports_gradient_checkpointing = False
     _no_split_modules = ["VideomtLayer"]
     _supports_sdpa = True
@@ -1146,34 +1143,28 @@ class VideomtForUniversalSegmentation(VideomtPreTrainedModel):
         pixel_values: torch.Tensor,
         mask_labels: list[torch.Tensor] | None = None,
         class_labels: list[torch.Tensor] | None = None,
-        patch_offsets: list[torch.Tensor] | None = None,
         **kwargs,
     ) -> VideomtForUniversalSegmentationOutput:
         r"""
+        pixel_values (`torch.Tensor`):
+            Video inputs of shape `(batch_size, num_frames, num_channels, height, width)`.
         mask_labels (`list[torch.Tensor]`, *optional*):
-            list of mask labels of shape `(num_labels, height, width)` to be fed to a model
+            Not supported for 5D video inputs.
         class_labels (`list[torch.LongTensor]`, *optional*):
-            list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
-            labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
-        patch_offsets (`list[torch.Tensor]`, *optional*):
-            list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
+            Not supported for 5D video inputs.
         """
+        kwargs.pop("patch_offsets", None)
+
         if pixel_values.ndim != 5:
             raise ValueError(
-                f"Expected 5D pixel_values (batch_size, num_frames, channels, height, width), "
-                f"but got {pixel_values.ndim}D input. For image segmentation, use EomtForUniversalSegmentation instead."
+                "VideomtForUniversalSegmentation only supports 5D video inputs of shape "
+                "(batch_size, num_frames, channels, height, width)."
             )
 
         if mask_labels is not None or class_labels is not None:
             raise ValueError(
-                "Video training labels are not supported yet for `VideomtForUniversalSegmentation`; "
-                "please provide flattened frame batches for training."
-            )
-
-        if patch_offsets is not None:
-            raise ValueError(
-                "Video-shaped `patch_offsets` are not supported yet for `VideomtForUniversalSegmentation`; "
-                "please provide flattened frame batches with matching patch offsets."
+                "Training with 5D video inputs is not supported in `VideomtForUniversalSegmentation`. "
+                "Flatten frames and use `EomtForUniversalSegmentation` instead."
             )
 
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
@@ -1183,7 +1174,7 @@ class VideomtForUniversalSegmentation(VideomtPreTrainedModel):
         query_start_idx = self.num_hidden_layers - self.config.num_blocks
 
         for layer_module in self.layers[:query_start_idx]:
-            hidden_states = layer_module(hidden_states, attention_mask=None)
+            hidden_states = layer_module(hidden_states)
 
         hidden_states = hidden_states.view(batch_size, num_frames, hidden_states.shape[1], hidden_states.shape[2])
 
@@ -1202,7 +1193,7 @@ class VideomtForUniversalSegmentation(VideomtPreTrainedModel):
             frame_hidden_states = torch.cat((query_tokens.to(frame_hidden_states.device), frame_hidden_states), dim=1)
 
             for layer_module in self.layers[query_start_idx:]:
-                frame_hidden_states = layer_module(frame_hidden_states, attention_mask=None)
+                frame_hidden_states = layer_module(frame_hidden_states)
 
             sequence_output = self.layernorm(frame_hidden_states)
             masks_queries_logits, class_queries_logits = self.predict(sequence_output)
@@ -1217,7 +1208,6 @@ class VideomtForUniversalSegmentation(VideomtPreTrainedModel):
             masks_queries_logits=torch.cat(all_masks_queries_logits, dim=0),
             class_queries_logits=torch.cat(all_class_queries_logits, dim=0),
             last_hidden_state=torch.cat(all_last_hidden_states, dim=0),
-            patch_offsets=patch_offsets,
         )
 
     def get_input_embeddings(self):
@@ -1240,14 +1230,7 @@ class VideomtForUniversalSegmentation(VideomtPreTrainedModel):
         return mask_logits, class_logits
 
     @staticmethod
-    def _disable_attention_mask(attn_mask, prob, num_query_tokens, encoder_start_tokens, device):
-        if prob < 1:
-            # Generate random queries to disable based on the probs
-            random_queries = torch.rand(attn_mask.shape[0], num_query_tokens, device=device) > prob
-
-            # Disable attention to the query tokens, considering the prefix tokens
-            attn_mask[:, :num_query_tokens, encoder_start_tokens:][random_queries] = 1
-
+    def _disable_attention_mask(attn_mask, *args, **kwargs):
         return attn_mask
 
 
