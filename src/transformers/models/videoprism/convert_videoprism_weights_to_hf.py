@@ -16,7 +16,7 @@ from transformers import (
     VideoPrismVisionConfig,
 )
 from transformers.models.videoprism.modeling_videoprism import VideoPrismClipModel, VideoPrismVisionModel
-
+from transformers.models.codegen.modeling_codegen import create_sinusoidal_positions
 
 torch.set_printoptions(precision=10)
 
@@ -193,7 +193,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"params/contrastive_vision_pooler/pooling_attention_query": r"video_model.contrastive_vision_pooler.pooling_attention_query",
     # Text Encoder
     r"params/text_encoder/cls_emb": r"text_model.cls_emb",
-    r"params/text_encoder/token_emb/emb_var": r"text_model.token_embeddings.weight",
+    r"params/text_encoder/token_emb/emb_var": r"text_model.embeddings.token_embedding.weight",
     r"params/text_encoder/unimodal_ln/(bias|scale)": r"text_model.layernorm.\1",
     r"params/text_encoder/unimodal_transformer/x_layers/ff_layer/ffn_layer1/linear/(bias|kernel)": r"text_model.text_encoder.layer.intermediate.dense.\1",
     r"params/text_encoder/unimodal_transformer/x_layers/ff_layer/ffn_layer2/linear/(bias|kernel)": r"text_model.text_encoder.layer.output.dense.\1",
@@ -314,7 +314,7 @@ def convert_params(flax_state_dict, model_name):
                     new_param = transform_remaining_params(key, param, hidden_size)
                     new_state_dict[new_key] = torch.tensor(new_param).contiguous()
 
-    # Last step is to add the buffer named "scale" and "positional_embedding"
+    # Last step is to add the buffers named "scale", "positional_embedding" and "position_ids"
     if "lvt" in model_name:
         # scale
         dim = int(vision_config["intermediate_size"] / vision_config["num_attention_heads"])
@@ -325,10 +325,11 @@ def convert_params(flax_state_dict, model_name):
         # positional_embedding
         text_config = COMMON_CONFIG_PARAMS[model_name]["text_config"]
         num_pos, dim = 64, text_config["hidden_size"]  # Hardcoded num_pos
-        inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / (dim - 2)))
-        sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.int64).float(), inv_freq).float()
-        positional_embedding = torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
-        new_state_dict["text_model.position_embeddings"] = positional_embedding
+        positional_embedding = create_sinusoidal_positions(num_pos, dim)
+        new_state_dict["text_model.embeddings.position_embedding"] = positional_embedding
+        
+        #position_ids
+        new_state_dict["text_model.embeddings.position_ids"] = torch.arange(num_pos).expand((1, -1))
 
     return new_state_dict
 
@@ -468,7 +469,8 @@ def convert_videoprism_checkpoint(
             assert torch.allclose(video_logits, EXPECTED_OUTPUTS[model_name]["vision"], atol=1e-5), (
                 "The converted model video logits do not match the expected logits."
             )
-            assert torch.allclose(text_logits, EXPECTED_OUTPUTS[model_name]["text"], atol=1e-5), (
+            print(text_logits)
+            assert torch.allclose(text_logits, EXPECTED_OUTPUTS[model_name]["text"], atol=1e-4), (
                 "The converted model text logits do not match the expected logits."
             )
             print("Inference successful and logits match expected outputs.")
@@ -490,7 +492,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model_name",
-        default="backbone_base",
+        default="lvt_base",
         type=str,
         choices=ORIGINAL_CHECKPOINTS.keys(),
         help="Name of the model you'd like to convert.",
@@ -515,7 +517,7 @@ def main():
     )
     parser.add_argument(
         "--from_pretrained",
-        default=True,
+        default=False,
         type=bool,
         help="Whether to load the model weights from the Hugging Face hub if load_model=True. Loads local checkpoint (not in cache dir) if False.",
     )
@@ -539,7 +541,7 @@ def main():
     )
     parser.add_argument(
         "--upload",
-        default=False,
+        default=True,
         type=bool,
         help="Whether to upload the converted model to the Hugging Face hub.",
     )

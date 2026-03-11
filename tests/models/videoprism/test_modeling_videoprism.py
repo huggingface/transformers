@@ -56,7 +56,7 @@ if is_torch_available():
         VideoPrismVisionModel,
     )
 if is_vision_available():
-    from transformers import VideoPrismVideoProcessor
+    from transformers import LlavaOnevisionVideoProcessor
 if is_sentencepiece_available():
     from transformers import VideoPrismTokenizer
 
@@ -721,7 +721,7 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
     def test_videoprism_interpolate_pos_encoding(self):
         model_name = "MHRDYN7/videoprism-base-f16r288"
         model = VideoPrismVisionModel.from_pretrained(model_name).to(torch_device)
-        processor = VideoPrismVideoProcessor.from_pretrained(model_name)
+        processor = LlavaOnevisionVideoProcessor.from_pretrained(model_name)
         kwargs = {
             "num_frames": 10,
             "size": {"height": 144, "width": 144},
@@ -739,7 +739,7 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
     def test_videoprism_classification_model(self):
         model_name = "MHRDYN7/videoprism-base-f16r288-finetuned-ucf101"
         model = VideoPrismForVideoClassification.from_pretrained(model_name).to(torch_device)
-        processor = VideoPrismVideoProcessor.from_pretrained(model_name)
+        processor = LlavaOnevisionVideoProcessor.from_pretrained(model_name)
         inputs = processor(videos=self.basketball_dunk_video, return_tensors="pt")["pixel_values_videos"].to(
             torch_device
         )

@@ -13,15 +13,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(
     checkpoint="google/videoprism-base-f16r288",
-    custom_intro="""
-    This is the configuration class to store the configuration of a [`VideoPrismVisionModel`]. It is used to instantiate a
-    VideoPrism vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the VideoPrism
-    [google/videoprism-base-f16r288](https://huggingface.co/google/videoprism-base-f16r288) architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-    """,
 )
 class VideoPrismVisionConfig(PreTrainedConfig):
     r"""

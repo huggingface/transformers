@@ -535,6 +535,12 @@ class VideoPrismTextEncoder(nn.Module):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
+def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
+    inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / dim))
+    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.int64).float(), inv_freq).float()
+    return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
+
+
 @auto_docstring
 class VideoPrismPreTrainedModel(PreTrainedModel):
     config: VideoPrismConfig
@@ -560,6 +566,7 @@ class VideoPrismPreTrainedModel(PreTrainedModel):
         "attentions": VideoPrismSelfAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, (nn.Linear, nn.Conv3d)):
             init.lecun_normal_(module.weight)
@@ -568,21 +575,6 @@ class VideoPrismPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             init.zeros_(module.bias)
             init.ones_(module.weight)
-
-        elif isinstance(module, VideoPrismTextModel):
-            dim = self.config.hidden_size
-            inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / (dim - 2)))
-            sinusoid_inp = torch.einsum(
-                "i , j -> i j", torch.arange(self.config.max_position_embeddings, dtype=torch.int64).float(), inv_freq
-            ).float()
-            pos_embed = torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
-            init.copy_(module.position_embeddings, pos_embed)
-
-        elif isinstance(module, VideoPrismMultiheadAttentionPoolingHead):
-            dim = int(self.config.intermediate_size / self.config.num_attention_heads)
-            r_softplus_0 = 1.442695041
-            scale = torch.tensor(r_softplus_0 / (dim**0.5))
-            init.copy_(module.scale, scale)
 
         elif isinstance(module, VideoPrismSpatialEmbeddings):
             init.lecun_normal_(module.position_embeddings)
@@ -593,10 +585,19 @@ class VideoPrismPreTrainedModel(PreTrainedModel):
         elif isinstance(module, VideoPrismMultiheadAttentionPoolingHead):
             init.zeros_(module.per_dim_scale)
             init.lecun_normal_(module.pooling_attention_query)
+            scale = module.scale.new_tensor(1.442695041 / (module.dim**0.5))
+            init.copy_(module.scale, scale)
+
+        elif isinstance(module, VideoPrismTextEmbeddings):
+            position_embedding = create_sinusoidal_positions(
+                module.config.max_position_embeddings, module.config.hidden_size
+            ).to(device=module.position_embedding.device, dtype=module.position_embedding.dtype)
+            init.copy_(module.position_embedding, position_embedding)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
         elif isinstance(module, VideoPrismTextModel):
-            init.normal_(module.cls_emb, std=1 / torch.sqrt(self.config.hidden_size))
-            init.normal_(module.position_embeddings, std=1 / torch.sqrt(self.config.hidden_size))
+            init.normal_(module.embeddings.token_embedding.weight, std=module.config.hidden_size**-0.5)
+            init.normal_(module.cls_emb, std=module.config.hidden_size**-0.5)
 
 
 @auto_docstring(
@@ -623,7 +624,8 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.spatial_embeddings.patch_embeddings = value
 
-    @can_return_tuple
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -730,6 +732,45 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
         return (outputs, attention_probs)
 
 
+class VideoPrismTextEmbeddings(nn.Module):
+    def __init__(self, config: VideoPrismTextConfig):
+        super().__init__()
+        self.config = config
+        embed_dim = config.hidden_size
+        self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
+        self.register_buffer(
+            "position_embedding", create_sinusoidal_positions(config.max_position_embeddings, config.hidden_size)
+        )
+        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+    ) -> torch.Tensor:
+        seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
+        max_position_embedding = self.position_embedding.shape[0]
+
+        if seq_length > max_position_embedding:
+            raise ValueError(
+                f"Sequence length must be less than max_position_embeddings (got `sequence length`: "
+                f"{seq_length} and max_position_embeddings: {max_position_embedding}"
+            )
+
+        if position_ids is None:
+            position_ids = self.position_ids[:, :seq_length]
+
+        if inputs_embeds is None:
+            inputs_embeds = self.token_embedding(input_ids)
+
+        inputs_embeds *= self.config.hidden_size**0.5
+        position_embeddings = self.position_embedding[position_ids]
+        embeddings = inputs_embeds + position_embeddings
+
+        return embeddings
+
+
 def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
     """This function is intended to align with the l2norm implementation in the FLA library."""
     inv_norm = torch.rsqrt((x * x).sum(dim=dim, keepdim=True) + eps)
@@ -748,28 +789,19 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
     def __init__(self, config: VideoPrismTextConfig):
         super().__init__(config)
         self.config = config
+        self.embeddings = VideoPrismTextEmbeddings(self.config)
         self.text_encoder = VideoPrismTextEncoder(self.config)
-        self.token_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
         self.cls_emb = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.layernorm = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.normalize = config.apply_l2_norm
-        self.register_buffer(
-            "position_embeddings", self.create_sinusoidal_positions(config.max_position_embeddings, config.hidden_size)
-        )
         self.post_init()
 
-    def create_sinusoidal_positions(self, num_pos: int, dim: int) -> torch.Tensor:
-        inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / (dim - 2)))
-        sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.int64).float(), inv_freq).float()
-        return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
-
     def get_input_embeddings(self) -> nn.Module:
-        return self.token_embeddings
+        return self.embeddings
 
     def set_input_embeddings(self, value: nn.Module):
-        self.token_embeddings = value
+        self.embeddings = value
 
-    @can_return_tuple
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
@@ -778,22 +810,17 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if inputs_embeds is None:
-            inputs_embeds = self.token_embeddings(input_ids)
-
-        batch_size, seq_length, dim = inputs_embeds.shape
-        hidden_states = inputs_embeds * (self.config.hidden_size**0.5)
-        seq_len = hidden_states.shape[1]
-
-        features = hidden_states + self.position_embeddings[:seq_len]
+        hidden_states = self.embeddings(input_ids, position_ids, inputs_embeds)
+        batch_size, seq_len, dim = hidden_states.shape
         cls_emb = self.cls_emb * (self.config.hidden_size**0.5)
-        cls_emb = cls_emb.expand(features.shape[0], -1, -1)
-        features = torch.cat((features, cls_emb), dim=1)
+        cls_emb = cls_emb.expand(hidden_states.shape[0], -1, -1)
+        features = torch.cat((hidden_states, cls_emb), dim=1)
 
         if attention_mask is not None:
             cls_padding = torch.ones(batch_size, 1, device=attention_mask.device, dtype=attention_mask.dtype)
