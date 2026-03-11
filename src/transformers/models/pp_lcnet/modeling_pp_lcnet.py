@@ -249,6 +249,8 @@ class PPLCNetEncoder(PPLCNetPreTrainedModel):
             block = PPLCNetBlock(config, stage_index)
             self.blocks.append(block)
 
+        self.post_init()
+
     @capture_outputs
     def forward(self, hidden_state: torch.Tensor, **kwargs) -> BaseModelOutputWithNoAttention:
         for block in self.blocks:

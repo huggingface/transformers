@@ -23,21 +23,13 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(
-    custom_intro="""
-    """
-)
+@auto_docstring(checkpoint="PaddlePaddle/Not_yet_released")
 class PPLCNetV3Config(BackboneConfigMixin, PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PPLCNetV3`]. It is used to instantiate a
-    PP-LCNet model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the PP-LCNet
-    [PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors](https://huggingface.co/PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors) architecture.
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    PP-LCNet backbone according to the specified arguments, defining the model architecture.
+
     Args:
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
         scale (`float`, *optional*, defaults to 1.0):
             The scaling factor for the model's channel dimensions, used to adjust the model size and computational cost
             without changing the overall architecture (e.g., 0.25, 0.5, 1.0, 1.5).
@@ -78,23 +70,16 @@ class PPLCNetV3Config(BackboneConfigMixin, PreTrainedConfig):
         divisor (`int`, *optional*, defaults to 8):
             The divisor used to ensure that various model parameters (e.g., channel dimensions, kernel sizes) are
             multiples of this value, promoting efficient model implementation and resource utilization.
-
-    Examples:
-    ```python
-    >>> from transformers import PPLCNetV3Config, PPLCNetV3ForImageClassification
-    >>> # Initializing a PP-LCNet configuration
-    >>> configuration = PPLCNetV3Config()
-    >>> # Initializing a model (with random weights) from the configuration
-    >>> model = PPLCNetV3ForImageClassification(configuration)
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
+        conv_kxk_num (`int`, *optional*, defaults to `4`):
+            The number of kxk convolution branches in the learnable reparameterization layer, used to enhance feature
+            extraction capability through multi-branch architecture during training while enabling efficient inference
+            via structural reparameterization.
     """
 
     model_type = "pp_lcnet_v3"
 
     def __init__(
         self,
-        num_channels=3,
         scale=1.0,
         hidden_act="hardswish",
         out_features=None,
@@ -103,24 +88,17 @@ class PPLCNetV3Config(BackboneConfigMixin, PreTrainedConfig):
         stem_stride=2,
         block_configs=None,
         reduction=4,
-        dropout_prob=0.2,
-        class_expand=1280,
-        use_last_convolution=True,
         divisor=8,
         conv_kxk_num=4,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.conv_kxk_num = conv_kxk_num
-        self.num_channels = num_channels
         self.scale = scale
         self.hidden_act = hidden_act
         self.stem_channels = stem_channels
         self.stem_stride = stem_stride
         self.reduction = reduction
-        self.dropout_prob = dropout_prob
-        self.class_expand = class_expand
-        self.use_last_convolution = use_last_convolution
         self.divisor = divisor
         # Default block configs for PP-LCNetV3
         # Each tuple: (kernel_size, in_channels, out_channels, stride, use_squeeze_excitation)

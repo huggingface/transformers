@@ -25,6 +25,7 @@ from ...utils import (
 )
 from ...utils.generic import TensorType
 from ...utils.output_capturing import capture_outputs
+from ..auto import AutoConfig
 
 
 if is_cv2_available():
@@ -34,14 +35,7 @@ if is_cv2_available():
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(
-    custom_intro="""
-    This is the configuration class to store the configuration of a [`PPOCRV5MobileDet`]. It is used to instantiate a
-    PPOCRV5 Mobile text detection model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the PPOCRV5 Mobile Det
-    [PaddlePaddle/PP-OCRv5-mobile-det](https://huggingface.co/PaddlePaddle/PP-OCRv5-mobile-det) architecture.
-    """
-)
+@auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5_mobile_det_safetensors")
 class PPOCRV5MobileDetConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PPOCRV5MobileDet`]. It is used to instantiate a
@@ -56,22 +50,9 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `None`):
             The configuration of the backbone model. If `None`, the default backbone configuration for PPOCRV5 Mobile Det
             will be used.
-        scale (`float`, *optional*, defaults to 1.0):
-            The scaling factor for the model's channel dimensions, used to adjust the model size and computational cost
-            without changing the overall architecture.
-        conv_kxk_num (`int`, *optional*, defaults to 4):
-            The number of stacked kxk convolutional layers in the backbone network, which is used to extract deep
-            visual features from the input images.
         reduction (`int`, *optional*, defaults to 4):
             The reduction factor for feature channel dimensions, used to reduce the number of model parameters and
             computational complexity while maintaining feature representability.
-        divisor (`int`, *optional*, defaults to 16):
-            The divisor for adjusting channel dimensions, ensuring that the number of channels meets hardware
-            optimization requirements (e.g., for efficient inference on mobile devices).
-        hidden_act (`str`, *optional*, defaults to `"hswish"`):
-            The non-linear activation function used in the hidden layers of the model. Supported functions include
-            `"hswish"`, `"relu"`, `"silu"`, and `"gelu"`. `"hswish"` is preferred for mobile-friendly efficient
-            inference.
         neck_out_channels (`int`, *optional*, defaults to 96):
             The number of output channels from the neck network, which is responsible for feature fusion and
             refinement before passing features to the head network.
@@ -84,6 +65,9 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         kernel_list (`List[int]`, *optional*, defaults to `[3, 2, 2]`):
             The list of kernel sizes for convolutional layers in the head network, used for multi-scale feature
             extraction to detect text regions of different sizes.
+        layer_list_out_channels (`List[int]`, *optional*, defaults to `[12, 18, 42, 360]`):
+            The list of output channels for each backbone stage, used to configure the input channels of the RSE layers
+            in the neck network for multi-scale feature fusion.
 
     Examples:
     ```python
@@ -97,13 +81,12 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
     """
 
     model_type = "pp_ocrv5_mobile_det"
+    sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
         self,
         backbone_config=None,
-        conv_kxk_num=4,
         reduction=4,
-        hidden_act="hswish",
         neck_out_channels=96,
         shortcut=True,
         interpolate_mode="nearest",
@@ -124,9 +107,7 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
             **kwargs,
         )
         self.backbone_config = backbone_config
-        self.conv_kxk_num = conv_kxk_num
         self.reduction = reduction
-        self.hidden_act = hidden_act
 
         # ---- Neck ----
         self.neck_out_channels = neck_out_channels

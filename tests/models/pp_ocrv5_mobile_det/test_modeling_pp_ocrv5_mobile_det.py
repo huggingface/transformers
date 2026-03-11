@@ -55,7 +55,7 @@ class PPOCRV5MobileDetModelTester:
         num_channels=3,
         num_stages=6,
         is_training=False,
-        convolutional_kxk_number=4,
+        conv_kxk_number=4,
         reduction=4,
         hidden_act="hardswish",
         layer_list_out_channels=[12, 18, 42, 360],
@@ -69,7 +69,7 @@ class PPOCRV5MobileDetModelTester:
         self.num_channels = num_channels
         self.num_stages = num_stages
         self.is_training = is_training
-        self.convolutional_kxk_number = convolutional_kxk_number
+        self.conv_kxk_number = conv_kxk_number
         self.reduction = reduction
         self.hidden_act = hidden_act
         self.layer_list_out_channels = layer_list_out_channels
@@ -99,7 +99,7 @@ class PPOCRV5MobileDetModelTester:
         }
         config = PPOCRV5MobileDetConfig(
             backbone_config=backbone_config,
-            convolutional_kxk_number=self.convolutional_kxk_number,
+            conv_kxk_number=self.conv_kxk_number,
             reduction=self.reduction,
             hidden_act=self.hidden_act,
             layer_list_out_channels=self.layer_list_out_channels,

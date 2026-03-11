@@ -23,10 +23,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(
-    custom_intro="""
-    """
-)
+@auto_docstring(checkpoint="PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors")
 class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PPLCNet`]. It is used to instantiate a
@@ -35,9 +32,8 @@ class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
     [PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors](https://huggingface.co/PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors) architecture.
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
+
     Args:
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
         scale (`float`, *optional*, defaults to 1.0):
             The scaling factor for the model's channel dimensions, used to adjust the model size and computational cost
             without changing the overall architecture (e.g., 0.25, 0.5, 1.0, 1.5).
@@ -94,7 +90,6 @@ class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
 
     def __init__(
         self,
-        num_channels=3,
         scale=1.0,
         hidden_act="hardswish",
         out_features=None,
@@ -110,7 +105,6 @@ class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.num_channels = num_channels
         self.scale = scale
         self.hidden_act = hidden_act
         self.stem_channels = stem_channels
