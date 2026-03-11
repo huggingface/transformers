@@ -1178,7 +1178,16 @@ def convert_and_load_state_dict_in_model(
             )
             if needs_quantization:
                 mapping.quantization_operation = hf_quantizer.get_quantize_ops()
-                mapping._gpu_semaphore = gpu_semaphore
+                # Only throttle WeightRenaming (1 tensor per mapping). WeightConverter may collect
+                # multiple tensors and would deadlock if more tensors are needed than semaphore permits.
+                if isinstance(mapping, WeightRenaming):
+                    mapping._gpu_semaphore = gpu_semaphore
+                elif gpu_semaphore is not None:
+                    logger.warning_once(
+                        "Some weights require both conversion and quantization. The GPU memory throttling "
+                        "cannot be applied in this case. If you experience high memory usage, consider setting "
+                        "the environment variable `HF_DEACTIVATE_ASYNC_LOAD=1` to load with minimal memory footprint."
+                    )
 
             _dtype = dtype
             if (
@@ -1223,7 +1232,7 @@ def convert_and_load_state_dict_in_model(
 
             if future_or_tensor is None:
                 param_device = get_device(device_map, renamed_key, valid_torch_device=True)
-                _semaphore = gpu_semaphore if needs_quantization else None
+                _semaphore = mapping._gpu_semaphore if needs_quantization and isinstance(mapping, WeightRenaming) else None
                 future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype, _semaphore)
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
