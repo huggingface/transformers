@@ -40,8 +40,6 @@ logger = logging.get_logger(__name__)
 @dataclass
 class Gemma3nTextConfig(PreTrainedConfig):
     r"""
-    query_pre_attn_scalar (`float`, *optional*, defaults to 256):
-        scaling factor used on the attention scores
     vocab_size_per_layer_input (`int`, *optional*, defaults to 262144):
         Vocabulary size of the per-layer text embeddings that augment the standard embeddings.
     hidden_size_per_layer_input (`int`, *optional*, defaults to 256):
@@ -65,10 +63,6 @@ class Gemma3nTextConfig(PreTrainedConfig):
         The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
         explicitly provide a sparsity value for each layer in the model. By default, the first 10 layers are
         sparse with a sparsity factor of 0.95 and the rest are dense.
-    attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
-        scaling factor when applying tanh softcapping on the attention scores.
-    use_bidirectional_attention (`bool`, *optional*):
-        If True, the model will attend to all text tokens instead of using a causal mask.
 
     ```python
     >>> from transformers import Gemma3nTextModel, Gemma3nTextConfig
@@ -123,12 +117,9 @@ class Gemma3nTextConfig(PreTrainedConfig):
     rope_parameters: dict | None = None
     attention_bias: bool = False
     attention_dropout: float | None = 0.0
-    query_pre_attn_scalar: int = 256
     sliding_window: int = 512
     layer_types: list[str] | None = None
     final_logit_softcapping: float = 30.0
-    attn_logit_softcapping: float | None = None
-    use_bidirectional_attention: bool | None = False
     default_theta = {"global": 1_000_000.0, "local": 10_000.0}
     vocab_size_per_layer_input: int = 262_144
     hidden_size_per_layer_input: int = 256

@@ -106,6 +106,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
     max_position_embeddings: int = 65536
     attention_bias: bool = True
     router_aux_loss_coef: float = 0.0001
+    use_qk_norm = AttributeError()
 
     def __post_init__(self, **kwargs):
         super().__post_init__(self, **kwargs)

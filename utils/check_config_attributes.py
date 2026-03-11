@@ -89,6 +89,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "HiggsAudioV2TokenizerConfig": ["downsample_factor"],
     "CsmConfig": ["tie_codebooks_embeddings"],
     "DeepseekV2Config": ["norm_topk_prob"],
+    "EsmFoldConfig": ['esm_ablate_pairwise', 'esm_ablate_sequence', 'esm_input_dropout', 'esm_type'],
+    "TrunkConfig": ['cpu_grad_checkpoint', 'layer_drop'],
     "SeamlessM4TConfig": True,
     "SeamlessM4Tv2Config": True,
     "ConditionalDetrConfig": True,
@@ -143,7 +145,10 @@ ATTRIBUTES_TO_ALLOW = (
     "id2label",
     "label2id",
     "problem_type",
-    "tokenizer_class"
+    "tokenizer_class",
+    "is_encoder_decoder",
+    "output_hidden_states",
+    "return_dict",
     # Inits related
     "initializer_range",
     "init_std",

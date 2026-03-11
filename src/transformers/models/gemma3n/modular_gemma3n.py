@@ -68,8 +68,6 @@ logger = logging.get_logger(__name__)
 @dataclass
 class Gemma3nTextConfig(Gemma3TextConfig):
     r"""
-    query_pre_attn_scalar (`float`, *optional*, defaults to 256):
-        scaling factor used on the attention scores
     vocab_size_per_layer_input (`int`, *optional*, defaults to 262144):
         Vocabulary size of the per-layer text embeddings that augment the standard embeddings.
     hidden_size_per_layer_input (`int`, *optional*, defaults to 256):
@@ -93,10 +91,6 @@ class Gemma3nTextConfig(Gemma3TextConfig):
         The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
         explicitly provide a sparsity value for each layer in the model. By default, the first 10 layers are
         sparse with a sparsity factor of 0.95 and the rest are dense.
-    attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
-        scaling factor when applying tanh softcapping on the attention scores.
-    use_bidirectional_attention (`bool`, *optional*):
-        If True, the model will attend to all text tokens instead of using a causal mask.
 
     ```python
     >>> from transformers import Gemma3nTextModel, Gemma3nTextConfig
@@ -145,6 +139,9 @@ class Gemma3nTextConfig(Gemma3TextConfig):
     num_kv_shared_layers: int = 15
     laurel_rank: int = 64
     activation_sparsity_pattern: float | list[float] | None = None
+    attn_logit_softcapping = AttributeError()
+    use_bidirectional_attention = AttributeError()
+    query_pre_attn_scalar = AttributeError()
 
     def __post_init__(self, **kwargs):
         if (

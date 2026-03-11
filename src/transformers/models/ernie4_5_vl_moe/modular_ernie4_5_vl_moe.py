@@ -137,12 +137,6 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
         The number of experts that are shared for all MoE forwards.
     moe_norm_min (`float`, *optional*, defaults to 1e-12):
         Minimum division value during routing normalization.
-    moe_layer_start_index (`int`, *optional*, defaults to 1):
-        The first index at which MoE layers start to appear.
-    moe_layer_end_index (`int`, *optional*, defaults to -1):
-        The last possible index for a MoE layer.
-    moe_layer_interval (`int`, *optional*, defaults to 1):
-        The intervals between MoE layers to appear.
     """
 
     model_type = "ernie4_5_vl_moe_text"
@@ -167,6 +161,9 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
     pad_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
     bos_token_id: int | None = None
+    moe_layer_end_index = AttributeError()
+    moe_layer_interval = AttributeError()
+    moe_layer_start_index = AttributeError()
 
     def __post_init__(self, **kwargs):
         if self.mlp_layer_types is None:

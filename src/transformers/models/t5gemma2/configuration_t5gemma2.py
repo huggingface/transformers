@@ -42,8 +42,6 @@ class T5Gemma2TextConfig(PreTrainedConfig):
         Scaling factor when applying tanh softcapping on the logits.
     attn_logit_softcapping (`float`, *optional*):
         Scaling factor when applying tanh softcapping on the attention scores.
-    use_bidirectional_attention (`bool`, *optional*):
-        If True, the model will attend to all text tokens instead of using a causal mask.
     """
 
     model_type = "t5gemma2_text"
@@ -89,7 +87,6 @@ class T5Gemma2TextConfig(PreTrainedConfig):
     layer_types: list[str] | None = None
     final_logit_softcapping: float | None = None
     attn_logit_softcapping: float | None = None
-    use_bidirectional_attention: bool | None = False
     default_theta = {"global": 1_000_000.0, "local": 10_000.0}
 
     def __post_init__(self, **kwargs):
@@ -222,8 +219,6 @@ class T5Gemma2DecoderConfig(PreTrainedConfig):
         Scaling factor when applying tanh softcapping on the logits.
     attn_logit_softcapping (`float`, *optional*):
         Scaling factor when applying tanh softcapping on the attention scores.
-    use_bidirectional_attention (`bool`, *optional*):
-        If True, the model will attend to all text tokens instead of using a causal mask.
     """
 
     model_type = "t5gemma2_decoder"
@@ -269,7 +264,6 @@ class T5Gemma2DecoderConfig(PreTrainedConfig):
     layer_types: list[str] | None = None
     final_logit_softcapping: float | None = None
     attn_logit_softcapping: float | None = None
-    use_bidirectional_attention: bool | None = False
     default_theta = {"global": 1_000_000.0, "local": 10_000.0}
 
     def __post_init__(self, **kwargs):

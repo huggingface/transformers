@@ -112,7 +112,8 @@ class Qwen3VLMoeTextConfig(Qwen3MoeConfig):
     head_dim: int | None = None
     tie_word_embeddings: bool = True
 
-    norm_topk_prob = AttributeError
+    norm_topk_prob = AttributeError()
+    output_router_logits = AttributeError()
     use_sliding_window = AttributeError()
     sliding_window = AttributeError()
 

@@ -82,14 +82,11 @@ class GraniteMoeSharedConfig(PreTrainedConfig):
     output_router_logits: bool | None = False
     router_aux_loss_coef: float | None = 0.01
     shared_intermediate_size: int = 0
-    position_embedding_type: str = "rope"
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
-        # this model has rope embedding type, hardcoded for BC
-        self.position_embedding_type = "rope"
         super().__post_init__(**kwargs)
 
 

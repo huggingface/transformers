@@ -22,6 +22,7 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ...configuration_utils import PreTrainedConfig
 from ... import initialization as init
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -97,6 +98,10 @@ class Aimv2TextConfig(SiglipTextConfig):
     bos_token_id = AttributeError()
     pad_token_id = AttributeError()
     layer_norm_eps = AttributeError()
+    projection_size = AttributeError()
+
+    def __post_init__(self, **kwargs):
+        PreTrainedConfig.__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")

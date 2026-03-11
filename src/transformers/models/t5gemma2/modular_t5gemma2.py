@@ -85,11 +85,10 @@ class T5Gemma2TextConfig(Gemma3TextConfig):
         Scaling factor when applying tanh softcapping on the logits.
     attn_logit_softcapping (`float`, *optional*):
         Scaling factor when applying tanh softcapping on the attention scores.
-    use_bidirectional_attention (`bool`, *optional*):
-        If True, the model will attend to all text tokens instead of using a causal mask.
     """
 
     model_type = "t5gemma2_text"
+    use_bidirectional_attention = AttributeError()
 
     def __post_init__(self, **kwargs):
         # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
@@ -126,11 +125,10 @@ class T5Gemma2DecoderConfig(Gemma3TextConfig):
         Scaling factor when applying tanh softcapping on the logits.
     attn_logit_softcapping (`float`, *optional*):
         Scaling factor when applying tanh softcapping on the attention scores.
-    use_bidirectional_attention (`bool`, *optional*):
-        If True, the model will attend to all text tokens instead of using a causal mask.
     """
 
     model_type = "t5gemma2_decoder"
+    use_bidirectional_attention = AttributeError()
 
     def __post_init__(self, **kwargs):
         # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub

@@ -105,14 +105,12 @@ class Aimv2TextConfig(PreTrainedConfig):
     hidden_act: str = "silu"
     attention_dropout: float | int = 0.0
     eos_token_id: int | list[int] | None = 49407
-    projection_size: int | None = None
     rms_norm_eps: float = 1e-5
     qkv_bias: bool = False
     mlp_bias: bool = False
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
-        self.projection_size = self.projection_size if self.projection_size is not None else self.hidden_size
         super().__post_init__(**kwargs)
 
 

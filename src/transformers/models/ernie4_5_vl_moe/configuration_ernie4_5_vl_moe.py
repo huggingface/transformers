@@ -79,12 +79,6 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
         The number of experts that are shared for all MoE forwards.
     moe_norm_min (`float`, *optional*, defaults to 1e-12):
         Minimum division value during routing normalization.
-    moe_layer_start_index (`int`, *optional*, defaults to 1):
-        The first index at which MoE layers start to appear.
-    moe_layer_end_index (`int`, *optional*, defaults to -1):
-        The last possible index for a MoE layer.
-    moe_layer_interval (`int`, *optional*, defaults to 1):
-        The intervals between MoE layers to appear.
     """
 
     model_type = "ernie4_5_vl_moe_text"
@@ -131,9 +125,6 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
     moe_k: int | None = 6
     moe_num_experts: int | None = 64
     moe_num_shared_experts: int | None = 2
-    moe_layer_start_index: int | None = 1
-    moe_layer_end_index: int | None = -1
-    moe_layer_interval: int | None = 1
     moe_norm_min: float | None = 1e-12
     output_router_logits: bool | None = False
     router_aux_loss_coef: float | None = 0.001
