@@ -55,10 +55,8 @@ if is_torch_available():
         VideoPrismVideoModel,
         VideoPrismVisionModel,
     )
-
 if is_vision_available():
     from transformers import VideoPrismVideoProcessor
-
 if is_sentencepiece_available():
     from transformers import VideoPrismTokenizer
 
@@ -87,7 +85,7 @@ class VideoPrismVisionModelTester:
         attn_logit_softcapping=50.0,
         num_auxiliary_layers=2,
         apply_l2_norm=True,
-        is_training=True,
+        is_training=False,
         **kwargs,
     ):
         self.parent = parent
@@ -205,26 +203,6 @@ class VideoPrismVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="VideoPrism does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="VideoPrismVisionModel and VideoPrismVideoModel do not support standalone training")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="VideoPrismVisionModel and VideoPrismVideoModel do not support standalone training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="VideoPrismVisionModel and VideoPrismVideoModel do not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
-    @unittest.skip(reason="VideoPrismVisionModel and VideoPrismVideoModel do not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     @unittest.skip(
         reason="VideoPrismVisionModel exposes spatial/temporal backbone states, not a single hidden_states tuple."
     )
@@ -281,7 +259,7 @@ class VideoPrismTextModelTester:
         initializer_range=0.02,
         attn_logit_softcapping=50.0,
         seq_length=7,
-        is_training=True,
+        is_training=False,
         use_input_mask=True,
     ):
         self.parent = parent
@@ -385,22 +363,6 @@ class VideoPrismTextModelTest(ModelTesterMixin, unittest.TestCase):
     ):
         pass
 
-    @unittest.skip(reason="VideoPrismTextModel does not support standalone training")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="VideoPrismTextModel does not support standalone training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="VideoPrismTextModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
-    @unittest.skip(reason="VideoPrismTextModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "MHRDYN7/videoprism-lvt-base-f16r288"
@@ -498,11 +460,6 @@ class VideoPrismClipModelTest(ModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="Inputs_embeds is tested in individual model tests")
-    # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_inputs_embeds
-    def test_inputs_embeds(self):
-        pass
-
     @unittest.skip(reason="Retain_grad is tested in individual model tests")
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_retain_grad_hidden_states_attentions
     def test_retain_grad_hidden_states_attentions(self):
@@ -550,12 +507,10 @@ class VideoPrismForVideoClassificationModelTester(ModelTesterMixin, VideoPrismVi
         return config, inputs_dict
 
     def create_and_check_model(self, config, pixel_values, labels):
-        config.num_labels = self.num_labels
         model = VideoPrismForVideoClassification._from_config(config=config)
         model.to(torch_device)
         pixel_values = pixel_values.to(torch_device)
         labels = labels.to(torch_device)
-
         model.eval()
         with torch.no_grad():
             result = model(pixel_values, labels=labels)
@@ -593,10 +548,6 @@ class VideoPrismForVideoClassificationTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsInstance(model.get_input_embeddings(), nn.Module)
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    @unittest.skip(reason="VideoPrismForVideoClassification does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
 
     @unittest.skip(reason="VideoPrismForVideoClassification does not expose top-level attentions")
     def test_attention_outputs(self):
