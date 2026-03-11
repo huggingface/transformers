@@ -153,14 +153,6 @@ print(f"Generated text: {generated_text}")
 ```
 
 </hfoption>
-
-<hfoption id="transformers CLI">
-
-```bash
-echo "The future of artificial intelligence is" | transformers run --task text-generation --model jhu-clsp/ettin-decoder-17m --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 ## ModernBertDecoderConfig

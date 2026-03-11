@@ -201,6 +201,8 @@ class AttentionMaskVisualizer:
             tokens = processor.tokenizer.convert_ids_to_tokens(inputs["input_ids"][0])
         else:
             tokenizer = AutoTokenizer.from_pretrained(self.repo_id)
+            if tokenizer is None:
+                raise ValueError(f"Could not load tokenizer for {self.repo_id}")
             tokens = tokenizer.tokenize(input_sentence)
             attention_mask = tokenizer(input_sentence, return_tensors="pt")["attention_mask"]
             if attention_mask is None:

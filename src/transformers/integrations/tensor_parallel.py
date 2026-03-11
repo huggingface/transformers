@@ -55,7 +55,7 @@ def initialize_tensor_parallelism(
         # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
         device_type = torch._C._get_accelerator().type
         if device_type == "mps":
-            device_type = "cpu"  # fallback
+            raise RuntimeError("Tensor parallelism is not supported on MPS devices.")
         current_device = getattr(torch, device_type)
         if not torch.distributed.is_initialized():
             try:
@@ -648,11 +648,11 @@ class TensorParallelLayer:
         self.device_mesh = device_mesh
         self.empty_param = empty_param
 
-    @staticmethod
-    def _prepare_input_fn(mod, inputs, device_mesh): ...
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
+        raise NotImplementedError
 
-    @staticmethod
-    def _prepare_output_fn(mod, outputs, device_mesh): ...
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
+        raise NotImplementedError
 
     def shard_tensor(
         self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
@@ -679,6 +679,18 @@ class TensorParallelLayer:
         """
         # Default: no sharding, return full shape
         return tuple(full_shape)
+
+    def update_module_attributes(self, module: nn.Module):
+        """
+        Update module attributes (e.g. in_features, out_features) to reflect sharded dimensions.
+
+        Args:
+            module: The module to update
+
+        Returns:
+            None, update the module in-place
+        """
+        pass
 
 
 class ColwiseParallel(TensorParallelLayer):
@@ -724,6 +736,12 @@ class ColwiseParallel(TensorParallelLayer):
         shape[dim] = end - start
         return tuple(shape)
 
+    def update_module_attributes(self, module: nn.Module):
+        # If we gather the output, the output dimension of the module is not sharded, so no need to update out_features.
+        # Otherwise, we need to update out_features to reflect the sharded dimension.
+        if not self.gather_output and hasattr(module, "out_features"):
+            module.out_features = self.get_expected_sharded_shape((module.out_features,))[0]
+
 
 class ReplicatedWithGradAllReduce(TensorParallelLayer):
     """
@@ -735,12 +753,10 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
     backward hook to all-reduce the parameter gradient.
     """
 
-    @staticmethod
-    def _prepare_input_fn(mod, inputs, device_mesh):
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
         return inputs
 
-    @staticmethod
-    def _prepare_output_fn(mod, outputs, device_mesh):
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
         return outputs
 
     def shard_tensor(self, param, tensor_idx=None, device=None, dtype=None):
@@ -862,6 +878,13 @@ class RowwiseParallel(TensorParallelLayer):
         end = min(start + shard_size, shape[dim])
         shape[dim] = end - start
         return tuple(shape)
+
+    def update_module_attributes(self, module: nn.Module):
+        if hasattr(module, "in_features"):
+            # To fall in the 2D case in get_expected_sharded_shape,
+            # otherwise it will be treated as 1D and not sharded
+            shape = (1, module.in_features)
+            module.in_features = self.get_expected_sharded_shape(shape)[1]
 
 
 class PackedColwiseParallel(ColwiseParallel):
@@ -986,6 +1009,12 @@ class EmbeddingParallel(TensorParallelLayer):
         shape[dim] = end - start
         return tuple(shape)
 
+    def update_module_attributes(self, module: nn.Module):
+        if hasattr(module, "num_embeddings") and self.embedding_dim_sharding == 0:
+            module.num_embeddings = self.get_expected_sharded_shape((module.num_embeddings,))[0]
+        if hasattr(module, "embedding_dim") and self.embedding_dim_sharding == 1:
+            module.embedding_dim = self.get_expected_sharded_shape((module.embedding_dim,))[0]
+
 
 class SequenceParallel(TensorParallelLayer):
     """
@@ -1054,6 +1083,10 @@ class GroupedGemmParallel(TensorParallelLayer):
         shape[0] = local_num_experts
         return tuple(shape)
 
+    def update_module_attributes(self, module: nn.Module):
+        if hasattr(module, "num_experts"):
+            module.num_experts = self.get_expected_sharded_shape((module.num_experts,))[0]
+
 
 class RouterParallel(TensorParallelLayer):
     """
@@ -1063,12 +1096,10 @@ class RouterParallel(TensorParallelLayer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    @staticmethod
-    def _prepare_input_fn(mod, inputs, device_mesh):
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
         return inputs[0] if inputs else inputs
 
-    @staticmethod
-    def _prepare_output_fn(mod, outputs, device_mesh):
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
         """
         Imagine if you had 4 tokens, top_k = 4, and 128experts.
         With EP = 8. The num_local_expert should be 128/8 = 16
@@ -1138,8 +1169,7 @@ class MoeTensorParalellExperts(TensorParallelLayer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    @staticmethod
-    def _prepare_input_fn(mod, inputs, device_mesh):
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
         # inputs = (hidden_states, top_k_index, top_k_weights)
         hidden_states = inputs[0]
         top_k_index = inputs[1]
@@ -1155,8 +1185,7 @@ class MoeTensorParalellExperts(TensorParallelLayer):
 
         return (hidden_states, top_k_index, top_k_weights)
 
-    @staticmethod
-    def _prepare_output_fn(mod, outputs, device_mesh):
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
         # all_reduce_forward to sum partial expert outputs across GPUs
         return all_reduce_forward(outputs, device_mesh)
 
@@ -1178,8 +1207,7 @@ class MoeIdentityExpertParallel(TensorParallelLayer):
     input by world_size to compensate.
     """
 
-    @staticmethod
-    def _prepare_input_fn(mod, inputs, device_mesh):
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
         input_tensor = inputs[0] if inputs else inputs
         # TODO(fmom): when 2D-device mesh, need to select a //-ism axis to divide the input tensor by.
         return input_tensor / device_mesh.size()
@@ -1429,6 +1457,7 @@ def shard_and_distribute_module(
     if not isinstance(param, torch.nn.Parameter):
         param = torch.nn.Parameter(param, requires_grad=empty_param.is_floating_point())
     setattr(module_to_tp, param_type, param)
+    tp_layer.update_module_attributes(module_to_tp)
     return param
 
 
