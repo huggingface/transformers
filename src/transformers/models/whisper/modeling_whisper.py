@@ -286,7 +286,6 @@ class WhisperAttention(nn.Module):
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-        cache_position: torch.Tensor | None = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -332,11 +331,7 @@ class WhisperAttention(nn.Module):
             key_states = key_states.transpose(1, 2).contiguous()
             value_states = value_states.transpose(1, 2).contiguous()
             if past_key_values is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -461,7 +456,7 @@ class WhisperDecoderLayer(GradientCheckpointingLayer):
         past_key_values: EncoderDecoderCache | None = None,
         output_attentions: bool | None = False,
         use_cache: bool | None = True,
-        cache_position: torch.LongTensor | None = None,
+        **kwargs,
     ) -> torch.Tensor:
         """
         Args:
@@ -486,7 +481,6 @@ class WhisperDecoderLayer(GradientCheckpointingLayer):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -735,7 +729,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        cache_position=None,
         **kwargs,
     ):
         r"""
@@ -777,9 +770,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
                 for more detail.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence. It is used to update the
-                cache in the correct position and to infer the complete sequence length.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -809,19 +799,11 @@ class WhisperDecoder(WhisperPreTrainedModel):
                 else DynamicCache(config=self.config)
             )
 
-        past_key_values_length = 0
-        if cache_position is not None:
-            past_key_values_length = cache_position[0]
-        elif past_key_values is not None:
-            past_key_values_length = past_key_values.get_seq_length()
-
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + input_shape[1], device=inputs_embeds.device
-            )
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0).repeat(input_shape[0], 1)
+            position_ids = torch.arange(input_shape[1], device=inputs_embeds.device) + past_key_values_length
+            position_ids = position_ids.unsqueeze(0).repeat(input_shape[0], 1)
 
         # embed positions
         if input_ids is not None:
@@ -840,7 +822,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -873,7 +854,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
                 past_key_values=past_key_values if use_cache else None,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
-                cache_position=cache_position,
             )
             hidden_states = layer_outputs[0]
 
@@ -985,7 +965,6 @@ class WhisperModel(WhisperPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | Seq2SeqModelOutput:
         r"""
@@ -1065,7 +1044,6 @@ class WhisperModel(WhisperPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         if not return_dict:
@@ -1133,7 +1111,6 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | Seq2SeqLMOutput:
         r"""
@@ -1211,7 +1188,6 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
         lm_logits = self.proj_out(outputs[0])
 
@@ -1305,7 +1281,6 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
@@ -1363,7 +1338,6 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         logits = self.proj_out(outputs[0])

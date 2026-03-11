@@ -444,7 +444,7 @@ class AutoformerAttention(nn.Module):
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
@@ -480,11 +480,7 @@ class AutoformerAttention(nn.Module):
             value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
             if past_key_values is not None:
-                # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
@@ -731,7 +727,7 @@ class AutoformerDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         output_attentions: bool | None = False,
         use_cache: bool | None = True,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         """
         Args:
@@ -758,7 +754,6 @@ class AutoformerDecoderLayer(GradientCheckpointingLayer):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -777,7 +772,6 @@ class AutoformerDecoderLayer(GradientCheckpointingLayer):
                 attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
@@ -993,7 +987,6 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | AutoFormerDecoderOutput:
         r"""
@@ -1101,7 +1094,6 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
-                cache_position=cache_position,
             )
             (hidden_states, residual_trend) = layer_outputs[0]
             trend = trend + residual_trend
@@ -1328,7 +1320,6 @@ class AutoformerModel(AutoformerPreTrainedModel):
         output_attentions: bool | None = None,
         use_cache: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> AutoformerModelOutput | tuple:
         r"""
@@ -1503,7 +1494,6 @@ class AutoformerModel(AutoformerPreTrainedModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
-                cache_position=cache_position,
             )
         else:
             decoder_outputs = AutoFormerDecoderOutput()
