@@ -104,7 +104,7 @@ import logging
 import os
 import re
 from datetime import datetime
-from functools import cache
+from functools import cache, cmp_to_key
 from pathlib import Path
 
 import numpy as np
@@ -259,6 +259,35 @@ def _strip_type_hints(code: str) -> str:
     return code
 
 
+def _normalize_dtype_patterns(code: str) -> str:
+    """
+    Normalize dtype save-and-cast patterns to a canonical form for better embedding comparison.
+
+    Removes dtype-saving lines and the corresponding cast-back calls:
+    - ``q_type, k_type = q.dtype, k.dtype`` → (line removed)
+    - ``input_dtype = hidden_states.dtype`` → (line removed)
+    - ``.to(dtype=some_var)`` → (removed)
+    - ``.to(VARNAME)`` where VARNAME ends in ``_type`` or ``_dtype`` or is ``dtype`` → (removed)
+    """
+    # Remove lines that are purely dtype variable assignments (tuple or single)
+    code = re.sub(r"^[^\S\n]*\w+\s*,\s*\w+\s*=\s*\w+\.dtype\s*,\s*\w+\.dtype[^\S\n]*$", "", code, flags=re.MULTILINE)
+    code = re.sub(r"^[^\S\n]*\w+\s*=\s*\w+\.dtype[^\S\n]*$", "", code, flags=re.MULTILINE)
+    # Remove `.to(dtype=VARNAME)` calls entirely
+    code = re.sub(r"\.to\(\s*dtype\s*=\s*\w+\s*\)", "", code)
+    # Remove `.to(VARNAME)` where VARNAME looks like a dtype variable
+    code = re.sub(r"\.to\(\s*\w*(?:_type|_dtype|dtype)\s*\)", "", code)
+    return code
+
+
+def _normalize_layer_constructor_kwargs(code: str) -> str:
+    """
+    Remove minor config-driven keyword arguments from standard layer constructors so that
+    e.g. ``bias=False`` and ``bias=config.mlp_bias`` don't create false negatives.
+    """
+    code = re.sub(r",\s*bias\s*=\s*[^,)]+", "", code)
+    return code
+
+
 def _sanitize_for_embedding(code: str, model_hint: str | None, symbol_hint: str | None) -> str:
     """
     Sanitize code for embedding by replacing model-specific identifiers with generic placeholder.
@@ -273,6 +302,8 @@ def _sanitize_for_embedding(code: str, model_hint: str | None, symbol_hint: str 
     """
     base = _strip_source_for_tokens(code)
     base = _strip_type_hints(base)
+    base = _normalize_dtype_patterns(base)
+    base = _normalize_layer_constructor_kwargs(base)
     variants = set()
     if model_hint:
         variants.add(model_hint)
@@ -592,6 +623,28 @@ class CodeSimilarityAnalyzer:
         scores.sort(key=lambda x: x[1], reverse=True)
         return scores[:k]
 
+    def _build_model_symbol_index(
+        self, identifier_map: dict[int, str]
+    ) -> tuple[dict[tuple[str, str], int], dict[tuple[str, str], int]]:
+        """Build two lookups for fast parent expansion:
+        - by_name:   (model_id, symbol_name)   -> embedding index  e.g. ("llama", "LlamaMLP")
+        - by_suffix: (model_id, symbol_suffix)  -> embedding index  e.g. ("llama", "MLP")
+          where suffix = symbol_name with leading CamelCase model prefix stripped.
+        """
+        by_name: dict[tuple[str, str], int] = {}
+        by_suffix: dict[tuple[str, str], int] = {}
+        for idx, identifier in identifier_map.items():
+            parts = identifier.split(":", 1)
+            if len(parts) != 2:
+                continue
+            relative_path, symbol_name = parts
+            model_id = Path(relative_path).parts[0] if Path(relative_path).parts else ""
+            by_name[(model_id, symbol_name)] = idx
+            suffix = symbol_name[len(_leading_symbol_prefix(symbol_name)):]
+            if suffix:
+                by_suffix.setdefault((model_id, suffix), idx)
+        return by_name, by_suffix
+
     def analyze_file(
         self, modeling_file: Path, top_k_per_item: int = 10, allow_hub_fallback: bool = True, use_jaccard=False, dates: dict[str, str] | None = None
     ) -> dict[str, dict[str, list]]:
@@ -633,12 +686,49 @@ class CodeSimilarityAnalyzer:
         )
         query_embeddings = self.encode(query_sources_sanitized)
 
+        inheritance_map = _build_modular_inheritance_map()
+        model_symbol_by_name, model_symbol_by_suffix = self._build_model_symbol_index(identifier_map)
+
         output = {}
         for i, query_identifier in enumerate(query_identifiers):
             query_name = query_identifier.split(":")[-1]
             embedding_top = self._topk_embedding(
                 query_embeddings[i], base_embeddings, identifier_map, self_model_normalized, query_name, top_k_per_item, dates
             )
+
+            # Expand results with parent models from modular inheritance.
+            # For the top 3 matches, if the matched model has a modular file that inherits from
+            # another model, find that parent's version of the same symbol and inject its score.
+            # We match by symbol suffix (e.g. "MLP" from "MistralMLP") so that e.g. looking up
+            # Llama's "LlamaMLP" works even when the query symbol is named "CohereMLP".
+            already_included = {ident for ident, _ in embedding_top}
+            seen_parents: set[str] = set()
+            additions: list[tuple[str, float]] = []
+            for identifier, _score in embedding_top[:3]:
+                parts = identifier.split(":", 1)
+                if len(parts) != 2:
+                    continue
+                match_relative_path, match_name = parts
+                model_id = Path(match_relative_path).parts[0] if Path(match_relative_path).parts else ""
+                match_suffix = match_name[len(_leading_symbol_prefix(match_name)):]
+                for parent_model in inheritance_map.get(model_id, ()):
+                    if parent_model in seen_parents or _normalize(parent_model) == self_model_normalized:
+                        continue
+                    seen_parents.add(parent_model)
+                    # Look up by suffix first (e.g. "MLP" -> "LlamaMLP"), fall back to exact name
+                    parent_idx = model_symbol_by_suffix.get((parent_model, match_suffix))
+                    if parent_idx is None:
+                        parent_idx = model_symbol_by_name.get((parent_model, match_name))
+                    if parent_idx is None:
+                        continue
+                    parent_identifier = identifier_map[parent_idx]
+                    if parent_identifier not in already_included:
+                        parent_score = float(query_embeddings[i] @ base_embeddings[parent_idx])
+                        additions.append((parent_identifier, parent_score))
+                        already_included.add(parent_identifier)
+            if additions:
+                embedding_top = sorted(embedding_top + additions, key=lambda x: -x[1])
+
             embedding_set = {identifier for identifier, _ in embedding_top}
             kind = definitions_kind.get(query_identifier, "function")
             entry = {"kind": kind, "embedding": embedding_top}
@@ -766,6 +856,177 @@ def _colorize_heading(text: str) -> str:
     return f"{ANSI_HEADER}{ANSI_BOLD}{text}{ANSI_RESET}"
 
 
+def _build_modular_inheritance_map() -> dict[str, set[str]]:
+    """
+    Build a map of modular models to the base models they inherit from.
+
+    The map is inferred from import statements in ``modular_*.py`` files under ``MODELS_ROOT``.
+    Only imports of the form ``from ..<model>.modeling_... import ...`` are considered, and
+    self-references are ignored.
+    """
+    inheritance: dict[str, set[str]] = {}
+    for modular_path in MODELS_ROOT.rglob("modular_*.py"):
+        model_id = modular_path.parent.name
+        bases = inheritance.setdefault(model_id, set())
+        try:
+            source = modular_path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom) or not node.module:
+                continue
+
+            parent: str | None = None
+            # Relative import inside models package: from ..llama.modeling_llama import ...
+            if node.level >= 2:
+                parent = node.module.split(".", 1)[0]
+            # Absolute import via transformers.models: from transformers.models.llava.modeling_llava import ...
+            elif node.level == 0 and node.module.startswith("transformers.models."):
+                parts = node.module.split(".")
+                if len(parts) >= 3:
+                    parent = parts[2]
+
+            if parent and parent != model_id:
+                bases.add(parent)
+    return inheritance
+
+
+def _is_descendant(model_id: str, ancestor: str, inheritance_map: dict[str, set[str]]) -> bool:
+    """
+    Return True if ``model_id`` transitively inherits from ``ancestor`` according to ``inheritance_map``.
+    """
+    if model_id == ancestor:
+        return False
+
+    visited: set[str] = set()
+    stack = [model_id]
+    while stack:
+        current = stack.pop()
+        if current in visited:
+            continue
+        visited.add(current)
+        for base in inheritance_map.get(current, ()):
+            if base == ancestor:
+                return True
+            if base not in visited:
+                stack.append(base)
+    return False
+
+
+def _compare_models(
+    a: tuple[str, set[str]],
+    b: tuple[str, set[str]],
+    inheritance_map: dict[str, set[str]],
+    model_class_scores: dict[str, dict[str, float]],
+) -> int:
+    """
+    Comparison function for sorting models by:
+    1) number of matched classes (descending)
+    2) ancestry (base models before descendants)
+    3) mean score (descending)
+    4) lexicographic model id
+    """
+    model_a, classes_a = a
+    model_b, classes_b = b
+
+    # Primary: number of matched classes (descending)
+    if len(classes_a) != len(classes_b):
+        return -1 if len(classes_a) > len(classes_b) else 1
+
+    # Secondary: ancestry-aware ordering (put ancestor first)
+    if _is_descendant(model_a, model_b, inheritance_map):
+        return 1  # a after b
+    if _is_descendant(model_b, model_a, inheritance_map):
+        return -1  # a before b
+
+    # Tertiary: mean score (descending)
+    scores_a = model_class_scores.get(model_a, {})
+    scores_b = model_class_scores.get(model_b, {})
+    mean_a = sum(scores_a.values()) / len(scores_a) if scores_a else 0.0
+    mean_b = sum(scores_b.values()) / len(scores_b) if scores_b else 0.0
+    if mean_a != mean_b:
+        return -1 if mean_a > mean_b else 1
+
+    # Final: lexicographic model id for deterministic ordering
+    if model_a < model_b:
+        return -1
+    if model_a > model_b:
+        return 1
+    return 0
+
+
+def compute_model_class_match_summary(
+    results: dict[str, dict],
+) -> tuple[int, list[dict[str, float | int | str]]]:
+    """
+    Build the "Model class match summary" from raw ``analyze_file`` results.
+
+    Returns:
+        `(total_classes, ordered_summary)` where `ordered_summary` is a list of dicts with keys
+        `model_id`, `num_matched`, `pct`, `mean_score`, in the same order as printed by the CLI
+        (models with most matched classes, ancestry-aware, then by mean score).
+    """
+    grouped: dict[str, list[tuple[str, dict]]] = {"class": [], "function": []}
+    for query_name, data in results.items():
+        kind = data.get("kind", "function")
+        grouped.setdefault(kind, []).append((query_name, data))
+
+    class_entries = grouped.get("class", [])
+    if not class_entries:
+        return 0, []
+
+    total_classes = len(class_entries)
+    model_class_matches: dict[str, set[str]] = {}
+    model_class_scores: dict[str, dict[str, float]] = {}
+    for query_name, data in class_entries:
+        for identifier, _score in data.get("embedding", []):
+            try:
+                relative_path, _ = identifier.split(":", 1)
+            except ValueError:
+                continue
+            model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
+            model_class_matches.setdefault(model_id, set()).add(query_name)
+            per_model_scores = model_class_scores.setdefault(model_id, {})
+            if query_name not in per_model_scores or _score > per_model_scores[query_name]:
+                per_model_scores[query_name] = _score
+
+    inheritance_map = _build_modular_inheritance_map()
+    model_items = list(model_class_matches.items())
+    redundant_models: set[str] = set()
+    for i, (model_i, classes_i) in enumerate(model_items):
+        if not classes_i:
+            continue
+        for j, (model_j, classes_j) in enumerate(model_items):
+            if i == j:
+                continue
+            if classes_i.issubset(classes_j) and len(classes_j) > len(classes_i):
+                redundant_models.add(model_i)
+                break
+
+    filtered_items = [(m, cls_set) for m, cls_set in model_items if m not in redundant_models]
+
+    sorted_models = sorted(
+        filtered_items,
+        key=cmp_to_key(lambda a, b: _compare_models(a, b, inheritance_map, model_class_scores)),
+    )
+    ordered_summary: list[dict[str, float | int | str]] = []
+    for model_id, matched in sorted_models:
+        pct = 100.0 * len(matched) / total_classes
+        scores_for_model = model_class_scores.get(model_id, {})
+        mean_score = sum(scores_for_model.values()) / len(scores_for_model) if scores_for_model else 0.0
+        ordered_summary.append({
+            "model_id": model_id,
+            "num_matched": len(matched),
+            "pct": round(pct, 1),
+            "mean_score": round(mean_score, 4),
+        })
+    return total_classes, ordered_summary
+
+
 def main():
     """CLI entry point for the modular model detector."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -805,7 +1066,7 @@ def main():
         modeling_file = os.path.join("src", "transformers", "models", modeling_file, f"modeling_{modeling_file}.py")
 
     results = analyzer.analyze_file(
-        Path(modeling_file), top_k_per_item=10, allow_hub_fallback=True, use_jaccard=args.use_jaccard, dates=dates
+        Path(modeling_file), top_k_per_item=12, allow_hub_fallback=True, use_jaccard=args.use_jaccard, dates=dates
     )
     modeling_filename = Path(modeling_file).name
     release_key = modeling_filename.split("modeling_")[-1][:-3]
@@ -1011,6 +1272,8 @@ def main():
                 if query_name not in per_model_scores or _score > per_model_scores[query_name]:
                     per_model_scores[query_name] = _score
 
+        inheritance_map = _build_modular_inheritance_map()
+
         # Filter out models whose matched‑class set is strictly contained in another model's set.
         # let C_m be the set of classes matched by model m. If there exists a model n such that
         # C_m ⊂ C_n, then m is considered redundant and removed.
@@ -1029,11 +1292,38 @@ def main():
 
         filtered_items = [(m, cls_set) for m, cls_set in model_items if m not in redundant_models]
 
-        sorted_models = sorted(
-            filtered_items,
-            key=lambda x: len(x[1]),
-            reverse=True,
-        )
+        def _compare_models(a: tuple[str, set[str]], b: tuple[str, set[str]]) -> int:
+            model_a, classes_a = a
+            model_b, classes_b = b
+
+            # Primary: number of matched classes (descending)
+            if len(classes_a) != len(classes_b):
+                return -1 if len(classes_a) > len(classes_b) else 1
+
+            # Secondary: if they cover the same number of classes and one inherits from the other,
+            # put the ancestor (base) model first. This ensures e.g. `llava` appears before
+            # `vipllava` when `vipllava` is modular-over-llava.
+            if _is_descendant(model_a, model_b, inheritance_map):
+                return 1  # a after b
+            if _is_descendant(model_b, model_a, inheritance_map):
+                return -1  # a before b
+
+            # Tertiary: mean score (descending)
+            scores_a = model_class_scores.get(model_a, {})
+            scores_b = model_class_scores.get(model_b, {})
+            mean_a = sum(scores_a.values()) / len(scores_a) if scores_a else 0.0
+            mean_b = sum(scores_b.values()) / len(scores_b) if scores_b else 0.0
+            if mean_a != mean_b:
+                return -1 if mean_a > mean_b else 1
+
+            # Final: lexicographic model id for deterministic ordering
+            if model_a < model_b:
+                return -1
+            if model_a > model_b:
+                return 1
+            return 0
+
+        sorted_models = sorted(filtered_items, key=cmp_to_key(_compare_models))
         logging.info(_colorize_heading("Model class match summary"))
         logging.info("")
         logging.info(f"Total classes: {total_classes}")
@@ -1047,6 +1337,9 @@ def main():
                 f"  {model_id:25s}: {len(matched):2d}/{total_classes} classes ({pct:5.1f}%), "
                 f"mean score {mean_score:.4f}"
             )
+            if matched:
+                class_list = ", ".join(sorted(matched))
+                logging.info(f"    Classes: {class_list}")
         logging.info("")
 
 if __name__ == "__main__":
