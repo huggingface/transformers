@@ -377,3 +377,78 @@ class ChatSchemaParserTest(unittest.TestCase):
                 ],
             },
         )
+
+    def test_required_fields_present(self):
+        """Test that required fields pass validation when present in the output."""
+        schema = {
+            "type": "object",
+            "required": ["role", "content"],
+            "properties": {
+                "role": {"const": "assistant"},
+                "content": {"type": "string", "x-regex": r"<response>(.*?)</response>"},
+                "thinking": {"type": "string", "x-regex": r"<think>(.*?)</think>"},
+            },
+        }
+        model_out = "<think>Let me think.</think><response>Hello!</response>"
+        parsed = recursive_parse(model_out, schema)
+        self.assertEqual(
+            parsed,
+            {"role": "assistant", "content": "Hello!", "thinking": "Let me think."},
+        )
+
+    def test_required_field_missing_raises(self):
+        """Test that a missing required field raises ValueError with a helpful message."""
+        schema = {
+            "type": "object",
+            "required": ["role", "content"],
+            "properties": {
+                "role": {"const": "assistant"},
+                "content": {"type": "string", "x-regex": r"<response>(.*?)</response>"},
+                "thinking": {"type": "string", "x-regex": r"<think>(.*?)</think>"},
+            },
+        }
+        # This output has thinking but no <response> tags, so content will be missing
+        model_out = "<think>Let me think about this.</think>Some plain text without response tags"
+        with self.assertRaises(ValueError) as cm:
+            recursive_parse(model_out, schema)
+        self.assertIn("content", str(cm.exception))
+        self.assertIn("missing", str(cm.exception).lower())
+
+    def test_required_not_enforced_when_absent(self):
+        """Test that schemas without 'required' still silently omit missing fields."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "role": {"const": "assistant"},
+                "content": {"type": "string", "x-regex": r"<response>(.*?)</response>"},
+                "thinking": {"type": "string", "x-regex": r"<think>(.*?)</think>"},
+            },
+        }
+        # No <response> tags, but content is not required — should succeed
+        model_out = "<think>Just thinking.</think>"
+        parsed = recursive_parse(model_out, schema)
+        self.assertEqual(parsed, {"role": "assistant", "thinking": "Just thinking."})
+
+    def test_type_any_passthrough(self):
+        """Test that type 'any' passes content through without transformation."""
+        schema = {
+            "type": "object",
+            "x-regex": r"<data>(?P<value>.*?)</data>",
+            "properties": {
+                "value": {"type": "any"},
+            },
+        }
+        model_out = "<data>some arbitrary content 123</data>"
+        parsed = recursive_parse(model_out, schema)
+        self.assertEqual(parsed, {"value": "some arbitrary content 123"})
+
+    def test_type_any_in_additional_properties(self):
+        """Test that type 'any' works in additionalProperties, matching the docs example."""
+        schema = {
+            "type": "object",
+            "x-parser": "json",
+            "additionalProperties": {"type": "any"},
+        }
+        node_content = '{"location": "San Francisco, CA", "units": "celsius"}'
+        parsed = recursive_parse(node_content, schema)
+        self.assertEqual(parsed, {"location": "San Francisco, CA", "units": "celsius"})

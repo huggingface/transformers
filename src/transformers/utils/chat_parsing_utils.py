@@ -170,7 +170,6 @@ def recursive_parse(
                 child_node_content = recursive_parse(node_content, node_schema["properties"][key])
                 if child_node_content is not None:
                     parsed_schema[key] = child_node_content
-            return parsed_schema
         elif isinstance(node_content, dict):
             for key, child_node in node_schema.get("properties", {}).items():
                 if "const" in child_node:
@@ -183,9 +182,18 @@ def recursive_parse(
                 for key, value in node_content.items():
                     if key not in node_schema.get("properties", {}):
                         parsed_schema[key] = recursive_parse(value, node_schema["additionalProperties"])
-            return parsed_schema
         else:
             raise TypeError(f"Expected a dict or str for schema node with type object, got {node_content}")
+        required = node_schema.get("required", [])
+        missing = [key for key in required if key not in parsed_schema]
+        if missing:
+            input_preview = repr(node_content[:500]) if isinstance(node_content, str) else repr(node_content)
+            raise ValueError(
+                f"Required fields {missing} are missing from parsed output.\n"
+                f"Parsed: {parsed_schema}\n"
+                f"Input: {input_preview}"
+            )
+        return parsed_schema
     elif node_type == "array":
         if not node_content:
             return []
@@ -232,7 +240,7 @@ def recursive_parse(
         else:
             # String type
             return node_content
-    elif node_type is None:
+    elif node_type is None or node_type == "any":
         return node_content  # Don't touch it
     else:
         raise TypeError(f"Unsupported schema type {node_type} for node: {node_content}")
