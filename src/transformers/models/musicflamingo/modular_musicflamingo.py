@@ -18,24 +18,21 @@ from math import pi
 
 import numpy as np
 import torch
-from torch import Tensor, broadcast_tensors, nn
+from torch import Tensor, broadcast_tensors
 from torch.amp import autocast
 
 from ... import initialization as init
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
-from ...masking_utils import create_bidirectional_mask
-from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
+from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ..audioflamingo3.configuration_audioflamingo3 import AudioFlamingo3Config, AudioFlamingo3EncoderConfig
+from ..audioflamingo3.configuration_audioflamingo3 import AudioFlamingo3Config
 from ..audioflamingo3.modeling_audioflamingo3 import (
-    AudioFlamingo3Encoder,
     AudioFlamingo3ForConditionalGeneration,
-    AudioFlamingo3MultiModalProjector,
     AudioFlamingo3PreTrainedModel,
 )
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor, AudioFlamingo3ProcessorKwargs
@@ -46,101 +43,27 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="nvidia/music-flamingo-2601-hf")
-class MusicFlamingoEncoderConfig(AudioFlamingo3EncoderConfig):
-    r"""
-    max_source_positions (`int`, *optional*, defaults to 1500):
-        The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
-    head_dim (`int`, *optional*, defaults to 256):
-        Rotary embedding dimension used per axis in [`MusicFlamingoRotaryEmbedding`]. Since the rotary embedding is
-        applied on two axes (batch and time), the rotated hidden size is `2 * head_dim`, which must be less than
-        or equal to `hidden_size`.
-    max_position_embeddings (`int`, *optional*, defaults to 1200):
-        Maximum cached positions used by the MusicFlamingo time rotary embedding. This should match the processor
-        `max_audio_len`.
-    rope_parameters (`dict`, *optional*):
-        RoPE parameters for [`MusicFlamingoRotaryEmbedding`]. Supports the standard keys `"rope_type"` (defaults to
-        `"default"`) and `"rope_theta"`. By default, `"rope_theta"` is derived from `max_position_embeddings / (2 * pi)`.
-
-    Example:
-
-    ```python
-    >>> from transformers import MusicFlamingoEncoderConfig, MusicFlamingoEncoder
-
-    >>> # Initializing an MusicFlamingoEncoderConfig
-    >>> configuration = MusicFlamingoEncoderConfig()
-
-    >>> # Initializing an MusicFlamingoEncoder (with random weights)
-    >>> model = MusicFlamingoEncoder(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-    def __init__(
-        self,
-        num_mel_bins=128,
-        num_hidden_layers=32,
-        num_attention_heads=20,
-        intermediate_size=5120,
-        layerdrop=0.0,
-        activation_function="gelu",
-        hidden_size=1280,
-        dropout=0.0,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        initializer_range=0.02,
-        scale_embedding=False,
-        max_source_positions=1500,
-        head_dim=256,
-        max_position_embeddings=1200,
-        rope_parameters=None,
-        **kwargs,
-    ):
-        super().__init__(
-            num_mel_bins=num_mel_bins,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            intermediate_size=intermediate_size,
-            layerdrop=layerdrop,
-            activation_function=activation_function,
-            hidden_size=hidden_size,
-            dropout=dropout,
-            attention_dropout=attention_dropout,
-            activation_dropout=activation_dropout,
-            initializer_range=initializer_range,
-            scale_embedding=scale_embedding,
-            max_source_positions=max_source_positions,
-            **kwargs,
-        )
-
-        if rope_parameters is None:
-            rope_parameters = {
-                "rope_type": "default",
-                # "rope_theta": max_position_embeddings / (2 * pi),
-                "rope_theta": max_position_embeddings,
-            }
-        rope_parameters["rope_theta"] = max_position_embeddings
-
-        self.head_dim = head_dim
-        self.max_position_embeddings = max_position_embeddings
-        self.rope_parameters = rope_parameters
-
-
-@auto_docstring(checkpoint="nvidia/music-flamingo-2601-hf")
 class MusicFlamingoConfig(AudioFlamingo3Config):
     r"""
     audio_bos_token_id (`int`, *optional*, defaults to 151670):
             The beginning-of-audio token index used to mark the start of audio spans.
     audio_eos_token_id (`int`, *optional*, defaults to 151671):
         The end-of-audio token index used to mark the end of audio spans.
+    head_dim (`int`, *optional*, defaults to 256):
+        Rotary embedding dimension used per axis in [`MusicFlamingoRotaryEmbedding`]. Since the rotary embedding is
+        applied on two axes (batch and time), the rotated hidden size is `2 * head_dim`, which must be less than
+        or equal to `hidden_size`.
+    rope_parameters (`dict`, *optional*):
+        RoPE parameters for [`MusicFlamingoRotaryEmbedding`]. Supports the standard keys `"rope_type"` (defaults to
+        `"default"`) and `"rope_theta"`.
 
     Example:
 
     ```python
-    >>> from transformers import MusicFlamingoForConditionalGeneration, MusicFlamingoConfig, MusicFlamingoEncoderConfig, Qwen2Config
+    >>> from transformers import MusicFlamingoForConditionalGeneration, MusicFlamingoConfig, AudioFlamingo3EncoderConfig, Qwen2Config
 
     >>> # Initializing an MusicFlamingoEncoder config
-    >>> audio_config = MusicFlamingoEncoderConfig()
+    >>> audio_config = AudioFlamingo3EncoderConfig()
 
     >>> # Initializing a Qwen2 config
     >>> text_config = Qwen2Config()
@@ -164,6 +87,8 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
         audio_eos_token_id=151671,
         projector_hidden_act="gelu",
         projector_bias=True,
+        head_dim=256,
+        rope_parameters=None,
         **kwargs,
     ):
         super().__init__(
@@ -176,6 +101,16 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
         )
         self.audio_bos_token_id = audio_bos_token_id
         self.audio_eos_token_id = audio_eos_token_id
+        if rope_parameters is None:
+            rope_parameters = {
+                "rope_type": "default",
+                "rope_theta": 1200,
+            }
+        self.rope_parameters = rope_parameters
+
+        # NOTE for modular with `LlamaRotaryEmbedding`
+        self.head_dim = head_dim
+        self.max_position_embeddings = rope_parameters["rope_theta"]
 
 
 class MusicFlamingoProcessorKwargs(AudioFlamingo3ProcessorKwargs): ...
@@ -387,7 +322,7 @@ class MusicFlamingoRotaryEmbedding(LlamaRotaryEmbedding):
     See (Goel et al., 2024) for more details: https://arxiv.org/abs/2410.12109
     """
 
-    def __init__(self, config: MusicFlamingoEncoderConfig, device=None):
+    def __init__(self, config: MusicFlamingoConfig, device=None):
         super().__init__(config, device=device)
         position_angles = self._compute_position_angles(self.inv_freq)
         self.register_buffer("position_angles", position_angles, persistent=False)
@@ -414,7 +349,6 @@ class MusicFlamingoRotaryEmbedding(LlamaRotaryEmbedding):
 
         # Compute frequencies for batch axis
         batch_positions = torch.arange(audio_times.shape[0], device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        # batch_positions = batch_positions / self.max_seq_len_cached * (2 * pi)
         batch_positions = batch_positions / self.max_seq_len_cached
         batch_freqs = batch_positions.unsqueeze(-1) * self.inv_freq
         batch_freqs = torch.repeat_interleave(batch_freqs, 2, dim=-1)
@@ -428,30 +362,10 @@ class MusicFlamingoRotaryEmbedding(LlamaRotaryEmbedding):
         # Apply time-based angle modulation
         angle = (-audio_times * 2 * pi).to(freqs)
         freqs = freqs * angle.unsqueeze(-1)
-
-        # Compute cos/sin in float64 for numerical precision
-        # return freqs.double().cos(), freqs.double().sin()
         return freqs.cos(), freqs.sin()
 
 
 class MusicFlamingoPreTrainedModel(AudioFlamingo3PreTrainedModel):
-    pass
-
-
-@auto_docstring(
-    custom_intro="""
-    The audio model from MusicFlamingo without any head or projection on top.
-    """
-)
-class MusicFlamingoEncoder(AudioFlamingo3Encoder):
-    """
-    MusicFlamingo encoder: Whisper encoder with rotary embeddings for time information.
-    """
-
-    def __init__(self, config: MusicFlamingoEncoderConfig):
-        super().__init__(config)
-        self.pos_emb = MusicFlamingoRotaryEmbedding(config)
-
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
@@ -459,75 +373,17 @@ class MusicFlamingoEncoder(AudioFlamingo3Encoder):
             buffer_value = module._compute_position_angles(module.inv_freq)
             init.copy_(module.position_angles, buffer_value)
 
-    @can_return_tuple
-    def forward(
-        self,
-        input_features: torch.Tensor,
-        input_features_mask: torch.Tensor | None = None,
-        audio_times: torch.Tensor | None = None,
-        **kwargs,
-    ):
-        r"""
-        Args:
-            input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
-                Log-Mel features extracted from raw audio. Use the processor/feature extractor to compute and pad
-                these features from waveform input.
-            input_features_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-            audio_times (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
-                The start time of the audio segments in seconds.
-        """
-        seq_len = (input_features.shape[-1] - 1) // 2 + 1  # After conv2 downsampling
-        input_features_lengths = input_features_mask.sum(-1)
-        input_features_lengths = (input_features_lengths - 1) // 2 + 1  # conv2 downsampling
-        input_features_mask = torch.arange(seq_len, device=input_features.device) < input_features_lengths[:, None]
-
-        # Conv front-end
-        inputs_embeds = nn.functional.gelu(self.conv1(input_features))
-        inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
-        inputs_embeds = inputs_embeds.permute(0, 2, 1)
-
-        # Add positions, dropout
-        hidden_states = inputs_embeds + self.embed_positions.weight
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-
-        attention_mask = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=hidden_states,
-            attention_mask=input_features_mask,
-        )
-
-        # Transformer stack
-        for layer in self.layers:
-            drop = self.training and torch.rand([]) < self.layerdrop
-            if not drop:
-                hidden_states = layer(hidden_states, attention_mask)[0]
-
-        # AvgPool (time/2) + LayerNorm
-        hidden_states = hidden_states.permute(0, 2, 1)
-        hidden_states = self.avg_pooler(hidden_states).permute(0, 2, 1)
-        hidden_states = self.layer_norm(hidden_states)
-
-        if audio_times is not None:
-            cos, sin = self.pos_emb(audio_times.to(hidden_states.device), seq_len=hidden_states.shape[-2])
-            hidden_states = apply_rotary_time_emb(hidden_states, cos, sin)
-
-        return BaseModelOutput(last_hidden_state=hidden_states)
-
-
-class MusicFlamingoMultiModalProjector(AudioFlamingo3MultiModalProjector):
-    pass
-
 
 @auto_docstring(
     custom_intro="""
-    The MusicFlamingo model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Qwen2 language model.
+    The MusicFlamingo model which consists of a fine-tuned Whisper encoder, rotary time embedding, a multi-modal projector, and a Qwen2 language model.
     """
 )
 class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
+    def __init__(self, config: MusicFlamingoConfig):
+        super().__init__(config)
+        self.pos_emb = MusicFlamingoRotaryEmbedding(config.audio_config)
+
     def get_audio_features(
         self,
         input_features: torch.FloatTensor,
@@ -543,7 +399,11 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         encoder_output = self.audio_tower(
             input_features, input_features_mask=input_features_mask, audio_times=audio_times
         )
-        audio_embeds = self.multi_modal_projector(encoder_output.last_hidden_state)
+        hidden_states = encoder_output.last_hidden_state
+        if audio_times is not None:
+            cos, sin = self.pos_emb(audio_times.to(hidden_states.device), seq_len=hidden_states.shape[-2])
+            hidden_states = apply_rotary_time_emb(hidden_states, cos, sin)
+        audio_embeds = self.multi_modal_projector(hidden_states)
 
         # Mask according to the audio tower output lengths, accounting for both conv downsampling and final avg pooling
         _, post_lengths = self.audio_tower._get_feat_extract_output_lengths(input_features_mask.sum(-1).to(torch.long))
@@ -679,9 +539,7 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
 
 __all__ = [
     "MusicFlamingoConfig",
-    "MusicFlamingoEncoderConfig",
     "MusicFlamingoProcessor",
     "MusicFlamingoForConditionalGeneration",
     "MusicFlamingoPreTrainedModel",
-    "MusicFlamingoEncoder",
 ]

@@ -25,111 +25,27 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="nvidia/music-flamingo-2601-hf")
-class MusicFlamingoEncoderConfig(PretrainedConfig):
-    r"""
-    max_source_positions (`int`, *optional*, defaults to 1500):
-        The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
-    head_dim (`int`, *optional*, defaults to 256):
-        Rotary embedding dimension used per axis in [`MusicFlamingoRotaryEmbedding`]. Since the rotary embedding is
-        applied on two axes (batch and time), the rotated hidden size is `2 * head_dim`, which must be less than
-        or equal to `hidden_size`.
-    max_position_embeddings (`int`, *optional*, defaults to 1200):
-        Maximum cached positions used by the MusicFlamingo time rotary embedding. This should match the processor
-        `max_audio_len`.
-    rope_parameters (`dict`, *optional*):
-        RoPE parameters for [`MusicFlamingoRotaryEmbedding`]. Supports the standard keys `"rope_type"` (defaults to
-        `"default"`) and `"rope_theta"`. By default, `"rope_theta"` is derived from `max_position_embeddings / (2 * pi)`.
-
-    Example:
-
-    ```python
-    >>> from transformers import MusicFlamingoEncoderConfig, MusicFlamingoEncoder
-
-    >>> # Initializing an MusicFlamingoEncoderConfig
-    >>> configuration = MusicFlamingoEncoderConfig()
-
-    >>> # Initializing an MusicFlamingoEncoder (with random weights)
-    >>> model = MusicFlamingoEncoder(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-    model_type = "musicflamingo_encoder"
-
-    attribute_map = {
-        "d_model": "hidden_size",
-        "encoder_layers": "num_hidden_layers",
-        "encoder_attention_heads": "num_attention_heads",
-        "encoder_ffn_dim": "intermediate_size",
-        "encoder_layerdrop": "layerdrop",
-    }
-
-    def __init__(
-        self,
-        num_mel_bins=128,
-        num_hidden_layers=32,
-        num_attention_heads=20,
-        intermediate_size=5120,
-        layerdrop=0.0,
-        activation_function="gelu",
-        hidden_size=1280,
-        dropout=0.0,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        initializer_range=0.02,
-        scale_embedding=False,
-        max_source_positions=1500,
-        head_dim=256,
-        max_position_embeddings=1200,
-        rope_parameters=None,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.num_mel_bins = num_mel_bins
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.activation_function = activation_function
-        self.initializer_range = initializer_range
-        self.layerdrop = layerdrop
-        self.num_hidden_layers = num_hidden_layers
-        self.scale_embedding = scale_embedding
-        self.max_source_positions = max_source_positions
-
-        if rope_parameters is None:
-            rope_parameters = {
-                "rope_type": "default",
-                # "rope_theta": max_position_embeddings / (2 * pi),
-                "rope_theta": max_position_embeddings,
-            }
-        rope_parameters["rope_theta"] = max_position_embeddings
-
-        self.head_dim = head_dim
-        self.max_position_embeddings = max_position_embeddings
-        self.rope_parameters = rope_parameters
-
-
-@auto_docstring(checkpoint="nvidia/music-flamingo-2601-hf")
 class MusicFlamingoConfig(PretrainedConfig):
     r"""
     audio_bos_token_id (`int`, *optional*, defaults to 151670):
             The beginning-of-audio token index used to mark the start of audio spans.
     audio_eos_token_id (`int`, *optional*, defaults to 151671):
         The end-of-audio token index used to mark the end of audio spans.
+    head_dim (`int`, *optional*, defaults to 256):
+        Rotary embedding dimension used per axis in [`MusicFlamingoRotaryEmbedding`]. Since the rotary embedding is
+        applied on two axes (batch and time), the rotated hidden size is `2 * head_dim`, which must be less than
+        or equal to `hidden_size`.
+    rope_parameters (`dict`, *optional*):
+        RoPE parameters for [`MusicFlamingoRotaryEmbedding`]. Supports the standard keys `"rope_type"` (defaults to
+        `"default"`) and `"rope_theta"`.
 
     Example:
 
     ```python
-    >>> from transformers import MusicFlamingoForConditionalGeneration, MusicFlamingoConfig, MusicFlamingoEncoderConfig, Qwen2Config
+    >>> from transformers import MusicFlamingoForConditionalGeneration, MusicFlamingoConfig, AudioFlamingo3EncoderConfig, Qwen2Config
 
     >>> # Initializing an MusicFlamingoEncoder config
-    >>> audio_config = MusicFlamingoEncoderConfig()
+    >>> audio_config = AudioFlamingo3EncoderConfig()
 
     >>> # Initializing a Qwen2 config
     >>> text_config = Qwen2Config()
@@ -156,6 +72,8 @@ class MusicFlamingoConfig(PretrainedConfig):
         audio_eos_token_id=151671,
         projector_hidden_act="gelu",
         projector_bias=True,
+        head_dim=256,
+        rope_parameters=None,
         **kwargs,
     ):
         self.audio_token_id = audio_token_id
@@ -181,6 +99,16 @@ class MusicFlamingoConfig(PretrainedConfig):
         super().__init__(**kwargs)
         self.audio_bos_token_id = audio_bos_token_id
         self.audio_eos_token_id = audio_eos_token_id
+        if rope_parameters is None:
+            rope_parameters = {
+                "rope_type": "default",
+                "rope_theta": 1200,
+            }
+        self.rope_parameters = rope_parameters
+
+        # NOTE for modular with `LlamaRotaryEmbedding`
+        self.head_dim = head_dim
+        self.max_position_embeddings = rope_parameters["rope_theta"]
 
 
-__all__ = ["MusicFlamingoConfig", "MusicFlamingoEncoderConfig"]
+__all__ = ["MusicFlamingoConfig"]

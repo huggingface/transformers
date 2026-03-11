@@ -302,7 +302,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mra", "MraModel"),
         ("mt5", "MT5Model"),
         ("musicflamingo", "MusicFlamingoForConditionalGeneration"),
-        ("musicflamingo_encoder", "MusicFlamingoEncoder"),
+        ("musicflamingo_encoder", "AudioFlamingo3Encoder"),
         ("musicgen", "MusicgenModel"),
         ("musicgen_melody", "MusicgenMelodyModel"),
         ("mvp", "MvpModel"),

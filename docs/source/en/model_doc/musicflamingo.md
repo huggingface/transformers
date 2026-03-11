@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Music Flamingo is a fully open large audio–language model designed for robust understanding and reasoning over music. It builds upon Audio Flamingo 3 architecture, pairing a Whisper-style audio encoder with a causal language model and performing replace-in-place audio–text fusion: the processor aligns post-pool audio frames to a dedicated placeholder token and the model replaces those token slots with projected audio embeddings during the forward pass.
+Music Flamingo is a fully open large audio–language model designed for robust understanding and reasoning over music. It builds upon the [Audio Flamingo 3](./audioflamingo3.md) architecture by including **Rotary Time Embeddings (RoTE)**, which injects temporal position information to enable the model to handle audio sequences up to 20 minutes (1200 seconds).
 
 The model checkpoint is available at: [nvidia/music-flamingo-2601-hf](https://huggingface.co/nvidia/music-flamingo-2601-hf)
 
@@ -242,9 +242,12 @@ loss.backward()
 
 ### Architecture
 
-* **MusicFlamingoEncoder**
-  Whisper-style feature extractor + encoder with **Rotary Time Embeddings (RoTE)** → average-pool over time (stride 2) → LayerNorm.
-  Produces per-frame hidden states at the post-pool rate. RoTE enables the model to handle temporal information for audio sequences up to 20 minutes.
+* **Audio Encoder**
+  Whisper-style feature extractor + encoder → average-pool over time (stride 2) → LayerNorm.
+  Produces per-frame hidden states at the post-pool rate.
+
+* **Rotary Time Embeddings (RoTE)**
+  Applied to the encoder output to inject temporal position information, enabling the model to handle audio sequences up to 20 minutes (1200 seconds). RoTE uses 2D axial rotary embeddings for batch and time dimensions with time-based angle modulation.
 
 * **MusicFlamingoMultiModalProjector**
   A small MLP that maps encoder features to the language model's hidden size.
@@ -277,18 +280,9 @@ loss.backward()
 
 [[autodoc]] MusicFlamingoConfig
 
-## MusicFlamingoEncoderConfig
-
-[[autodoc]] MusicFlamingoEncoderConfig
-
 ## MusicFlamingoProcessor
 
 [[autodoc]] MusicFlamingoProcessor
-
-## MusicFlamingoEncoder
-
-[[autodoc]] MusicFlamingoEncoder
-    - forward
 
 ## MusicFlamingoForConditionalGeneration
 
