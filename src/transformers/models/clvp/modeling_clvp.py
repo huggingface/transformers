@@ -1667,7 +1667,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
             conditioning_embeds=conditioning_embeds,
             generation_config=generation_config,
             output_hidden_states=output_hidden_states,
-            return_dict=generation_config.return_dict_in_generate,
         )
         if isinstance(decoder_outputs, ModelOutput):
             speech_ids = decoder_outputs.sequences
