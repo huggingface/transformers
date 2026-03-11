@@ -176,3 +176,6 @@ tags
 # Cursor IDE files
 .cursor/
 test-results/
+
+# Agents skills
+.agents/

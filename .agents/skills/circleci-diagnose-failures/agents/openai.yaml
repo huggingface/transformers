@@ -1,4 +1,0 @@
-interface:
-  display_name: "CircleCI Diagnose Failures"
-  short_description: "Diagnose failing CircleCI checks on GitHub PRs"
-  default_prompt: "Diagnose the failing CircleCI checks on this PR"
