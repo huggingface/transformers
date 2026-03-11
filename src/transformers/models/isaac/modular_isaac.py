@@ -1066,12 +1066,10 @@ class IsaacModel(Qwen3PreTrainedModel):
                 raise ValueError("Image placeholders require `vision_patches` and `vision_token_grids`.")
             return embeds, modality
 
-        vision_patches = vision_patches.to(device=embeds.device)
-        token_grids = vision_token_grids.to(device=embeds.device, dtype=torch.long)
         image_attention_mask = (
             vision_image_attention_mask.to(device=embeds.device, dtype=torch.bool)
             if vision_image_attention_mask is not None
-            else torch.ones(token_grids.shape[:2], device=embeds.device, dtype=torch.bool)
+            else torch.ones(vision_token_grids.shape[:2], device=embeds.device, dtype=torch.bool)
         )
         patch_attention_mask = (
             vision_patch_attention_mask.to(device=embeds.device, dtype=torch.long)
@@ -1081,18 +1079,18 @@ class IsaacModel(Qwen3PreTrainedModel):
         offsets = (
             vision_token_offsets.to(device=embeds.device, dtype=torch.long)
             if vision_token_offsets is not None
-            else torch.zeros(token_grids.shape[:2], device=embeds.device, dtype=torch.long)
+            else torch.zeros(vision_token_grids.shape[:2], device=embeds.device, dtype=torch.long)
         )
         reduction_factor = int(self.config.vision_config.pixel_shuffle_scale_factor) ** 2
         lengths = (
             vision_token_lengths.to(device=embeds.device, dtype=torch.long)
             if vision_token_lengths is not None
-            else token_grids.prod(-1).div(reduction_factor, rounding_mode="floor").to(dtype=torch.long)
+            else vision_token_grids.prod(-1).div(reduction_factor, rounding_mode="floor").to(dtype=torch.long)
         )
 
         flat_vision_patches = vision_patches[image_attention_mask]
         flat_patch_attention_mask = patch_attention_mask[image_attention_mask]
-        flat_token_grids = token_grids[image_attention_mask]
+        flat_token_grids = vision_token_grids[image_attention_mask]
         flat_offsets = offsets[image_attention_mask]
         flat_lengths = lengths[image_attention_mask]
 
