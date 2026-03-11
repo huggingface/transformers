@@ -979,6 +979,8 @@ class IdeficsModel(IdeficsPreTrainedModel):
             The output of the image encoder.
         perceiver_embeddings (`torch.FloatTensor`, *optional*):
             The output of the perceiver resampler.
+        image_hidden_states (<fill_type>):
+            <fill_docstring>
         image_attention_mask (`torch.LongTensor`, *optional*):
             The attention mask for the image encoder.
         """
