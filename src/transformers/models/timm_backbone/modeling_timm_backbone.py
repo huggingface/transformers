@@ -49,6 +49,7 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
         out_indices = config.out_indices if getattr(config, "out_indices", None) is not None else (-1,)
         pretrained = kwargs.pop("pretrained", False)
         in_chans = kwargs.pop("in_chans", config.num_channels)
+        timm_model_kwargs = getattr(config, "timm_model_kwargs", {})
 
         backbone = timm.create_model(
             config.backbone,
@@ -58,6 +59,7 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
             in_chans=in_chans,
             out_indices=out_indices,
             output_stride=config.output_stride,
+            **timm_model_kwargs,
             **kwargs,
         )
 

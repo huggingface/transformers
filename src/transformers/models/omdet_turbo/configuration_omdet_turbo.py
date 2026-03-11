@@ -149,8 +149,7 @@ class OmDetTurboConfig(PreTrainedConfig):
         # Init timm backbone with hardcoded values for BC
         timm_default_kwargs = {
             "out_indices": [1, 2, 3],
-            "img_size": image_size,
-            "always_partition": True,
+            "timm_model_kwargs": {"img_size": image_size, "always_partition": True},
         }
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
@@ -160,6 +159,16 @@ class OmDetTurboConfig(PreTrainedConfig):
             timm_default_kwargs=timm_default_kwargs,
             **kwargs,
         )
+
+        if getattr(backbone_config, "model_type", None) == "timm_backbone" and not getattr(
+            backbone_config, "timm_model_kwargs", None
+        ):
+            timm_extra = {}
+            for attr in ("img_size", "always_partition"):
+                if hasattr(backbone_config, attr):
+                    timm_extra[attr] = getattr(backbone_config, attr)
+            if timm_extra:
+                backbone_config.timm_model_kwargs = timm_extra
 
         if text_config is None:
             logger.info("`text_config` is `None`. Initializing the config with the default `clip_text_model`")
