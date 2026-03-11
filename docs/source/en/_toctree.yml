@@ -172,7 +172,7 @@
     - local: deepspeed
       title: DeepSpeed ZeRO
     - local: deepspeed_alst
-      title: DeepSpeed ALST
+      title: Ulysses sequence parallelism
     - local: perf_train_gpu_many
       title: N-D parallelism
     - local: debugging
