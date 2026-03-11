@@ -341,6 +341,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
 # These models will be forced to use TokenizersBackend.
 MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "arctic",
+    "chameleon",
     "deepseek_vl",
     "deepseek_vl_v2",
     "deepseek_vl_hybrid",
