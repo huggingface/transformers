@@ -173,10 +173,10 @@
       title: DeepSpeed ZeRO
     - local: deepspeed_alst
       title: Ulysses sequence parallelism
-    - local: perf_train_gpu_many
-      title: N-D parallelism
     - local: debugging
       title: Debugging
+    - local: perf_train_gpu_many
+      title: Parallelism methods
     title: Distributed training
   - isExpanded: false
     sections:
