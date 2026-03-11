@@ -33,7 +33,8 @@ class ShieldGemma2Config(PreTrainedConfig):
         The begin-of-image token index to wrap the image prompt.
     eoi_token_index (`int`, *optional*, defaults to 256000):
         The end-of-image token index to wrap the image prompt.
-
+    tie_word_embeddings (`bool`, *optional*):
+            Whether to tie the word embeddings. Defaults to the value of `text_config.tie_word_embeddings` if not set.
     Example:
 
     ```python
@@ -83,6 +84,8 @@ class ShieldGemma2Config(PreTrainedConfig):
             self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["gemma3_text"]()
+        if kwargs.get("tie_word_embeddings") is None:
+            self.tie_word_embeddings = getattr(self.text_config, "tie_word_embeddings", True)
 
         super().__post_init__(**kwargs)
 

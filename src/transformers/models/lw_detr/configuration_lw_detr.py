@@ -164,7 +164,7 @@ class LwDetrConfig(PreTrainedConfig):
     c2f_num_blocks: int = 3
     activation_function: str = "silu"
     batch_norm_eps: float = 1e-5
-    dropout: float | int = 0.1
+    dropout: float | int = 0.0
     decoder_ffn_dim: int = 2048
     decoder_n_points: int = 4
     decoder_layers: int = 3
