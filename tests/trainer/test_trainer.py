@@ -21,7 +21,6 @@ import math
 import os
 import tempfile
 from functools import partial
-from unittest.mock import patch
 
 import datasets
 import numpy as np
