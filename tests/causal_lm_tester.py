@@ -39,7 +39,8 @@ from .test_modeling_common import (
     torch_device,
 )
 from .test_pipeline_mixin import PipelineTesterMixin
-from .test_training_distributed_mixin import TrainingDistributedTesterMixin
+from .test_tensor_parallel_mixin import TensorParallelTesterMixin
+from .test_fsdp_mixin import FSDPTesterMixin
 from .test_training_mixin import TrainingTesterMixin
 
 
@@ -307,7 +308,7 @@ class CausalLMModelTester:
 
 
 @require_torch
-class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TrainingTesterMixin, TrainingDistributedTesterMixin, FSDPTesterMixin):
+class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TrainingTesterMixin, TensorParallelTesterMixin, FSDPTesterMixin):
     model_tester_class = None
     all_model_classes = None
     pipeline_model_mapping = None

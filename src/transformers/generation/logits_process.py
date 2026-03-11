@@ -15,11 +15,12 @@
 import inspect
 import math
 from collections.abc import Callable, Iterable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import torch
 
+from .._typing import WhisperGenerationConfigLike
 from ..utils import add_start_docstrings
 from ..utils.logging import get_logger
 
@@ -1269,7 +1270,8 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, sequence_bias: list[list[list[int] | float]]):
-        self.sequence_bias = sequence_bias
+        # After _convert_list_arguments_into_dict(), becomes dict[tuple[int, ...], float]
+        self.sequence_bias: Any = sequence_bias
         self._validate_arguments()
         self._convert_list_arguments_into_dict()
 
@@ -1964,8 +1966,9 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         begin_index: int,
         _detect_timestamp_from_logprob: bool | None = None,
     ):  # support for the kwargs
-        self.no_timestamps_token_id = generate_config.no_timestamps_token_id
-        self.timestamp_begin = generate_config.no_timestamps_token_id + 1
+        whisper_generate_config = cast(WhisperGenerationConfigLike, generate_config)
+        self.no_timestamps_token_id = whisper_generate_config.no_timestamps_token_id
+        self.timestamp_begin = whisper_generate_config.no_timestamps_token_id + 1
         self.eos_token_id = generate_config.eos_token_id or generate_config.bos_token_id
 
         # this variable is mostly just used for testing
@@ -2057,9 +2060,9 @@ class WhisperNoSpeechDetection(LogitsProcessor):
         self._no_speech_prob = [0.0]
         self.is_scores_logprobs = scores_is_logprobs
 
-        # overwritten dynamically
-        self.model = None
-        self.inputs = None
+        # overwritten dynamically via set_model()
+        self.model: Any = None
+        self.inputs: dict[str, Any] | None = None
 
     def set_model(self, model):
         self.model = model
@@ -2701,8 +2704,8 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         if self.debug_mode:
             scores = torch.ones_like(scores)
 
-        # Currently indices is just a arange to compute watermarking on the dense logits.
-        all_indices = torch.stack([torch.arange(vocab_size, device=self.device) for _ in range(batch_size)])
+        # Build continuation indices once and broadcast across batch instead of creating one arange per row.
+        all_indices = torch.arange(vocab_size, device=self.device).unsqueeze(0).expand(batch_size, -1)
 
         if self.state is None:
             # Initialize watermarking state if it does not exist.

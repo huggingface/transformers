@@ -270,7 +270,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         selected_image_feature = image_outputs.last_hidden_state
         image_features = self.multi_modal_projector(selected_image_feature)
-        image_features = image_features / (self.config.text_config.hidden_size**0.5)
+        image_features = image_features
         image_outputs.pooler_output = image_features
 
         return image_outputs
@@ -577,7 +577,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
 
         # position_ids in Paligemma are 1-indexed
         if model_inputs.get("position_ids") is not None:
-            model_inputs["position_ids"] += 1
+            # NOTE: we need this op out-of-place, otherwise it modifies the `model_kwargs` dict used in `generate` in-place!
+            model_inputs["position_ids"] = model_inputs["position_ids"] + 1
 
         # Pixel values are used only in the first iteration if available
         # In subsequent iterations, they are already merged with text and cached

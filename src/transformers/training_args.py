@@ -44,6 +44,7 @@ from .utils import (
     is_torch_mlu_available,
     is_torch_mps_available,
     is_torch_musa_available,
+    is_torch_neuron_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_tf32_available,
@@ -896,7 +897,7 @@ class TrainingArguments:
     gradient_checkpointing: bool = field(
         default=False,
         metadata={
-            "help": "Enable gradient checkpointing to trade compute for memory. Reduces memory at the cost of ~20% slower training."
+            "help": "Enable gradient checkpointing to trade compute for memory. Reduces memory at the cost of ~20%% slower training."
         },
     )
     gradient_checkpointing_kwargs: dict[str, Any] | str | None = field(
@@ -925,7 +926,7 @@ class TrainingArguments:
     use_liger_kernel: bool = field(
         default=False,
         metadata={
-            "help": "Enable Liger Kernel optimizations. Increases throughput by ~20% and reduces memory by ~60%."
+            "help": "Enable Liger Kernel optimizations. Increases throughput by ~20%% and reduces memory by ~60%%."
         },
     )
     liger_kernel_config: dict[str, bool] | None = field(
@@ -951,7 +952,7 @@ class TrainingArguments:
     torch_empty_cache_steps: int | None = field(
         default=None,
         metadata={
-            "help": "Number of steps to wait before calling `torch.<device>.empty_cache()`. Helps avoid CUDA OOM at a cost of ~10% slower performance. If None, cache will not be emptied."
+            "help": "Number of steps to wait before calling `torch.<device>.empty_cache()`. Helps avoid CUDA OOM at a cost of ~10%% slower performance. If None, cache will not be emptied."
         },
     )
     auto_find_batch_size: bool = field(
@@ -1515,7 +1516,11 @@ class TrainingArguments:
         if self.greater_is_better is None and self.metric_for_best_model is not None:
             self.greater_is_better = not self.metric_for_best_model.endswith("loss")
 
-        if self.report_to == "none" or self.report_to == ["none"]:
+        if self.report_to == "all" or self.report_to == ["all"]:
+            from .integrations import get_available_reporting_integrations
+
+            self.report_to = get_available_reporting_integrations()
+        elif self.report_to == "none" or self.report_to == ["none"]:
             self.report_to = []
         elif not isinstance(self.report_to, list):
             self.report_to = [self.report_to]
@@ -1808,6 +1813,7 @@ class TrainingArguments:
                 "torch.distributed process group is initialized, but parallel_mode != ParallelMode.DISTRIBUTED. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
             )
+
         if is_torch_xla_available():
             device = self.distributed_state.device
             self._n_gpu = 0
@@ -1833,6 +1839,9 @@ class TrainingArguments:
             elif is_torch_hpu_available():
                 device = torch.device("hpu:0")
                 torch.hpu.set_device(device)
+            elif is_torch_neuron_available():
+                device = torch.device("neuron:0")
+                torch.neuron.set_device(device)
             else:
                 # Default to cuda:0 (respects CUDA_VISIBLE_DEVICES); nn.DataParallel handles n_gpu > 1
                 device = torch.device(

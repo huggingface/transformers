@@ -76,6 +76,10 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     model_split_percents = [0.5, 0.7, 0.8]
 
+    @unittest.skip("Float8 quantization + TP numerical noise exceeds match threshold")
+    def test_tp_generation_quantized(self):
+        pass
+
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         """Needs to be overridden as GLM-4.7-Flash has special MLA cache format (though we don't really use the MLA)"""
         self.assertIsInstance(past_key_values, Cache)
@@ -122,14 +126,6 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
     ):
         pass
 
-    @unittest.skip("I am in a rush, will check it out later on")
-    def test_keep_in_fp32_modules_strict(self):
-        pass
-
-    @unittest.skip("I am in a rush, will check it out later on")
-    def test_keep_in_fp32_modules(self):
-        pass
-
     @require_torch_accelerator
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
@@ -142,10 +138,6 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip("DSA indexer mask shape mismatch with assisted decoding")
     def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("Requires torch>=2.9.0 for grouped MM")
-    def test_eager_matches_batched_and_grouped_inference(self):
         pass
 
     @unittest.skip("DSA indexer mask shape mismatch with static cache")

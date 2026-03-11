@@ -168,11 +168,16 @@ class Qwen3VLMoeVisionText2TextModelTester:
         input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
         input_ids[:, self.num_image_tokens] = self.image_token_id
         input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
+
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[:, self.num_image_tokens] = 1
+
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "mm_token_type_ids": mm_token_type_ids,
         }
         return config, inputs_dict
 
@@ -220,6 +225,7 @@ class Qwen3VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(**curr_input_dict)
 
+            model.base_model.rope_deltas = None
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
             input_ids = curr_input_dict["input_ids"][:1]
             pixel_values = curr_input_dict["pixel_values"][:one_img_length]
@@ -234,6 +240,7 @@ class Qwen3VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                     image_grid_thw=image_grid_thw,
                 )
 
+            model.base_model.rope_deltas = None
             # two images and two image tokens don't raise an error
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
@@ -242,6 +249,54 @@ class Qwen3VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
             )
+
+    def test_image_forward(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        B = self.model_tester.batch_size
+        C = config.vision_config.in_chans
+        T = config.vision_config.temporal_patch_size
+        P = config.vision_config.patch_size
+        num_images = 2
+
+        input_ids = ids_tensor([B, self.model_tester.seq_length], self.model_tester.vocab_size)
+        input_ids[:, -1] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.video_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.image_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.vision_start_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.vision_end_token_id] = self.model_tester.pad_token_id
+
+        # For this tiny config, each image corresponds to one patch token.
+        patches_per_image = 1
+        pixel_values = floats_tensor(
+            [
+                B * num_images * patches_per_image,
+                C * T * (P**2),
+            ]
+        )
+        image_grid_thw = torch.tensor([[1, 1, 1]] * (B * num_images))
+        self.assertEqual(pixel_values.shape[0], image_grid_thw.prod(dim=1).sum().item())
+
+        insertion_point = 0
+        tokens_per_image = 3  # vision_start + image_token + vision_end
+        required_seq_length = insertion_point + num_images * tokens_per_image
+        self.assertLessEqual(required_seq_length, input_ids.shape[1])
+
+        for b in range(B):
+            for image_idx in range(num_images):
+                image_start = insertion_point + image_idx * tokens_per_image
+                input_ids[b, image_start] = self.model_tester.vision_start_token_id
+                input_ids[b, image_start + 1] = self.model_tester.image_token_id
+                input_ids[b, image_start + 2] = self.model_tester.vision_end_token_id
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            outputs = model(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                image_grid_thw=image_grid_thw,
+            )
+            self.assertIsNotNone(outputs)
 
     def test_video_forward(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -254,6 +309,8 @@ class Qwen3VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         input_ids = ids_tensor([B, self.model_tester.seq_length], self.model_tester.vocab_size)
 
         F = 4
+        num_video = 2
+        frame_timestamp_tokens = 5
         patch_H = self.model_tester.image_size // P
         patch_W = self.model_tester.image_size // P
         patch_T = F // T
@@ -262,12 +319,13 @@ class Qwen3VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         pixel_values_videos = floats_tensor(
             [
                 # first dim: batch_size * num_patches
-                B * patches_per_video,
+                B * num_video * patches_per_video,
                 # second dim: in_channels * temporal_patch_size * patch_size^2
                 C * T * (P**2),
             ]
         )
-        video_grid_thw = torch.tensor([[1, patch_H, patch_W] for _ in range(patch_T)] * B)
+
+        video_grid_thw = torch.tensor([[patch_T, patch_H, patch_W]] * (B * num_video))
 
         # sanity check
         self.assertEqual(pixel_values_videos.shape[0], video_grid_thw.prod(dim=1).sum().item())
@@ -277,22 +335,49 @@ class Qwen3VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         input_ids[input_ids == self.model_tester.video_token_id] = self.model_tester.pad_token_id
         input_ids[input_ids == self.model_tester.image_token_id] = self.model_tester.pad_token_id
         input_ids[input_ids == self.model_tester.vision_start_token_id] = self.model_tester.pad_token_id
-        input_ids[:, self.model_tester.num_image_tokens] = self.model_tester.video_token_id
+        input_ids[input_ids == self.model_tester.vision_end_token_id] = self.model_tester.pad_token_id
 
-        insertion_point = self.model_tester.num_image_tokens
+        insertion_point = 0
+        tokens_per_frame = frame_timestamp_tokens + 1 + pathed_per_frame + 1
+        tokens_per_video = patch_T * tokens_per_frame
+        required_seq_length = insertion_point + num_video * tokens_per_video
+        if required_seq_length > input_ids.shape[1]:
+            pad_extension = torch.full(
+                (B, required_seq_length - input_ids.shape[1]),
+                self.model_tester.pad_token_id,
+                dtype=input_ids.dtype,
+                device=input_ids.device,
+            )
+            input_ids = torch.cat([input_ids, pad_extension], dim=1)
+        timestamp_start_token_id = self.model_tester.vision_end_token_id + 1
+        self.assertLessEqual(timestamp_start_token_id + frame_timestamp_tokens, self.model_tester.vocab_size)
+        timestamp_token_ids = torch.arange(
+            timestamp_start_token_id,
+            timestamp_start_token_id + frame_timestamp_tokens,
+            device=input_ids.device,
+            dtype=input_ids.dtype,
+        )
 
-        self.assertLessEqual((B * patches_per_video) + insertion_point, self.model_tester.seq_length)
+        self.assertLessEqual(required_seq_length, input_ids.shape[1])
         for b in range(B):
-            # each frame is separated by a vision_start_token_id
-            for frame_idx in range(patch_T):
-                input_ids[b, insertion_point + frame_idx * (pathed_per_frame + 1)] = (
-                    self.model_tester.vision_start_token_id
-                )
-                input_ids[
-                    b,
-                    insertion_point + frame_idx * (pathed_per_frame + 1) + 1 : insertion_point
-                    + (frame_idx + 1) * (pathed_per_frame + 1),
-                ] = self.model_tester.video_token_id
+            for video_idx in range(num_video):
+                video_start = insertion_point + video_idx * tokens_per_video
+                for frame_idx in range(patch_T):
+                    frame_start = video_start + frame_idx * tokens_per_frame
+                    input_ids[b, frame_start : frame_start + frame_timestamp_tokens] = timestamp_token_ids
+
+                    vision_start_pos = frame_start + frame_timestamp_tokens
+                    input_ids[b, vision_start_pos] = self.model_tester.vision_start_token_id
+
+                    frame_token_start = vision_start_pos + 1
+                    frame_token_end = frame_token_start + pathed_per_frame
+                    input_ids[b, frame_token_start:frame_token_end] = self.model_tester.video_token_id
+
+                    input_ids[b, frame_token_end] = self.model_tester.vision_end_token_id
+
+        # build mm_token_type_ids
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.model_tester.video_token_id] = 2
 
         for model_class in self.all_model_classes:
             # TODO:we should remove this because we use timestamps for video
@@ -301,6 +386,7 @@ class Qwen3VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 input_ids=input_ids,
                 pixel_values_videos=pixel_values_videos,
                 video_grid_thw=video_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
             )
             self.assertIsNotNone(outputs)
 
@@ -365,7 +451,8 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         )
-        expected_input_ids = [151644, 872, 198, 151652, 151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655]  # fmt: skip
+        expected_input_ids = [151644, 872, 198, 151652, 151655, 151655, 151655, 151655,
+                              151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655]  # fmt: skip
         self.assertListEqual(expected_input_ids, inputs.input_ids[0].tolist()[:17])
 
         expected_pixel_slice = torch.tensor(

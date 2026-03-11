@@ -328,12 +328,12 @@ training_ci_job = CircleCIJob(
     parallelism=6,
 )
 
-training_distributed_ci_job = CircleCIJob(
-    "training_distributed_ci",
-    additional_env={"RUN_TRAINING_TESTS": True},
+tensor_parallel_ci_job = CircleCIJob(
+    "tensor_parallel_ci",
+    additional_env={"RUN_TENSOR_PARALLEL_TESTS": True},
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
-    install_steps=["uv pip install ."],
-    marker="is_training_distributed_test",
+    install_steps=["uv pip install .", "uv pip install torchao"],
+    marker="is_tensor_parallel_test",
     parallelism=6,
 )
 
@@ -366,8 +366,9 @@ EXAMPLES_TESTS = [examples_torch_job]
 PIPELINE_TESTS = [pipelines_torch_job]
 REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
-TRAINING_CI_TESTS = [training_ci_job, training_distributed_ci_job]
-ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job] + TRAINING_CI_TESTS  # fmt: skip
+TRAINING_CI_TESTS = [training_ci_job]
+TENSOR_PARALLEL_CI_TESTS = [tensor_parallel_ci_job]
+ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job] + TRAINING_CI_TESTS + TENSOR_PARALLEL_CI_TESTS  # fmt: skip
 
 
 def create_circleci_config(folder=None):
