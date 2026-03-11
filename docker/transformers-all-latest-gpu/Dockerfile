@@ -108,9 +108,6 @@ RUN python3 -m pip install --no-cache-dir g2p-en
 # For Some bitsandbytes tests
 RUN python3 -m pip install --no-cache-dir einops
 
-# For Some tests with `@require_liger_kernel`
-RUN python3 -m pip install --no-cache-dir liger-kernel
-
 # For `VibeVoice` (added in PR #40546)
 RUN python3 -m pip install --no-cache-dir diffusers
 

@@ -1,13 +1,12 @@
 import argparse
 import json
+import logging
 import math
 import os
 import time
 import traceback
 import zipfile
 from collections import Counter
-
-import logging
 
 import requests
 
