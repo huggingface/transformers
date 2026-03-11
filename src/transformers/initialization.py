@@ -20,7 +20,7 @@ import torch
 
 
 # Record all the torch primitives in advance, so that we can use them without them being modified when we patch torch
-# in context managers.
+# in context managers
 TORCH_INIT_FUNCTIONS = {
     "uniform_": torch.nn.init.uniform_,
     "normal_": torch.nn.init.normal_,
