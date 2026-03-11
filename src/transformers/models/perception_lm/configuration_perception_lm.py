@@ -13,7 +13,7 @@
 """PerceptionLM model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..timm_wrapper.configuration_timm_wrapper import TimmWrapperConfig
 
@@ -21,32 +21,13 @@ from ..timm_wrapper.configuration_timm_wrapper import TimmWrapperConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="facebook/Perception-LM-1B")
 class PerceptionLMConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PerceptionLMForConditionalGeneration`]. It is used to instantiate an
-    PerceptionLM model according to the specified arguments, defining the model architecture.
-
-    Example models:
-    -  [facebook/Perception-LM-1B](https://huggingface.co/facebook/Perception-LM-1B).
-    -  [facebook/Perception-LM-3B](https://huggingface.co/facebook/Perception-LM-3B).
-    -  [facebook/Perception-LM-8B](https://huggingface.co/facebook/Perception-LM-8B).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vision_config (`Union[TimmWrapperConfig, dict]`, *optional*, defaults to `TimmWrapperConfig()`):
-            The config object or dictionary of the vision backbone.
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `LlamaConfig()`):
-            The config object or dictionary of the text backbone.
-        vision_use_cls_token (`bool`, *optional*, defaults to `True`):
-            Whether CLS token is used in the vision backbone. If used, we remove CLS token embedding from vision output.
-        projector_pooling_ratio (`int`, *optional*, defaults to 1):
-            The pooling ratio used in the multimodal projector.
-        image_token_id (`int`, *optional*, defaults to 128002):
-            The image token index to encode the image prompt.
-        video_token_id (`int`, *optional*, defaults to 128003):
-            The video token index to encode the video prompt.
+    vision_use_cls_token (`bool`, *optional*, defaults to `True`):
+        Whether CLS token is used in the vision backbone. If used, we remove CLS token embedding from vision output.
+    projector_pooling_ratio (`int`, *optional*, defaults to 1):
+        The pooling ratio used in the multimodal projector.
     """
 
     model_type = "perception_lm"
