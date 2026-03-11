@@ -18,9 +18,20 @@ ARG TORCHCODEC='0.8.0'
 
 ARG FLASH_ATTN='false'
 
+# 'x86_64' or 'arm64'
+ARG ARCHITECTURE='x86_64'
+
 RUN apt update
-RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg git-lfs
+RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg git-lfs curl
 RUN git lfs install
+
+RUN set-e; \
+if [ "$ARCHITECTURE" = "arm64" ]; then \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y;\
+    PATH="/root/.cargo/bin:${PATH}";\
+    rustc --version;\
+fi;
+
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
 ARG REF=main
@@ -36,7 +47,11 @@ RUN set -e; \
     # Determine torch version
     if [ ${#PYTORCH} -gt 0 ] && [ "$PYTORCH" != "pre" ]; then \
         VERSION="torch==${PYTORCH}.*"; \
-        TORCHCODEC_VERSION="torchcodec==${TORCHCODEC}.*"; \
+        if [ "$ARCHITECTURE" = "arm64" ]; then \
+            TORCHCODEC_VERSION="torchcodec"; \
+        else \
+            TORCHCODEC_VERSION="torchcodec==${TORCHCODEC}.*"; \
+        fi; \
     else \
         VERSION="torch"; \
         TORCHCODEC_VERSION="torchcodec"; \
