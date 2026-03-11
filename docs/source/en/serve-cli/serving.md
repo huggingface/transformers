@@ -313,7 +313,7 @@ The [OpenAI](https://platform.openai.com/docs/quickstart) client returns the fol
 Paris, and the capital of the United States is Washington, D.C.
 ```
 
-Streaming is also supported.
+The client also supports streaming.
 
 ```python
 stream = client.completions.create(
