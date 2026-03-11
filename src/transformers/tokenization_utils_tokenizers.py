@@ -106,6 +106,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         """
         # Preserve kwargs for possible downstream use
         local_kwargs = dict(kwargs)
+        override_tokenizer = local_kwargs.get("override_tokenizer", False)
         fast_tokenizer_file = local_kwargs.pop("tokenizer_file", None)
 
         if (
@@ -169,6 +170,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 merges = tokenizer_json["model"]["merges"]
                 merges = [tuple(merge.split(" ")) if isinstance(merge, str) else tuple(merge) for merge in merges]
                 local_kwargs["merges"] = merges
+
+            if override_tokenizer:
+                local_kwargs["tokenizer_file"] = fast_tokenizer_file
 
             return local_kwargs
 
@@ -312,6 +316,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # (before calling super().__init__) and should not be stored in `init_kwargs` to keep the tokenizer  serializable.
         kwargs.pop("_spm_precompiled_charsmap", None)
 
+        override_tokenizer = kwargs.pop("override_tokenizer", False)
+
         tokenizer_object = kwargs.pop("tokenizer_object", None)
         gguf_file = kwargs.pop("gguf_file", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
@@ -325,11 +331,15 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         merges = kwargs.get("merges")
 
         fast_tokenizer = None
+        serialized_tokenizer = None
         if tokenizer_object is not None:
             fast_tokenizer = copy.deepcopy(tokenizer_object)
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
             # We have a serialization from tokenizers which let us directly build the backend
-            fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
+            if self.__class__ is TokenizersBackend or self._tokenizer is None or not override_tokenizer:
+                fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
+            else:
+                serialized_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif gguf_file is not None:
             # We need to convert a slow tokenizer to build the backend
             gguf_path = cached_file(kwargs.get("name_or_path", ""), gguf_file, **kwargs)
@@ -368,6 +378,21 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         if self._tokenizer is None:
             raise ValueError("The backend tokenizer is not correctly initialized.")
+
+        # Optionally override subclass-created tokenizers with the serialized tokenizer file.
+        if override_tokenizer and serialized_tokenizer is not None:
+
+            def _sig(tok: TokenizerFast):
+                return tuple(
+                    type(getattr(tok, attr, None))
+                    for attr in ("normalizer", "pre_tokenizer", "decoder", "post_processor", "model")
+                )
+
+            if _sig(self._tokenizer) != _sig(serialized_tokenizer):
+                self._tokenizer = serialized_tokenizer
+                logger.warning(
+                    "Tokenizer pipeline differs from serialized tokenizer; overriding with the serialized definition."
+                )
 
         _truncation = kwargs.pop("tokenizer_truncation", None) or self._tokenizer.truncation or _json_truncation
         if _truncation is not None:
