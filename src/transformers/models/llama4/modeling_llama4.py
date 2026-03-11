@@ -473,6 +473,7 @@ class Llama4PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = False
     _supports_sdpa = True
     _supports_flex_attn = True
+    _keep_in_fp32_modules = ["router", "multi_modal_projector", "vision_model", "lm_head"]
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
