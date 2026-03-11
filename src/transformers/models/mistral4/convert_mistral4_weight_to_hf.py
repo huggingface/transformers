@@ -68,7 +68,7 @@ class FP8RescaleMergeAndConcatenate(ConversionOps):
     Produced output keys::
 
         "gate_up_proj":           fused weight  (n_experts, 2*intermediate, hidden)
-        "gate_up_proj_scale_inv": fused scale   (n_experts,)
+        "gate_up_proj_scale_inv": fused scale   (n_experts, 1, 1)
     """
 
     @torch.no_grad()
