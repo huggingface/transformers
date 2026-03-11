@@ -28,35 +28,13 @@ The Canopy Height Maps v2 (CHMv2) model was proposed in [CHMv2: Improvements in 
 
 You can find more information [here](http://ai.meta.com/blog/world-resources-institute-dino-canopy-height-maps-v2), and the original code [here](https://github.com/facebookresearch/dinov3).
 
-**Abstract from the paper**:
+The abstract from the paper is the following:
 
-Accurate canopy height information is essential for quantifying forest carbon, monitoring restoration and degradation, and
-assessing habitat structure, yet high-fidelity measurements from airborne laser scanning (ALS) remain unevenly available
-globally. Here we present CHMv2, a global, meter-resolution canopy height map derived from high-resolution optical satellite
-imagery using a depth-estimation model built on DINOv3 and trained against ALS canopy height models. Compared to existing
-products, CHMv2 substantially improves accuracy, reduces bias in tall forests, and better preserves fine-scale structure such as
-canopy edges and gaps. These gains are enabled by a large expansion of geographically diverse training data, automated data
-curation and registration, and a loss formulation and data sampling strategy tailored to canopy height distributions. We validate
-CHMv2 against independent ALS test sets and against tens of millions of GEDI and ICESat-2 observations, demonstrating
-consistent performance across major forest biomes.
-
-> [!TIP]
-> You can download the model weights and follow the examples below to convert them to the HF format. There are two checkpoints to download - the backbone (DINOv3 ViT-L) and the head (CHMv2).
+*Accurate canopy height information is essential for quantifying forest carbon, monitoring restoration and degradation, and assessing habitat structure, yet high-fidelity measurements from airborne laser scanning (ALS) remain unevenly available globally. Here we present CHMv2, a global, meter-resolution canopy height map derived from high-resolution optical satellite imagery using a depth-estimation model built on DINOv3 and trained against ALS canopy height models. Compared to existing products, CHMv2 substantially improves accuracy, reduces bias in tall forests, and better preserves fine-scale structure such as canopy edges and gaps. These gains are enabled by a large expansion of geographically diverse training data, automated data curation and registration, and a loss formulation and data sampling strategy tailored to canopy height distributions. We validate CHMv2 against independent ALS test sets and against tens of millions of GEDI and ICESat-2 observations, demonstrating consistent performance across major forest biomes.*
 
 ## Usage examples
 
-Convert the original weights with the following command:
-```bash
-python -m transformers.models.chmv2.convert_chmv2_to_hf \
-    --head_checkpoint_path /path/to/chmv2_head.pth \
-    --backbone_checkpoint_path /path/to/dinov3_vitl16.pth \
-    --pytorch_dump_folder_path /path/to/chmv2_hf_checkpoint \
-    --verify_image_path /path/to/image.tif \
-```
-
-Add the flags `--push_to_hub` and `--model_name <model_name>` to push the converted model and processor to `facebook/<model_name>` on the Hub.
-
-Then for running inference on an image:
+Run inference on an image with the following code:
 
 ```python
 from PIL import Image
@@ -77,9 +55,6 @@ depth = processor.post_process_depth_estimation(
     outputs, target_sizes=[(image.height, image.width)]
 )[0]["predicted_depth"]
 ```
-
-
-
 
 ## CHMv2Config
 
