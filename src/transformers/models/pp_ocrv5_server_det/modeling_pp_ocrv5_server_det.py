@@ -385,18 +385,18 @@ class PPOCRV5ServerDetPFHeadLocal(nn.Module):
 
     def __init__(self, config: PPOCRV5ServerDetConfig):
         super().__init__()
-        self.binarize = PPOCRV5ServerDetHead(in_channels=config.neck_out_channels, kernel_list=config.kernel_list)
-        self.up_conv = nn.Upsample(scale_factor=config.scale_factor, mode=config.interpolate_mode)
+        self.binarize_head = PPOCRV5ServerDetHead(in_channels=config.neck_out_channels, kernel_list=config.kernel_list)
+        self.upsample_convolution = nn.Upsample(scale_factor=config.scale_factor, mode=config.interpolate_mode)
 
-        self.cbn_layer = PPOCRV5ServerDetLocalModule(
+        self.local_refinement_module = PPOCRV5ServerDetLocalModule(
             config.neck_out_channels // 4, config.neck_out_channels // 4, config.hidden_act
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states, feature = self.binarize(hidden_states)
+        hidden_states, feature = self.binarize_head(hidden_states)
         residual = hidden_states
-        feature = self.up_conv(feature)
-        hidden_states = self.cbn_layer(feature, hidden_states)
+        feature = self.upsample_convolution(feature)
+        hidden_states = self.local_refinement_module(feature, hidden_states)
         hidden_states = torch.sigmoid(hidden_states)
 
         return 0.5 * (residual + hidden_states)

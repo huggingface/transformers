@@ -52,6 +52,8 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
             The number of output channels from the neck network, responsible for feature fusion and refinement.
         reduce_factor (`int`, *optional*, defaults to 2):
             The channel reduction factor used in the neck blocks to balance performance and complexity.
+        intraclass_block_number (`int`, *optional*, defaults to 4):
+            The number of Intra-Class Block modules used for enhancing feature representation.
         intraclass_block_config (`dict`, *optional*, defaults to `None`):
             Configuration for the Intra-Class Block modules, if any, used for enhancing feature representation.
         scale_factor (`int`, *optional*, defaults to 2):
