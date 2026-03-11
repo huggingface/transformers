@@ -154,17 +154,13 @@ class MusicFlamingoProcessor(ProcessorMixin):
 
             window_size = int(audio_kwargs["sampling_rate"] * audio_kwargs["chunk_length"])
             max_windows = int(self.max_audio_len // audio_kwargs["chunk_length"])
+            frames_per_window = int(
+                self._get_audio_token_length(torch.tensor([self.feature_extractor.nb_max_frames], dtype=torch.long))
+            )
+            time_step = audio_kwargs["chunk_length"] / frames_per_window
 
             per_sample_windows: list[int] = []
             flat_chunks: list[np.ndarray] = []
-            num_audio_time_steps = int(
-                self._get_audio_token_length(
-                    torch.tensor([self.feature_extractor.nb_max_frames], dtype=torch.long)
-                ).item()
-            )
-            audio_time_step = self.feature_extractor.chunk_length / num_audio_time_steps
-            audio_time_offsets = torch.arange(num_audio_time_steps, dtype=torch.float32) * audio_time_step
-
             chunk_start_times: list[float] = []
 
             for audio_el in audio:
@@ -182,15 +178,14 @@ class MusicFlamingoProcessor(ProcessorMixin):
                     start = i * window_size
                     end = min((i + 1) * window_size, time_cap)
                     flat_chunks.append(audio_el[start:end])
-
-                    start_sec = start / audio_kwargs["sampling_rate"]
-                    chunk_start_times.append(start_sec)
+                    chunk_start_times.append(start / audio_kwargs["sampling_rate"])
 
             audio_inputs = self.feature_extractor(flat_chunks, **audio_kwargs)
             padding_mask = audio_inputs.pop("attention_mask")
             audio_inputs["input_features_mask"] = padding_mask
-            audio_inputs["audio_times"] = (
-                torch.as_tensor(chunk_start_times, dtype=torch.float32).unsqueeze(1) + audio_time_offsets
+            frame_offsets = torch.arange(frames_per_window, dtype=torch.float32) * time_step
+            audio_inputs["rote_timestamps"] = (
+                torch.as_tensor(chunk_start_times, dtype=torch.float32).unsqueeze(1) + frame_offsets
             )
 
             audio_lengths = torch.stack([s.sum() for s in torch.split(padding_mask.sum(-1), per_sample_windows)])
@@ -220,7 +215,7 @@ class MusicFlamingoProcessor(ProcessorMixin):
     def model_input_names(self) -> list[str]:
         tok_names = self.tokenizer.model_input_names
         fea_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tok_names + fea_names + ["input_features_mask", "audio_times"]))
+        return list(dict.fromkeys(tok_names + fea_names + ["input_features_mask", "rote_timestamps"]))
 
 
 __all__ = ["MusicFlamingoProcessor"]
