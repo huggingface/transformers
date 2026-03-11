@@ -12,15 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
-import importlib.metadata
 import inspect
 import json
 import os
 import re
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Literal, Optional
-
-from packaging import version
 
 from ..conversion_mapping import (
     _MODEL_TO_CONVERSION_PATTERN,
@@ -59,7 +56,6 @@ if is_accelerate_available():
 
 # Minimum PEFT version supported for the integration
 MIN_PEFT_VERSION = "0.18.0"
-IS_PEFT_GE_019 = version.parse(importlib.metadata.version("peft")) >= version.parse("0.19.0")
 
 
 logger = logging.get_logger(__name__)

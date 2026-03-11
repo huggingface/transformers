@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import gc
+import importlib.metadata
 import json
 import os
 import re
@@ -21,6 +22,7 @@ from pathlib import Path
 
 from datasets import Dataset, DatasetDict
 from huggingface_hub import hf_hub_download
+from packaging import version
 from torch import nn
 
 from transformers import (
@@ -35,7 +37,6 @@ from transformers import (
     TrainingArguments,
     logging,
 )
-from transformers.integrations.peft import IS_PEFT_GE_019
 from transformers.testing_utils import (
     CaptureLogger,
     require_bitsandbytes,
@@ -932,7 +933,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 assert not torch.allclose(output_base, output_peft, atol=atol, rtol=rtol)
 
     def test_mixtral_lora_conversion(self):
-        if not IS_PEFT_GE_019:
+        if version.parse(importlib.metadata.version("peft")) < version.parse("0.19.0"):
             self.skipTest("For this test to pass, PEFT 0.19 is required.")
 
         inputs = torch.arange(10).view(1, -1).to(0)
