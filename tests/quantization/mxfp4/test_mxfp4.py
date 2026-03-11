@@ -126,7 +126,11 @@ class Mxfp4QuantizerTest(unittest.TestCase):
 
     def test_quantizer_validation_no_accelerator(self):
         """Test quantizer validation when CUDA/XPU is not available"""
-        with _patch_no_accelerator():
+        with (
+            _patch_no_accelerator(),
+            patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=True),
+            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=True),
+        ):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
             config = Mxfp4Config()
@@ -180,7 +184,11 @@ class Mxfp4QuantizerTest(unittest.TestCase):
     def test_quantizer_validation_order_dequantize_before_accelerator_check(self):
         """Test that dequantize check happens before CUDA/XPU availability check"""
         # Mock torch.cuda.is_available
-        with _patch_no_accelerator():
+        with (
+            _patch_no_accelerator(),
+            patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=True),
+            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=True),
+        ):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
             # Test with dequantize=True - should pass even without CUDA/XPU and accelerate

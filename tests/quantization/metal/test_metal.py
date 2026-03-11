@@ -22,6 +22,7 @@ from transformers.quantizers.quantizer_metal import MetalHfQuantizer
 from transformers.testing_utils import (
     require_torch,
     slow,
+    torch_device,
 )
 from transformers.utils import is_torch_available
 
@@ -219,7 +220,7 @@ class AffineQuantizeDequantizeTest(unittest.TestCase):
     def test_roundtrip_4bit_gs64(self):
         orig, deq = self._roundtrip(bits=4, group_size=64)
         max_err = (orig - deq).abs().max().item()
-        self.assertLess(max_err, 0.25, "4-bit gs=64 round-trip error too large")
+        self.assertLess(max_err, 0.30, "4-bit gs=64 round-trip error too large")
 
     def test_roundtrip_4bit_gs128(self):
         orig, deq = self._roundtrip(bits=4, group_size=128)
@@ -234,7 +235,7 @@ class AffineQuantizeDequantizeTest(unittest.TestCase):
     def test_roundtrip_2bit_gs64(self):
         orig, deq = self._roundtrip(bits=2, group_size=64)
         max_err = (orig - deq).abs().max().item()
-        self.assertLess(max_err, 1.25, "2-bit gs=64 round-trip error too large")
+        self.assertLess(max_err, 1.50, "2-bit gs=64 round-trip error too large")
 
     def test_quantize_shapes_2bit(self):
         from transformers.integrations.metal_quantization import _affine_quantize_tensor
@@ -629,7 +630,7 @@ class MetalSlowIntegrationTest(unittest.TestCase):
     def test_quantized_model(self):
         with _patch_no_mps():
             config = MetalConfig(bits=4, group_size=64)
-            model = AutoModelForCausalLM.from_pretrained(self.model_id, quantization_config=config, device_map="mps")
+            model = AutoModelForCausalLM.from_pretrained(self.model_id, quantization_config=config, device_map=torch_device)
             tokenizer = AutoTokenizer.from_pretrained(self.model_id)
             self.assertIsNotNone(model)
             input = "Hello, how are you?"

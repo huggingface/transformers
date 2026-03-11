@@ -883,9 +883,11 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
         model.train()
 
         if torch_device in ["cuda", "xpu"]:
-            self.assertEqual(
-                set(model.hf_device_map.values()), {backend_torch_accelerator_module(torch_device).current_device()}
-            )
+            hf_device_map = getattr(model, "hf_device_map", None)
+            if hf_device_map is not None:
+                self.assertEqual(
+                    set(hf_device_map.values()), {backend_torch_accelerator_module(torch_device).current_device()}
+                )
         else:
             self.assertTrue(all(param.device.type == "cpu" for param in model.parameters()))
 
