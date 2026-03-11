@@ -611,18 +611,31 @@ class PeftAdapterMixin:
         else:
             checkpoint_files, sharded_metadata = [], {}
 
+        device_map = getattr(self, "hf_device_map", {"": self.device})
         load_config = replace(
             load_config,
             pretrained_model_name_or_path=peft_model_id,
             sharded_metadata=sharded_metadata,
             weight_mapping=peft_weight_conversions,
+            device_map=device_map,
         )
         loading_info, _ = self._load_pretrained_model(
             model=self,
             state_dict=adapter_state_dict,
             checkpoint_files=checkpoint_files,
             load_config=load_config,
+            # pass expected keys explicitly, otherwise they are determined from the state_dict, which can contain
+            # unexpected entries, like "layer.SCB" from a bnb layer.
+            expected_keys=[n for n, _ in self.named_parameters()],
         )
+
+        if peft_config.inference_mode:
+            from peft.tuners.tuners_utils import BaseTunerLayer
+
+            self.eval()
+            for module in self.modules():
+                if isinstance(module, BaseTunerLayer):
+                    module.requires_grad_(False)
 
         adapter_key_markers = {adapter_name}
         if peft_config is not None and getattr(peft_config, "peft_type", None) is not None:
