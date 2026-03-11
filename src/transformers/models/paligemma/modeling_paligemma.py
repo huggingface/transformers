@@ -268,7 +268,6 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         selected_image_feature = image_outputs.last_hidden_state
         image_features = self.multi_modal_projector(selected_image_feature)
-        image_features = image_features
         image_outputs.pooler_output = image_features
 
         return image_outputs

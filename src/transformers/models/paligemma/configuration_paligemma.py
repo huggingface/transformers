@@ -20,7 +20,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="paligemma-hf/paligemma-2b")
+@auto_docstring(checkpoint="google/paligemma-3b-pt-224")
 class PaliGemmaConfig(PreTrainedConfig):
     r"""
     Example:

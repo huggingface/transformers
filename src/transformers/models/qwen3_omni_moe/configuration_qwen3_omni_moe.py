@@ -82,7 +82,7 @@ class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
         self.downsample_hidden_size = downsample_hidden_size
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
     r"""
     num_position_embeddings (`int`, *optional*, defaults to 2304):
@@ -130,7 +130,7 @@ class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
         self.deepstack_visual_indexes = deepstack_visual_indexes
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 class Qwen3OmniMoeTextConfig(PreTrainedConfig):
     r"""
     decoder_sparse_step (`int`, *optional*, defaults to 1):
@@ -241,7 +241,7 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         )
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
     r"""
     position_id_per_seconds (`int`, *optional*, defaults to 25):
@@ -420,7 +420,7 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
     r"""
     decoder_sparse_step (`int`, *optional*, defaults to 1):
@@ -536,7 +536,7 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     r"""
     code_predictor_config (`dict`, *optional*):
@@ -651,7 +651,7 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
     r"""
     num_quantizers (`int`, *optional*, defaults to 16):
@@ -731,7 +731,7 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         return ["sliding_attention"] * self.num_hidden_layers
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 class Qwen3OmniMoeConfig(PreTrainedConfig):
     r"""
     thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.

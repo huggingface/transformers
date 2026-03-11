@@ -21,7 +21,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="meta/chameleon-7B")
+@auto_docstring(checkpoint="facebook/chameleon-7b")
 class ChameleonVQVAEConfig(PreTrainedConfig):
     r"""
     base_channels (`int`, *optional*, defaults to 128):
@@ -76,7 +76,7 @@ class ChameleonVQVAEConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
 
 
-@auto_docstring(checkpoint="meta/chameleon-7B")
+@auto_docstring(checkpoint="facebook/chameleon-7b")
 class ChameleonConfig(PreTrainedConfig):
     r"""
     model_parallel_size (`int`, *optional*, defaults to 1):
