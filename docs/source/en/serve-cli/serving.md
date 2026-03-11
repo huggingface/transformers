@@ -250,7 +250,7 @@ The image depicts an astronaut in a space suit standing on what appears to be th
 
 ## v1/completions
 
-The `v1/completions` API is based on the [legacy Completions API](https://platform.openai.com/docs/api-reference/completions). Unlike `/v1/chat/completions`, it takes a freeform text `prompt` instead of chat messages and returns generated text in `choices[].text`. This is useful for base (non-instruct) models and text completion tasks where a chat template is not needed. It also supports `suffix` for fill-in-the-middle text insertion.
+The `v1/completions` API is based on the [legacy Completions API](https://platform.openai.com/docs/api-reference/completions). Unlike [/v1/chat/completions](#v1/chat/completions), it takes a freeform text `prompt` instead of chat messages and returns generated text in `choices[].text`. Use it for base (non-instruct) models and tasks that don't need a chat template. It also supports `suffix` for fill-in-the-middle text insertion.
 
 <hfoptions id="legacy-completion">
 <hfoption id="curl">
