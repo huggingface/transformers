@@ -168,6 +168,7 @@ else:
             ("pix2struct", ("Pix2StructImageProcessor", "Pix2StructImageProcessorFast")),
             ("pixio", ("BitImageProcessor", "BitImageProcessorFast")),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
+            ("pi0", (None, "PI0ImageProcessorFast")),
             ("poolformer", ("PoolFormerImageProcessor", "PoolFormerImageProcessorFast")),
             ("pp_doclayout_v2", (None, "PPDocLayoutV2ImageProcessorFast")),
             ("pp_doclayout_v3", (None, "PPDocLayoutV3ImageProcessorFast")),

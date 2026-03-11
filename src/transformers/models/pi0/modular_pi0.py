@@ -32,11 +32,19 @@ from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast
+from ...siglip.image_processor_siglip import SiglipImageProcessorFast
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..paligemma.processing_paligemma import PaligemmaProcessor
-
+from ...image_utils import SizeDict
 
 logger = logging.get_logger(__name__)
+
+
+@auto_docstring
+class PI0ImageProcessorFast(SiglipImageProcessorFast):
+    size = {"max_height": 224, "max_height": 224}
+    pad_size = {"height": 224, "width": 224}
+    do_pad = True
 
 
 class PI0ProcessorKwargs(ProcessingKwargs, total=False):
