@@ -938,7 +938,8 @@ class Ernie4_5_VLMoeVariableResolutionResamplerModel(nn.Module):
 
 
 class Ernie4_5_VLMoeModel(Qwen2VLModel):
-    _no_split_modules = ["Ernie4_5_VL_MoeDecoderLayer", "Ernie4_5_VL_MoeVisionBlock"]
+    config: Ernie4_5_VLMoeConfig
+    _no_split_modules = ["Ernie4_5_VLMoeDecoderLayer", "Ernie4_5_VLMoeVisionBlock"]
 
     def __init__(self, config: Ernie4_5_VLMoeConfig):
         super().__init__(config)

@@ -4695,7 +4695,7 @@ class ModelTesterMixin:
                 # Check that for each conversion entry, we at least map to one key
                 for conversion in conversions:
                     for source_pattern in conversion.source_patterns:
-                        # Some patterns are writtent for gen-model only and won't be applied on base model
+                        # Some patterns are written for gen-model only and won't be applied on base model
                         if "lm_head" in source_pattern and model_class not in [
                             *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
                             *get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES),
