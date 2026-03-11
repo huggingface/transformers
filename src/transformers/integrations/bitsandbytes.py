@@ -53,10 +53,7 @@ class Bnb4bitQuantize(ConversionOps):
             value = value.T
 
         old_value = model.get_parameter_or_buffer(full_layer_name)
-        # Filter out HF-internal attributes (e.g. _is_hf_initialized) that
-        # Params4bit.__new__ does not accept.
-        param_kwargs = {k: v for k, v in old_value.__dict__.items() if not k.startswith("_")}
-        new_value = bnb.nn.Params4bit(value, requires_grad=False, **param_kwargs).to(value.device)
+        new_value = bnb.nn.Params4bit(value, requires_grad=False, **old_value.__dict__).to(value.device)
         module._is_hf_initialized = True
         return {full_layer_name: new_value}
 
