@@ -116,7 +116,8 @@ class MusicFlamingoEncoderConfig(AudioFlamingo3EncoderConfig):
         if rope_parameters is None:
             rope_parameters = {
                 "rope_type": "default",
-                "rope_theta": max_position_embeddings / (2 * pi),
+                # "rope_theta": max_position_embeddings / (2 * pi),
+                "rope_theta": max_position_embeddings,
             }
         rope_parameters["rope_theta"] = max_position_embeddings
 

@@ -19,8 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from math import pi
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -107,7 +105,8 @@ class MusicFlamingoEncoderConfig(PretrainedConfig):
         if rope_parameters is None:
             rope_parameters = {
                 "rope_type": "default",
-                "rope_theta": max_position_embeddings / (2 * pi),
+                # "rope_theta": max_position_embeddings / (2 * pi),
+                "rope_theta": max_position_embeddings,
             }
         rope_parameters["rope_theta"] = max_position_embeddings
 
