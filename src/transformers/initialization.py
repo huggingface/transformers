@@ -21,10 +21,6 @@ import torch
 
 # Record all the torch primitives in advance, so that we can use them without them being modified when we patch torch
 # in context managers.
-# NOTE: The wrapper functions below add a `tensor.is_floating_point()` guard for init ops that require
-# floating-point tensors (e.g. normal_, uniform_, xavier_*, kaiming_*, etc.).  This prevents
-# NotImplementedError when these are called on non-float dtypes such as uint8 or int8 — which happens
-# when loading pre-quantized checkpoints (e.g. BitsAndBytes NF4) that store weights as packed integers.
 TORCH_INIT_FUNCTIONS = {
     "uniform_": torch.nn.init.uniform_,
     "normal_": torch.nn.init.normal_,
@@ -46,7 +42,7 @@ TORCH_INIT_FUNCTIONS = {
 def uniform_(
     tensor: torch.Tensor, a: float = 0.0, b: float = 1.0, generator: torch.Generator | None = None
 ) -> torch.Tensor:
-    if not getattr(tensor, "_is_hf_initialized", False) and tensor.is_floating_point():
+    if not getattr(tensor, "_is_hf_initialized", False):
         return TORCH_INIT_FUNCTIONS["uniform_"](tensor, a=a, b=b, generator=generator)
     return tensor
 
@@ -54,7 +50,7 @@ def uniform_(
 def normal_(
     tensor: torch.Tensor, mean: float = 0.0, std: float = 1.0, generator: torch.Generator | None = None
 ) -> torch.Tensor:
-    if not getattr(tensor, "_is_hf_initialized", False) and tensor.is_floating_point():
+    if not getattr(tensor, "_is_hf_initialized", False):
         return TORCH_INIT_FUNCTIONS["normal_"](tensor, mean=mean, std=std, generator=generator)
     return tensor
 
@@ -84,19 +80,19 @@ def eye_(tensor: torch.Tensor) -> torch.Tensor:
 
 
 def dirac_(tensor: torch.Tensor, groups: int = 1) -> torch.Tensor:
-    if not getattr(tensor, "_is_hf_initialized", False) and tensor.is_floating_point():
+    if not getattr(tensor, "_is_hf_initialized", False):
         return TORCH_INIT_FUNCTIONS["dirac_"](tensor, groups=groups)
     return tensor
 
 
 def xavier_uniform_(tensor: torch.Tensor, gain: float = 1.0, generator: torch.Generator | None = None) -> torch.Tensor:
-    if not getattr(tensor, "_is_hf_initialized", False) and tensor.is_floating_point():
+    if not getattr(tensor, "_is_hf_initialized", False):
         return TORCH_INIT_FUNCTIONS["xavier_uniform_"](tensor, gain=gain, generator=generator)
     return tensor
 
 
 def xavier_normal_(tensor: torch.Tensor, gain: float = 1.0, generator: torch.Generator | None = None) -> torch.Tensor:
-    if not getattr(tensor, "_is_hf_initialized", False) and tensor.is_floating_point():
+    if not getattr(tensor, "_is_hf_initialized", False):
         return TORCH_INIT_FUNCTIONS["xavier_normal_"](tensor, gain=gain, generator=generator)
     return tensor
 
@@ -108,7 +104,7 @@ def kaiming_uniform_(
     nonlinearity: str = "leaky_relu",
     generator: torch.Generator | None = None,
 ) -> torch.Tensor:
-    if not getattr(tensor, "_is_hf_initialized", False) and tensor.is_floating_point():
+    if not getattr(tensor, "_is_hf_initialized", False):
         return TORCH_INIT_FUNCTIONS["kaiming_uniform_"](
             tensor, a=a, mode=mode, nonlinearity=nonlinearity, generator=generator
         )
@@ -122,7 +118,7 @@ def kaiming_normal_(
     nonlinearity: str = "leaky_relu",
     generator: torch.Generator | None = None,
 ) -> torch.Tensor:
-    if not getattr(tensor, "_is_hf_initialized", False) and tensor.is_floating_point():
+    if not getattr(tensor, "_is_hf_initialized", False):
         return TORCH_INIT_FUNCTIONS["kaiming_normal_"](
             tensor, a=a, mode=mode, nonlinearity=nonlinearity, generator=generator
         )
@@ -137,7 +133,7 @@ def trunc_normal_(
     b: float = 2.0,
     generator: torch.Generator | None = None,
 ) -> torch.Tensor:
-    if not getattr(tensor, "_is_hf_initialized", False) and tensor.is_floating_point():
+    if not getattr(tensor, "_is_hf_initialized", False):
         return TORCH_INIT_FUNCTIONS["trunc_normal_"](tensor, mean=mean, std=std, a=a, b=b, generator=generator)
     return tensor
 
@@ -147,7 +143,7 @@ def orthogonal_(
     gain: float = 1,
     generator: torch.Generator | None = None,
 ) -> torch.Tensor:
-    if not getattr(tensor, "_is_hf_initialized", False) and tensor.is_floating_point():
+    if not getattr(tensor, "_is_hf_initialized", False):
         return TORCH_INIT_FUNCTIONS["orthogonal_"](tensor, gain=gain, generator=generator)
     return tensor
 
@@ -155,7 +151,7 @@ def orthogonal_(
 def sparse_(
     tensor: torch.Tensor, sparsity: float, std: float = 0.01, generator: torch.Generator | None = None
 ) -> torch.Tensor:
-    if not getattr(tensor, "_is_hf_initialized", False) and tensor.is_floating_point():
+    if not getattr(tensor, "_is_hf_initialized", False):
         return TORCH_INIT_FUNCTIONS["sparse_"](tensor, sparsity=sparsity, std=std, generator=generator)
     return tensor
 
@@ -190,13 +186,13 @@ def _variance_scaling(tensor, mode="fan_in", distribution="normal"):
 
 
 def lecun_normal_(tensor):
-    if not getattr(tensor, "_is_hf_initialized", False) and tensor.is_floating_point():
+    if not getattr(tensor, "_is_hf_initialized", False):
         _variance_scaling(tensor, mode="fan_in", distribution="truncated_normal")
     return tensor
 
 
 def default_flax_embed_init_(tensor):
-    if not getattr(tensor, "_is_hf_initialized", False) and tensor.is_floating_point():
+    if not getattr(tensor, "_is_hf_initialized", False):
         _variance_scaling(tensor, mode="fan_in", distribution="normal")
     return tensor
 
