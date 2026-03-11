@@ -237,7 +237,13 @@ def local_torch_dtype(dtype: torch.dtype, model_class_name: str | None = None):
 
     original_dtype = torch.get_default_dtype()
     try:
-        torch.set_default_dtype(dtype)
+        try:
+    torch.set_default_dtype(dtype)
+except TypeError as e:
+    if "Float8" in str(e):
+        torch.set_default_dtype(torch.bfloat16)
+    else:
+        raise
         yield
     finally:
         torch.set_default_dtype(original_dtype)
