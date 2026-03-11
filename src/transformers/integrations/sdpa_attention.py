@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 
 from ..utils import is_torch_npu_available, is_torch_xpu_available, logging
 from ..utils.import_utils import is_torch_greater_or_equal
@@ -9,6 +10,8 @@ logger = logging.get_logger(__name__)
 
 _is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5", accept_dev=True)
 _is_torch_greater_or_equal_than_2_8 = is_torch_greater_or_equal("2.8", accept_dev=True)
+_is_torch_greater_or_equal_than_2_11 = is_torch_greater_or_equal("2.11", accept_dev=True)
+_is_torch_greater_or_equal_than_2_12 = is_torch_greater_or_equal("2.12", accept_dev=True)
 _is_torch_xpu_available = is_torch_xpu_available()
 _is_torch_npu_available = is_torch_npu_available()
 
@@ -35,6 +38,53 @@ def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor) -> b
     if _is_torch_xpu_available:
         return _is_torch_greater_or_equal_than_2_8
     return _is_torch_greater_or_equal_than_2_5 and attention_mask is None
+
+
+def _apply_mps_fixes(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    is_causal: bool,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None, int | None]:
+    """Apply workarounds for known MPS SDPA bugs in PyTorch.
+
+    Returns the (possibly modified) query, key, value, attention_mask, and the original
+    value head dim if padding was applied (None otherwise).
+
+    Fixes two upstream PyTorch issues:
+
+    1. pytorch/pytorch#176767 (fixed in PyTorch 2.12): scaled_dot_product_attention returns
+       incorrect results and corrupted output when value head dim differs from query head dim
+       on MPS. Workaround: pad value to match query head dim, then slice output after SDPA.
+
+    2. pytorch/pytorch#174861 (fixed in PyTorch 2.11): silent correctness issue in bidirectional
+       attention on MPS with non-float32 dtypes, no mask or bool mask, non-causal mode, and
+       specific head dim / sequence length conditions. Workaround: provide a zeros attention
+       mask to force the sdpa_general_mps code path instead of the broken sdpa_vector_2pass_mps.
+    """
+    original_v_head_dim = None
+
+    # Fix 1: pad value tensor when v head dim != q head dim (pytorch/pytorch#176767)
+    if not _is_torch_greater_or_equal_than_2_12:
+        q_head_dim = query.shape[-1]
+        v_head_dim = value.shape[-1]
+        if v_head_dim != q_head_dim:
+            original_v_head_dim = v_head_dim
+            value = F.pad(value, (0, q_head_dim - v_head_dim))
+
+    # Fix 2: force non-bool mask for bidirectional attention (pytorch/pytorch#174861)
+    # Only applies to non-causal attention (is_causal will be handled separately).
+    if _is_torch_greater_or_equal_than_2_8 and not _is_torch_greater_or_equal_than_2_11:
+        if not is_causal and query.dtype != torch.float32:
+            if attention_mask is None or attention_mask.dtype == torch.bool:
+                attention_mask = torch.zeros(
+                    (query.shape[0], 1, query.shape[2], key.shape[2]),
+                    dtype=query.dtype,
+                    device=query.device,
+                )
+
+    return query, key, value, attention_mask, original_v_head_dim
 
 
 def sdpa_attention_forward(
@@ -89,6 +139,12 @@ def sdpa_attention_forward(
             # Convert to boolean type, making sdpa to force call FlashAttentionScore to improve performance.
             attention_mask = torch.logical_not(attention_mask.bool()).to(query.device)
 
+    original_v_head_dim = None
+    if query.device.type == "mps":
+        query, key, value, attention_mask, original_v_head_dim = _apply_mps_fixes(
+            query, key, value, attention_mask, is_causal
+        )
+
     attn_output = torch.nn.functional.scaled_dot_product_attention(
         query,
         key,
@@ -99,6 +155,10 @@ def sdpa_attention_forward(
         is_causal=is_causal,
         **sdpa_kwargs,
     )
+
+    if original_v_head_dim is not None:
+        attn_output = attn_output[..., :original_v_head_dim]
+
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, None
