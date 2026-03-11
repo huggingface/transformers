@@ -240,7 +240,6 @@ class Speech2TextAttention(nn.Module):
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
-        cache_position: torch.Tensor | None = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -284,10 +283,8 @@ class Speech2TextAttention(nn.Module):
 
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
@@ -418,7 +415,6 @@ class Speech2TextDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         output_attentions: bool | None = False,
         use_cache: bool | None = True,
-        cache_position: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -443,7 +439,6 @@ class Speech2TextDecoderLayer(GradientCheckpointingLayer):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -460,7 +455,6 @@ class Speech2TextDecoderLayer(GradientCheckpointingLayer):
                 attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
@@ -715,7 +709,6 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        cache_position=None,
         **kwargs,
     ):
         r"""
@@ -800,16 +793,10 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + input_shape[1], device=inputs_embeds.device
-            )
-
         attention_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
         )
         encoder_attention_mask = create_bidirectional_mask(
@@ -847,7 +834,6 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
-                cache_position=cache_position,
             )
             hidden_states = layer_outputs[0]
 
@@ -908,7 +894,6 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor] | Seq2SeqModelOutput:
         r"""
@@ -994,7 +979,6 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         if not return_dict:
@@ -1045,7 +1029,6 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, Generation
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
         r"""
@@ -1116,7 +1099,6 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, Generation
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
         lm_logits = self.lm_head(outputs[0])
 

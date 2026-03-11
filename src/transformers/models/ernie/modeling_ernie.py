@@ -189,7 +189,6 @@ class ErnieSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -211,7 +210,6 @@ class ErnieSelfAttention(nn.Module):
                 key_layer,
                 value_layer,
                 self.layer_idx,
-                {"cache_position": cache_position},
             )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -338,7 +336,6 @@ class ErnieAttention(nn.Module):
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         attention_mask = attention_mask if not self.is_cross_attention else encoder_attention_mask
@@ -347,7 +344,6 @@ class ErnieAttention(nn.Module):
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         attention_output = self.output(attention_output, hidden_states)
@@ -410,14 +406,12 @@ class ErnieLayer(GradientCheckpointingLayer):
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         self_attention_output, _ = self.attention(
             hidden_states,
             attention_mask,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         attention_output = self_attention_output
@@ -512,7 +506,6 @@ class ErnieEncoder(nn.Module):
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPastAndCrossAttentions:
         for i, layer_module in enumerate(self.layer):
@@ -522,7 +515,6 @@ class ErnieEncoder(nn.Module):
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
 

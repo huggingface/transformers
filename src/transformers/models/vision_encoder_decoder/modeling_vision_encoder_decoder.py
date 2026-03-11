@@ -312,7 +312,6 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
         r"""
@@ -424,7 +423,6 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             past_key_values=past_key_values,
             return_dict=return_dict,
-            cache_position=cache_position,
             **kwargs_decoder,
         )
 

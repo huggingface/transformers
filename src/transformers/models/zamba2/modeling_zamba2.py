@@ -1083,7 +1083,6 @@ class Zamba2MambaDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Zamba2HybridDynamicCache | None = None,
         output_attentions: bool | None = False,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         transformer_hidden_states: torch.Tensor | None = None,
         **kwargs,
@@ -1100,8 +1099,6 @@ class Zamba2MambaDecoderLayer(GradientCheckpointingLayer):
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
         """
 
         residual = hidden_states
@@ -1443,7 +1440,6 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
@@ -1487,7 +1483,6 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            cache_position=cache_position,
             return_dict=return_dict,
         )
 
@@ -1518,7 +1513,6 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         position_ids=None,
         use_cache=True,
         is_first_iteration=False,
@@ -1537,7 +1531,6 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             position_ids=position_ids,
             use_cache=use_cache,
             is_first_iteration=is_first_iteration,

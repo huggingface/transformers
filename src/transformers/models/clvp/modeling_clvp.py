@@ -309,7 +309,6 @@ class ClvpSelfAttention(nn.Module):
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
         output_attentions: bool | None = False,
-        cache_position: torch.Tensor | None = None,
     ) -> tuple[torch.FloatTensor, torch.FloatTensor | None, tuple[torch.FloatTensor] | None]:
         # Raise error when position_ids is None but rotary_pos_emb is provided, because we need that when applying
         # rotary_pos_emb to query and key states.
@@ -324,9 +323,7 @@ class ClvpSelfAttention(nn.Module):
         value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
         if past_key_values is not None:
-            key_states, value_states = past_key_values.update(
-                key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-            )
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         if rotary_pos_emb is not None:
             rotary_emb_dim = rotary_pos_emb.shape[-1]
@@ -612,7 +609,6 @@ class ClvpDecoderLayer(nn.Module):
         position_ids: torch.LongTensor | None = None,
         use_cache: bool | None = False,
         output_attentions: bool | None = False,
-        cache_position: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor] | tuple[torch.Tensor, tuple[torch.FloatTensor, ...]] | None:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
@@ -623,7 +619,6 @@ class ClvpDecoderLayer(nn.Module):
             position_ids=position_ids,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         attn_output = attn_outputs[0]
         # residual connection
@@ -1036,7 +1031,6 @@ class ClvpDecoder(ClvpPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1078,10 +1072,7 @@ class ClvpDecoder(ClvpPreTrainedModel):
             past_key_values = DynamicCache(config=self.config)
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + input_shape[-1], device=inputs_embeds.device
-            )
+
         if position_ids is None:
             position_ids = torch.arange(
                 past_key_values_length, input_shape[-1] + past_key_values_length, dtype=torch.long, device=device
@@ -1095,7 +1086,6 @@ class ClvpDecoder(ClvpPreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
         )
 
@@ -1123,7 +1113,6 @@ class ClvpDecoder(ClvpPreTrainedModel):
                     None,
                     attention_mask,
                     position_ids,
-                    cache_position,
                 )
             else:
                 outputs = block(
@@ -1133,7 +1122,6 @@ class ClvpDecoder(ClvpPreTrainedModel):
                     position_ids=position_ids,
                     use_cache=use_cache,
                     output_attentions=output_attentions,
-                    cache_position=cache_position,
                 )
 
             hidden_states = outputs[0]
@@ -1198,7 +1186,6 @@ class ClvpModel(ClvpPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1220,7 +1207,6 @@ class ClvpModel(ClvpPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         if not return_dict:
@@ -1337,7 +1323,6 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         past_key_values=None,
         inputs_embeds=None,
         conditioning_embeds=None,
-        cache_position=None,
         is_first_iteration=False,
         **kwargs,
     ):
@@ -1349,7 +1334,6 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
@@ -1372,7 +1356,6 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
@@ -1400,7 +1383,6 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         hidden_states = outputs[0]
@@ -1653,7 +1635,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         output_hidden_states: bool | None = None,
         output_attentions: bool | None = False,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | ClvpOutput:
         r"""
@@ -1709,7 +1690,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
             inputs_embeds=conditioning_embeds,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         speech_ids = decoder_outputs[0]

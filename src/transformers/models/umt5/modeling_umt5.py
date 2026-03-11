@@ -233,14 +233,11 @@ class UMT5Attention(nn.Module):
         relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
         return relative_buckets
 
-    def compute_bias(self, query_length, key_length, device=None, cache_position=None):
+    def compute_bias(self, query_length, key_length, device=None):
         """Compute binned relative position bias"""
         if device is None:
             device = self.relative_attention_bias.weight.device
-        if cache_position is None:
-            context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
-        else:
-            context_position = cache_position[:, None]
+        context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
         memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
         relative_position = memory_position - context_position  # shape (query_length, key_length)
         relative_position_bucket = self._relative_position_bucket(relative_position)
@@ -254,7 +251,6 @@ class UMT5Attention(nn.Module):
         encoder_hidden_states: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
-        cache_position: torch.Tensor | None = None,
     ):
         batch_size, seq_length = hidden_states.shape[:2]
 
@@ -289,10 +285,8 @@ class UMT5Attention(nn.Module):
 
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
@@ -308,9 +302,7 @@ class UMT5Attention(nn.Module):
                 (1, self.n_heads, seq_length, key_length), device=scores.device, dtype=scores.dtype
             )
         else:
-            position_bias = self.compute_bias(
-                real_seq_length, key_length, device=scores.device, cache_position=cache_position
-            )
+            position_bias = self.compute_bias(real_seq_length, key_length, device=scores.device)
             position_bias = position_bias[:, :, -seq_length:, :]
 
         if attention_mask is not None:
@@ -344,14 +336,12 @@ class UMT5LayerSelfAttention(nn.Module):
         hidden_states,
         attention_mask=None,
         past_key_values=None,
-        cache_position=None,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.SelfAttention(
             normed_hidden_states,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
-            cache_position=cache_position,
         )
         hidden_states = hidden_states + self.dropout(attention_output[0])
         outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
@@ -371,7 +361,6 @@ class UMT5LayerCrossAttention(nn.Module):
         encoder_hidden_states=None,
         attention_mask=None,
         past_key_values=None,
-        cache_position=None,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.EncDecAttention(
@@ -379,7 +368,6 @@ class UMT5LayerCrossAttention(nn.Module):
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
-            cache_position=cache_position,
         )
         layer_output = hidden_states + self.dropout(attention_output[0])
         outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
@@ -406,13 +394,11 @@ class UMT5Block(GradientCheckpointingLayer):
         past_key_values=None,
         use_cache=False,
         output_attentions=False,
-        cache_position=None,
     ):
         hidden_states, self_attn_weights = self.layer[0](
             hidden_states,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
-            cache_position=cache_position,
         )
 
         # clamp inf values to enable fp16 training
@@ -430,7 +416,6 @@ class UMT5Block(GradientCheckpointingLayer):
                 encoder_hidden_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
             )
             # clamp inf values to enable fp16 training
             if hidden_states.dtype == torch.float16:
@@ -612,7 +597,6 @@ class UMT5Stack(UMT5PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        cache_position=None,
         **kwargs,
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -669,10 +653,6 @@ class UMT5Stack(UMT5PreTrainedModel):
             past_key_values = None
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
-            )
 
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past cache
@@ -684,7 +664,6 @@ class UMT5Stack(UMT5PreTrainedModel):
                 config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                cache_position=cache_position,
                 past_key_values=past_key_values,
             )
         elif attention_mask is not None:
@@ -723,7 +702,6 @@ class UMT5Stack(UMT5PreTrainedModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
 
             hidden_states = layer_outputs[0]
@@ -829,7 +807,6 @@ class UMT5Model(UMT5PreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor] | Seq2SeqModelOutput:
         r"""
@@ -915,7 +892,6 @@ class UMT5Model(UMT5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         if not return_dict:
@@ -1009,7 +985,6 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
         r"""
@@ -1103,7 +1078,6 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         sequence_output = decoder_outputs[0]

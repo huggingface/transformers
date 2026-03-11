@@ -205,6 +205,7 @@ class DiaGenerationMixin(GenerationMixin):
         input_ids,
         encoder_outputs=None,  # Using this to easily get the batch size
         decoder_delay_mask=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Reshape decoder input_ids to 3D to be compile friendly and to fit the expected model input shape
@@ -221,7 +222,7 @@ class DiaGenerationMixin(GenerationMixin):
         )
 
         # Depending on cache usage we need to pass all or just one
-        if model_inputs.get("use_cache", False) and model_inputs["cache_position"][0] > 0:
+        if model_inputs.get("use_cache", False) and not is_first_iteration:
             model_inputs["decoder_input_ids"] = model_inputs["decoder_input_ids"][:, -1, :][:, None, :]
 
         # Be compile friendly

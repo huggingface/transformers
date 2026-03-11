@@ -84,8 +84,7 @@ class MambaCache:
 
         >>> # Prepare a cache class and pass it to model's forward
         >>> cache_params = MambaCache(config=model.config, max_batch_size=1, device=model.device, dtype=model.dtype)
-        >>> cache_position = torch.arange(len(inputs["input_ids"][0]), device=model.device)  # sequence length
-        >>> outputs = model(**inputs, cache_params=cache_params, cache_position=cache_position, use_cache=True)
+        >>> outputs = model(**inputs, cache_params=cache_params,  use_cache=True)
         >>> outputs.cache_params
         ```
     """
@@ -105,6 +104,7 @@ class MambaCache:
         self.intermediate_size = config.intermediate_size
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
+        self.is_initialized = torch.tensor(False, device=device, dtype=bool)
 
         self.conv_states: list[torch.Tensor] = []
         self.ssm_states: list[torch.Tensor] = []
@@ -130,24 +130,23 @@ class MambaCache:
             self.conv_states.append(conv_state)
             self.ssm_states.append(ssm_state)
 
-    def update_conv_state(
-        self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor
-    ) -> torch.Tensor:
+    def update_conv_state(self, layer_idx: int, new_conv_state: torch.Tensor) -> torch.Tensor:
         # This `if` blocks is only reached in multigpu and if `layer_device_map` is not passed. It is used
         # when the cache is initialized in the forward pass (e.g. Mamba)
+        self.is_initialized = True
         if self.conv_states[layer_idx].device != new_conv_state.device:
             self.conv_states[layer_idx] = self.conv_states[layer_idx].to(new_conv_state.device)
 
         conv_state = self.conv_states[layer_idx]
-        cache_position = cache_position.clamp(0, self.conv_kernel_size - 1)
 
         conv_state = conv_state.roll(shifts=-1, dims=-1)
-        conv_state[:, :, cache_position] = new_conv_state.to(device=conv_state.device, dtype=conv_state.dtype)
+        conv_state = new_conv_state.to(device=conv_state.device, dtype=conv_state.dtype)
         self.conv_states[layer_idx].zero_()
         self.conv_states[layer_idx] += conv_state
         return self.conv_states[layer_idx]
 
     def update_ssm_state(self, layer_idx: int, new_ssm_state: torch.Tensor):
+        self.is_initialized = True
         self.ssm_states[layer_idx].zero_()
         self.ssm_states[layer_idx] += new_ssm_state.to(self.ssm_states[layer_idx].device)
         return self.ssm_states[layer_idx]
@@ -272,7 +271,6 @@ class MambaMixer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         cache_params: MambaCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
     ):
         # 1. Gated MLP's linear projection
@@ -303,7 +301,7 @@ class MambaMixer(nn.Module):
 
             # 2. Convolution sequence transformation
             conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
-            if cache_params is not None and cache_position[0] > 0:
+            if cache_params is not None and cache_params.is_initialized:
                 hidden_states = causal_conv1d_update(
                     hidden_states.squeeze(-1),
                     cache_params.conv_states[self.layer_idx],
@@ -317,7 +315,7 @@ class MambaMixer(nn.Module):
                     conv_states = nn.functional.pad(
                         hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0)
                     )
-                    cache_params.update_conv_state(self.layer_idx, conv_states, cache_position)
+                    cache_params.update_conv_state(self.layer_idx, conv_states)
                 hidden_states = causal_conv1d_fn(
                     hidden_states, conv_weights, self.conv1d.bias, activation=self.activation
                 )
@@ -336,7 +334,7 @@ class MambaMixer(nn.Module):
             A = -torch.exp(self.A_log.float())
             # 3.c perform the recurrence y ← SSM(A, B, C)(x)
             time_proj_bias = self.dt_proj.bias.float() if hasattr(self.dt_proj, "bias") else None
-            if cache_params is not None and cache_position[0] > 0:
+            if cache_params is not None and cache_params.is_initialized:
                 scan_outputs = selective_state_update(
                     cache_params.ssm_states[self.layer_idx],
                     hidden_states[..., 0],
@@ -370,7 +368,7 @@ class MambaMixer(nn.Module):
         return contextualized_states
 
     # fmt: off
-    def slow_forward(self, input_states, cache_params: MambaCache | None=None, cache_position:torch.LongTensor | None=None, attention_mask: torch.LongTensor | None = None):
+    def slow_forward(self, input_states, cache_params: MambaCache | None=None, attention_mask: torch.LongTensor | None = None):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
@@ -384,19 +382,17 @@ class MambaMixer(nn.Module):
         if cache_params is not None:
             ssm_state = cache_params.ssm_states[self.layer_idx].clone()
             ssm_state = ssm_state.to(hidden_states.device)
-            # use `cache_position.shape[0]` to check whether we are in prefill
-            # stage, it's equivalent to check `cache_position[0] == 0`, which
-            # breaks dynamo fullgraph constraints
-            if cache_position.shape[0] == self.conv_kernel_size:
+            # check whether we are in prefill stage
+            if not cache_params.is_initialized:
                 conv_state = nn.functional.pad(
                     hidden_states,
                     (self.conv_kernel_size - hidden_states.shape[-1], 0)
                 )
 
-                cache_params.update_conv_state(self.layer_idx, conv_state, cache_position)
+                cache_params.update_conv_state(self.layer_idx, conv_state)
                 hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])     # [batch, intermediate_size, seq_len]
             else:
-                conv_state = cache_params.update_conv_state(self.layer_idx, hidden_states, cache_position)
+                conv_state = cache_params.update_conv_state(self.layer_idx, hidden_states)
                 conv_state = conv_state.to(self.conv1d.weight.device)
                 hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
                 if self.use_conv_bias:
@@ -471,15 +467,14 @@ class MambaMixer(nn.Module):
         self,
         hidden_states,
         cache_params: MambaCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
     ):
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
         if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_tracing(hidden_states):
-            return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
-        return self.slow_forward(hidden_states, cache_params, cache_position, attention_mask)
+            return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
+        return self.slow_forward(hidden_states, cache_params, attention_mask)
 
 
 class MambaRMSNorm(nn.Module):
@@ -515,7 +510,6 @@ class MambaBlock(GradientCheckpointingLayer):
         self,
         hidden_states,
         cache_params: MambaCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
     ):
         residual = hidden_states
@@ -523,9 +517,7 @@ class MambaBlock(GradientCheckpointingLayer):
         if self.residual_in_fp32:
             residual = residual.to(torch.float32)
 
-        hidden_states = self.mixer(
-            hidden_states, cache_params=cache_params, cache_position=cache_position, attention_mask=attention_mask
-        )
+        hidden_states = self.mixer(hidden_states, cache_params=cache_params, attention_mask=attention_mask)
         hidden_states = residual + hidden_states
         return hidden_states
 
@@ -656,7 +648,6 @@ class MambaModel(MambaPreTrainedModel):
         use_cache: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | MambaOutput:
@@ -682,23 +673,10 @@ class MambaModel(MambaPreTrainedModel):
         if self.gradient_checkpointing and self.training and use_cache:
             use_cache = False
 
-        if use_cache:
-            if cache_params is None:
-                cache_params = MambaCache(
-                    self.config, inputs_embeds.size(0), device=inputs_embeds.device, dtype=inputs_embeds.dtype
-                )
-                cache_position = torch.arange(0, self.config.conv_kernel, device=inputs_embeds.device)
-            elif cache_position is None:
-                # cases when we do manual forward instead of using `model.generate` which will initiate
-                # `cache_position` and makes sure it is not None, throw error here instead of doing some
-                # hack to conjecture the current cache position
-                raise ValueError(
-                    "You have to specify the `cache_position` manually when `use_cache=True` and `cache_params` is passed, "
-                    "you don't have to pass a `cache_params` if you are in prefilling stage because in that case it will "
-                    "be initialized for you automatically"
-                )
-        else:
-            cache_params = None
+        if use_cache and cache_params is None:
+            cache_params = MambaCache(
+                self.config, inputs_embeds.size(0), device=inputs_embeds.device, dtype=inputs_embeds.dtype
+            )
 
         hidden_states = inputs_embeds
         all_hidden_states = () if output_hidden_states else None
@@ -706,7 +684,6 @@ class MambaModel(MambaPreTrainedModel):
             hidden_states = mixer_block(
                 hidden_states,
                 cache_params=cache_params,
-                cache_position=cache_position,
                 attention_mask=attention_mask,
             )
 
@@ -754,13 +731,6 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         self, outputs: ModelOutput, model_kwargs: dict[str, Any], num_new_tokens: int = 1, **kwargs
     ) -> dict[str, Any]:
         model_kwargs["cache_params"] = outputs.get("cache_params", None)
-        if (
-            model_kwargs.get("use_cache", True)
-            and "cache_position" in model_kwargs
-            and model_kwargs["cache_position"] is not None
-        ):
-            model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + num_new_tokens
-
         if "attention_mask" in model_kwargs:
             attention_mask = model_kwargs["attention_mask"]
             model_kwargs["attention_mask"] = torch.cat(
@@ -775,7 +745,6 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         use_cache=None,
         cache_params: MambaCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         is_first_iteration: bool | None = False,
         **kwargs,
@@ -786,18 +755,15 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             cache_params=cache_params,
-            cache_position=cache_position,
             attention_mask=attention_mask,
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
         if use_cache and cache_params is None:
-            # we initialize the `cache_position` to full size of `conv_states` at prefill stage
             # considering padding will be applied when input length is shorter, and truncation
             # will be applied when it is longer, so it will be equivalent to always have it match
             # the length of `cache_params.conv_states`, which is `config.conv_kernel`
-            model_inputs["cache_position"] = torch.arange(0, self.backbone.config.conv_kernel, device=input_ids.device)
             if inputs_embeds is not None:
                 max_batch_size = inputs_embeds.size(0)
             else:
@@ -805,7 +771,7 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
             model_inputs["cache_params"] = MambaCache(
                 self.backbone.config, max_batch_size, device=self.device, dtype=self.dtype
             )
-        elif use_cache and cache_position[0] > 0:
+        elif use_cache and cache_params is not None:
             model_inputs["attention_mask"] = None
 
         return model_inputs
@@ -821,7 +787,6 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,  # for now we need this for generation
     ) -> tuple | MambaCausalLMOutput:
@@ -845,7 +810,6 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             use_cache=use_cache,
-            cache_position=cache_position,
             attention_mask=attention_mask,
         )
 

@@ -237,14 +237,11 @@ class Pop2PianoAttention(nn.Module):
         relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
         return relative_buckets
 
-    def compute_bias(self, query_length, key_length, device=None, cache_position=None):
+    def compute_bias(self, query_length, key_length, device=None):
         """Compute binned relative position bias"""
         if device is None:
             device = self.relative_attention_bias.weight.device
-        if cache_position is None:
-            context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
-        else:
-            context_position = cache_position[:, None].to(device)
+        context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None].to(device)
         memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
         relative_position = memory_position - context_position  # shape (query_length, key_length)
         relative_position_bucket = self._relative_position_bucket(
@@ -267,7 +264,6 @@ class Pop2PianoAttention(nn.Module):
         query_length=None,
         use_cache=False,
         output_attentions=False,
-        cache_position=None,
     ):
         """
         Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
@@ -307,10 +303,8 @@ class Pop2PianoAttention(nn.Module):
 
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
@@ -321,7 +315,7 @@ class Pop2PianoAttention(nn.Module):
         if position_bias is None:
             key_length = key_states.shape[-2]
             # cache position is 0-indexed so we add 1 to get the real length of queries (aka with past)
-            real_seq_length = query_length if query_length is not None else cache_position[-1] + 1
+            real_seq_length = query_length
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
                     (1, self.n_heads, seq_length, key_length), device=scores.device, dtype=scores.dtype
@@ -329,9 +323,7 @@ class Pop2PianoAttention(nn.Module):
                 if self.gradient_checkpointing and self.training:
                     position_bias.requires_grad = True
             else:
-                position_bias = self.compute_bias(
-                    real_seq_length, key_length, device=scores.device, cache_position=cache_position
-                )
+                position_bias = self.compute_bias(real_seq_length, key_length, device=scores.device)
                 position_bias = position_bias[:, :, -seq_length:, :]
 
             if mask is not None:
@@ -376,7 +368,6 @@ class Pop2PianoLayerSelfAttention(nn.Module):
         past_key_values=None,
         use_cache=False,
         output_attentions=False,
-        cache_position=None,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.SelfAttention(
@@ -386,7 +377,6 @@ class Pop2PianoLayerSelfAttention(nn.Module):
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         hidden_states = hidden_states + self.dropout(attention_output[0])
         outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
@@ -411,7 +401,6 @@ class Pop2PianoLayerCrossAttention(nn.Module):
         use_cache=False,
         query_length=None,
         output_attentions=False,
-        cache_position=None,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.EncDecAttention(
@@ -423,7 +412,6 @@ class Pop2PianoLayerCrossAttention(nn.Module):
             use_cache=use_cache,
             query_length=query_length,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         layer_output = hidden_states + self.dropout(attention_output[0])
         outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
@@ -458,7 +446,6 @@ class Pop2PianoBlock(GradientCheckpointingLayer):
         use_cache=False,
         output_attentions=False,
         return_dict=True,
-        cache_position=None,
     ):
         self_attention_outputs = self.layer[0](
             hidden_states,
@@ -467,7 +454,6 @@ class Pop2PianoBlock(GradientCheckpointingLayer):
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         hidden_states = self_attention_outputs[0]
         attention_outputs = self_attention_outputs[1:]  # Keep self-attention outputs and relative position weights
@@ -489,7 +475,6 @@ class Pop2PianoBlock(GradientCheckpointingLayer):
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
                 past_key_values=past_key_values,
-                query_length=cache_position[-1] + 1,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
             )
@@ -635,7 +620,6 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        cache_position=None,
         **kwargs,
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -691,10 +675,6 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
             past_key_values = None
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
-            )
 
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past cache
@@ -706,7 +686,6 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
                 config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                cache_position=cache_position,
                 past_key_values=past_key_values,
             )
         else:
@@ -747,7 +726,6 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
 
             hidden_states = layer_outputs[0]
@@ -916,7 +894,6 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
         r"""
@@ -984,7 +961,6 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         sequence_output = decoder_outputs[0]

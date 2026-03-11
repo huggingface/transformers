@@ -24,6 +24,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithNoAttention, CausalLMOutput
 from ...modeling_rope_utils import dynamic_rope_update
@@ -200,7 +201,6 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         use_cache: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         bsz, q_len, _ = hidden_states.size()
@@ -223,8 +223,7 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         key_states = torch.cat((key_rot, key_pass), dim=-1)
 
         if use_cache and hasattr(self, "key_states"):
-            cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = self._update_cache(key_states, value_states, **cache_kwargs)
+            key_states, value_states = self._update_cache(key_states, value_states)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -254,6 +253,7 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         cache_shape = (batch_size, self.num_key_value_heads, self.config.attention_window_size, self.head_dim)
         self.value_states = torch.zeros(cache_shape, dtype=dtype, device=device)
         self.key_states = torch.zeros(cache_shape, dtype=dtype, device=device)
+        self.cumulative_cache_length = torch.tensor([0], device=device, dtype=int)
 
     @torch.no_grad()
     def _update_cache(self, key_states, value_states, **cache_kwargs):
@@ -270,7 +270,12 @@ class RecurrentGemmaSdpaAttention(nn.Module):
 
         We overwrite the cache using these, then we always write at cache_position (clamped to `attention_window_size`)
         """
-        cache_position = cache_kwargs.get("cache_position")
+        # Create a tensor to slice the static kv at the correct indices
+        kv_length = key_states.shape[-2]
+        cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_cache_length
+        # Note that has to be performed in-place, as we have a static address that we need to keep
+        self.cumulative_cache_length.add_(kv_length)
+
         if cache_position.shape[0] > self.config.attention_window_size:
             # int indexing -> device sync? in compile, use tensor
             k_out = key_states[:, :, -self.config.attention_window_size :, :]
@@ -279,7 +284,6 @@ class RecurrentGemmaSdpaAttention(nn.Module):
             slicing = torch.ones(
                 self.config.attention_window_size, dtype=torch.long, device=value_states.device
             ).cumsum(0)
-            cache_position = cache_position.clamp(0, self.config.attention_window_size - 1)
             to_shift = cache_position >= self.config.attention_window_size - 1
             indices = (slicing + to_shift[-1].int() - 1) % self.config.attention_window_size
 
@@ -450,7 +454,6 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         input_states: torch.Tensor,
         position_ids: torch.Tensor,
         attention_mask: torch.Tensor,
-        cache_position: torch.Tensor,
         use_cache: bool = True,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         _, seq_len, _ = input_states.shape
@@ -474,7 +477,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
                     (batch_size, self.lru_width), device=input_states.device, dtype=torch.float32
                 )
 
-            if cache_position.shape[0] != 1:  # prefill
+            if self.cumulative_cache_length == 0:  # prefill
                 self.conv1d_state = nn.functional.pad(x_branch, (self.conv1d_width - x_branch.shape[-1] - 1, 0))
                 x_branch = self.conv_1d(x_branch)[..., :seq_len]
             else:  # decoding
@@ -482,6 +485,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
                 x_branch = torch.sum(conv_state * self.conv_1d.weight[:, 0, :], dim=-1) + self.conv_1d.bias
                 x_branch = x_branch.unsqueeze(-1)
                 self.conv1d_state = conv_state[:, :, 1:]
+            self.cumulative_cache_length += seq_len
         else:
             self.conv1d_state = None
             self.rg_lru.recurrent_states = None
@@ -497,6 +501,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         # recurrent_states always computed in full precision
         self.rg_lru.recurrent_states = torch.zeros((batch, self.lru_width), device=device, dtype=torch.float32)
         self.conv1d_state = torch.zeros((batch, self.hidden_size, self.conv1d_width - 1), device=device, dtype=dtype)
+        self.cumulative_cache_length = torch.tensor([0], device=device, dtype=int)
 
 
 TEMPORAL_BLOCK_CLASSES = {"recurrent": RecurrentGemmaRecurrentBlock, "attention": RecurrentGemmaSdpaAttention}
@@ -533,15 +538,12 @@ class RecurrentGemmaDecoderLayer(GradientCheckpointingLayer):
         activations: torch.Tensor,
         position_ids: torch.Tensor,
         attention_mask: torch.Tensor,
-        cache_position: torch.Tensor | None = None,
         use_cache: bool | None = None,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         raw_activations = activations
         inputs_normalized = self.temporal_pre_norm(raw_activations)  # RMSNorm introduces slight slight differences
 
-        hidden_states = self.temporal_block(
-            inputs_normalized, position_ids, attention_mask, cache_position=cache_position, use_cache=use_cache
-        )
+        hidden_states = self.temporal_block(inputs_normalized, position_ids, attention_mask, use_cache=use_cache)
 
         residual = hidden_states + raw_activations
 
@@ -647,7 +649,6 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -677,12 +678,17 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         if use_cache and inputs_embeds.shape[1] != 1:  # TODO let's maybe only call in the `generate`?
             self._setup_cache(self.config, hidden_states.shape[0], hidden_states.device, hidden_states.dtype)
 
-        if cache_position is None:
-            cache_position = torch.arange(hidden_states.shape[1], device=hidden_states.device)
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+        past_seq_length = self.layers[0].temporal_block.cumulative_cache_length
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_seq_length,  # FIXME
+            position_ids=position_ids,
+        )
 
         hidden_states = hidden_states * self.normalizer.type(hidden_states.dtype)
 
@@ -690,7 +696,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         for i, residual_block in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            hidden_states = residual_block(hidden_states, position_ids, causal_mask, cache_position, use_cache)
+            hidden_states = residual_block(hidden_states, position_ids, causal_mask, use_cache)
 
         hidden_states = self.final_norm(hidden_states)
 
@@ -705,36 +711,6 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
         )
-
-    def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
-        dtype, device = input_tensor.dtype, input_tensor.device
-        min_dtype = torch.finfo(dtype).min
-        sequence_length = input_tensor.shape[1]
-        target_length = max(self.config.attention_window_size, sequence_length)
-
-        diagonal = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
-        causal_mask = diagonal
-        if sequence_length != 1:
-            causal_mask = torch.triu(diagonal, diagonal=-1)
-
-        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-        causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
-        if attention_mask is not None:
-            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-            if attention_mask.dim() == 2:
-                # Crop the attention mask to the target length.
-                attention_mask = attention_mask[:, -target_length:]
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
-                causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
-
-        if attention_mask is not None and attention_mask.device.type in ["cuda", "xpu", "npu"]:
-            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-            # Details: https://github.com/pytorch/pytorch/issues/110213
-            causal_mask = causal_mask.mul(~torch.all(causal_mask == min_dtype, dim=-1, keepdim=True))
-
-        return causal_mask
 
 
 # TODO: re-enable check: Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->RECURRENTGEMMA,Llama->RecurrentGemma,llama->gemma
@@ -757,7 +733,6 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
         self,
         input_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
@@ -797,7 +772,6 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
         outputs = self.model(
             input_ids=input_ids,
             position_ids=position_ids,
-            cache_position=cache_position,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,

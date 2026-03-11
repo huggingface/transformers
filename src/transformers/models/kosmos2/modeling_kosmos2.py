@@ -718,7 +718,6 @@ class KosmosTextAttention(nn.Module):
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, Cache | None]:
         """Input shape: Batch x Time x Channel"""
@@ -756,10 +755,8 @@ class KosmosTextAttention(nn.Module):
 
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
@@ -852,7 +849,6 @@ class Kosmos2TextBlock(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         output_attentions: bool | None = False,
         use_cache: bool | None = True,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
@@ -863,7 +859,6 @@ class Kosmos2TextBlock(GradientCheckpointingLayer):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -887,7 +882,6 @@ class Kosmos2TextBlock(GradientCheckpointingLayer):
                 attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
                 **kwargs,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1010,7 +1004,6 @@ class Kosmos2TextTransformer(nn.Module):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1092,7 +1085,6 @@ class Kosmos2TextTransformer(nn.Module):
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
             hidden_states = layer_outputs[0]
@@ -1254,7 +1246,6 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         r"""
@@ -1281,7 +1272,6 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1328,7 +1318,6 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithCrossAttentions:
@@ -1364,7 +1353,6 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1395,7 +1383,6 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
         attention_mask=None,
         inputs_embeds=None,
         use_cache=None,
-        cache_position=None,
         is_first_iteration=False,
         **model_kwargs,
     ):
@@ -1429,7 +1416,6 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
             image_embeds_position_mask=image_embeds_position_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             is_first_iteration=is_first_iteration,
             **model_kwargs,
         )

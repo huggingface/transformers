@@ -133,7 +133,6 @@ class BlipTextSelfAttention(nn.Module):
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         output_attentions: bool | None = False,
-        cache_position: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor]:
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
@@ -179,10 +178,8 @@ class BlipTextSelfAttention(nn.Module):
 
             if past_key_values is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_layer, value_layer = curr_past_key_values.update(
-                    key_layer, value_layer, self.layer_idx, {"cache_position": cache_position}
-                )
+
+                key_layer, value_layer = curr_past_key_values.update(key_layer, value_layer, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
@@ -240,7 +237,6 @@ class BlipTextAttention(nn.Module):
         encoder_hidden_states: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         output_attentions: bool | None = False,
-        cache_position: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
@@ -248,7 +244,6 @@ class BlipTextAttention(nn.Module):
             encoder_hidden_states=encoder_hidden_states,
             past_key_values=past_key_values,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -309,14 +304,12 @@ class BlipTextLayer(GradientCheckpointingLayer):
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         output_attentions: bool | None = False,
-        cache_position: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor]:
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             past_key_values=past_key_values,
-            cache_position=cache_position,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]
@@ -328,7 +321,6 @@ class BlipTextLayer(GradientCheckpointingLayer):
                 encoder_hidden_states=encoder_hidden_states,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
             attention_output = cross_attention_outputs[0]
             outputs = outputs + cross_attention_outputs[1:]  # add cross attentions if we output attention weights
@@ -362,7 +354,6 @@ class BlipTextEncoder(nn.Module):
         output_attentions: bool | None = False,
         output_hidden_states: bool | None = False,
         return_dict: bool | None = True,
-        cache_position: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPastAndCrossAttentions:
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -397,7 +388,6 @@ class BlipTextEncoder(nn.Module):
                 encoder_attention_mask,
                 past_key_values,
                 output_attentions,
-                cache_position,
             )
 
             hidden_states = layer_outputs[0]
@@ -612,7 +602,6 @@ class BlipTextModel(BlipTextPreTrainedModel):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         is_decoder: bool | None = False,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
@@ -712,7 +701,6 @@ class BlipTextModel(BlipTextPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
@@ -776,7 +764,6 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
         return_logits: bool | None = False,
         is_decoder: bool | None = True,
         reduction: str | None = "mean",
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple[torch.Tensor] | CausalLMOutputWithCrossAttentions:
@@ -819,7 +806,6 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             is_decoder=is_decoder,
-            cache_position=cache_position,
         )
 
         hidden_states = outputs[0]

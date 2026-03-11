@@ -627,8 +627,6 @@ class ZambaAttentionDecoderLayer(nn.Module):
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
         """
         hidden_states = torch.concatenate([hidden_states, original_hidden_states], dim=-1)
         hidden_states = self.input_layernorm(hidden_states)
@@ -670,7 +668,6 @@ class ZambaMambaDecoderLayer(GradientCheckpointingLayer):
         past_key_values: ZambaHybridDynamicCache | None = None,
         output_attentions: bool | None = False,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         transformer_hidden_states: torch.Tensor | None = None,
         **kwargs,
@@ -687,8 +684,6 @@ class ZambaMambaDecoderLayer(GradientCheckpointingLayer):
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
         """
 
         residual = hidden_states
@@ -739,7 +734,6 @@ class ZambaHybridLayer(GradientCheckpointingLayer):
         past_key_values: ZambaHybridDynamicCache | None = None,
         output_attentions: bool | None = False,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         """
         Args:
@@ -755,9 +749,7 @@ class ZambaHybridLayer(GradientCheckpointingLayer):
                 returned tensors for more detail.
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
+                (see `past_key_values`)
         """
 
         layer_outputs = self.shared_transf(
@@ -768,7 +760,6 @@ class ZambaHybridLayer(GradientCheckpointingLayer):
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
-            cache_position=cache_position,
         )
 
         transformer_hidden_states = layer_outputs[0]
@@ -785,7 +776,6 @@ class ZambaHybridLayer(GradientCheckpointingLayer):
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
-            cache_position=cache_position,
         )
 
         if output_attentions:
@@ -881,7 +871,6 @@ class ZambaModel(ZambaPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -917,16 +906,15 @@ class ZambaModel(ZambaPreTrainedModel):
                 "provided, so no cache will be returned."
             )
 
-        if cache_position is None:
-            cache_position = torch.arange(hidden_states.shape[1], device=hidden_states.device)
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -947,7 +935,6 @@ class ZambaModel(ZambaPreTrainedModel):
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
-                cache_position=cache_position,
             )
 
             hidden_states = layer_outputs[0]
@@ -1001,7 +988,6 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
@@ -1045,7 +1031,6 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            cache_position=cache_position,
             return_dict=return_dict,
         )
 
@@ -1076,7 +1061,6 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         position_ids=None,
         use_cache=True,
         is_first_iteration=False,
@@ -1095,7 +1079,6 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             position_ids=position_ids,
             use_cache=use_cache,
             is_first_iteration=is_first_iteration,

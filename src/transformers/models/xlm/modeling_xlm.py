@@ -514,7 +514,6 @@ class MultiHeadAttention(nn.Module):
         kv=None,
         cache=None,
         output_attentions=False,
-        cache_position=None,
     ):
         """
         Self-attention (if kv is None) or attention over source sentence (provided by kv).
@@ -550,8 +549,8 @@ class MultiHeadAttention(nn.Module):
 
             if cache is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                k, v = curr_past_key_values.update(k, v, self.layer_id, {"cache_position": cache_position})
+
+                k, v = curr_past_key_values.update(k, v, self.layer_id)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention:
                     cache.is_updated[self.layer_id] = True
@@ -758,7 +757,6 @@ class XLMModel(XLMPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,  # Dummy kwargs for now
     ) -> tuple | BaseModelOutput:
         r"""
@@ -853,7 +851,6 @@ class XLMModel(XLMPreTrainedModel):
                 attn_mask,
                 cache=cache,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
             attn = attn_outputs[0]
             if output_attentions:
@@ -983,7 +980,6 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple | MaskedLMOutput:
@@ -1022,7 +1018,6 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
             **kwargs,
         )
 

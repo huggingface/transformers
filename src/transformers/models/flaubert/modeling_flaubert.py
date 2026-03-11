@@ -102,7 +102,6 @@ class MultiHeadAttention(nn.Module):
         kv=None,
         cache=None,
         output_attentions=False,
-        cache_position=None,
     ):
         """
         Self-attention (if kv is None) or attention over source sentence (provided by kv).
@@ -138,8 +137,8 @@ class MultiHeadAttention(nn.Module):
 
             if cache is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                k, v = curr_past_key_values.update(k, v, self.layer_id, {"cache_position": cache_position})
+
+                k, v = curr_past_key_values.update(k, v, self.layer_id)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention:
                     cache.is_updated[self.layer_id] = True
@@ -786,7 +785,6 @@ class FlaubertModel(FlaubertPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutput:
         r"""
@@ -908,7 +906,6 @@ class FlaubertModel(FlaubertPreTrainedModel):
                     attn_mask,
                     cache=cache,
                     output_attentions=output_attentions,
-                    cache_position=cache_position,
                 )
                 attn = attn_outputs[0]
                 if output_attentions:
