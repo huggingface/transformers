@@ -797,8 +797,8 @@ def _preprocess_mask_arguments(
             It can also be an already prepared 4D mask, in which case it is returned as-is.
         past_key_values (`Cache`, optional):
             The past key values, if we use a cache.
-        position_ids (`torch.Tensor`, optional)
-            A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
+        position_ids (`torch.LongTensor` of shape `(batch_size, query_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings.
         layer_idx (`int`, optional):
             If `past_key_values` is not None, this is the layer index of the cache from which to get the key-value
             length and offset. Indeed, for hybrid caches, different layers may return different lengths.
