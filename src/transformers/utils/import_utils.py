@@ -25,6 +25,7 @@ import re
 import shutil
 import subprocess
 import sys
+import warnings
 from collections import OrderedDict
 from collections.abc import Callable
 from enum import Enum
@@ -186,6 +187,40 @@ def is_torch_less_or_equal(library_version: str, accept_dev: bool = False) -> bo
         return version.parse(version.parse(get_torch_version()).base_version) <= version.parse(library_version)
     else:
         return version.parse(get_torch_version()) <= version.parse(library_version)
+
+
+@lru_cache
+def is_torch_fx_available() -> bool:
+    """
+    Backwards-compatibility shim for remote code that still imports this symbol
+    from `transformers.utils.import_utils`.
+
+    In Transformers v5+, we require PyTorch >= 2.4 where `torch.fx` is always
+    available. This function therefore simply checks that PyTorch itself is
+    available and returns True in that case.
+
+    This API is deprecated and will be removed in a future major release.
+    Remote code should stop relying on it and instead assume `torch.fx` is
+    available under the supported PyTorch versions.
+    """
+    warnings.warn(
+        "`is_torch_fx_available` is deprecated and kept only for backwards "
+        "compatibility with older `trust_remote_code` models. It now simply "
+        "checks for the presence of PyTorch >= 2.4 and always returns True "
+        "in that case.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+    if not is_torch_available():
+        return False
+
+    try:
+        import torch.fx  # noqa: F401
+    except Exception:
+        return False
+
+    return True
 
 
 @lru_cache
