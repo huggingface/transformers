@@ -521,30 +521,46 @@ def patch_for_onnx_export(model):
         _masking_utils_mod._vmap_expansion_sdpa = original_vmap_expansion_sdpa
 
 
-# ── post-ONNX-export ORT compatibility fixer ───────────────────────────────────
-# Some ONNX ops have attributes or input patterns that are technically valid but cause ORT to reject the model.
-# This function applies in-place fixes to the exported ONNXProgram to ensure ORT compatibility.
+# ── post-ONNX-export ORT compatibility fixers ─────────────────────────────────
+# Some ONNX ops have attributes or input patterns that are technically valid but
+# cause ORT to reject the model. Implement these as individual graph-level
+# fix functions and apply them in order so additional fixes can be appended
+# without changing the applicator logic.
 
 
-def _fix_graph(graph_like: "onnx_ir.Graph") -> None:
+def _onnx_ir_fix_topk_set_sorted(graph_like: "onnx_ir.Graph") -> None:
+    """Set the ``sorted`` attribute on TopK nodes.
+
+    ORT's CUDA EP rejects ``TopK`` nodes that have no ``sorted`` attribute
+    (nodes emitted from ``aten.sort.default`` are translated to ``TopK``
+    without setting it).  Setting ``sorted=1`` is always safe because callers
+    that requested unordered selection only care about the selected set, not
+    the order.
+    """
     for ir_node in list(graph_like.all_nodes()):
         if ir_node.op_type == "TopK":
             ir_node.attributes["sorted"] = onnx_ir.Attr("sorted", onnx_ir.AttributeType.INT, 1)
 
 
+# Ordered list of graph-level fixers. Append new graph fix functions here.
+_ONNX_IR_GRAPH_FIXES = [
+    _onnx_ir_fix_topk_set_sorted,
+]
+
+
+def _apply_graph_fixes(graph_like: "onnx_ir.Graph") -> None:
+    """Apply all registered graph-level fixes to ``graph_like`` in order."""
+    for fix in _ONNX_IR_GRAPH_FIXES:
+        fix(graph_like)
+
+
 def patch_onnx_program_for_onnxruntime(onnx_program: "ONNXProgram") -> None:
     """Patch an exported ONNXProgram in-place for ORT compatibility.
-
-    ORT's CUDA EP rejects ``TopK`` nodes that have no ``sorted`` attribute
-    (nodes emitted from ``aten.sort.default`` are translated to ``TopK``
-    without setting it).  Every ``TopK`` node is unconditionally set to
-    ``sorted=1``; this is always correct because callers that use
-    ``sorted=False`` only care about the selected set, not its order.
 
     Call this function after :meth:`OnnxExporter.export` and before running ORT
     inference (i.e. before ``onnx_program(...)``).
     """
 
-    _fix_graph(onnx_program.model.graph)
+    _apply_graph_fixes(onnx_program.model.graph)
     for func in onnx_program.model.functions.values():
-        _fix_graph(func)
+        _apply_graph_fixes(func)
