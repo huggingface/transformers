@@ -27,6 +27,7 @@ from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, is_torch_a
 from transformers.testing_utils import (
     backend_device_count,
     init_test_logger,
+    is_fsdp_test,
     require_fsdp,
     require_torch_multi_accelerator,
     torch_device,
@@ -804,6 +805,7 @@ class FSDPTesterMixin(ABC):
     # Test: get_transformer_block_classes (CPU, meta device)
     # =========================================================================
 
+    @is_fsdp_test
     def test_get_transformer_block_classes(self):
         """get_transformer_block_classes() finds >= 1 block class for the model."""
         self._skip_if_fsdp_disabled()
@@ -821,6 +823,7 @@ class FSDPTesterMixin(ABC):
     # Batched test: all distributed FSDP2 tests in a single mp.spawn
     # =========================================================================
 
+    @is_fsdp_test
     @require_fsdp
     @require_torch_multi_accelerator
     def test_fsdp2_all(self):
