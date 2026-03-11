@@ -327,6 +327,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
         num_steps: int | None = None,
+        **kwargs,
     ) -> torch.FloatTensor:
         """Run flow matching inference to generate actions."""
 

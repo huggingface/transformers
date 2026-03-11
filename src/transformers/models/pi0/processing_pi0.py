@@ -38,6 +38,7 @@ class PI0ProcessorKwargs(ProcessingKwargs, total=False):
             "max_length": 48,
             "padding_side": "right",
         },
+        "common_kwargs": {"return_tensors": "pt"},
     }
 
 
@@ -49,13 +50,17 @@ EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i i
 class PI0Processor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.height, self.width = image_processor.size["height"], image_processor.size["width"]
-        self.state_mean = kwargs.get(
-            "state_mean", [-0.0419, 0.0354, 0.8257, 2.9083, -0.5562, -0.1665, 0.0283, -0.0286]
-        )
-        self.state_std = kwargs.get("state_std", [0.1074, 0.1442, 0.2572, 0.3441, 1.2344, 0.3580, 0.0133, 0.0132])
-        self.actions_mean = kwargs.get("actions_mean", [0.0182, 0.0586, -0.0559, 0.0046, 0.0029, -0.0077, -0.0916])
-        self.actions_std = kwargs.get("actions_std", [0.2825, 0.3590, 0.3674, 0.0377, 0.0543, 0.0872, 0.9958])
+        state_mean = kwargs.get("state_mean", [-0.0419, 0.0354, 0.8257, 2.9083, -0.5562, -0.1665, 0.0283, -0.0286])
+        state_std = kwargs.get("state_std", [0.1074, 0.1442, 0.2572, 0.3441, 1.2344, 0.3580, 0.0133, 0.0132])
+        actions_mean = kwargs.get("actions_mean", [0.0182, 0.0586, -0.0559, 0.0046, 0.0029, -0.0077, -0.0916])
+        actions_std = kwargs.get("actions_std", [0.2825, 0.3590, 0.3674, 0.0377, 0.0543, 0.0872, 0.9958])
+
+        self.state_mean = torch.tensor(state_mean)
+        self.state_std = torch.tensor(state_std)
+        self.actions_mean = torch.tensor(actions_mean)
+        self.actions_std = torch.tensor(actions_std)
         self.max_state_dim = kwargs.get("max_state_dim", 32)
+        self.chunk_size = kwargs.get("chunk_size", 50)
         if not hasattr(image_processor, "image_seq_length"):
             raise ValueError("Image processor is missing an `image_seq_length` attribute.")
 
@@ -82,8 +87,8 @@ class PI0Processor(ProcessorMixin):
         self,
         images: ImageInput | list[ImageInput] | list[list[ImageInput]] | None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        actions: list | np.ndarray | "torch.tensor" | None = None,
-        state: list | np.ndarray | "torch.tensor" | None = None,
+        actions: list | np.ndarray | torch.Tensor | None = None,
+        state: list | np.ndarray | torch.Tensor | None = None,
         **kwargs: Unpack[PI0ProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -147,14 +152,16 @@ class PI0Processor(ProcessorMixin):
         }
 
         if actions is not None:
-            return_data["actions"] = (actions - self.actions_mean) / (self.actions_std + 1e-08)
+            actions = (torch.tensor(actions) - self.actions_mean) / (self.actions_std + 1e-08)
             if actions.shape[-1] < self.max_state_dim:
                 actions = F.pad(actions, (0, self.max_state_dim - actions.shape[-1]))
+            return_data["actions"] = actions.view(-1, self.chunk_size, self.max_state_dim)
 
         if state is not None:
-            return_data["state"] = (state - self.state_mean) / (self.state_std + 1e-08)
+            state = (torch.tensor(state) - self.state_mean) / (self.state_std + 1e-08)
             if state.shape[-1] < self.max_state_dim:
                 state = F.pad(state, (0, self.max_state_dim - state.shape[-1]))
+            return_data["state"] = state.view(-1, self.max_state_dim)
 
         return BatchFeature(data=return_data, tensor_type=return_tensors)
 

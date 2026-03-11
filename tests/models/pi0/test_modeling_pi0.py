@@ -15,6 +15,7 @@
 
 import unittest
 
+from datasets import load_dataset
 from parameterized import parameterized
 
 from transformers import PI0Config, PI0Processor, is_torch_available
@@ -312,4 +313,44 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         )
         torch.testing.assert_close(
             sampled[0, -1, :4], torch.tensor([0.0615, 0.0161, -0.3112, -0.9186]), atol=1e-3, rtol=1e-3
+        )
+
+    def test_pi0_base_libero(self):
+        model = PI0ForConditionalGeneration.from_pretrained("lerobot/pi0_base", torch_dtype=torch.float32).eval()
+        processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224")
+
+        small_data = load_dataset("RaushanTurganbay/libero-small-testing", split="train")
+        first_sample = small_data[0]
+        timestep = torch.tensor([first_sample["timestamp"]])
+
+        inputs = processor(
+            images=[first_sample["observation.images.image"], first_sample["observation.images.wrist_image"]],
+            text="put the white mug on the left plate and put the yellow and white mug on the right plate",
+            actions=small_data["action"][:50],  # chunk size is 50
+            state=first_sample["observation.state"],
+            padding=True,
+            padding_side="right",
+            truncation=True,
+            return_tensors="pt",
+        )
+
+        # Generate random noise
+        torch.manual_seed(63)
+        noise = torch.randn(1, 50, 32)
+
+        with torch.no_grad():
+            outputs = model(**inputs, noise=noise, timestep=timestep)
+        self.assertEqual(outputs.loss.shape, (1, 50, 32))
+        self.assertAlmostEqual(outputs.loss.mean().item(), 2.5087, places=3)
+
+        with torch.no_grad():
+            sampled = model.sample_actions(**inputs, num_steps=5)
+        self.assertEqual(sampled.shape, (1, 50, 32))
+        self.assertAlmostEqual(sampled.mean().item(), -0.0192, places=3)
+        self.assertAlmostEqual(sampled.std().item(), 0.1267, places=3)
+        torch.testing.assert_close(
+            sampled[0, 0, :4], torch.tensor([-0.2456, -0.1260, -0.2977, 0.2654]), atol=1e-3, rtol=1e-3
+        )
+        torch.testing.assert_close(
+            sampled[0, -1, :4], torch.tensor([-0.2541, -0.1213, -0.2637, 0.2935]), atol=1e-3, rtol=1e-3
         )

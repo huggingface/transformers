@@ -23,6 +23,6 @@ from ...utils import auto_docstring
 
 @auto_docstring
 class PI0ImageProcessorFast(SiglipImageProcessorFast):
-    size = {"max_height": 224, "max_height": 224}
+    size = {"max_height": 224, "max_width": 224}
     pad_size = {"height": 224, "width": 224}
     do_pad = True
