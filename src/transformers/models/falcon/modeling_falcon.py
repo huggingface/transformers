@@ -280,15 +280,15 @@ class FalconAttention(nn.Module):
             return query, key, value
         elif not self.multi_query:
             batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
-            fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads, 3, self.head_dim)
+            fused_qkv = fused_qkv.view(batch_size, seq_length, -1, 3, self.head_dim)
             return fused_qkv[..., 0, :], fused_qkv[..., 1, :], fused_qkv[..., 2, :]
         else:
             batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
-            fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads + 2, self.head_dim)
+            fused_qkv = fused_qkv.view(batch_size, seq_length, -1, self.head_dim)
             return fused_qkv[..., :-2, :], fused_qkv[..., [-2], :], fused_qkv[..., [-1], :]
 
     # Copied from transformers.models.bloom.modeling_bloom.BloomAttention._merge_heads
-    def _merge_heads(self, x: torch.Tensor) -> torch.Tensor:
+    def _merge_heads(self, x: torch.Tensor, tp_aware_num_heads: int) -> torch.Tensor:
         """
         Merge heads together over the last dimension
 
@@ -301,17 +301,17 @@ class FalconAttention(nn.Module):
         # What we want to achieve is:
         # batch_size * num_heads, seq_length, head_dim -> batch_size, seq_length, num_heads * head_dim
         batch_size_and_num_heads, seq_length, _ = x.shape
-        batch_size = batch_size_and_num_heads // self.num_heads
+        batch_size = batch_size_and_num_heads // tp_aware_num_heads
 
         # First view to decompose the batch size
         # batch_size * num_heads, seq_length, head_dim -> batch_size, num_heads, seq_length, head_dim
-        x = x.view(batch_size, self.num_heads, seq_length, self.head_dim)
+        x = x.view(batch_size, tp_aware_num_heads, seq_length, self.head_dim)
 
         # batch_size, num_heads, seq_length, head_dim -> batch_size, seq_length, num_heads, head_dim
         x = x.permute(0, 2, 1, 3)
 
         # batch_size, seq_length, num_heads, head_dim -> batch_size, seq_length, num_heads * head_dim
-        return x.reshape(batch_size, seq_length, self.num_heads * self.head_dim)
+        return x.reshape(batch_size, seq_length, tp_aware_num_heads * self.head_dim)
 
     def forward(
         self,
@@ -326,15 +326,18 @@ class FalconAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
     ):
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
-        num_kv_heads = self.num_heads if self.new_decoder_architecture else self.num_kv_heads
         # 3 x [batch_size, seq_length, num_heads, head_dim]
         (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
 
         batch_size, query_length, _, _ = query_layer.shape
 
-        query_layer = query_layer.transpose(1, 2).reshape(batch_size, self.num_heads, query_length, self.head_dim)
-        key_layer = key_layer.transpose(1, 2).reshape(batch_size, num_kv_heads, query_length, self.head_dim)
-        value_layer = value_layer.transpose(1, 2).reshape(batch_size, num_kv_heads, query_length, self.head_dim)
+        tp_aware_num_heads = query_layer.shape[2]
+        tp_aware_key_heads = key_layer.shape[2]
+        tp_aware_value_heads = value_layer.shape[2]
+
+        query_layer = query_layer.transpose(1, 2).reshape(batch_size, tp_aware_num_heads, query_length, self.head_dim)
+        key_layer = key_layer.transpose(1, 2).reshape(batch_size, tp_aware_key_heads, query_length, self.head_dim)
+        value_layer = value_layer.transpose(1, 2).reshape(batch_size, tp_aware_value_heads, query_length, self.head_dim)
 
         if alibi is None:
             cos, sin = position_embeddings
@@ -372,9 +375,9 @@ class FalconAttention(nn.Module):
                 # It is unclear why dropout is not applied here (while it is with alibi).
                 attn_output = attention_scores @ value_layer
 
-            attn_output = attn_output.view(batch_size, self.num_heads, query_length, self.head_dim)
+            attn_output = attn_output.view(batch_size, tp_aware_num_heads, query_length, self.head_dim)
             attn_output = attn_output.permute(0, 2, 1, 3)
-            attn_output = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
+            attn_output = attn_output.reshape(batch_size, query_length, tp_aware_num_heads * self.head_dim)
 
             attn_output = self.dense(attn_output)
 
@@ -395,14 +398,14 @@ class FalconAttention(nn.Module):
                 )
                 attention_probs = None
                 attn_output = attn_output.transpose(1, 2)
-                attn_output = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
+                attn_output = attn_output.reshape(batch_size, query_length, tp_aware_num_heads * self.head_dim)
 
                 attn_output = self.dense(attn_output)
             else:
                 matmul_result = query_layer @ key_layer.transpose(-1, -2)
 
                 # change view to [batch_size, num_heads, q_length, kv_length]
-                attention_scores = matmul_result.view(batch_size, self.num_heads, query_length, kv_length)
+                attention_scores = matmul_result.view(batch_size, tp_aware_num_heads, query_length, kv_length)
 
                 # cast attention scores to fp32, compute scaled softmax and cast back to initial dtype - [batch_size, num_heads, q_length, kv_length]
                 input_dtype = attention_scores.dtype
@@ -410,20 +413,20 @@ class FalconAttention(nn.Module):
                 if input_dtype == torch.float16 or input_dtype == torch.bfloat16:
                     attention_scores = attention_scores.to(torch.float32)
 
-                attention_logits = attention_scores + alibi.view(batch_size, self.num_heads, 1, -1)
+                attention_logits = attention_scores + alibi.view(batch_size, tp_aware_num_heads, 1, -1)
                 attention_logits *= self.inv_norm_factor
                 attention_probs = F.softmax(attention_logits + attention_mask, dim=-1, dtype=hidden_states.dtype)
                 # [batch_size, num_heads, q_length, kv_length]
                 attention_probs = self.attention_dropout(attention_probs)
 
                 # change view [batch_size, num_heads, q_length, kv_length]
-                attention_probs_reshaped = attention_probs.view(batch_size, self.num_heads, query_length, kv_length)
+                attention_probs_reshaped = attention_probs.view(batch_size, tp_aware_num_heads, query_length, kv_length)
 
                 # matmul: [batch_size * num_heads, q_length, head_dim]
                 attn_output = (attention_probs_reshaped @ value_layer).flatten(0, 1)
 
                 # change view [batch_size, q_length, num_heads * head_dim]
-                attn_output = self._merge_heads(attn_output)
+                attn_output = self._merge_heads(attn_output, tp_aware_num_heads)
 
                 attn_output = self.dense(attn_output)
 
