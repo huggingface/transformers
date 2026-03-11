@@ -14,13 +14,13 @@
 
 
 import torch
-from torch import Tensor, nn
+from torch import nn
 
 from ... import initialization as init
 from ...backbone_utils import BackboneMixin
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import is_timm_available, requires_backends
+from ...utils import can_return_tuple, is_timm_available, requires_backends
 from .configuration_timm_backbone import TimmBackboneConfig
 
 
@@ -71,8 +71,8 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
         if getattr(config, "freeze_batch_norm_2d", False):
             self.freeze_batch_norm_2d()
 
-        # These are used to control the output of the model when called. If output_hidden_states is True, then
-        # return_layers is modified to include all layers.
+        # These are used to control the output of the model when called. If hidden states are requested (via
+        # config or kwargs), return_layers is modified to include all layers.
         self._return_layers = {
             layer["module"]: str(layer["index"]) for layer in self._backbone.feature_info.get_dicts()
         }
@@ -116,19 +116,14 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
                 init.ones_(module.running_var)
                 init.zeros_(module.num_batches_tracked)
 
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> BackboneOutput | tuple[Tensor, ...]:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+    ) -> BackboneOutput:
+        output_hidden_states = kwargs.pop("output_hidden_states", self.config.output_hidden_states)
+        output_attentions = kwargs.pop("output_attentions", self.config.output_attentions)
 
         if output_attentions:
             raise ValueError("Cannot output attentions for timm backbones at the moment")
@@ -145,12 +140,6 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
 
         feature_maps = tuple(feature_maps)
         hidden_states = tuple(hidden_states) if hidden_states is not None else None
-
-        if not return_dict:
-            output = (feature_maps,)
-            if output_hidden_states:
-                output = output + (hidden_states,)
-            return output
 
         return BackboneOutput(feature_maps=feature_maps, hidden_states=hidden_states, attentions=None)
 
