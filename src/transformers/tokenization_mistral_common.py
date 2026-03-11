@@ -38,7 +38,7 @@ from transformers.utils.import_utils import is_mistral_common_available, is_torc
 
 
 if is_mistral_common_available():
-    from mistral_common.protocol.instruct.request import ChatCompletionRequest
+    from mistral_common.protocol.instruct.request import ChatCompletionRequest, ReasoningEffort
     from mistral_common.protocol.instruct.validator import ValidationMode
     from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy, SpecialTokens
     from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
@@ -1028,6 +1028,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         tools: list[dict | Callable] | None = None,
         add_generation_prompt: bool = False,
         continue_final_message: bool = False,
+        reasoning_effort: ReasoningEffort | None = None,
         tokenize: bool = True,
         padding: bool | str | PaddingStrategy = False,
         truncation: bool = False,
@@ -1052,11 +1053,14 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
             add_generation_prompt (`bool`, *optional*):
                 This argument is a no-op for `MistralCommonBackend`. However, it cannot be used at the same time as `continue_final_message` to keep the API consistent.
                 If any conversation ends with an assistant message, it will raise an error. In such cases, use `continue_final_message` instead.
-            continue_final_message (bool, *optional*):
+            continue_final_message (`bool`, *optional*):
                 If this is set, the chat will be formatted so that the final
                 message in the chat is open-ended, without any EOS tokens. The model will continue this message
                 rather than starting a new one. This allows you to "prefill" part of
                 the model's response for it. Cannot be used at the same time as `add_generation_prompt`.
+            reasoning_effort (`ReasoningEffort | None`, *optional*):
+                This argument is used to control the reasoning effort of a model. Not all models support this feature and the tokenizer will throw an error if the value is not
+                valid.
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
@@ -1176,6 +1180,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
                 messages=messages,
                 tools=tools,
                 continue_final_message=continue_final_message,
+                reasoning_effort=reasoning_effort,
             )
 
             tokenized_request = self.tokenizer.encode_chat_completion(chat_request)
