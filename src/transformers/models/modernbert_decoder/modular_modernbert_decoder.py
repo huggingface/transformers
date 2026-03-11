@@ -472,11 +472,8 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, ...] | BaseModelOutputWithPast:
-        if (input_ids is None) == (inputs_embeds is None):
+        if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if input_ids is not None:
-            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
 
         # Calculate embeddings
         hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
