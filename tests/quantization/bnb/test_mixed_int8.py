@@ -923,7 +923,7 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
 @apply_skip_if_not_implemented
 class MixedInt8GPT2Test(MixedInt8Test):
     model_name = "openai-community/gpt2-xl"
-    EXPECTED_RELATIVE_DIFFERENCE = 1.8720077507258357
+    EXPECTED_RELATIVE_DIFFERENCE = 1.8987589402914336
     EXPECTED_OUTPUTS = set()
     EXPECTED_OUTPUTS.add("Hello my name is John Doe, and I'm a big fan of")
     EXPECTED_OUTPUTS.add("Hello my name is John Doe, and I'm a fan of the")

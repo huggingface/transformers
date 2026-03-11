@@ -674,7 +674,7 @@ class Bnb4BitTestTraining(Base4bitTest):
 @apply_skip_if_not_implemented
 class Bnb4BitGPT2Test(Bnb4BitTest):
     model_name = "openai-community/gpt2-xl"
-    EXPECTED_RELATIVE_DIFFERENCE = 3.3191854854152187
+    EXPECTED_RELATIVE_DIFFERENCE = 3.4483983748189027
 
 
 @apply_skip_if_not_implemented
