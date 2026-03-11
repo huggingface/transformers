@@ -592,16 +592,16 @@ class VideoPrismForVideoClassificationTest(ModelTesterMixin, unittest.TestCase):
 
 def prepare_video(video_type="water_bottle_drumming"):
     """
-    Returns the input video array preprocessed using the original repo's processor if frames=True, else returns the original video file.
+    Returns different video files/arrays based on the `video_type` argument.
     """
 
     api = HfApi()
     if video_type == "water_bottle_drumming":
-        filename = "water_bottle_drumming.mp4"
+        filename = "water_bottle_drumming.mp4"  # Raw video used in original repo's example
     elif video_type == "water_bottle_drumming_frames":
-        filename = "frames_16_288.npy"
+        filename = "frames_16_288.npy"  # Preprocessed array of the raw video
     elif video_type == "basketball_dunk":
-        filename = "v_BasketballDunk_g14_c06.avi"
+        filename = "v_BasketballDunk_g14_c06.avi"  # An example video from UCF101 used for testing the classification head of VideoPrismForVideoClassification
     else:
         raise ValueError(
             "The `video_type` should be one of ['water_bottle_drumming', 'water_bottle_drumming_frames', 'basketball_dunk']."
@@ -666,8 +666,9 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_videoprism_clip_model(self):
-        model = VideoPrismClipModel.from_pretrained("MHRDYN7/videoprism-lvt-base-f16r288").to(torch_device)
-        model.config._attn_implementation = "eager"
+        model = VideoPrismClipModel.from_pretrained(
+            "MHRDYN7/videoprism-lvt-base-f16r288", attention_implementation="eager"
+        ).to(torch_device)
         input_vids = torch.cat([self.water_bottle_drumming_frames, self.water_bottle_drumming_frames], dim=0).to(
             torch_device
         )
