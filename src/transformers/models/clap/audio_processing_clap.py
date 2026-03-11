@@ -63,6 +63,32 @@ class ClapAudioProcessor(NumpyAudioBackend):
         self.nb_max_samples = self.max_length_s * self.sample_rate
         self.mel_filters_fusion = self._mel_filter_bank(self.spectrogram_config_fusion)
 
+    def _pad_single_clap(self, audio: np.ndarray, max_length: int, padding_mode: str) -> np.ndarray:
+        """
+        CLAP-specific padding: handles "repeat" and "repeatpad" modes.
+        This is separate from the standard _pad_single used by the base class.
+        """
+        current_length = audio.shape[-1]
+        if current_length >= max_length:
+            return audio
+
+        if padding_mode == "repeat":
+            # Repeat the audio enough times to cover max_length
+            n_repeat = int(max_length / current_length)
+            audio = np.tile(audio, n_repeat + 1)[:max_length]
+            return audio
+        elif padding_mode == "repeatpad":
+            # Repeat then pad with zeros
+            n_repeat = int(max_length / current_length)
+            audio = np.tile(audio, n_repeat)
+            remaining = max_length - audio.shape[-1]
+            if remaining > 0:
+                audio = np.pad(audio, (0, remaining), mode="constant", constant_values=0)
+            return audio
+        else:
+            # For other modes, use standard padding via parent's _pad_single
+            return super()._pad_single(audio, max_length)
+
     def _mel_filter_bank(self, spectrogram_config):
         stft_cfg = spectrogram_config.stft_config
         mel_cfg = spectrogram_config.mel_scale_config
@@ -81,7 +107,6 @@ class ClapAudioProcessor(NumpyAudioBackend):
         if spectrogram_config is None:
             spectrogram_config = self.spectrogram_config
         stft_cfg = spectrogram_config.stft_config
-        mel_cfg = spectrogram_config.mel_scale_config
 
         # Use the correct mel filters for this config
         if spectrogram_config is self.spectrogram_config_fusion:
@@ -123,7 +148,7 @@ class ClapAudioProcessor(NumpyAudioBackend):
         mel_shrink = mel_shrink[0][0].numpy()
         return np.stack([mel_shrink, mel_chunk_front, mel_chunk_middle, mel_chunk_back], axis=0)
 
-    def _get_input_mel(self, waveform, max_length, truncation, padding):
+    def _get_input_mel(self, waveform, max_length, truncation):
         hop_length = self.spectrogram_config.stft_config.hop_length
 
         if waveform.shape[0] > max_length:
@@ -147,15 +172,6 @@ class ClapAudioProcessor(NumpyAudioBackend):
                 raise NotImplementedError(f"data_truncating {truncation} not implemented")
         else:
             longer = False
-            if waveform.shape[0] < max_length:
-                if padding == "repeat":
-                    n_repeat = int(max_length / len(waveform))
-                    waveform = np.tile(waveform, n_repeat + 1)[:max_length]
-                if padding == "repeatpad":
-                    n_repeat = int(max_length / len(waveform))
-                    waveform = np.tile(waveform, n_repeat)
-                waveform = np.pad(waveform, (0, max_length - waveform.shape[0]), mode="constant", constant_values=0)
-
             if truncation == "fusion":
                 input_mel = self._extract_single_mel(waveform, spectrogram_config=self.spectrogram_config_fusion)
                 input_mel = np.stack([input_mel, input_mel, input_mel, input_mel], axis=0)
@@ -164,13 +180,60 @@ class ClapAudioProcessor(NumpyAudioBackend):
 
         return input_mel, longer
 
-    def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
-        truncation_mode = self.truncation_mode
-        padding_mode = padding if padding else self.padding_mode
+    def _preprocess(
+        self,
+        audio,
+        padding,
+        max_length,
+        truncation,
+        pad_to_multiple_of,
+        return_tensors,
+        spectrogram_config=None,
+        do_extract_spectrogram=None,
+        do_batch_spectrogram=True,
+        **kwargs,
+    ):
+        # Use instance defaults when not explicitly provided (matching feature extractor behavior)
+        truncation_mode = self.truncation_mode if truncation is None else truncation
+        # For padding: use instance default only when not provided (None or False)
+        # When padding=True is passed, use it directly (feature extractor behavior)
+        if padding is None or padding is False:
+            padding_mode = self.padding_mode
+        else:
+            padding_mode = padding
         nb_max_samples = max_length if isinstance(max_length, int) and max_length > 0 else self.nb_max_samples
 
+        # Handle truncation: only apply if boolean truncation=True OR if using CLAP-specific string modes
+        # Note: CLAP's _get_input_mel handles truncation internally based on truncation_mode
+        # We only do pre-truncation here for standard boolean truncation=True case
+        if truncation is True:
+            if nb_max_samples is None:
+                raise ValueError("When setting `truncation=True`, make sure that `max_length` is defined.")
+            trunc_length = nb_max_samples
+            if pad_to_multiple_of is not None and (trunc_length % pad_to_multiple_of != 0):
+                trunc_length = ((trunc_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
+            audio = [self._truncate_single(audio_el, max_length=trunc_length) for audio_el in audio]
+
+        # Handle padding: CLAP-specific modes ("repeat", "repeatpad") vs standard modes
+        if padding_mode in ("repeat", "repeatpad"):
+            # Use CLAP's custom _pad_single_clap which handles repeat/repeatpad
+            audio = [self._pad_single_clap(audio_el, max_length=nb_max_samples, padding_mode=padding_mode) for audio_el in audio]
+        elif padding is not False and padding_mode is not False:
+            # Use standard padding flow for "longest", "max_length", True, etc.
+            from ...utils import PaddingStrategy
+            if padding_mode is True and nb_max_samples is not None:
+                # When padding=True and we have a max length, use MAX_LENGTH strategy
+                # (matching feature extractor behavior that pads to max_length)
+                padding_strategy = PaddingStrategy.MAX_LENGTH
+            elif isinstance(padding_mode, str) and padding_mode not in ("longest", "max_length", "do_not_pad"):
+                padding_strategy = PaddingStrategy.LONGEST  # Default to longest for unknown string values
+            else:
+                padding_strategy = padding_mode
+            audio = self.pad(audio, padding_strategy, nb_max_samples, truncation=False, pad_to_multiple_of=pad_to_multiple_of)
+
+        # Process each waveform through CLAP's mel extraction (handles truncation internally)
         padded_inputs = [
-            self._get_input_mel(np.squeeze(waveform), nb_max_samples, truncation_mode, padding_mode)
+            self._get_input_mel(np.squeeze(waveform), nb_max_samples, truncation_mode)
             for waveform in audio
         ]
 

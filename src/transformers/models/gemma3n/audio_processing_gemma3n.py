@@ -127,36 +127,27 @@ class Gemma3nAudioProcessor(NumpyAudioBackend):
         return features
 
     def _extract_spectrogram(self, audio, *, spectrogram_config, **kwargs):
-        """Custom STFT with HTK-flavor preemphasis."""
         stft_cfg = spectrogram_config.stft_config
         preemphasis = spectrogram_config.preemphasis
 
-        features = []
-        for waveform in audio:
-            if waveform.ndim == 1:
-                waveform = np.expand_dims(waveform, axis=0)
+        frame_size_for_unfold = stft_cfg.win_length + 1
+        frames_to_process = _unfold(audio, dimension=-1, size=frame_size_for_unfold, step=stft_cfg.hop_length)
 
-            frame_size_for_unfold = stft_cfg.win_length + 1
-            frames_to_process = _unfold(waveform, dimension=-1, size=frame_size_for_unfold, step=stft_cfg.hop_length)
-
-            if preemphasis is not None and preemphasis > 0.0:
-                if self.preemphasis_htk_flavor:
-                    first_in_frame = frames_to_process[..., :1] * (1.0 - preemphasis)
-                    rest_in_frame = (
-                        frames_to_process[..., 1:-1] - preemphasis * frames_to_process[..., :-2]
-                    )
-                    frames = np.concatenate([first_in_frame, rest_in_frame], axis=-1)
-                else:
-                    frames = frames_to_process[..., 1:] - preemphasis * frames_to_process[..., :-1]
+        # Preemphasis
+        if preemphasis is not None and preemphasis > 0.0:
+            if self.preemphasis_htk_flavor:
+                first_in_frame = frames_to_process[..., :1] * (1.0 - preemphasis)
+                rest_in_frame = frames_to_process[..., 1:-1] - preemphasis * frames_to_process[..., :-2]
+                frames = np.concatenate([first_in_frame, rest_in_frame], axis=-1)
             else:
-                frames = frames_to_process[..., :-1]
+                frames = frames_to_process[..., 1:] - preemphasis * frames_to_process[..., :-1]
+        else:
+            frames = frames_to_process[..., :-1]
 
-            frames = frames * self.window
-            stft = np.fft.rfft(frames, n=stft_cfg.n_fft, axis=-1)
-            magnitude_spec = np.abs(stft)
-            features.append(magnitude_spec.squeeze(0))  # (frames, n_freqs)
+        frames = frames * self.window  # Broadcasting window
 
-        return features
+        stft = np.fft.rfft(frames, n=stft_cfg.n_fft, axis=-1)
+        magnitude_spec = np.abs(stft)
 
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
         """Apply mel filterbank, log compression, and per-bin normalization."""
@@ -172,60 +163,6 @@ class Gemma3nAudioProcessor(NumpyAudioBackend):
 
             result.append(log_mel_spec.astype(np.float32))
         return result
-
-    def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors,
-                    spectrogram_config=None, do_extract_spectrogram=None, **kwargs):
-        if max_length is None:
-            max_length = self.max_length
-        if truncation is None:
-            truncation = self.truncation
-        if pad_to_multiple_of is None:
-            pad_to_multiple_of = self.pad_to_multiple_of
-        if spectrogram_config is None:
-            spectrogram_config = self.spectrogram_config
-
-        # Truncate then pad to longest in batch (matching FE "longest" padding strategy)
-        if truncation and max_length is not None:
-            audio = [a[..., :max_length] for a in audio]
-
-        # Determine pad length (to longest in batch, rounded to multiple)
-        pad_length = max(a.shape[-1] for a in audio)
-        if pad_to_multiple_of is not None and (pad_length % pad_to_multiple_of != 0):
-            pad_length = ((pad_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
-
-        # Record original audio lengths and pad
-        original_lengths = [a.shape[-1] for a in audio]
-        audio = [self._pad_single(a, pad_length) for a in audio]
-
-        # Extract spectrogram via orchestrator (_extract_spectrogram + _apply_mel_scale)
-        if do_extract_spectrogram is not False and spectrogram_config is not None:
-            features = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config)
-        else:
-            features = audio
-
-        output_key = "audio_features"
-        stacked = np.stack(features, axis=0)
-
-        # Compute per-sample spectrogram frame counts from the padded audio length
-        # This matches the FeatureExtractor which subsamples the attention mask from padded audio
-        frame_size_for_unfold = spectrogram_config.stft_config.win_length + 1  # 513
-        hop_length = spectrogram_config.stft_config.hop_length  # 160
-        # Use padded length for frame count to match FeatureExtractor behavior
-        frame_counts = [(pad_length - frame_size_for_unfold) // hop_length + 1 for _ in original_lengths]
-        # Then limit by actual audio length to avoid counting frames beyond original audio
-        max_frames_per_audio = [(orig_len - 1) // hop_length + 1 for orig_len in original_lengths]
-        frame_counts = [min(fc, max_f) for fc, max_f in zip(frame_counts, max_frames_per_audio)]
-
-        # Build mask: 1 for real frames, 0 for padded frames
-        max_frames = stacked.shape[1]
-        input_features_mask = np.array(
-            [[True] * fc + [False] * (max_frames - fc) for fc in frame_counts], dtype=bool
-        )
-
-        return BatchFeature(
-            data={output_key: stacked, "input_features_mask": input_features_mask},
-            tensor_type=return_tensors,
-        )
 
 
 __all__ = ["Gemma3nAudioProcessor"]

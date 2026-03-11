@@ -91,7 +91,6 @@ class Phi4MultimodalAudioProcessor(TorchAudioBackend):
         return [log_spec[i] for i in range(batch_size)]
 
     def _compute_audio_embed_size(self, audio_frames):
-        import torch
 
         integer = audio_frames // self.audio_compression_rate
         remainder = audio_frames % self.audio_compression_rate

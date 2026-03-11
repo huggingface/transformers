@@ -37,8 +37,8 @@ class WhisperAudioProcessor(TorchAudioBackend):
         log_mode="log10",
     )
 
-    def extract_spectrogram(self, audio, **kwargs):
-        features = super().extract_spectrogram(audio, **kwargs)
+    def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
+        features = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
         features = features[..., :-1]  # whisper skips last frame
 
         max_vals = features.amax(dim=(-2, -1), keepdim=True)
