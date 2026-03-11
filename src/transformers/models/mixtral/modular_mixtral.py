@@ -383,6 +383,10 @@ class MixtralForCausalLM(MistralForCausalLM):
             output_router_logits if output_router_logits is not None else self.config.output_router_logits
         )
 
+        # Always collect router logits internally when aux loss is needed for training
+        compute_aux_loss = self.router_aux_loss_coef > 0
+        collect_router_logits = output_router_logits or compute_aux_loss
+
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
@@ -391,7 +395,7 @@ class MixtralForCausalLM(MistralForCausalLM):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_router_logits=output_router_logits,
+            output_router_logits=collect_router_logits,
             **kwargs,
         )
 
@@ -405,7 +409,7 @@ class MixtralForCausalLM(MistralForCausalLM):
             loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         aux_loss = None
-        if output_router_logits:
+        if collect_router_logits:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
                 self.num_experts,
@@ -422,7 +426,7 @@ class MixtralForCausalLM(MistralForCausalLM):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
+            router_logits=outputs.router_logits if output_router_logits else None,
         )
 
 
