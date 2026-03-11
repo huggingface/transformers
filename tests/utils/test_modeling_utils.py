@@ -1960,6 +1960,27 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue(torch.get_default_dtype() == torch.float32)
         torch.set_default_dtype(old_dtype)
 
+    def test_local_torch_dtype_float8_fallback(self):
+        """
+        Tests that `local_torch_dtype` gracefully handles float8 dtypes by falling back to bfloat16,
+        since `torch.set_default_dtype` does not support float8 types.
+        See https://github.com/huggingface/transformers/issues/44589
+        """
+        from transformers.modeling_utils import local_torch_dtype
+
+        old_dtype = torch.get_default_dtype()
+
+        # float8_e4m3fn should fall back to bfloat16 without raising
+        with local_torch_dtype(torch.float8_e4m3fn):
+            self.assertEqual(torch.get_default_dtype(), torch.bfloat16)
+
+        # float8_e5m2 should also fall back to bfloat16 without raising
+        with local_torch_dtype(torch.float8_e5m2):
+            self.assertEqual(torch.get_default_dtype(), torch.bfloat16)
+
+        # default dtype should be restored after exiting
+        self.assertEqual(torch.get_default_dtype(), old_dtype)
+
     def test_unknown_quantization_config(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             config = BertConfig(

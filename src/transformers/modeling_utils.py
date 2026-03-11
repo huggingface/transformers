@@ -235,6 +235,11 @@ def local_torch_dtype(dtype: torch.dtype, model_class_name: str | None = None):
             error_message = f"Cannot set `{dtype}` as torch's default as it's not a floating-point dtype"
         raise ValueError(error_message)
 
+    # float8 types (e.g. float8_e4m3fn, float8_e5m2) are not supported by torch.set_default_dtype.
+    # Fall back to bfloat16 for model initialization; actual float8 weights are loaded separately.
+    if "float8" in str(dtype):
+        dtype = torch.bfloat16
+
     original_dtype = torch.get_default_dtype()
     try:
         torch.set_default_dtype(dtype)
