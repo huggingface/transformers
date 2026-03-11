@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-03-10 and added to Hugging Face Transformers on 2026-03-10.*
+*This model was released on 2026-03-11 and added to Hugging Face Transformers on 2026-03-11.*
 # CHMv2
 
 <div class="flex flex-wrap space-x-1">
@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Canopy Height Maps v2 (CHMv2) model was proposed in [CHMv2: Improvements in Global Canopy Height Mapping using DINOv3](https://arxiv.org/abs/2603.06382). Building on our [original high-resolution canopy height maps](https://sustainability.atmeta.com/blog/2024/04/22/using-artificial-intelligence-to-map-the-earths-forests/) released in 2024, CHMv2 delivers substantial improvements in accuracy, detail, and global consistency by leveraging DINOv3, Meta's self-supervised vision model.
+The Canopy Height Maps v2 (CHMv2) model was proposed in [CHMv2: Improvements in Global Canopy Height Mapping using DINOv3](https://huggingface.co/papers/2603.06382). Building on our [original high-resolution canopy height maps](https://sustainability.atmeta.com/blog/2024/04/22/using-artificial-intelligence-to-map-the-earths-forests/) released in 2024, CHMv2 delivers substantial improvements in accuracy, detail, and global consistency by leveraging DINOv3, Meta's self-supervised vision model.
 
 You can find more information [here](http://ai.meta.com/blog/world-resources-institute-dino-canopy-height-maps-v2), and the original code [here](https://github.com/facebookresearch/dinov3).
 

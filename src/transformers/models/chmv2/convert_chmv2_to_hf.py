@@ -235,7 +235,9 @@ def convert_chmv2_checkpoint(
             outputs = model(**inputs)
         results = processor.post_process_depth_estimation(outputs, target_sizes=[(image.height, image.width)])
         depth = results[0]["predicted_depth"]
-        print(f"Predicted depth — shape: {depth.shape}  mean: {depth.mean():.4f}  range: [{depth.min():.4f}, {depth.max():.4f}]")
+        print(
+            f"Predicted depth — shape: {depth.shape}  mean: {depth.mean():.4f}  range: [{depth.min():.4f}, {depth.max():.4f}]"
+        )
 
     # Save
     logger.info(f"Saving to {pytorch_dump_folder_path}")
@@ -256,7 +258,9 @@ def convert_chmv2_checkpoint(
 def main():
     parser = argparse.ArgumentParser(description="Convert CHMv2 checkpoints to HuggingFace format")
     parser.add_argument("--head_checkpoint_path", type=str, required=True, help="Path to CHMv2 head checkpoint (.pth)")
-    parser.add_argument("--pytorch_dump_folder_path", type=str, required=True, help="Output directory for converted model")
+    parser.add_argument(
+        "--pytorch_dump_folder_path", type=str, required=True, help="Output directory for converted model"
+    )
     parser.add_argument(
         "--backbone_checkpoint_path",
         type=str,
@@ -264,7 +268,9 @@ def main():
         help="Path to separate DINOv3 backbone checkpoint, if not in head checkpoint",
     )
     parser.add_argument("--model_name", type=str, default="chmv2", choices=list(MODEL_CONFIGS.keys()))
-    parser.add_argument("--backbone_repo_id", type=str, default=None, help="HuggingFace repo ID for pre-converted DINOv3 backbone")
+    parser.add_argument(
+        "--backbone_repo_id", type=str, default=None, help="HuggingFace repo ID for pre-converted DINOv3 backbone"
+    )
     parser.add_argument("--verify_image_path", type=str, default=None, help="Image path to verify conversion")
     parser.add_argument("--push_to_hub", action="store_true")
 
