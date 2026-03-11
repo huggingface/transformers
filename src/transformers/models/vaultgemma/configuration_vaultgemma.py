@@ -24,7 +24,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="google/vaultgemma-7b")
+@auto_docstring(checkpoint="google/vaultgemma-1b")
 class VaultGemmaConfig(PreTrainedConfig):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):

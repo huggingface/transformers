@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring(checkpoint="lightonocr-hf/lightonocr-9b")
+@auto_docstring(checkpoint="lightonai/LightOnOCR-1B-1025")
 class LightOnOcrConfig(PretrainedConfig):
     r"""
     Example:

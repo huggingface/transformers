@@ -502,6 +502,7 @@ def get_model_conversion_mapping(
     For a given `model`, obtain the weight conversion mapping if any are registered either as a simple renaming
     `_checkpoint_conversion_mapping` class argument, or in the general WeightConverter mapping.
     """
+    # note: this function is used in PEFT, so changing the API requires coordination
     weight_conversions = []
 
     # Load models with explicit, user-provided key mapping

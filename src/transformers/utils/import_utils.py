@@ -475,10 +475,12 @@ def is_torch_neuron_available(check_device: bool = False) -> bool:
         try:
             import torch_neuronx  # noqa: F401
 
-            # Will raise a RuntimeError if no Neuron is found, or AttributeError if torch.neuron is not available
-            _ = getattr(torch, "neuron").device_count()
-            return getattr(torch, "neuron").is_available()
-        except (AttributeError, RuntimeError):
+            # Will raise a RuntimeError if no Neuron is found
+            if hasattr(torch, "neuron"):
+                _ = torch.neuron.device_count()
+                return torch.neuron.is_available()
+            return False
+        except RuntimeError:
             return False
 
     return hasattr(torch, "neuron") and torch.neuron.is_available()
@@ -497,17 +499,17 @@ def is_torch_bf16_gpu_available() -> bool:
         return torch.xpu.is_bf16_supported()
     if is_torch_hpu_available():
         return True
-    if is_torch_npu_available():
-        return torch.npu.is_bf16_supported() if hasattr(torch, "npu") else False
+    if is_torch_npu_available() and hasattr(torch, "npu"):
+        return torch.npu.is_bf16_supported()
     if is_torch_mps_available():
         # Note: Emulated in software by Metal using fp32 for hardware without native support (like M1/M2)
         return torch.backends.mps.is_macos_or_newer(14, 0)
-    if is_torch_musa_available():
-        return getattr(torch, "musa").is_bf16_supported()
-    if is_torch_mlu_available():
-        return getattr(torch, "mlu").is_bf16_supported()
-    if is_torch_neuron_available():
-        return getattr(torch, "neuron").is_bf16_supported()
+    if is_torch_musa_available() and hasattr(torch, "musa"):
+        return torch.musa.is_bf16_supported()
+    if is_torch_mlu_available() and hasattr(torch, "mlu"):
+        return torch.mlu.is_bf16_supported()
+    if is_torch_neuron_available() and hasattr(torch, "neuron"):
+        return torch.neuron.is_bf16_supported()
     return False
 
 
@@ -566,11 +568,10 @@ def is_torch_tf32_available() -> bool:
 
     import torch
 
-    if is_torch_musa_available():
-        if hasattr(torch, "musa"):
-            device_info = torch.musa.get_device_properties(torch.musa.current_device())
-            if f"{device_info.major}{device_info.minor}" >= "22":
-                return True
+    if is_torch_musa_available() and hasattr(torch, "musa"):
+        device_info = torch.musa.get_device_properties(torch.musa.current_device())
+        if f"{device_info.major}{device_info.minor}" >= "22":
+            return True
         return False
     torch_version = getattr(torch, "version")
     if not torch.cuda.is_available() or torch_version.cuda is None:
@@ -1341,7 +1342,9 @@ def is_torchdynamo_compiling() -> bool:
     try:
         import torch
 
-        return getattr(torch, "compiler").is_compiling()
+        if hasattr(torch, "compiler"):
+            return torch.compiler.is_compiling()
+        return False
     except Exception:
         return False
 
@@ -1350,7 +1353,9 @@ def is_torchdynamo_exporting() -> bool:
     try:
         import torch
 
-        return getattr(torch, "compiler").is_exporting()
+        if hasattr(torch, "compiler"):
+            return torch.compiler.is_exporting()
+        return False
     except Exception:
         return False
 
@@ -2546,15 +2551,16 @@ def create_import_structure_from_path(module_path):
     if os.path.isfile(module_path):
         module_path = os.path.dirname(module_path)
 
-    directory = module_path
     adjacent_modules = []
 
-    for f in os.listdir(module_path):
-        if f != "__pycache__" and os.path.isdir(os.path.join(module_path, f)):
-            import_structure[f] = create_import_structure_from_path(os.path.join(module_path, f))
-
-        elif not os.path.isdir(os.path.join(directory, f)):
-            adjacent_modules.append(f)
+    with os.scandir(module_path) as entries:
+        for entry in entries:
+            if entry.name == "__pycache__":
+                continue
+            if entry.is_dir():
+                import_structure[entry.name] = create_import_structure_from_path(entry.path)
+            elif not entry.name.startswith(("convert_", "modular_")):
+                adjacent_modules.append(entry.name)
 
     # We're only taking a look at files different from __init__.py
     # We could theoretically require things directly from the __init__.py
@@ -2562,20 +2568,13 @@ def create_import_structure_from_path(module_path):
     if "__init__.py" in adjacent_modules:
         adjacent_modules.remove("__init__.py")
 
-    # Modular files should not be imported
-    def find_substring(substring, list_):
-        return any(substring in x for x in list_)
-
-    if find_substring("modular_", adjacent_modules) and find_substring("modeling_", adjacent_modules):
-        adjacent_modules = [module for module in adjacent_modules if "modular_" not in module]
-
     module_requirements = {}
     for module_name in adjacent_modules:
         # Only modules ending in `.py` are accepted here.
         if not module_name.endswith(".py"):
             continue
 
-        with open(os.path.join(directory, module_name), encoding="utf-8") as f:
+        with open(os.path.join(module_path, module_name), encoding="utf-8") as f:
             file_content = f.read()
 
         # Remove the .py suffix

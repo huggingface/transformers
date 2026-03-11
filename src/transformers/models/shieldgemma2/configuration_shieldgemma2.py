@@ -21,7 +21,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="google/gemma-3-4b")
+@auto_docstring(checkpoint="google/shieldgemma-2-4b-it")
 class ShieldGemma2Config(PreTrainedConfig):
     r"""
     mm_tokens_per_image (`int`, *optional*, defaults to 256):
@@ -30,7 +30,8 @@ class ShieldGemma2Config(PreTrainedConfig):
         The begin-of-image token index to wrap the image prompt.
     eoi_token_index (`int`, *optional*, defaults to 256000):
         The end-of-image token index to wrap the image prompt.
-
+    tie_word_embeddings (`bool`, *optional*):
+            Whether to tie the word embeddings. Defaults to the value of `text_config.tie_word_embeddings` if not set.
     Example:
 
     ```python
@@ -69,6 +70,7 @@ class ShieldGemma2Config(PreTrainedConfig):
         eoi_token_index: int = 256_000,
         image_token_index: int = 262_144,
         initializer_range: float = 0.02,
+        tie_word_embeddings=None,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -92,7 +94,9 @@ class ShieldGemma2Config(PreTrainedConfig):
         self.eoi_token_index = eoi_token_index
         self.image_token_index = image_token_index
         self.initializer_range = initializer_range
-
+        if tie_word_embeddings is None:
+            tie_word_embeddings = getattr(self.text_config, "tie_word_embeddings", True)
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 

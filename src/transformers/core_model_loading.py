@@ -646,7 +646,7 @@ class WeightTransform:
         - saving: the tensors are already torch.Tensor instances (the existing model weights)
         """
         collected_tensors = {}
-        for key in set(self.collected_tensors.keys()):
+        for key in list(self.collected_tensors.keys()):
             # Remove from internal attribute
             tensors = self.collected_tensors.pop(key)
             # Async loading
@@ -1179,7 +1179,7 @@ def convert_and_load_state_dict_in_model(
 
             # 4. Handle TP sharding or device_map placement
             future_or_tensor = None
-            if device_mesh:
+            if device_mesh and tp_plan:
                 if matched_tp_pattern := tp_plan_alt.search(renamed_key):
                     matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
                     if getattr(mapping, "distributed_operation", None) is None:

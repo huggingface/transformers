@@ -24,7 +24,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="THUDM/GLM-4-100B-A10B")
+@auto_docstring(checkpoint="zai-org/GLM-4.5")
 class Glm4MoeLiteConfig(PreTrainedConfig):
     r"""
     rope_interleave (`bool`, *optional*, defaults to `True`):
