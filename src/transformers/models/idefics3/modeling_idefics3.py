@@ -926,7 +926,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
             **kwargs,
         )
 
-        if image_hidden_states is not None or not is_first_iteration:
+        if image_hidden_states is not None or (kwargs.get("use_cache") and not is_first_iteration):
             model_inputs["pixel_values"] = None
             model_inputs["pixel_attention_mask"] = None
 
