@@ -246,6 +246,7 @@ IGNORE_NON_TESTED = (
         "PeAudioVideoModel",
         "VibeVoiceAcousticTokenizerEncoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "VibeVoiceAcousticTokenizerDecoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
+        "PI0Model", # special arch, tested through PI0ForConditionalGeneration
     ]
 )
 
