@@ -49,6 +49,8 @@ class PI0Config(PreTrainedConfig):
         Minimum period for sinusoidal time embedding.
     max_period (`float`, *optional*, defaults to 4.0):
         Maximum period for sinusoidal time embedding.
+    loss_reduction (`str`, *optional*, defaults to `"mean"`):
+        The reduction to use on MSE loss.
 
     Example:
     ```python
@@ -78,6 +80,7 @@ class PI0Config(PreTrainedConfig):
         time_sampling_offset=0.001,
         min_period=4e-3,
         max_period=4.0,
+        loss_reduction="mean",
         **kwargs,
     ):
         if isinstance(vlm_config, dict):
@@ -144,6 +147,7 @@ class PI0Config(PreTrainedConfig):
         self.time_sampling_offset = time_sampling_offset
         self.min_period = min_period
         self.max_period = max_period
+        self.loss_reduction = loss_reduction
         super().__init__(**kwargs)
 
 

@@ -307,7 +307,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         loss = None
         if actions is not None:
             # Let the users reduce loss themselves and return fine-grained per sample loss
-            loss = F.mse_loss(target_velocity, predicted_velocity, reduction="none")
+            loss = F.mse_loss(target_velocity, predicted_velocity, reduction=self.config.loss_reduction)
 
         return CausalLMOutputWithPast(
             loss=loss,

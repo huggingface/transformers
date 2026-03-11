@@ -13,12 +13,13 @@
 # limitations under the License.
 """Testing suite for the PyTorch PI0 model."""
 
+import tempfile
 import unittest
 
-from datasets import load_dataset
+from datasets import Dataset, load_dataset
 from parameterized import parameterized
 
-from transformers import PI0Config, PI0Processor, is_torch_available
+from transformers import PI0Config, PI0Processor, Trainer, TrainingArguments, is_torch_available
 from transformers.image_utils import load_image
 from transformers.testing_utils import (
     require_torch,
@@ -33,6 +34,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+from ...trainer.trainer_test_utils import StoreLossCallback
 
 
 if is_torch_available():
@@ -175,18 +177,6 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
             outputs = model(**inputs_dict)
         self.assertEqual(outputs.loss.shape, (self.model_tester.batch_size, config.chunk_size, config.max_action_dim))
 
-    def test_training(self):
-        # Overwrite becasue PI0 returns loss per sample. Needs to apply avg reduction before backward
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.return_dict = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.mean().backward()
-
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("Model architecture is special and requires much higher `tols`")
     def test_eager_matches_sdpa_inference(
@@ -268,7 +258,6 @@ class PI0ModelIntegrationTest(unittest.TestCase):
             suffix_embs = model.embed_action_time(state, noise, timestep)
         self.assertEqual(suffix_embs.shape, (1, 51, 1024))
         self.assertAlmostEqual(suffix_embs.mean().item(), -0.10177, delta=0.002)
-        print(suffix_embs.shape, suffix_embs[0, 0, :4], suffix_embs[0, -1, :4])
         torch.testing.assert_close(
             suffix_embs[0, 0, :4], torch.tensor([-0.0460, 0.8858, 0.7172, -0.7538]), atol=1e-3, rtol=1e-3
         )
@@ -281,7 +270,6 @@ class PI0ModelIntegrationTest(unittest.TestCase):
 
         self.assertEqual(prefix_embs.shape, (1, 304, 2048))
         self.assertAlmostEqual(prefix_embs.mean().item(), 0.0224, places=3)
-        print(prefix_embs.shape, prefix_embs[0, 0, :4], prefix_embs[0, -1, :4])
         torch.testing.assert_close(
             prefix_embs[0, 0, :4], torch.tensor([1.1781, 0.1176, -0.2231, -0.3662]), atol=1e-3, rtol=1e-3
         )
@@ -305,7 +293,6 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             sampled = model.sample_actions(**inputs, state=state, num_steps=3)
         self.assertEqual(sampled.shape, (1, 50, 32))
-        print(sampled.mean(), sampled.std(), sampled[0, 0, :4], sampled[0, -1, :4])
         self.assertAlmostEqual(sampled.mean().item(), -0.0764, places=3)
         self.assertAlmostEqual(sampled.std().item(), 0.2300, places=3)
         torch.testing.assert_close(
@@ -354,3 +341,48 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             sampled[0, -1, :4], torch.tensor([-0.2541, -0.1213, -0.2637, 0.2935]), atol=1e-3, rtol=1e-3
         )
+
+    def test_train_pi0_base_libero(self):
+        model = PI0ForConditionalGeneration.from_pretrained("lerobot/pi0_base", torch_dtype=torch.float32).eval()
+        processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224")
+
+        small_data = load_dataset("RaushanTurganbay/libero-small-testing", split="train")
+        train_actions = [small_data["action"][i : i + 50] for i in range(len(small_data) - 50)]
+
+        def preprocess(example):
+            # format images as nested list
+            example["images"] = [[im] for im in example["images"]]
+            encodings = processor(**example, return_tensors="pt")
+            encodings["timestep"] = example["timestep"]
+            return encodings
+
+        train_data = Dataset.from_dict(
+            {
+                "actions": train_actions[:50],
+                "text": ["put the white mug on the left plate"] * 50,
+                "state": small_data["observation.state"][:50],
+                "timestep": small_data["timestamp"][:50],
+                "images": small_data["observation.images.image"][:50],
+            }
+        )
+        train_data = train_data.map(preprocess, batched=True)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(
+                tmp_dir,
+                max_steps=5,
+                learning_rate=2e-4,
+                disable_tqdm=True,
+            )
+            loss_callback = StoreLossCallback()
+            trainer = Trainer(
+                model,
+                args,
+                train_dataset=train_data,
+                callbacks=[loss_callback],
+                processing_class=processor,
+            )
+            trainer.train()
+
+        # Loss is steadily decreasing
+        self.assertTrue(sorted(loss_callback.losses, reverse=True) == loss_callback)
