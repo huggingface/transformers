@@ -126,7 +126,7 @@ class NumpyAudioBackend(BaseAudioProcessor):
 
     def _normalize_magnitude(
         self,
-        features: list[np.ndarray],
+        features: np.ndarray,
         *,
         spectrogram_config: SpectrogramConfig,
         reference: float = 1.0,
@@ -134,9 +134,10 @@ class NumpyAudioBackend(BaseAudioProcessor):
         db_range: float | None = None,
         dtype: np.dtype = np.float32,
         **kwargs,
-    ) -> list[np.ndarray]:
+    ) -> np.ndarray:
         """Apply magnitude normalization (log, log10, or dB scaling) to spectrogram features.
 
+        Accepts a single or batched spectrogram (not a list).
         Mirrors the normalization logic in `audio_utils.spectrogram()`.
         """
         log_mel = spectrogram_config.log_mode
@@ -147,17 +148,17 @@ class NumpyAudioBackend(BaseAudioProcessor):
             return features
 
         # Clamp to mel_floor before taking log
-        result = [np.maximum(mel_floor, spec) for spec in features]
+        result = np.maximum(mel_floor, features)
 
         if log_mel == "log":
-            result = [np.log(spec).astype(dtype) for spec in result]
+            result = np.log(result).astype(dtype)
         elif log_mel == "log10":
-            result = [np.log10(spec).astype(dtype) for spec in result]
+            result = np.log10(result).astype(dtype)
         elif log_mel == "dB":
             if power == 1.0:
-                result = [amplitude_to_db(spec, reference, min_value, db_range).astype(dtype) for spec in result]
+                result = amplitude_to_db(result, reference, min_value, db_range).astype(dtype)
             elif power == 2.0:
-                result = [power_to_db(spec, reference, min_value, db_range).astype(dtype) for spec in result]
+                result = power_to_db(result, reference, min_value, db_range).astype(dtype)
             else:
                 raise ValueError(f"Cannot use log_mel option 'dB' with power {power}")
         else:
@@ -261,31 +262,25 @@ class TorchAudioBackend(BaseAudioProcessor):
 
     def _extract_spectrogram(
         self,
-        audio: list["torch.Tensor"],
+        audio: list["torch.Tensor"],  # TODO: this can be either a audio or batch of audio and this should be documented
         *,
         spectrogram_config: SpectrogramConfig,
         **kwargs,
     ) -> list["torch.Tensor"]:
         """Compute the (power) spectrogram via STFT using the torch backend."""
-        import torch
 
         stft_cfg = spectrogram_config.stft_config
-
-        if isinstance(audio, torch.Tensor) and audio.dim() == 2:
-            waveform = audio
-        else:
-            waveform = torch.stack(audio)
-
-        if spectrogram_config.preemphasis is not None:
-            audio_ranges = kwargs.get("audio_ranges", None)
-            if audio_ranges is not None:
-                device = waveform.device
-                timemask = torch.arange(waveform.shape[1], device=device).unsqueeze(0)
-                timemask = timemask < audio_ranges.unsqueeze(1)
-                waveform = waveform.masked_fill(~timemask, 0.0)
+    
+        # if spectrogram_config.preemphasis is not None:
+        #     audio_ranges = kwargs.get("audio_ranges", None)
+        #     if audio_ranges is not None:
+        #         device = waveform.device
+        #         timemask = torch.arange(waveform.shape[1], device=device).unsqueeze(0)
+        #         timemask = timemask < audio_ranges.unsqueeze(1)
+        #         waveform = waveform.masked_fill(~timemask, 0.0)
 
         magnitudes = _torch_spec._extract_spectrogram(
-            waveform,
+            audio,
             self.sample_rate,
             n_fft=stft_cfg.n_fft,
             win_length=stft_cfg.win_length,
@@ -301,9 +296,8 @@ class TorchAudioBackend(BaseAudioProcessor):
             preemphasis=spectrogram_config.preemphasis,
             remove_dc_offset=spectrogram_config.remove_dc_offset,
         )
-        magnitudes = magnitudes[..., :-1]
 
-        return [magnitudes[i] for i in range(magnitudes.shape[0])]
+        return magnitudes
 
     def _apply_mel_scale(
         self,
@@ -317,7 +311,7 @@ class TorchAudioBackend(BaseAudioProcessor):
 
     def _normalize_magnitude(
         self,
-        features: list["torch.Tensor"],
+        features: "torch.Tensor",
         *,
         spectrogram_config: SpectrogramConfig,
         reference: float = 1.0,
@@ -325,11 +319,8 @@ class TorchAudioBackend(BaseAudioProcessor):
         db_range: float | None = None,
         dtype: "torch.dtype | None" = None,
         **kwargs,
-    ) -> list["torch.Tensor"]:
-        """Apply magnitude normalization (log, log10, or dB scaling) to spectrogram features.
-
-        Mirrors the normalization logic in `audio_utils.spectrogram()`.
-        """
+    ) -> "torch.Tensor":
+        """Apply magnitude normalization (log, log10, or dB scaling) to batched spectrogram features (torch.Tensor only)."""
         import torch
 
         log_mel = spectrogram_config.log_mode
@@ -343,12 +334,12 @@ class TorchAudioBackend(BaseAudioProcessor):
             return features
 
         # Clamp to mel_floor before taking log
-        result = [torch.clamp(spec, min=mel_floor) for spec in features]
+        result = torch.clamp(features, min=mel_floor)
 
         if log_mel == "log":
-            result = [torch.log(spec).to(dtype) for spec in result]
+            result = torch.log(result).to(dtype)
         elif log_mel == "log10":
-            result = [torch.log10(spec).to(dtype) for spec in result]
+            result = torch.log10(result).to(dtype)
         elif log_mel == "dB":
             if reference <= 0.0:
                 raise ValueError("reference must be greater than zero")
@@ -358,17 +349,16 @@ class TorchAudioBackend(BaseAudioProcessor):
             multiplier = 10.0 if power == 2.0 else 20.0 if power == 1.0 else None
             if multiplier is None:
                 raise ValueError(f"Cannot use log_mel option 'dB' with power {power}")
-            log_ref = np.log10(reference)
-            processed = []
-            for spec in result:
-                spec = torch.clamp(spec, min=min_value)
-                spec = multiplier * (torch.log10(spec) - log_ref)
-                if db_range is not None:
-                    if db_range <= 0.0:
-                        raise ValueError("db_range must be greater than zero")
-                    spec = torch.clamp(spec, min=spec.max() - db_range)
-                processed.append(spec.to(dtype))
-            result = processed
+            log_ref = torch.log10(torch.tensor(reference, dtype=result.dtype, device=result.device))
+            result = torch.clamp(result, min=min_value)
+            result = multiplier * (torch.log10(result) - log_ref)
+            if db_range is not None:
+                if db_range <= 0.0:
+                    raise ValueError("db_range must be greater than zero")
+                # Clamp each sample so the minimum value is (max - db_range)
+                max_vals = result.amax(dim=-2, keepdim=True) if result.ndim > 2 else result.max()
+                result = torch.clamp(result, min=max_vals - db_range)
+            result = result.to(dtype)
         else:
             raise ValueError(f"Unknown log_mel option: {log_mel}")
 
@@ -386,7 +376,7 @@ class TorchAudioBackend(BaseAudioProcessor):
             norm=mel_cfg.norm,
             mel_scale=mel_cfg.mel_scale,
             triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
-        ).numpy()
+        )
 
     def _preprocess(
         self,

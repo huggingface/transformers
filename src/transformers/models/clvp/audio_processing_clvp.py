@@ -15,7 +15,7 @@
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_utils import BatchFeature
 
 
@@ -49,13 +49,45 @@ class ClvpAudioProcessor(NumpyAudioBackend):
         super().__init__(**kwargs)
         self.mel_norms = mel_norms
 
-    def extract_spectrogram(self, audio, *, spectrogram_config):
-        # Use the generic config-based API for the core spectrogram
-        features = super().extract_spectrogram(audio, spectrogram_config=spectrogram_config)
+    def _mel_filter_bank(self, spectrogram_config):
+        mel_cfg = spectrogram_config.mel_scale_config
+        stft_cfg = spectrogram_config.stft_config
+        return mel_filter_bank(
+            num_frequency_bins=1 + (stft_cfg.n_fft // 2),
+            num_mel_filters=mel_cfg.n_mels,
+            min_frequency=mel_cfg.f_min,
+            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else 8000.0,
+            sampling_rate=self.sample_rate,
+            norm=mel_cfg.norm,
+            mel_scale=mel_cfg.mel_scale,
+        )
 
-        # Apply mel_norms if provided
-        if self.mel_norms is not None:
-            features = [f / np.array(self.mel_norms)[:, None] for f in features]
+    def extract_spectrogram(self, audio, *, spectrogram_config=None, **kwargs):
+        if spectrogram_config is None:
+            spectrogram_config = self.spectrogram_config
+
+        if not isinstance(audio, list):
+            audio = [audio]
+
+        stft_cfg = spectrogram_config.stft_config
+        features = []
+        for waveform in audio:
+            waveform = np.squeeze(waveform)
+            log_spec = spectrogram(
+                waveform,
+                window_function(stft_cfg.n_fft, "hann"),
+                frame_length=stft_cfg.n_fft,
+                hop_length=stft_cfg.hop_length,
+                power=2.0,
+                mel_filters=self.mel_filters,
+                log_mel=None,
+            )
+            log_spec = np.log(np.clip(log_spec, a_min=1e-5, a_max=None))
+
+            if self.mel_norms is not None:
+                log_spec = log_spec / np.array(self.mel_norms)[:, None]
+
+            features.append(log_spec)
 
         return features
 
@@ -74,7 +106,7 @@ class ClvpAudioProcessor(NumpyAudioBackend):
             pad_length = max_length
         audio = self.pad(audio, padding=True, max_length=pad_length)
 
-        # Extract spectrogram via config-based API (with mel_norms applied)
+        # Extract spectrogram via audio_utils (with mel_norms applied)
         features = self.extract_spectrogram(audio, spectrogram_config=self.spectrogram_config)
 
         # Cast to float32 to match the legacy FeatureExtractor

@@ -13,62 +13,96 @@
 # limitations under the License.
 
 import numpy as np
-import torch
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_utils import mel_filter_bank, spectrogram, window_function
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_utils import BatchFeature
 
 
 class ClapAudioProcessor(NumpyAudioBackend):
     sample_rate = 48000
     force_mono = True
-    n_fft = 1024
-    hop_length = 480
-    n_mels = 64
-    f_min = 0
-    f_max = 14000
     max_length_s = 10
     truncation_mode = "rand_trunc"  # "fusion" or "rand_trunc"
     padding_mode = "repeatpad"  # "repeatpad", "repeat", or "pad"
 
+    spectrogram_config = SpectrogramConfig(
+        stft_config=StftConfig(
+            n_fft=1024,
+            hop_length=480,
+            power=2.0,
+        ),
+        mel_scale_config=MelScaleConfig(
+            n_mels=64,
+            f_min=50,
+            f_max=14000,
+            mel_scale="slaney",
+            norm="slaney",
+        ),
+        log_mode="dB",
+    )
+
+    # Fusion mode uses a different mel filter bank (htk scale, no norm)
+    spectrogram_config_fusion = SpectrogramConfig(
+        stft_config=StftConfig(
+            n_fft=1024,
+            hop_length=480,
+            power=2.0,
+        ),
+        mel_scale_config=MelScaleConfig(
+            n_mels=64,
+            f_min=0,
+            f_max=14000,
+            mel_scale="htk",
+        ),
+        log_mode="dB",
+    )
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.nb_max_samples = self.max_length_s * self.sample_rate
-        self.mel_filters = mel_filter_bank(
-            num_frequency_bins=1 + self.n_fft // 2,
-            num_mel_filters=self.n_mels,
-            min_frequency=self.f_min,
-            max_frequency=self.f_max,
+        self.mel_filters_fusion = self._mel_filter_bank(self.spectrogram_config_fusion)
+
+    def _mel_filter_bank(self, spectrogram_config):
+        stft_cfg = spectrogram_config.stft_config
+        mel_cfg = spectrogram_config.mel_scale_config
+        return mel_filter_bank(
+            num_frequency_bins=(stft_cfg.n_fft // 2) + 1,
+            num_mel_filters=mel_cfg.n_mels,
+            min_frequency=mel_cfg.f_min,
+            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
             sampling_rate=self.sample_rate,
-            norm=None,
-            mel_scale="htk",
-        )
-        self.mel_filters_slaney = mel_filter_bank(
-            num_frequency_bins=1 + self.n_fft // 2,
-            num_mel_filters=self.n_mels,
-            min_frequency=self.f_min,
-            max_frequency=self.f_max,
-            sampling_rate=self.sample_rate,
-            norm="slaney",
-            mel_scale="htk",
+            norm=mel_cfg.norm,
+            mel_scale=mel_cfg.mel_scale,
         )
 
-    def _np_extract_fbank_features(self, waveform, mel_filters=None):
-        if mel_filters is None:
+    def _extract_single_mel(self, waveform, spectrogram_config=None):
+        """Extract mel spectrogram for a single waveform using audio_utils.spectrogram."""
+        if spectrogram_config is None:
+            spectrogram_config = self.spectrogram_config
+        stft_cfg = spectrogram_config.stft_config
+        mel_cfg = spectrogram_config.mel_scale_config
+
+        # Use the correct mel filters for this config
+        if spectrogram_config is self.spectrogram_config_fusion:
+            mel_filters = self.mel_filters_fusion
+        else:
             mel_filters = self.mel_filters
-        log_mel = spectrogram(
+
+        log_mel_spectrogram = spectrogram(
             waveform,
-            window_function(self.n_fft, "hann"),
-            frame_length=self.n_fft,
-            hop_length=self.hop_length,
+            window_function(stft_cfg.n_fft, "hann"),
+            frame_length=stft_cfg.n_fft,
+            hop_length=stft_cfg.hop_length,
             power=2.0,
             mel_filters=mel_filters,
             log_mel="dB",
         )
-        return log_mel.T
+        return log_mel_spectrogram.T
 
     def _random_mel_fusion(self, mel, total_frames, chunk_frames):
+        import torch
+
         ranges = np.array_split(list(range(0, total_frames - chunk_frames + 1)), 3)
         if len(ranges[1]) == 0:
             ranges[1] = [0]
@@ -90,16 +124,18 @@ class ClapAudioProcessor(NumpyAudioBackend):
         return np.stack([mel_shrink, mel_chunk_front, mel_chunk_middle, mel_chunk_back], axis=0)
 
     def _get_input_mel(self, waveform, max_length, truncation, padding):
+        hop_length = self.spectrogram_config.stft_config.hop_length
+
         if waveform.shape[0] > max_length:
             if truncation == "rand_trunc":
                 longer = True
                 overflow = len(waveform) - max_length
                 idx = np.random.randint(0, overflow + 1)
                 waveform = waveform[idx : idx + max_length]
-                input_mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)[None, :]
+                input_mel = self._extract_single_mel(waveform)[None, :]
             elif truncation == "fusion":
-                mel = self._np_extract_fbank_features(waveform, self.mel_filters)
-                chunk_frames = max_length // self.hop_length + 1
+                mel = self._extract_single_mel(waveform, spectrogram_config=self.spectrogram_config_fusion)
+                chunk_frames = max_length // hop_length + 1
                 total_frames = mel.shape[0]
                 if chunk_frames == total_frames:
                     input_mel = np.stack([mel, mel, mel, mel], axis=0)
@@ -121,17 +157,17 @@ class ClapAudioProcessor(NumpyAudioBackend):
                 waveform = np.pad(waveform, (0, max_length - waveform.shape[0]), mode="constant", constant_values=0)
 
             if truncation == "fusion":
-                input_mel = self._np_extract_fbank_features(waveform, self.mel_filters)
+                input_mel = self._extract_single_mel(waveform, spectrogram_config=self.spectrogram_config_fusion)
                 input_mel = np.stack([input_mel, input_mel, input_mel, input_mel], axis=0)
             else:
-                input_mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)[None, :]
+                input_mel = self._extract_single_mel(waveform)[None, :]
 
         return input_mel, longer
 
     def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
         truncation_mode = self.truncation_mode
-        padding_mode = self.padding_mode
-        nb_max_samples = max_length if max_length else self.nb_max_samples
+        padding_mode = padding if padding else self.padding_mode
+        nb_max_samples = max_length if isinstance(max_length, int) and max_length > 0 else self.nb_max_samples
 
         padded_inputs = [
             self._get_input_mel(np.squeeze(waveform), nb_max_samples, truncation_mode, padding_mode)

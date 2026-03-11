@@ -62,15 +62,22 @@ class LasrAudioProcessor(TorchAudioBackend):
             upper_edge_hertz=7500.0,
         )
 
-    def extract_spectrogram(self, audio, *, spectrogram_config, **kwargs):
+    def extract_spectrogram(self, audio, *, spectrogram_config=None, **kwargs):
         import torch
+
+        if spectrogram_config is None:
+            spectrogram_config = self.spectrogram_config
 
         stft_cfg = spectrogram_config.stft_config
         n_fft = stft_cfg.n_fft
         hop_length = stft_cfg.hop_length
         win_length = stft_cfg.win_length or n_fft
 
-        waveform = torch.stack(audio, dim=0).to(torch.float64)
+        if isinstance(audio, list):
+            waveform = torch.stack(audio, dim=0).to(torch.float64)
+        else:
+            waveform = audio.to(torch.float64)
+
         device = waveform.device
 
         window = torch.hann_window(win_length, periodic=False, device=device, dtype=torch.float64)
