@@ -21,7 +21,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="google/gemma-3-4b")
+@auto_docstring(checkpoint="google/shieldgemma-2-4b-it")
 class ShieldGemma2Config(PreTrainedConfig):
     r"""
     mm_tokens_per_image (`int`, *optional*, defaults to 256):
