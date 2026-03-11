@@ -72,7 +72,7 @@ class PPLCNetV3Config(BackboneConfigMixin, PreTrainedConfig):
         class_expand (`int`, *optional*, defaults to 1280):
             The number of hidden units in the expansion layer of the classification head, used to enhance the model's
             feature representation capability before the final classification layer.
-        use_last_conv (`bool`, *optional*, defaults to `True`):
+        use_last_convolution (`bool`, *optional*, defaults to `True`):
             Whether to use the final convolutional layer in the classification head. Setting this to `True` helps
             extract more discriminative features for the classification task.
         divisor (`int`, *optional*, defaults to 8):
@@ -149,10 +149,6 @@ class PPLCNetV3Config(BackboneConfigMixin, PreTrainedConfig):
 
         self.depths = [len(blocks) for blocks in self.block_configs]
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.block_configs) + 1)]
-        stage_out_channels = []
-        for block in self.block_configs:
-            stage_out_channels.append(int(block[-1][2] * self.scale))
-        self.stage_out_channels = stage_out_channels
         self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
 
 

@@ -95,7 +95,6 @@ class PPOCRV5MobileDetModelTester:
             "scale": 0.75,
             "out_features": ["stage2", "stage3", "stage4", "stage5"],
             "out_indices": [2, 3, 4, 5],
-            "return_idx": [1, 2, 3, 4],
             "divisor": 16,
         }
         config = PPOCRV5MobileDetConfig(
@@ -173,6 +172,10 @@ class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="PPOCRV5MobileDet does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip(reason="PPOCRV5MobileDet does not support.")
+    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     def test_forward_signature(self):

@@ -102,12 +102,11 @@ class PPLCNetV3Embeddings(PPLCNetEmbeddings):
 class PPLCNetV3LearnableAffineBlock(nn.Module):
     def __init__(self, scale_value: float = 1.0, bias_value: float = 0.0):
         super().__init__()
-        self.scale = nn.Parameter(torch.tensor([scale_value]), requires_grad=True)
-        self.bias = nn.Parameter(torch.tensor([bias_value]), requires_grad=True)
+        self.scale = nn.Parameter(torch.tensor([scale_value]))
+        self.bias = nn.Parameter(torch.tensor([bias_value]))
 
     def forward(self, hidden_state):
-        hidden_state = self.scale * hidden_state + self.bias
-        return hidden_state
+        return hidden_state * self.scale + self.bias
 
 
 class PPLCNetV3Act(nn.Module):
@@ -121,9 +120,7 @@ class PPLCNetV3Act(nn.Module):
         self.lab = PPLCNetV3LearnableAffineBlock()
 
     def forward(self, hidden_state: torch.Tensor):
-        hidden_state = self.act(hidden_state)
-        hidden_state = self.lab(hidden_state)
-        return hidden_state
+        return self.lab(self.act(hidden_state))
 
 
 class PPLCNetV3LearnableRepLayer(nn.Module):
@@ -180,24 +177,18 @@ class PPLCNetV3LearnableRepLayer(nn.Module):
         self.act = PPLCNetV3Act(activation=activation)
 
     def forward(self, hidden_state: torch.Tensor):
-        """
-        Forward pass of the PPLCNetV3LearnableRepLayer, fusing all enabled branches and applying post-processing.
+        output = None
 
-        Args:
-            hidden_state (torch.Tensor): Input feature tensor of shape (B, in_channels, H, W).
-
-        Returns:
-            torch.Tensor: Output feature tensor of shape (B, out_channels, H', W').
-        """
-        output = 0
         if self.identity is not None:
-            output += self.identity(hidden_state)
+            output = self.identity(hidden_state)
 
         if self.conv_1x1 is not None:
-            output += self.conv_1x1(hidden_state)
+            branch = self.conv_1x1(hidden_state)
+            output = branch if output is None else output + branch
 
         for conv in self.conv_kxk:
-            output += conv(hidden_state)
+            branch = conv(hidden_state)
+            output = branch if output is None else output + branch
 
         hidden_state = self.lab(output)
         if self.stride != 2:

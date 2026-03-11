@@ -119,7 +119,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
                 "scale": 0.75,
                 "out_features": ["stage2", "stage3", "stage4", "stage5"],
                 "out_indices": [2, 3, 4, 5],
-                "return_idx": [1, 2, 3, 4],
                 "divisor": 16,
             },
             **kwargs,
@@ -504,7 +503,7 @@ def boxes_from_bitmap(
 )
 class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
     """
-    Image processor for PPOCRV5 Mobile Det model, handling preprocessing (resizing, normalization)
+    Image processor for PP-OCRv5_mobile_det, handling preprocessing (resizing, normalization)
     and post-processing (converting model outputs to text boxes).
     """
 
@@ -726,17 +725,7 @@ class PPOCRV5MobileDetRSELayer(nn.Module):
     """
 
     def __init__(self, in_channels, out_channels, kernel_size, reduction, shortcut=True):
-        """
-        Initialize the PPOCRV5MobileDetRSELayer with convolution and residual connection parameters.
-
-        Args:
-            in_channels (int): Number of input channels.
-            out_channels (int): Number of output channels.
-            kernel_size (int): Size of the convolution kernel.
-            shortcut (bool, optional): Whether to enable the residual shortcut connection. Defaults to True.
-        """
         super().__init__()
-        self.out_channels = out_channels
         self.shortcut = shortcut
         self.in_conv = nn.Conv2d(
             in_channels=in_channels,
@@ -748,20 +737,10 @@ class PPOCRV5MobileDetRSELayer(nn.Module):
         self.se_block = PPOCRV5MobileDetSEModule(out_channels, reduction)
 
     def forward(self, hidden_state):
-        """
-        Forward pass of the PPOCRV5MobileDetRSELayer, applying convolution, SE recalibration, and optional residual connection.
+        conv_output = self.in_conv(hidden_state)
+        se_output = self.se_block(conv_output)
+        hidden_state = conv_output + se_output if self.shortcut else se_output
 
-        Args:
-            ins (torch.Tensor): Input feature tensor of shape (B, in_channels, H, W).
-
-        Returns:
-            torch.Tensor: Output feature tensor of shape (B, out_channels, H, W).
-        """
-        hidden_state = self.in_conv(hidden_state)
-        if self.shortcut:
-            hidden_state = hidden_state + self.se_block(hidden_state)
-        else:
-            hidden_state = self.se_block(hidden_state)
         return hidden_state
 
 
@@ -773,18 +752,11 @@ class PPOCRV5MobileDetNeck(nn.Module):
     """
 
     def __init__(self, config: PPOCRV5MobileDetConfig):
-        """
-        Initialize the PPOCRV5MobileDetNeck with the specified model configuration and input channels.
-
-        Args:
-            config (PPOCRV5MobileDetConfig): Configuration object containing neck hyperparameters.
-        """
         super().__init__()
         self.interpolate_mode = config.interpolate_mode
 
         self.ins_conv = nn.ModuleList()
         self.inp_conv = nn.ModuleList()
-
         for i in range(len(config.layer_list_out_channels)):
             self.ins_conv.append(
                 PPOCRV5MobileDetRSELayer(
@@ -802,44 +774,18 @@ class PPOCRV5MobileDetNeck(nn.Module):
             )
 
     def forward(self, feature_maps):
-        """
-        Forward pass of the neck network, fusing multi-scale backbone features.
+        fused = [conv(feature) for conv, feature in zip(self.ins_conv, feature_maps)]  # [p2, p3, p4, p5]
 
-        Args:
-            feature_maps (list[torch.Tensor]): List of multi-scale feature maps from the backbone (4 feature maps).
+        for i in range(2, -1, -1):  # p4 -> p3-> p2
+            fused[i] = fused[i] + F.interpolate(fused[i + 1], scale_factor=2, mode=self.interpolate_mode)
 
-        Returns:
-            torch.Tensor: Concatenated fused feature tensor of shape (B, C, H, W).
-        """
-        feature_map_c2, feature_map_c3, feature_map_c4, feature_map_c5 = feature_maps
-
-        input_feature_c5 = self.ins_conv[3](feature_map_c5)
-        input_feature_c4 = self.ins_conv[2](feature_map_c4)
-        input_feature_c3 = self.ins_conv[1](feature_map_c3)
-        input_feature_c2 = self.ins_conv[0](feature_map_c2)
-
-        output_feature_c4 = input_feature_c4 + F.interpolate(
-            input_feature_c5, scale_factor=2, mode=self.interpolate_mode
-        )  # 1/16
-        output_feature_c3 = input_feature_c3 + F.interpolate(
-            output_feature_c4, scale_factor=2, mode=self.interpolate_mode
-        )  # 1/8
-        output_feature_c2 = input_feature_c2 + F.interpolate(
-            output_feature_c3, scale_factor=2, mode=self.interpolate_mode
-        )  # 1/4
-
-        processed_feature_c5 = self.inp_conv[3](input_feature_c5)
-        processed_feature_c4 = self.inp_conv[2](output_feature_c4)
-        processed_feature_c3 = self.inp_conv[1](output_feature_c3)
-        processed_feature_c2 = self.inp_conv[0](output_feature_c2)
-
-        processed_feature_c5 = F.interpolate(processed_feature_c5, scale_factor=8, mode=self.interpolate_mode)
-        processed_feature_c4 = F.interpolate(processed_feature_c4, scale_factor=4, mode=self.interpolate_mode)
-        processed_feature_c3 = F.interpolate(processed_feature_c3, scale_factor=2, mode=self.interpolate_mode)
-
-        fused_feature_map = torch.cat(
-            [processed_feature_c5, processed_feature_c4, processed_feature_c3, processed_feature_c2], dim=1
-        )
+        processed = [conv(feat) for conv, feat in zip(self.inp_conv, [fused[0], fused[1], fused[2], fused[3]])]
+        upsample_scales = [1, 2, 4, 8]  # p2, p3, p4, p5
+        processed = [
+            F.interpolate(feat, scale_factor=scale, mode=self.interpolate_mode) if scale != 1 else feat
+            for feat, scale in zip(processed, upsample_scales)
+        ]
+        fused_feature_map = torch.cat(processed[::-1], dim=1)  # [p5, p4, p3, p2]
         return fused_feature_map
 
 
@@ -851,14 +797,6 @@ class PPOCRV5MobileDetHead(nn.Module):
     """
 
     def __init__(self, in_channels, kernel_list=[3, 2, 2]):
-        """
-        Initialize the Head sub-module with convolution and upsampling parameters.
-
-        Args:
-            in_channels (int): Number of input channels from the neck network.
-            kernel_list (list[int], optional): List of kernel sizes for the three convolution layers:
-                [conv1 kernel, conv2 transposed kernel, conv3 transposed kernel]. Defaults to [3, 2, 2].
-        """
         super().__init__()
 
         self.conv1 = nn.Conv2d(
@@ -888,23 +826,9 @@ class PPOCRV5MobileDetHead(nn.Module):
         )
 
     def forward(self, hidden_state):
-        """
-        Forward pass of the Head sub-module, generating binary segmentation logits.
-
-        Args:
-            hidden_state (torch.Tensor): Input feature tensor of shape (B, in_channels, H, W).
-
-        Returns:
-            torch.Tensor: Binary segmentation logits of shape (B, 1, H', W') (original image scale).
-        """
-        hidden_state = self.conv1(hidden_state)
-        hidden_state = self.bn1(hidden_state)
-        hidden_state = self.relu1(hidden_state)
-        hidden_state = self.conv2(hidden_state)
-        hidden_state = self.bn2(hidden_state)
-        hidden_state = self.relu2(hidden_state)
-        hidden_state = self.conv3(hidden_state)
-        hidden_state = torch.sigmoid(hidden_state)
+        hidden_state = self.relu1(self.bn1(self.conv1(hidden_state)))
+        hidden_state = self.relu2(self.bn2(self.conv2(hidden_state)))
+        hidden_state = torch.sigmoid(self.conv3(hidden_state))
         return hidden_state
 
 
@@ -925,8 +849,6 @@ class PPOCRV5MobileDetDBHead(nn.Module):
 @dataclass
 class PPOCRV5MobileDetModelOutput(BaseModelOutputWithNoAttention):
     """
-    Output class for the PPOCRV5MobileDetModel.
-
     Args:
         logits (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
             Binary segmentation probability maps from the head. Higher values indicate
@@ -938,7 +860,7 @@ class PPOCRV5MobileDetModelOutput(BaseModelOutputWithNoAttention):
 
 @auto_docstring(
     custom_intro="""
-    Core PPOCRV5 Mobile Det model, consisting of Backbone, Neck, and Head networks.
+    Core PP-OCRv5_mobile_det, consisting of Backbone, Neck, and Head networks.
     Generates binary text segmentation maps for text detection tasks.
     """
 )
@@ -947,8 +869,7 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
         super().__init__(config)
 
         self.backbone = load_backbone(config)
-
-        out_channels = [self.backbone.config.stage_out_channels[idx] for idx in self.backbone.config.return_idx]
+        out_channels = [self.backbone.num_features[i] for i in self.backbone.out_indices]
         self.layer_list = nn.ModuleList()
         for idx, out_channel in enumerate(out_channels):
             self.layer_list.append(nn.Conv2d(out_channel, config.layer_list_out_channels[idx], 1, 1, 0))
@@ -964,11 +885,9 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
         hidden_state: torch.FloatTensor,
         **kwargs,
     ) -> tuple[torch.FloatTensor] | PPOCRV5MobileDetModelOutput:
-        feature_maps = list(self.backbone(hidden_state).feature_maps)
-        for i in range(len(feature_maps)):
-            feature_maps[i] = self.layer_list[i](feature_maps[i])
-
-        hidden_state = self.neck(feature_maps)
+        feature_maps = self.backbone(hidden_state).feature_maps
+        hidden_state = [self.layer_list[i](feature_maps[i]) for i in range(len(feature_maps))]
+        hidden_state = self.neck(hidden_state)
 
         return PPOCRV5MobileDetModelOutput(logits=hidden_state)
 
@@ -991,8 +910,7 @@ class PPOCRV5MobileDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
 
 @auto_docstring(
     custom_intro="""
-    PPOCRV5 Mobile Det model for object (text) detection tasks. Wraps the core PPOCRV5MobileDetModel
-    and returns outputs compatible with the Transformers object detection API.
+    PP-OCRv5_mobile_det for text detection tasks.
     """
 )
 class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
@@ -1015,9 +933,7 @@ class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
         outputs = self.model(pixel_values, **kwargs)
         logits = self.head(outputs.logits)
 
-        return PPOCRV5MobileDetForObjectDetectionOutput(
-            logits=logits,
-        )
+        return PPOCRV5MobileDetForObjectDetectionOutput(logits=logits)
 
 
 __all__ = [

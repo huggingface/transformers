@@ -95,7 +95,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
                 "scale": 0.75,
                 "out_features": ["stage2", "stage3", "stage4", "stage5"],
                 "out_indices": [2, 3, 4, 5],
-                "return_idx": [1, 2, 3, 4],
                 "divisor": 16,
             },
             **kwargs,

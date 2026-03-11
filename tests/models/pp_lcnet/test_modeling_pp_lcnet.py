@@ -17,6 +17,7 @@
 import inspect
 import unittest
 
+import requests
 from parameterized import parameterized
 
 from transformers import (
@@ -50,7 +51,22 @@ if is_vision_available():
 
 class PPLCNetModelTester:
     def __init__(
-        self, batch_size=3, image_size=128, num_channels=3, num_stages=6, is_training=False, scale=1.0, num_labels=4
+        self,
+        batch_size=3,
+        image_size=128,
+        num_channels=3,
+        num_stages=5,
+        is_training=False,
+        scale=1.0,
+        reduction=4,
+        dropout_prob=0.2,
+        class_expand=1280,
+        use_last_convolution=True,
+        hidden_act="hardswish",
+        num_labels=4,
+        out_features=["stage2", "stage3", "stage4"],
+        out_indices=[2, 3, 4],
+        stem_channels=16,
     ):
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -58,7 +74,29 @@ class PPLCNetModelTester:
         self.is_training = is_training
         self.num_stages = num_stages
         self.scale = scale
+        self.reduction = reduction
+        self.dropout_prob = dropout_prob
+        self.class_expand = class_expand
+        self.use_last_convolution = use_last_convolution
+        self.hidden_act = hidden_act
         self.num_labels = num_labels
+        self.out_features = out_features
+        self.out_indices = out_indices
+        self.stem_channels = stem_channels
+        self.block_configs = [
+            [[3, 16, 32, 1, False]],
+            [[3, 32, 32, 2, False], [3, 32, 32, 1, False]],
+            [[3, 32, 32, 2, False], [3, 32, 32, 1, False]],
+            [
+                [3, 32, 32, 2, False],
+                [5, 32, 32, 1, False],
+                [5, 32, 32, 1, False],
+                [5, 32, 32, 1, False],
+                [5, 32, 32, 1, False],
+                [5, 32, 32, 1, False],
+            ],
+            [[5, 32, 32, 2, True], [5, 32, 32, 1, True]],
+        ]
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values = self.prepare_config_and_inputs()
@@ -72,47 +110,21 @@ class PPLCNetModelTester:
         return config, pixel_values
 
     def get_config(self) -> PPLCNetConfig:
-        backbone_config = {
-            "blocks2": [[3, 16, 32, 1, False]],
-            "blocks3": [[3, 32, 64, 2, False], [3, 64, 64, 1, False]],
-            "blocks4": [[3, 64, 128, 2, False], [3, 128, 128, 1, False]],
-            "blocks5": [
-                [3, 128, 256, 2, False],
-                [5, 256, 256, 1, False],
-                [5, 256, 256, 1, False],
-                [5, 256, 256, 1, False],
-                [5, 256, 256, 1, False],
-                [5, 256, 256, 1, False],
-            ],
-            "blocks6": [[5, 256, 512, 2, True], [5, 512, 512, 1, True]],
-        }
-
         id2label = {"0": "0", "1": "90", "2": "180", "3": "270"}
-
-        self.backbone_config = backbone_config
-
         config = PPLCNetConfig(
-            backbone_config=backbone_config,
-            scale=1.0,
-            stride_list=[2, 2, 2, 2, 2],
-            reduction=4,
-            dropout_prob=0.2,
-            class_expand=1280,
-            use_last_conv=True,
-            hidden_act="hardswish",
+            scale=self.scale,
+            reduction=self.reduction,
+            dropout_prob=self.dropout_prob,
+            class_expand=self.class_expand,
+            use_last_conv=self.use_last_convolution,
+            hidden_act=self.hidden_act,
             id2label=id2label,
+            out_features=self.out_features,
+            out_indices=self.out_indices,
+            block_configs=self.block_configs,
         )
 
         return config
-
-    def create_and_check_pp_lcnet_image_classification(self, config, pixel_values):
-        model = PPLCNetForImageClassification(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(pixel_values)
-
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
 
 @require_torch
@@ -123,6 +135,12 @@ class PPLCNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = PPLCNetModelTester()
+        self.config_tester = ConfigTester(
+            self,
+            config_class=PPLCNetConfig,
+            has_text_modality=False,
+            common_properties=[],
+        )
 
 
 @require_torch
@@ -131,14 +149,11 @@ class PPLCNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     pipeline_model_mapping = {"image-classification": PPLCNetForImageClassification} if is_torch_available() else {}
 
     has_attentions = False
+    test_inputs_embeds = False
+    test_resize_embeddings = False
 
     def setUp(self):
-        self.model_tester = PPLCNetModelTester(
-            batch_size=3,
-            is_training=False,
-            image_size=128,
-        )
-        self.model_tester.parent = self
+        self.model_tester = PPLCNetModelTester()
         self.config_tester = ConfigTester(
             self,
             config_class=PPLCNetConfig,
@@ -149,13 +164,18 @@ class PPLCNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def create_and_check_pp_lcnet_image_classification(self, config, pixel_values):
+        model = PPLCNetForImageClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(pixel_values)
+
+        self.assertEqual(result.last_hidden_state.shape, (self.model_tester.batch_size, model.config.num_labels))
+
     def test_pp_lcnet_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_pp_lcnet_image_classification(*config_and_inputs)
-
-    @unittest.skip(reason="PPLCNet does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
+        self.create_and_check_pp_lcnet_image_classification(*config_and_inputs)
 
     @unittest.skip(reason="PPLCNet does not use test_inputs_embeds_matches_input_ids")
     def test_inputs_embeds_matches_input_ids(self):
@@ -169,16 +189,8 @@ class PPLCNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="PPLCNet does not use token embeddings")
-    def test_resize_tokens_embeddings(self):
-        pass
-
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
-        pass
-
-    @unittest.skip(reason="PPLCNet does not support this test")
-    def test_model_is_small(self):
         pass
 
     @unittest.skip(reason="PPLCNet does not support attention")
@@ -235,42 +247,17 @@ class PPLCNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             hidden_states = outputs.hidden_states
-
             expected_num_stages = self.model_tester.num_stages
             scale = self.model_tester.scale
+
             self.assertEqual(len(hidden_states), expected_num_stages + 1)
 
-            self.assertEqual(hidden_states[0].shape[-1], self.model_tester.image_size)
-
-            self.assertEqual(
-                hidden_states[1].shape[1],
-                self.model_tester.backbone_config["blocks2"][0][1] * scale,
-            )
-
-            self.assertEqual(
-                hidden_states[2].shape[1],
-                self.model_tester.backbone_config["blocks2"][0][2] * scale,
-            )
-
-            self.assertEqual(
-                hidden_states[3].shape[1],
-                self.model_tester.backbone_config["blocks3"][0][2] * scale,
-            )
-
-            self.assertEqual(
-                hidden_states[4].shape[1],
-                self.model_tester.backbone_config["blocks4"][0][2] * scale,
-            )
-
-            self.assertEqual(
-                hidden_states[5].shape[1],
-                self.model_tester.backbone_config["blocks5"][0][2] * scale,
-            )
-
-            self.assertEqual(
-                hidden_states[6].shape[1],
-                self.model_tester.backbone_config["blocks6"][0][2] * scale,
-            )
+            self.assertEqual(hidden_states[0].shape[1], self.model_tester.stem_channels)
+            for i in range(expected_num_stages):
+                self.assertEqual(
+                    hidden_states[i + 1].shape[1],
+                    self.model_tester.block_configs[i][-1][2] * scale,
+                )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
@@ -289,22 +276,19 @@ class PPLCNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 @slow
 class PPLCNetModelIntegrationTest(unittest.TestCase):
     def setUp(self):
-        model_path = "/workspace/model_weight_torch/PP-LCNet_x1_0_doc_ori"
-
+        model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
         self.model = PPLCNetForImageClassification.from_pretrained(model_path).to(torch_device)
         self.image_processor = PPLCNetImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
-        path = "/workspace/PaddleX/paddlex/inference/models/image_classification/modeling/doc_ori/img_rot180_demo.jpg"
-        self.image = Image.open(path)
+        url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png"
+        self.image = Image.open(requests.get(url, stream=True).raw)
 
     def test_inference_image_classification_head(self):
         inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)
-        bs, c, h, w = inputs["pixel_values"].shape
 
         with torch.no_grad():
             outputs = self.model(**inputs)
 
-        expected_shape_logits = torch.Size((bs, 4))
-
+        expected_shape_logits = torch.Size((1, 4))
         expected_logits = torch.tensor([[0.0511, 0.0259, 0.8973, 0.0257]]).to(torch_device)
 
         self.assertEqual(outputs.logits.shape, expected_shape_logits)

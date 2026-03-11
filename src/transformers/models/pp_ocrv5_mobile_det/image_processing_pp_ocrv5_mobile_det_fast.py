@@ -385,7 +385,7 @@ def boxes_from_bitmap(
 )
 class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
     """
-    Image processor for PPOCRV5 Mobile Det model, handling preprocessing (resizing, normalization)
+    Image processor for PP-OCRv5_mobile_det, handling preprocessing (resizing, normalization)
     and post-processing (converting model outputs to text boxes).
     """
 

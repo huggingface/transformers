@@ -91,7 +91,7 @@ class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
         class_expand (`int`, *optional*, defaults to 1280):
             The number of hidden units in the expansion layer of the classification head, used to enhance the model's
             feature representation capability before the final classification layer.
-        use_last_conv (`bool`, *optional*, defaults to `True`):
+        use_last_convolution (`bool`, *optional*, defaults to `True`):
             Whether to use the final convolutional layer in the classification head. Setting this to `True` helps
             extract more discriminative features for the classification task.
         divisor (`int`, *optional*, defaults to 8):
@@ -168,10 +168,6 @@ class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
 
         self.depths = [len(blocks) for blocks in self.block_configs]
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.block_configs) + 1)]
-        stage_out_channels = []
-        for block in self.block_configs:
-            stage_out_channels.append(int(block[-1][2] * self.scale))
-        self.stage_out_channels = stage_out_channels
         self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
 
 
@@ -369,6 +365,7 @@ class PPLCNetDepthwiseSeparableConvLayer(nn.Module):
         hidden_state = self.depthwise_convolution(hidden_state)
         hidden_state = self.squeeze_excitation_module(hidden_state)
         hidden_state = self.pointwise_convolution(hidden_state)
+
         return hidden_state
 
 
@@ -379,18 +376,24 @@ class PPLCNetSEModule(nn.Module):
     """
 
     def __init__(self, channel, reduction=4):
-        """
-        Initialize the SEModule module.
-
-        Args:
-            channel (int): Number of channels of the input feature map.
-            reduction (int, optional): Reduction ratio for bottleneck layer. Defaults to 4.
-        """
         super().__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        conv_kwargs = {"kernel_size": 1, "stride": 1, "padding": 0, "bias": True}
-        self.convolution1 = nn.Conv2d(in_channels=channel, out_channels=channel // reduction, **conv_kwargs)
-        self.convolution2 = nn.Conv2d(in_channels=channel // reduction, out_channels=channel, **conv_kwargs)
+        self.convolution1 = nn.Conv2d(
+            in_channels=channel,
+            out_channels=channel // reduction,
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            bias=True,
+        )
+        self.convolution2 = nn.Conv2d(
+            in_channels=channel // reduction,
+            out_channels=channel,
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            bias=True,
+        )
         self.activation1 = nn.ReLU()
         self.activation2 = nn.Hardsigmoid()
 
@@ -406,11 +409,10 @@ class PPLCNetSEModule(nn.Module):
         """
         identity = hidden_state
         hidden_state = self.avg_pool(hidden_state)
-        hidden_state = self.convolution1(hidden_state)
-        hidden_state = self.activation1(hidden_state)
-        hidden_state = self.convolution2(hidden_state)
-        hidden_state = self.activation2(hidden_state)
+        hidden_state = self.activation1(self.convolution1(hidden_state))
+        hidden_state = self.activation2(self.convolution2(hidden_state))
         hidden_state = identity * hidden_state
+
         return hidden_state
 
 
@@ -442,10 +444,7 @@ class PPLCNetBlock(nn.Module):
         return x
 
 
-@auto_docstring(
-    custom_intro="""
-    """
-)
+@auto_docstring
 class PPLCNetPreTrainedModel(PreTrainedModel):
     """
     An abstract base class for PP-LCNet models that inherits from Hugging Face PreTrainedModel.
@@ -475,15 +474,10 @@ class PPLCNetEmbeddings(nn.Module):
             stride=config.stem_stride,
             activation=config.hidden_act,
         )
-        self.num_channels = 3
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        num_channels = pixel_values.shape[1]
-        if num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-            )
         embedding = self.convolution(pixel_values)
+
         return embedding
 
 
@@ -514,6 +508,10 @@ class PPLCNetBackbone(BackboneMixin, PPLCNetPreTrainedModel):
 
     def __init__(self, config: PPLCNetConfig):
         super().__init__(config)
+        num_features = [config.stem_channels]
+        for block in config.block_configs:
+            num_features.append(int(block[-1][2] * config.scale))
+        self.num_features = num_features
         self.embedder = PPLCNetEmbeddings(config)
         self.encoder = PPLCNetEncoder(config)
 
@@ -551,7 +549,10 @@ class PPLCNetBackbone(BackboneMixin, PPLCNetPreTrainedModel):
             if stage in self.out_features:
                 feature_maps += (hidden_states[idx],)
 
-        return BackboneOutput(feature_maps=feature_maps)
+        return BackboneOutput(
+            feature_maps=feature_maps,
+            hidden_states=hidden_states if kwargs.get("output_hidden_states", False) else None,
+        )
 
 
 @auto_docstring(
@@ -580,8 +581,8 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
                 bias=False,
             )
             self.activation = ACT2FN[config.hidden_act]
-            fc_in_channels = config.class_expand
             self.dropout_prob = config.dropout_prob
+            fc_in_channels = config.class_expand
         else:
             self.last_convolution = None
             fc_in_channels = make_divisible(last_block_out_channels * config.scale, config.divisor)
@@ -622,7 +623,6 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
         embedding_output = self.embedder(pixel_values)
         outputs = self.encoder(embedding_output, **kwargs)
 
-        hidden_states = outputs.hidden_states
         last_hidden_state = self.avg_pool(outputs.last_hidden_state)
 
         if self.config.use_last_convolution:
@@ -633,7 +633,7 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
         last_hidden_state = self.flatten(last_hidden_state)
         last_hidden_state = self.fc(last_hidden_state)
 
-        return BaseModelOutputWithNoAttention(last_hidden_state=last_hidden_state, hidden_states=hidden_states)
+        return BaseModelOutputWithNoAttention(last_hidden_state=last_hidden_state, hidden_states=outputs.hidden_states)
 
 
 __all__ = [

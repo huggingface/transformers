@@ -88,27 +88,21 @@ class PPLCNetV3Embeddings(nn.Module):
             stride=config.stem_stride,
             activation=None,
         )
-        self.num_channels = 3
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        num_channels = pixel_values.shape[1]
-        if num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-            )
         embedding = self.convolution(pixel_values)
+
         return embedding
 
 
 class PPLCNetV3LearnableAffineBlock(nn.Module):
     def __init__(self, scale_value: float = 1.0, bias_value: float = 0.0):
         super().__init__()
-        self.scale = nn.Parameter(torch.tensor([scale_value]), requires_grad=True)
-        self.bias = nn.Parameter(torch.tensor([bias_value]), requires_grad=True)
+        self.scale = nn.Parameter(torch.tensor([scale_value]))
+        self.bias = nn.Parameter(torch.tensor([bias_value]))
 
     def forward(self, hidden_state):
-        hidden_state = self.scale * hidden_state + self.bias
-        return hidden_state
+        return hidden_state * self.scale + self.bias
 
 
 class PPLCNetV3Act(nn.Module):
@@ -122,9 +116,7 @@ class PPLCNetV3Act(nn.Module):
         self.lab = PPLCNetV3LearnableAffineBlock()
 
     def forward(self, hidden_state: torch.Tensor):
-        hidden_state = self.act(hidden_state)
-        hidden_state = self.lab(hidden_state)
-        return hidden_state
+        return self.lab(self.act(hidden_state))
 
 
 class PPLCNetV3LearnableRepLayer(nn.Module):
@@ -181,24 +173,18 @@ class PPLCNetV3LearnableRepLayer(nn.Module):
         self.act = PPLCNetV3Act(activation=activation)
 
     def forward(self, hidden_state: torch.Tensor):
-        """
-        Forward pass of the PPLCNetV3LearnableRepLayer, fusing all enabled branches and applying post-processing.
+        output = None
 
-        Args:
-            hidden_state (torch.Tensor): Input feature tensor of shape (B, in_channels, H, W).
-
-        Returns:
-            torch.Tensor: Output feature tensor of shape (B, out_channels, H', W').
-        """
-        output = 0
         if self.identity is not None:
-            output += self.identity(hidden_state)
+            output = self.identity(hidden_state)
 
         if self.conv_1x1 is not None:
-            output += self.conv_1x1(hidden_state)
+            branch = self.conv_1x1(hidden_state)
+            output = branch if output is None else output + branch
 
         for conv in self.conv_kxk:
-            output += conv(hidden_state)
+            branch = conv(hidden_state)
+            output = branch if output is None else output + branch
 
         hidden_state = self.lab(output)
         if self.stride != 2:
@@ -213,18 +199,24 @@ class PPLCNetV3SEModule(nn.Module):
     """
 
     def __init__(self, channel, reduction=4):
-        """
-        Initialize the SEModule module.
-
-        Args:
-            channel (int): Number of channels of the input feature map.
-            reduction (int, optional): Reduction ratio for bottleneck layer. Defaults to 4.
-        """
         super().__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        conv_kwargs = {"kernel_size": 1, "stride": 1, "padding": 0, "bias": True}
-        self.convolution1 = nn.Conv2d(in_channels=channel, out_channels=channel // reduction, **conv_kwargs)
-        self.convolution2 = nn.Conv2d(in_channels=channel // reduction, out_channels=channel, **conv_kwargs)
+        self.convolution1 = nn.Conv2d(
+            in_channels=channel,
+            out_channels=channel // reduction,
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            bias=True,
+        )
+        self.convolution2 = nn.Conv2d(
+            in_channels=channel // reduction,
+            out_channels=channel,
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            bias=True,
+        )
         self.activation1 = nn.ReLU()
         self.activation2 = nn.Hardsigmoid()
 
@@ -240,11 +232,10 @@ class PPLCNetV3SEModule(nn.Module):
         """
         identity = hidden_state
         hidden_state = self.avg_pool(hidden_state)
-        hidden_state = self.convolution1(hidden_state)
-        hidden_state = self.activation1(hidden_state)
-        hidden_state = self.convolution2(hidden_state)
-        hidden_state = self.activation2(hidden_state)
+        hidden_state = self.activation1(self.convolution1(hidden_state))
+        hidden_state = self.activation2(self.convolution2(hidden_state))
         hidden_state = identity * hidden_state
+
         return hidden_state
 
 
@@ -299,6 +290,7 @@ class PPLCNetV3DepthwiseSeparableConvLayer(nn.Module):
         hidden_state = self.depthwise_convolution(hidden_state)
         hidden_state = self.squeeze_excitation_module(hidden_state)
         hidden_state = self.pointwise_convolution(hidden_state)
+
         return hidden_state
 
 
@@ -330,10 +322,7 @@ class PPLCNetV3Block(nn.Module):
         return x
 
 
-@auto_docstring(
-    custom_intro="""
-    """
-)
+@auto_docstring
 class PPLCNetV3PreTrainedModel(PreTrainedModel):
     """
     An abstract base class for PP-LCNet models that inherits from Hugging Face PreTrainedModel.
@@ -376,6 +365,10 @@ class PPLCNetV3Backbone(BackboneMixin, PPLCNetV3PreTrainedModel):
 
     def __init__(self, config: PPLCNetV3Config):
         super().__init__(config)
+        num_features = [config.stem_channels]
+        for block in config.block_configs:
+            num_features.append(int(block[-1][2] * config.scale))
+        self.num_features = num_features
         self.embedder = PPLCNetV3Embeddings(config)
         self.encoder = PPLCNetV3Encoder(config)
 
@@ -413,7 +406,10 @@ class PPLCNetV3Backbone(BackboneMixin, PPLCNetV3PreTrainedModel):
             if stage in self.out_features:
                 feature_maps += (hidden_states[idx],)
 
-        return BackboneOutput(feature_maps=feature_maps)
+        return BackboneOutput(
+            feature_maps=feature_maps,
+            hidden_states=hidden_states if kwargs.get("output_hidden_states", False) else None,
+        )
 
 
 __all__ = ["PPLCNetV3Backbone", "PPLCNetV3PreTrainedModel"]
