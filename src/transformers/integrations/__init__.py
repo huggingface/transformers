@@ -163,6 +163,13 @@ _import_structure["tensor_parallel"] = [
     "ALL_PARALLEL_STYLES",
     "translate_to_torch_parallel_style",
 ]
+_import_structure["pipeline_parallel"] = [
+    "PipelineParallelSkipped",
+    "initialize_pipeline_parallelism",
+    "add_pipeline_parallel_hooks",
+    "flatten_pp_units",
+    "partition_units",
+]
 try:
     if not is_torch_greater_or_equal("2.5"):
         raise OptionalDependencyNotAvailable()
@@ -305,6 +312,13 @@ if TYPE_CHECKING:
         ALL_PARALLEL_STYLES,
         shard_and_distribute_module,
         translate_to_torch_parallel_style,
+    )
+    from .pipeline_parallel import (
+        PipelineParallelSkipped,
+        add_pipeline_parallel_hooks,
+        flatten_pp_units,
+        initialize_pipeline_parallelism,
+        partition_units,
     )
 
     try:

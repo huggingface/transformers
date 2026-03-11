@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any
 import torch
 
 from .integrations.accelerate import get_device, offload_weight
+from .integrations.pipeline_parallel import flatten_pp_units, partition_units
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
 from .utils import is_env_variable_true
 from .utils.loading_report import LoadStateDictInfo
@@ -1116,12 +1117,29 @@ def convert_and_load_state_dict_in_model(
     else:
         thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
 
+    # Pipeline parallel partitioning (if available)
+    pp_plan = model.pp_plan if getattr(model, "supports_pp_plan", False) else {}
+    local_pp_units: set[str] = set()
+    if device_mesh is not None and pp_plan:
+        pp_mesh = (
+            device_mesh["pp"]
+            if device_mesh.ndim > 1 and "pp" in (device_mesh.mesh_dim_names or {})
+            else device_mesh
+        )
+        pp_size = pp_mesh.size()
+        pp_rank = pp_mesh.get_local_rank()
+        pp_units = flatten_pp_units(model, pp_plan)
+        pp_partitions = partition_units(pp_units, pp_size)
+        local_pp_units = set(pp_partitions[pp_rank]) if pp_rank < len(pp_partitions) else set()
+
     renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
     param_name_to_load: dict[str, WeightRenaming | WeightConverter] = {}
 
     # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and group to source {'g0': '*.block_sparse_moe.'}
     # and target to source {'g0': '*.mlp.'}. This allows us to quickly find which pattern matched.
+    tp_plan_alt = None
+    tp_plan_by_group_name = {}
     if tp_plan != {}:
         tp_plan_alt, tp_plan_by_group_name, _ = build_glob_alternation(list(tp_plan.keys()))
     if dtype_plan != {}:
@@ -1179,7 +1197,12 @@ def convert_and_load_state_dict_in_model(
 
             # 4. Handle TP sharding or device_map placement
             future_or_tensor = None
-            if device_mesh:
+            param_module = renamed_key.rsplit(".", 1)[0]
+            is_local_pp = True if len(local_pp_units) == 0 else any(
+                param_module.startswith(unit) for unit in local_pp_units
+            )
+
+            if device_mesh and is_local_pp and tp_plan_alt is not None:
                 if matched_tp_pattern := tp_plan_alt.search(renamed_key):
                     matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
                     if getattr(mapping, "distributed_operation", None) is None:
@@ -1202,7 +1225,10 @@ def convert_and_load_state_dict_in_model(
                     )
 
             if future_or_tensor is None:
-                param_device = get_device(device_map, renamed_key, valid_torch_device=True)
+                if is_local_pp:
+                    param_device = get_device(device_map, renamed_key, valid_torch_device=True)
+                else:
+                    param_device = "cpu"
                 future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
