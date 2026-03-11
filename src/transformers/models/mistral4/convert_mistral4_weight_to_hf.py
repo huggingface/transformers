@@ -94,9 +94,13 @@ class FP8RescaleMergeAndConcatenate(ConversionOps):
             gate_up_list.append(torch.cat([gate, up], dim=0))
             scale_inv_list.append(fused_scale_inv)
 
+        gate_up_proj_scale_inv = torch.stack(scale_inv_list)
+        while gate_up_proj_scale_inv.ndim < 3:
+            gate_up_proj_scale_inv = gate_up_proj_scale_inv.unsqueeze(-1)
+
         return {
             "gate_up_proj": torch.stack(gate_up_list, dim=0),
-            "gate_up_proj_scale_inv": torch.stack(scale_inv_list),
+            "gate_up_proj_scale_inv": gate_up_proj_scale_inv,
         }
 
 
@@ -255,7 +259,10 @@ def _fuse_experts_for_layer(
             target_patterns=["down_proj"],
         )
         result[f"{base}.down_proj"] = down_result["down_proj"]
-        result[f"{base}.down_proj_scale_inv"] = torch.stack([w2_scales[e] for e in range(n_experts)])
+        down_proj_scale_inv = torch.stack([w2_scales[e] for e in range(n_experts)])
+        while down_proj_scale_inv.ndim < 3:
+            down_proj_scale_inv = down_proj_scale_inv.unsqueeze(-1)
+        result[f"{base}.down_proj_scale_inv"] = down_proj_scale_inv
 
         w1_act = grouped.get((layer_idx, "w1", "qscale_act"))
         if w1_act is not None:
