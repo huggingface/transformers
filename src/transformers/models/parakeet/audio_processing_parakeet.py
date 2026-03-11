@@ -16,91 +16,109 @@ import librosa
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...feature_extraction_utils import BatchFeature
-
-LOG_ZERO_GUARD_VALUE = 2**-24
-EPSILON = 1e-5
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 class ParakeetAudioProcessor(TorchAudioBackend):
     sample_rate = 16000
     force_mono = True
-    preemphasis = 0.97
-    n_fft = 512
-    hop_length = 160
-    win_length = 400
-    n_mels = 80
+    spectrogram_config = SpectrogramConfig(
+        stft_config=StftConfig(
+            n_fft=512,
+            hop_length=160,
+            win_length=400,
+            window_fn="hann_window",
+            power=2.0,
+            pad_mode="constant",
+            periodic=False,
+        ),
+        mel_scale_config=MelScaleConfig(
+            n_mels=80,
+            f_min=0.0,
+            norm="slaney",
+        ),
+        preemphasis=0.97,
+        log_mode="log",
+        mel_floor=2**-24,
+    )
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def _mel_filter_bank(self, spectrogram_config):
+        """Use librosa mel filters for exact numerical match with the feature extractor."""
+        stft_cfg = spectrogram_config.stft_config
+        mel_cfg = spectrogram_config.mel_scale_config
         mel_filters = librosa.filters.mel(
             sr=self.sample_rate,
-            n_fft=self.n_fft,
-            n_mels=self.n_mels,
-            fmin=0.0,
-            fmax=self.sample_rate / 2,
-            norm="slaney",
+            n_fft=stft_cfg.n_fft,
+            n_mels=mel_cfg.n_mels,
+            fmin=mel_cfg.f_min,
+            fmax=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
+            norm=mel_cfg.norm,
         )
-        self.mel_filters = torch.from_numpy(mel_filters).to(torch.float32)
-
-    def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
-        # Pad raw audio
-        lengths = [a.shape[-1] for a in audio]
-        audio = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
-
-        # Stack into batch
-        waveform = torch.stack(audio)  # (batch, length)
-        audio_lengths = torch.tensor(lengths)
-
-        # Preemphasis with masking for padded regions
-        if self.preemphasis is not None:
-            timemask = torch.arange(waveform.shape[1]).unsqueeze(0) < audio_lengths.unsqueeze(1)
-            waveform = torch.cat(
-                [waveform[:, :1], waveform[:, 1:] - self.preemphasis * waveform[:, :-1]], dim=1
+        # librosa returns (n_mels, freq); transpose to (freq, n_mels) for base class convention
+        return torch.from_numpy(mel_filters.T).to(torch.float32)        
+    
+    def _pre_stft(self, audio, *, spectrogram_config, **kwargs):
+        preemphasis = spectrogram_config.preemphasis
+        if preemphasis is not None:
+            timemask = torch.arange(audio.shape[-1], device=audio.device).unsqueeze(0) < self._audio_lengths.unsqueeze(1)
+            audio = torch.cat(
+                [audio[:, :1], audio[:, 1:] - preemphasis * audio[:, :-1]], dim=1
             )
-            waveform = waveform.masked_fill(~timemask, 0.0)
+            audio = audio.masked_fill(~timemask, 0.0)
+        return audio
 
-        # STFT
-        window = torch.hann_window(self.win_length, periodic=False)
+    def _extract_spectrogram(self, audio, *, spectrogram_config, **kwargs):
+        # Detect audio lengths from zero-padded waveform for preemphasis masking and normalization
+        if audio.ndim == 2:
+            indices = torch.arange(audio.shape[-1], device=audio.device).expand_as(audio)
+            self._audio_lengths = indices.masked_fill(audio == 0, -1).max(dim=-1).values + 1
+
+        audio = self._pre_stft(audio, spectrogram_config=spectrogram_config, **kwargs)
+
+        # Compute STFT matching the FE's magnitude computation for exact numerical match
+        stft_cfg = spectrogram_config.stft_config
+        window = torch.hann_window(stft_cfg.win_length, periodic=stft_cfg.periodic, device=audio.device)
         stft = torch.stft(
-            waveform,
-            self.n_fft,
-            hop_length=self.hop_length,
-            win_length=self.win_length,
+            audio,
+            stft_cfg.n_fft,
+            hop_length=stft_cfg.hop_length,
+            win_length=stft_cfg.win_length,
             window=window,
             return_complex=True,
-            pad_mode="constant",
+            pad_mode=stft_cfg.pad_mode,
         )
-        # Match FE: view_as_real -> pow(2).sum(-1).sqrt().pow(2)
         magnitudes = torch.view_as_real(stft)
         magnitudes = torch.sqrt(magnitudes.pow(2).sum(-1))
         magnitudes = magnitudes.pow(2)
+        return magnitudes
 
-        # Mel spectrogram + log
-        mel_spec = self.mel_filters @ magnitudes
-        mel_spec = torch.log(mel_spec + LOG_ZERO_GUARD_VALUE)
+    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
+        return torch.matmul(self.mel_filters.T, features)
+
+    def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
+        # Match FE: log(mel_spec + guard_value) instead of log(clamp(mel_spec, guard_value))
+        features = torch.log(features + spectrogram_config.mel_floor)
 
         # (batch, mels, frames) -> (batch, frames, mels)
-        mel_spec = mel_spec.permute(0, 2, 1)
+        features = features.permute(0, 2, 1)
 
         # Per-utterance normalization
+        stft_cfg = spectrogram_config.stft_config
+        audio_lengths = self._audio_lengths
         features_lengths = torch.floor_divide(
-            audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length
+            audio_lengths + stft_cfg.n_fft // 2 * 2 - stft_cfg.n_fft, stft_cfg.hop_length
         )
-        attention_mask = torch.arange(mel_spec.shape[1])[None, :] < features_lengths[:, None]
+        attention_mask = torch.arange(features.shape[1])[None, :] < features_lengths[:, None]
         mask = attention_mask.unsqueeze(-1)
-        mel_masked = mel_spec * mask
+        mel_masked = features * mask
         mean = mel_masked.sum(dim=1) / features_lengths.unsqueeze(-1)
         mean = mean.unsqueeze(1)
         variance = ((mel_masked - mean) ** 2 * mask).sum(dim=1) / (features_lengths - 1).unsqueeze(-1)
         std = torch.sqrt(variance).unsqueeze(1)
-        mel_spec = (mel_spec - mean) / (std + EPSILON)
-        mel_spec *= mask
+        features = (features - mean) / (std + 1e-5)
+        features *= mask
 
-        return BatchFeature(
-            data={"audio_features": mel_spec},
-            tensor_type=return_tensors,
-        )
+        return features
 
 
 __all__ = ["ParakeetAudioProcessor"]

@@ -19,6 +19,7 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 from ...feature_extraction_utils import BatchFeature
 from ...utils import is_speech_available, is_torch_available
 
+
 if is_speech_available():
     import torchaudio.compliance.kaldi as ta_kaldi
 

@@ -22,7 +22,7 @@ import numpy as np
 from .audio_processing_utils import BaseAudioProcessor
 from .audio_utils import SpectrogramConfig, amplitude_to_db, power_to_db
 from .feature_extraction_utils import BatchFeature
-from .utils import PaddingStrategy, TensorType, is_torch_available, logging
+from .utils import is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -32,6 +32,7 @@ if _WORKSPACE_ROOT not in sys.path:
     sys.path.insert(0, _WORKSPACE_ROOT)
 
 from spectrograms import numpy_mel_spectrogram as _np_spec
+
 
 if is_torch_available():
     import torch
@@ -43,7 +44,7 @@ class NumpyAudioBackend(BaseAudioProcessor):
 
     @property
     def backend(self) -> str:
-        return "numpy"    
+        return "numpy"
 
     def _process_audio(self, audio_el):
         """
@@ -270,7 +271,7 @@ class TorchAudioBackend(BaseAudioProcessor):
         """Compute the (power) spectrogram via STFT using the torch backend."""
 
         stft_cfg = spectrogram_config.stft_config
-    
+
         # if spectrogram_config.preemphasis is not None:
         #     audio_ranges = kwargs.get("audio_ranges", None)
         #     if audio_ranges is not None:

@@ -29,7 +29,6 @@ class MusicgenMelodyAudioProcessor(TorchAudioBackend):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         import librosa
-        import numpy as np
         import torch
 
         self.chroma_filters = torch.from_numpy(

@@ -15,14 +15,13 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...feature_extraction_utils import BatchFeature
 
 
 class VibevoiceAcousticTokenizerAudioProcessor(TorchAudioBackend):
     sample_rate = 24000
     force_mono = True
     add_channel_dim = True
-    
+
     target_dB_FS = -25
     eps = 1e-6
 

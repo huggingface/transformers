@@ -19,7 +19,7 @@
 """Image processor class for Qwen2-VL."""
 
 import math
-from typing import Iterable
+from collections.abc import Iterable
 
 import torch
 
