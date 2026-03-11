@@ -146,6 +146,12 @@ class VideomtForUniversalSegmentationOutput(ModelOutput):
 class VideomtPreTrainedModel(EomtPreTrainedModel):
     input_modalities = ("video",)
 
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Module) -> None:
+        super()._init_weights(module)
+        if isinstance(module, VideomtEmbeddings):
+            nn.init.zeros_(module.mask_token)
+
 
 class VideomtLayerNorm2d(EomtLayerNorm2d):
     pass
