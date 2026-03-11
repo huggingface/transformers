@@ -42,8 +42,8 @@ import torch
 
 from transformers import CHMv2ForDepthEstimation, CHMv2ImageProcessorFast
 
-processor = CHMv2ImageProcessorFast.from_pretrained("/path/to/chmv2_hf_checkpoint")
-model = CHMv2ForDepthEstimation.from_pretrained("/path/to/chmv2_hf_checkpoint").eval()
+processor = CHMv2ImageProcessorFast.from_pretrained("facebook/dinov3-vitl16-chmv2-dpt-head")
+model = CHMv2ForDepthEstimation.from_pretrained("facebook/dinov3-vitl16-chmv2-dpt-head").eval()
 
 image = Image.open("image.tif")
 inputs = processor(images=image, return_tensors="pt")

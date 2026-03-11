@@ -15,6 +15,8 @@
 
 import unittest
 
+import requests
+
 from transformers import CHMv2Config
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
@@ -200,24 +202,22 @@ class CHMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loss.backward()
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Integration tests using the real converted checkpoint
-# ──────────────────────────────────────────────────────────────────────────────
-
-CHECKPOINT_DIR = "/home/ubuntu/transformers_fork_3/dino/chmv2_hf_checkpoint"
-TEST_IMAGE = "/home/ubuntu/transformers_fork_3/dino/original_img_0.tif"
-
-
 @require_torch
 @require_vision
 @slow
 class CHMv2IntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation(self):
-        processor = CHMv2ImageProcessorFast.from_pretrained(CHECKPOINT_DIR)
-        model = CHMv2ForDepthEstimation.from_pretrained(CHECKPOINT_DIR).to(torch_device)
+        processor = CHMv2ImageProcessorFast.from_pretrained(
+            "facebook/dinov3-vitl16-chmv2-dpt-head", revision="refs/pr/1"
+        )
+        model = CHMv2ForDepthEstimation.from_pretrained(
+            "facebook/dinov3-vitl16-chmv2-dpt-head", revision="refs/pr/1"
+        ).to(torch_device)
 
-        image = Image.open(TEST_IMAGE)
-        inputs = processor(images=image, return_tensors="pt").to(torch_device)
+        img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/chmv2_example.tif"
+        raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+
+        inputs = processor(images=raw_image, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             outputs = model(**inputs)
@@ -239,7 +239,7 @@ class CHMv2IntegrationTest(unittest.TestCase):
         self.assertEqual(depth.shape, torch.Size([448, 448]))
 
         # post-processing: with target_sizes resizes to the original image dimensions
-        depth_resized = processor.post_process_depth_estimation(outputs, target_sizes=[(image.height, image.width)])[
-            0
-        ]["predicted_depth"]
-        self.assertEqual(depth_resized.shape, torch.Size([image.height, image.width]))
+        depth_resized = processor.post_process_depth_estimation(
+            outputs, target_sizes=[(raw_image.height, raw_image.width)]
+        )[0]["predicted_depth"]
+        self.assertEqual(depth_resized.shape, torch.Size([raw_image.height, raw_image.width]))

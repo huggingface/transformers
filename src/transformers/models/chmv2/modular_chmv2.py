@@ -31,44 +31,35 @@ from ..dpt.image_processing_dpt_fast import DPTImageProcessorFast
 from ..dpt.modeling_dpt import DPTReassembleLayer, _get_backbone_hidden_size
 
 
+@auto_docstring(checkpoint="facebook/dinov3-vitl16-chmv2-dpt-head")
 class CHMv2Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CHMv2ForDepthEstimation`]. It is used to
-    instantiate a CHMv2 model according to the specified arguments, defining the model architecture. Instantiating
-    a configuration with the defaults will yield a similar configuration to the CHMv2 model.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
-            The configuration of the backbone model. Only DINOv3ViTConfig is currently supported.
-        patch_size (`int`, *optional*, defaults to 16):
-            The patch size used by the backbone vision transformer.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        reassemble_factors (`list[float]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
-            The up/downsampling factors of the reassemble layers.
-        post_process_channels (`list[int]`, *optional*, defaults to `[128, 256, 512, 1024]`):
-            The output channel sizes of the reassemble stage for each backbone feature level.
-        fusion_hidden_size (`int`, *optional*, defaults to 256):
-            The number of channels before fusion.
-        head_in_index (`int`, *optional*, defaults to -1):
-            The index of the features to use in the depth estimation head.
-        head_hidden_size (`int`, *optional*, defaults to 128):
-            The number of channels in the hidden layer of the depth estimation head.
-        n_output_channels (`int`, *optional*, defaults to 256):
-            Number of output channels for the CHMv2 head (number of depth bins).
-        readout_type (`str`, *optional*, defaults to `"project"`):
-            Type of readout operation for the CLS token. One of `["ignore", "add", "project"]`.
-        min_depth (`float`, *optional*, defaults to 0.001):
-            The minimum depth value for depth bin calculation.
-        max_depth (`float`, *optional*, defaults to 96.0):
-            The maximum depth value for depth bin calculation.
-        bins_strategy (`str`, *optional*, defaults to `"chmv2_mixlog"`):
-            The strategy for depth bins distribution. One of `["linear", "log", "chmv2_mixlog"]`.
-        norm_strategy (`str`, *optional*, defaults to `"chmv2_mixlog"`):
-            The normalization strategy for depth prediction. One of `["linear", "softmax", "sigmoid", "chmv2_mixlog"]`.
+    backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
+        The configuration of the backbone model. Only DINOv3ViTConfig is currently supported.
+    patch_size (`int`, *optional*, defaults to 16):
+        The patch size used by the backbone vision transformer.
+    initializer_range (`float`, *optional*, defaults to 0.02):
+        The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+    reassemble_factors (`list[float]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
+        The up/downsampling factors of the reassemble layers.
+    post_process_channels (`list[int]`, *optional*, defaults to `[128, 256, 512, 1024]`):
+        The output channel sizes of the reassemble stage for each backbone feature level.
+    fusion_hidden_size (`int`, *optional*, defaults to 256):
+        The number of channels before fusion.
+    head_hidden_size (`int`, *optional*, defaults to 128):
+        The number of channels in the hidden layer of the depth estimation head.
+    n_output_channels (`int`, *optional*, defaults to 256):
+        Number of output channels for the CHMv2 head (number of depth bins).
+    readout_type (`str`, *optional*, defaults to `"project"`):
+        Type of readout operation for the CLS token. One of `["ignore", "add", "project"]`.
+    min_depth (`float`, *optional*, defaults to 0.001):
+        The minimum depth value for depth bin calculation.
+    max_depth (`float`, *optional*, defaults to 96.0):
+        The maximum depth value for depth bin calculation.
+    bins_strategy (`str`, *optional*, defaults to `"chmv2_mixlog"`):
+        The strategy for depth bins distribution. One of `["linear", "log", "chmv2_mixlog"]`.
+    norm_strategy (`str`, *optional*, defaults to `"chmv2_mixlog"`):
+        The normalization strategy for depth prediction. One of `["linear", "softmax", "sigmoid", "chmv2_mixlog"]`.
 
     ```python
     >>> from transformers import CHMv2Config, CHMv2ForDepthEstimation
@@ -76,7 +67,8 @@ class CHMv2Config(PreTrainedConfig):
     >>> configuration = CHMv2Config()
     >>> model = CHMv2ForDepthEstimation(configuration)
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "chmv2"
     sub_configs = {"backbone_config": AutoConfig}
@@ -89,7 +81,6 @@ class CHMv2Config(PreTrainedConfig):
         reassemble_factors: list[float] | None = None,
         post_process_channels: list[int] | None = None,
         fusion_hidden_size: int | None = 256,
-        head_in_index: int | None = -1,
         head_hidden_size: int | None = 128,
         n_output_channels: int | None = 256,
         readout_type: str | None = "project",
@@ -132,7 +123,6 @@ class CHMv2Config(PreTrainedConfig):
         self.reassemble_factors = reassemble_factors
         self.post_process_channels = post_process_channels
         self.fusion_hidden_size = fusion_hidden_size
-        self.head_in_index = head_in_index
         self.head_hidden_size = head_hidden_size
         self.n_output_channels = n_output_channels
         self.readout_type = readout_type
