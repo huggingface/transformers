@@ -216,16 +216,16 @@ GreedyLR is model-agnostic. The `run_greedy.py` script pre-trains or fine-tunes 
 
 ```bash
 # Pre-train with GreedyLR (default)
-python examples/greedy-lr/run_greedy.py
+python examples/scheduler/run_greedy.py
 
 # Compare with cosine scheduler
-python examples/greedy-lr/run_greedy.py --lr_scheduler_type cosine
+python examples/scheduler/run_greedy.py --lr_scheduler_type cosine
 
 # Use a different model
-python examples/greedy-lr/run_greedy.py --model_name_or_path Qwen/Qwen3-0.6B
+python examples/scheduler/run_greedy.py --model_name_or_path Qwen/Qwen3-0.6B
 
 # Fine-tune from pretrained weights
-python examples/greedy-lr/run_greedy.py --finetune
+python examples/scheduler/run_greedy.py --finetune
 ```
 
 ## Citation
