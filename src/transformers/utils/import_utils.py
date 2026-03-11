@@ -2546,15 +2546,16 @@ def create_import_structure_from_path(module_path):
     if os.path.isfile(module_path):
         module_path = os.path.dirname(module_path)
 
-    directory = module_path
     adjacent_modules = []
 
-    for f in os.listdir(module_path):
-        if f != "__pycache__" and os.path.isdir(os.path.join(module_path, f)):
-            import_structure[f] = create_import_structure_from_path(os.path.join(module_path, f))
-
-        elif not os.path.isdir(os.path.join(directory, f)):
-            adjacent_modules.append(f)
+    with os.scandir(module_path) as entries:
+        for entry in entries:
+            if entry.name == "__pycache__":
+                continue
+            if entry.is_dir():
+                import_structure[entry.name] = create_import_structure_from_path(entry.path)
+            elif not entry.name.startswith(("convert_", "modular_")):
+                adjacent_modules.append(entry.name)
 
     # We're only taking a look at files different from __init__.py
     # We could theoretically require things directly from the __init__.py
@@ -2562,20 +2563,13 @@ def create_import_structure_from_path(module_path):
     if "__init__.py" in adjacent_modules:
         adjacent_modules.remove("__init__.py")
 
-    # Modular files should not be imported
-    def find_substring(substring, list_):
-        return any(substring in x for x in list_)
-
-    if find_substring("modular_", adjacent_modules) and find_substring("modeling_", adjacent_modules):
-        adjacent_modules = [module for module in adjacent_modules if "modular_" not in module]
-
     module_requirements = {}
     for module_name in adjacent_modules:
         # Only modules ending in `.py` are accepted here.
         if not module_name.endswith(".py"):
             continue
 
-        with open(os.path.join(directory, module_name), encoding="utf-8") as f:
+        with open(os.path.join(module_path, module_name), encoding="utf-8") as f:
             file_content = f.read()
 
         # Remove the .py suffix
