@@ -310,7 +310,7 @@ print(completion.choices[0].text)
 The [OpenAI](https://platform.openai.com/docs/quickstart) client returns the following.
 
 ```shell
- Paris, and the capital of the United States is Washington, D.C.
+Paris, and the capital of the United States is Washington, D.C.
 ```
 
 Streaming is also supported.
