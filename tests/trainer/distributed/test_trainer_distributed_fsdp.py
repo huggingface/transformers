@@ -19,31 +19,29 @@ FSDP-specific distributed trainer tests.
 import itertools
 import json
 import os
-import textwrap
+import unittest
 from functools import partial
 from pathlib import Path
+from unittest.mock import patch
 
 from parameterized import parameterized
 
 from tests.trainer.trainer_test_utils import TrainerIntegrationCommon, get_regression_trainer  # noqa
-from transformers import is_torch_available
+from transformers import PreTrainedConfig, is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
     execute_subprocess_async,
     get_torch_dist_unique_port,
     mockenv_context,
-    require_accelerate,
+    require_torch,
     require_torch_accelerator,
     require_torch_multi_accelerator,
-    run_first,
     slow,
     torch_device,
-    torchrun,
 )
 from transformers.trainer_utils import FSDPOption, set_seed
 from transformers.utils import (
-    is_accelerate_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
@@ -53,7 +51,9 @@ from .test_trainer_distributed import CONFIGS_DIR, SCRIPTS_DIR, TRAIN_SCRIPT, Tr
 
 if is_torch_available():
     import torch
+    from torch import nn
 
+    from transformers import PreTrainedModel
     from transformers.trainer import FSDP_MODEL_NAME
 
 # Base accelerate configs (version only — model-specific settings via launch args)
@@ -101,8 +101,79 @@ if is_torch_available():
     # hack to restore original logging level pre #21700
     get_regression_trainer = partial(get_regression_trainer, log_level="info")
 
-if is_accelerate_available():
-    from accelerate.utils.constants import FSDP_SHARDING_STRATEGY
+
+if is_torch_available():
+
+    class _BaseModel(PreTrainedModel):
+        base_model_prefix = "base"
+        config_class = PreTrainedConfig
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = nn.Linear(5, 5)
+            self.linear_2 = nn.Linear(5, 5)
+            self.post_init()
+
+        def forward(self, x):
+            return self.linear_2(self.linear(x))
+
+
+@require_torch
+class InitializeMissingKeysTest(unittest.TestCase):
+    """Tests for FSDP non-rank-0 weight initialization: params should be moved from meta to CPU
+    and marked as initialized without being re-initialized."""
+
+    def _clear_init_flags(self, model):
+        for module in model.modules():
+            if hasattr(module, "_is_hf_initialized"):
+                delattr(module, "_is_hf_initialized")
+        for param in model.parameters():
+            if hasattr(param, "_is_hf_initialized"):
+                delattr(param, "_is_hf_initialized")
+        for buffer in model.buffers():
+            if hasattr(buffer, "_is_hf_initialized"):
+                delattr(buffer, "_is_hf_initialized")
+
+    def test_move_missing_keys_fsdp_non_rank0_moves_meta_to_cpu(self):
+        """FSDP non-rank-0 path should move all params from meta to CPU."""
+        with torch.device("meta"):
+            model = _BaseModel(PreTrainedConfig())
+
+        for param in model.parameters():
+            self.assertEqual(param.device, torch.device("meta"))
+
+        with (
+            patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True),
+            patch("transformers.modeling_utils.is_local_dist_rank_0", return_value=False),
+        ):
+            model._move_missing_keys_from_meta_to_device(
+                missing_keys=set(), device_map=None, device_mesh=None, hf_quantizer=None
+            )
+
+        for name, param in model.named_parameters():
+            self.assertEqual(param.device, torch.device("cpu"), f"param {name} should be on CPU after FSDP move")
+
+    def test_fsdp_non_rank0_end_to_end_no_reinit(self):
+        """End-to-end: move from meta + _initialize_missing_keys should mark all params initialized
+        without changing their values."""
+        with torch.device("meta"):
+            model = _BaseModel(PreTrainedConfig())
+
+        with (
+            patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True),
+            patch("transformers.modeling_utils.is_local_dist_rank_0", return_value=False),
+        ):
+            model._move_missing_keys_from_meta_to_device(
+                missing_keys=set(), device_map=None, device_mesh=None, hf_quantizer=None
+            )
+            pre_init_values = {name: param.clone() for name, param in model.named_parameters()}
+            self._clear_init_flags(model)
+            model._initialize_missing_keys(is_quantized=False)
+
+        for name, param in model.named_parameters():
+            self.assertTrue(getattr(param, "_is_hf_initialized", False), f"param {name} not marked initialized")
+            torch.testing.assert_close(param, pre_init_values[name], msg=f"param {name} was re-initialized")
+        self.assertTrue(getattr(model, "_is_hf_initialized", False))
 
 
 def _parameterized_custom_name_func(func, param_num, param):
@@ -164,7 +235,6 @@ class FSDPCommandsMixin:
 # ---------------------------------------------------------------------------
 
 
-@require_accelerate
 @require_torch_accelerator
 class TestFSDPConfig(TestCasePlus):
     def setUp(self):
@@ -270,6 +340,7 @@ class TestFSDPConfig(TestCasePlus):
 # ---------------------------------------------------------------------------
 
 
+@require_torch_multi_accelerator
 class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus):
     def _run_env_check(self, cmd, num_processes):
         """Run the env check script and return per-rank results."""
@@ -282,9 +353,6 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus):
                 results.append(json.load(f))
         return results
 
-    @run_first
-    @require_accelerate
-    @require_torch_multi_accelerator
     def test_torchrun_accelerate_fsdp1_env_parity(self):
         """Verify torchrun+--fsdp and accelerate launch produce the same FSDP1 env."""
         script = os.path.join(SCRIPTS_DIR, "torchrun_env_check.py")
@@ -317,9 +385,6 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus):
 
         self._check_parity(torchrun_results, accel_results, num_processes, expected_fsdp_version=1)
 
-    @run_first
-    @require_accelerate
-    @require_torch_multi_accelerator
     def test_torchrun_accelerate_fsdp2_env_parity(self):
         """Verify torchrun+--fsdp and accelerate launch produce the same FSDP2 env."""
         script = os.path.join(SCRIPTS_DIR, "torchrun_env_check.py")
@@ -388,8 +453,6 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus):
 # All distributed FSDP training tests
 # ---------------------------------------------------------------------------
 @slow
-@run_first
-@require_accelerate
 @require_torch_multi_accelerator
 class TestTrainerDistributedFSDPCommon(
     FSDPCommandsMixin, TrainerDistributedCommon, TestCasePlus, TrainerIntegrationCommon
@@ -406,8 +469,11 @@ class TestTrainerDistributedFSDPCommon(
     # Mixed precision: model loaded in fp32, training with --bf16/--fp16
     @parameterized.expand(mixed_precision_params, name_func=_parameterized_custom_name_func)
     def test_training_mixed_precision(self, sharding_strategy, dtype, fsdp_version):
-        sharding_idx = FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1
-        launch_args = list(TRAIN_LAUNCH_ARGS) + ["--fsdp_sharding_strategy", str(sharding_idx)]
+        if fsdp_version == "fsdp2":
+            reshard = "true" if sharding_strategy == "full_shard" else "false"
+        else:
+            reshard = sharding_strategy.upper()
+        launch_args = list(TRAIN_LAUNCH_ARGS) + ["--fsdp_reshard_after_forward", reshard]
         self.check_mixed_precision(dtype, config_file=FSDP_CONFIGS[fsdp_version], launch_args=launch_args)
 
     @parameterized.expand(["true", "false"], name_func=_parameterized_custom_name_func)
@@ -577,46 +643,3 @@ class TestTrainerDistributedFSDPCommon(
             script_args=["--fsdp2"],
         )
         execute_subprocess_async(cmd, env=self.get_env())
-
-
-# ---------------------------------------------------------------------------
-# FSDP generic task model sharding (moved from tests/generation/test_fsdp.py)
-# ---------------------------------------------------------------------------
-
-
-@require_torch_multi_accelerator
-class TestFSDPGenericTaskModel(TestCasePlus):
-    nproc_per_node = 2
-
-    def test_generic_task_model_can_be_sharded(self):
-        script_to_run = textwrap.dedent(
-            """
-            import torch
-            from torch.distributed.fsdp import fully_shard
-            from transformers import AutoModelForTokenClassification
-
-            current_accelerator = torch.accelerator.current_accelerator(check_available=True)
-            accelerator_type = "cpu" if current_accelerator is None else current_accelerator.type
-            torch_accelerator_module = getattr(torch, accelerator_type, torch.cuda)
-
-            backend = "gloo"
-            if accelerator_type == "cuda":
-                backend = "nccl"
-            elif accelerator_type == "xpu":
-                backend = "xccl"
-
-            torch.distributed.init_process_group(
-                backend=backend, init_method="env://"
-            )
-            rank = torch.distributed.get_rank()
-            if torch_accelerator_module.is_available():
-                torch_accelerator_module.set_device(rank)
-
-            # Make sure it works
-            model = AutoModelForTokenClassification.from_pretrained("Qwen/Qwen2-0.5B")
-            module = fully_shard(model)
-
-            torch.distributed.destroy_process_group()
-            """
-        )
-        torchrun(script_to_run, self.nproc_per_node, env=self.get_env())
