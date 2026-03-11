@@ -351,9 +351,6 @@ class PI0Model(PI0PreTrainedModel):
         )
         inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, total_image_features)
 
-        # FIXME: remove after https://github.com/huggingface/transformers/pull/44432 is merged!
-        inputs_embeds = inputs_embeds * math.sqrt(2048)
-
         return inputs_embeds
 
     @can_return_tuple
@@ -380,7 +377,6 @@ class PI0Model(PI0PreTrainedModel):
 
             if inputs_embeds is None:
                 inputs_embeds = self.embed_prefix(input_ids, pixel_values, pixel_attention_mask)
-                inputs_embeds = inputs_embeds / math.sqrt(2048)
 
             token_type_ids = torch.ones_like(inputs_embeds)[:, :, 0]
             past_key_values = self.vlm(
@@ -419,9 +415,6 @@ class PI0Model(PI0PreTrainedModel):
             and_mask_function=blockwise_bidirectional_mask(block_boundaries),
         )
 
-        action_embeds = action_embeds / torch.tensor(
-            self.config.dit_config.hidden_size**0.5, dtype=action_embeds.dtype
-        )
         dit_output = self.dit(
             inputs_embeds=action_embeds,
             attention_mask=bidirectional_mask,
@@ -563,7 +556,6 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         if attention_mask is not None:
             position_ids = attention_mask.cumsum(-1) - 1
         inputs_embeds = self.model.embed_prefix(input_ids, pixel_values, pixel_attention_mask)
-        inputs_embeds = inputs_embeds / math.sqrt(2048)
         past_key_values = self.model.vlm(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
