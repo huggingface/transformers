@@ -4214,7 +4214,7 @@ class ModelTesterMixin:
                     continue
 
                 # Filter out non-tensor inputs for ONNX Runtime, which does not support them.
-                onnx_inputs = {k: v for k, v in inputs_dict if not isinstance(v, (bool, int, float, str))}
+                onnx_inputs = {k: v for k, v in inputs_dict.items() if not isinstance(v, (bool, int, float, str))}
 
                 set_seed(1234)
                 onnx_outputs = onnx_program(**onnx_inputs)
