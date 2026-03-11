@@ -88,10 +88,10 @@ class UnivNetAudioProcessor(NumpyAudioBackend):
             mel = self.mel_spectrogram(waveform)
             if self.do_normalize:
                 mel = self.normalize(mel)
-            features.append(mel)
+            features.append(mel.astype(np.float32))
         return features
 
-    def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
+    def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, generator=None, **kwargs):
         # Pad raw audio
         if padding:
             audio = self.pad(audio, padding=True, max_length=max_length)
@@ -110,7 +110,19 @@ class UnivNetAudioProcessor(NumpyAudioBackend):
 
         output_key = "audio_features"
         stacked = np.stack(padded, axis=0)
-        return BatchFeature(data={output_key: stacked}, tensor_type=return_tensors)
+
+        # Generate noise sequence matching the FE
+        if generator is None:
+            generator = np.random.default_rng()
+        noise = [
+            generator.standard_normal((f.shape[0], 64), dtype=np.float32)
+            for f in padded
+        ]
+
+        return BatchFeature(
+            data={output_key: stacked, "noise_sequence": noise},
+            tensor_type=return_tensors,
+        )
 
 
 __all__ = ["UnivNetAudioProcessor"]

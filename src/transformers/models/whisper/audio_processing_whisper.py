@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import torch
+
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, mel_filter_bank
 
 
 class WhisperAudioProcessor(TorchAudioBackend):
@@ -36,16 +38,43 @@ class WhisperAudioProcessor(TorchAudioBackend):
     )
 
     def extract_spectrogram(self, audio, **kwargs):
-        import torch
-
         features = super().extract_spectrogram(audio, **kwargs)
-        processed = []
-        for spec in features:
-            max_val = spec.max()
-            spec = torch.maximum(spec, max_val - 8.0)
-            spec = (spec + 4.0) / 4.0
-            processed.append(spec)
-        return processed
+        features = features[..., :-1]  # whisper skips last frame
+
+        max_vals = features.amax(dim=(-2, -1), keepdim=True)
+        features = torch.maximum(features, max_vals - 8.0)
+        features = (features + 4.0) / 4.0
+
+        return features
+
+    def _mel_filter_bank(self, spectrogram_config):
+        """
+        Override to use the same numpy-based mel filter bank as WhisperFeatureExtractor
+        for exact numerical compatibility.
+        """
+        stft_cfg = spectrogram_config.stft_config
+        mel_cfg = spectrogram_config.mel_scale_config
+        mel_filters = mel_filter_bank(
+            num_frequency_bins=1 + stft_cfg.n_fft // 2,
+            num_mel_filters=mel_cfg.n_mels,
+            min_frequency=mel_cfg.f_min,
+            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
+            sampling_rate=self.sample_rate,
+            norm=mel_cfg.norm,
+            mel_scale=mel_cfg.mel_scale,
+        )
+        return torch.from_numpy(mel_filters).to(torch.float32)
+
+    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
+        """
+        Override to use the same matrix multiplication order as WhisperFeatureExtractor
+        for exact numerical compatibility. FeatureExtractor uses (n_mels, n_freq) @ (n_freq, time),
+        while the generic spectrograms module uses (time, n_freq) @ (n_freq, n_mels) then transpose.
+        The different summation order produces slightly different rounding (1 ULP).
+        """
+        stacked = torch.stack(features) if isinstance(features, list) else features
+        mel_spec = torch.matmul(self.mel_filters.T, stacked)
+        return torch.clamp(mel_spec, min=spectrogram_config.mel_floor)
 
 
 __all__ = ["WhisperAudioProcessor"]

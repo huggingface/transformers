@@ -15,8 +15,13 @@
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, spectrogram, window_function
 from ...feature_extraction_utils import BatchFeature
+from ...utils import is_speech_available
+
+if is_speech_available():
+    import torch
+    import torchaudio.compliance.kaldi as ta_kaldi
 
 
 class SpeechToTextAudioProcessor(NumpyAudioBackend):
@@ -28,7 +33,7 @@ class SpeechToTextAudioProcessor(NumpyAudioBackend):
             n_fft=512,
             win_length=400,
             hop_length=160,
-            window_fn="povey_window",
+            window_fn="povey",
             power=2.0,
             center=False,
             periodic=False,
@@ -51,6 +56,31 @@ class SpeechToTextAudioProcessor(NumpyAudioBackend):
         super().__init__(**kwargs)
         self.normalize_means = normalize_means
         self.normalize_vars = normalize_vars
+        if not is_speech_available():
+            self.window = window_function(400, "povey", periodic=False)
+
+    def _extract_fbank_features(self, waveform):
+        waveform = waveform * (2**15)  # Kaldi compliance
+        if is_speech_available():
+            waveform_tensor = torch.from_numpy(waveform).unsqueeze(0)
+            features = ta_kaldi.fbank(waveform_tensor, num_mel_bins=80, sample_frequency=self.sample_rate)
+            return features.numpy()
+        else:
+            waveform = np.squeeze(waveform)
+            return spectrogram(
+                waveform,
+                self.window,
+                frame_length=400,
+                hop_length=160,
+                fft_length=512,
+                power=2.0,
+                center=False,
+                preemphasis=0.97,
+                mel_filters=self.mel_filters,
+                log_mel="log",
+                mel_floor=1.192092955078125e-07,
+                remove_dc_offset=True,
+            ).T
 
     @staticmethod
     def utterance_cmvn(x, input_length, normalize_means=True, normalize_vars=True, padding_value=0.0):
@@ -65,11 +95,8 @@ class SpeechToTextAudioProcessor(NumpyAudioBackend):
         return x.astype(np.float32)
 
     def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
-        # Extract Kaldi-style features via generic config-based API
-        features = self.extract_spectrogram(audio, spectrogram_config=self.spectrogram_config)
-
-        # Generic extract_spectrogram returns (n_mels, frames); transpose to (frames, n_mels)
-        features = [f.T for f in features]
+        # Extract Kaldi-style features matching the FE exactly
+        features = [self._extract_fbank_features(waveform) for waveform in audio]
         lengths = [f.shape[0] for f in features]
 
         # Pad features to longest

@@ -15,10 +15,11 @@
 from dataclasses import fields, replace
 from typing import Unpack
 
+import numpy as np
 from huggingface_hub.dataclasses import validate_typed_dict
 
 from .audio_processing_base import AudioProcessingMixin
-from .audio_utils import AudioInput, SpectrogramConfig, make_list_of_audio, mel_filter_bank
+from .audio_utils import AudioInput, SpectrogramConfig, make_list_of_audio
 from .feature_extraction_utils import BatchFeature
 from .processing_utils import AudioKwargs
 from .utils import PaddingStrategy, TensorType, logging
@@ -35,6 +36,7 @@ class AudioProcessingKwargs(AudioKwargs, total=False):
     do_extract_spectrogram: bool | None
     do_pad_features: bool | None
     do_resample: bool | None
+    generator: np.random.Generator | None
 
 
 class BaseAudioProcessor(AudioProcessingMixin):
@@ -87,7 +89,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
             setattr(self, key, value)
 
         # Derive mel_filters from spectrogram_config if mel_scale_config is set
-        # TODO: maybe the mel spectrogram initialization should be lazy? 
+        # TODO: maybe the mel spectrogram initialization should be lazy?
         if self.spectrogram_config is not None and self.spectrogram_config.mel_scale_config is not None:
             if not hasattr(self, "mel_filters"):
                 self.mel_filters = self._mel_filter_bank(self.spectrogram_config)
@@ -113,7 +115,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         self._validate_preprocess_kwargs(**kwargs)
 
         return self._preprocess_audio_like_inputs(audio, *args, **kwargs)
-    
+
     def _preprocess_audio_like_inputs(
         self,
         audio: AudioInput,
@@ -245,11 +247,26 @@ class BaseAudioProcessor(AudioProcessingMixin):
         overrides = {k: kwargs.pop(k) for k in list(kwargs) if k in config_field_names}
         if overrides:
             spectrogram_config = replace(spectrogram_config, **overrides)
-    
-        features = self._extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
-        if spectrogram_config.mel_scale_config is not None:
-            features = self._apply_mel_scale(features, spectrogram_config=spectrogram_config, **kwargs)
-        features = self._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
+
+        if isinstance(audio, list):
+            features = [
+                self._extract_spectrogram(a, spectrogram_config=spectrogram_config, **kwargs)
+                for a in audio
+            ]
+            if spectrogram_config.mel_scale_config is not None:
+                features = [
+                    self._apply_mel_scale(f, spectrogram_config=spectrogram_config, **kwargs)
+                    for f in features
+                ]
+            features = [
+                self._normalize_magnitude(f, spectrogram_config=spectrogram_config, **kwargs)
+                for f in features
+            ]
+        else:
+            features = self._extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
+            if spectrogram_config.mel_scale_config is not None:
+                features = self._apply_mel_scale(features, spectrogram_config=spectrogram_config, **kwargs)
+            features = self._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
 
         return features
 
@@ -332,7 +349,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         if truncation and max_length is None:
             raise ValueError(
                 "When setting `truncation=True`, make sure that `max_length` is defined."
-            ) 
+            )
 
     def to_dict(self):
         output = super().to_dict()

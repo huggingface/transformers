@@ -15,7 +15,7 @@
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_utils import BatchFeature
 
 
@@ -29,7 +29,7 @@ class SeamlessM4tAudioProcessor(NumpyAudioBackend):
             n_fft=512,
             win_length=400,
             hop_length=160,
-            window_fn="povey_window",
+            window_fn="povey",
             power=2.0,
             center=False,
             periodic=False,
@@ -48,6 +48,41 @@ class SeamlessM4tAudioProcessor(NumpyAudioBackend):
         waveform_scale=32768.0,
     )
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.window = window_function(400, "povey", periodic=False)
+
+    def _mel_filter_bank(self, spectrogram_config):
+        mel_cfg = spectrogram_config.mel_scale_config
+        return mel_filter_bank(
+            num_frequency_bins=257,
+            num_mel_filters=mel_cfg.n_mels,
+            min_frequency=mel_cfg.f_min,
+            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate // 2,
+            sampling_rate=self.sample_rate,
+            norm=mel_cfg.norm,
+            mel_scale=mel_cfg.mel_scale,
+            triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
+        )
+
+    def _extract_fbank_features(self, waveform):
+        waveform = np.squeeze(waveform) * (2**15)  # Kaldi compliance: 16-bit signed integers
+        features = spectrogram(
+            waveform,
+            self.window,
+            frame_length=400,
+            hop_length=160,
+            fft_length=512,
+            power=2.0,
+            center=False,
+            preemphasis=0.97,
+            mel_filters=self.mel_filters,
+            log_mel="log",
+            mel_floor=1.192092955078125e-07,
+            remove_dc_offset=True,
+        ).T
+        return features
+
     def feature_normalize(self, features):
         # Per-mel-bin normalization with ddof=1 for variance
         normalized = []
@@ -58,11 +93,8 @@ class SeamlessM4tAudioProcessor(NumpyAudioBackend):
         return normalized
 
     def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
-        # Extract Kaldi-style features via generic config-based API
-        features = self.extract_spectrogram(audio, spectrogram_config=self.spectrogram_config)
-
-        # Generic extract_spectrogram returns (n_mels, frames); transpose to (frames, n_mels)
-        features = [f.T for f in features]
+        # Extract Kaldi-style features matching the FE exactly
+        features = [self._extract_fbank_features(waveform) for waveform in audio]
 
         # Per-mel-bin normalization
         features = self.feature_normalize(features)

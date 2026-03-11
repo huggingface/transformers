@@ -14,12 +14,19 @@
 
 import numpy as np
 
-from ...audio_processing_backends import NumpyAudioBackend
+from ...audio_processing_backends import NumpyAudioBackend, TorchAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 from ...feature_extraction_utils import BatchFeature
+from ...utils import is_speech_available, is_torch_available
+
+if is_speech_available():
+    import torchaudio.compliance.kaldi as ta_kaldi
+
+if is_torch_available():
+    import torch
 
 
-class AudioSpectrogramTransformerAudioProcessor(NumpyAudioBackend):
+class AudioSpectrogramTransformerAudioProcessor(NumpyAudioBackend if not is_speech_available() else TorchAudioBackend):
     sample_rate = 16000
     force_mono = True
 
@@ -53,12 +60,29 @@ class AudioSpectrogramTransformerAudioProcessor(NumpyAudioBackend):
         mel_floor=1.192092955078125e-07,
     )
 
-    def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
-        # Compute spectrogram per-sample (no audio padding beforehand)
-        features = self.extract_spectrogram(audio, spectrogram_config=self.spectrogram_config)
+    def _extract_fbank_features_torchaudio(self, waveform) -> np.ndarray:
+        """Extract mel-filter bank features using torchaudio Kaldi (matches ASTFeatureExtractor)."""
+        if isinstance(waveform, np.ndarray):
+            waveform = torch.from_numpy(waveform)
+        waveform = waveform.unsqueeze(0)
+        fbank = ta_kaldi.fbank(
+            waveform,
+            sample_frequency=self.sample_rate,
+            window_type="hanning",
+            num_mel_bins=128,
+        )
+        return fbank.numpy()
 
-        # (n_mels, frames) -> (frames, n_mels)
-        features = [f.T for f in features]
+    def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
+        # Compute spectrogram per-sample using the same method as ASTFeatureExtractor
+        if is_speech_available():
+            # Use torchaudio Kaldi for exact match with ASTFeatureExtractor
+            features = [self._extract_fbank_features_torchaudio(waveform) for waveform in audio]
+        else:
+            # Use numpy spectrogram (fallback)
+            features = self.extract_spectrogram(audio, spectrogram_config=self.spectrogram_config)
+            # (n_mels, frames) -> (frames, n_mels)
+            features = [f.T for f in features]
 
         # Pad or truncate to max_length_frames
         padded = []
