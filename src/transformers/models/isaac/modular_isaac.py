@@ -1020,18 +1020,6 @@ class IsaacModel(Qwen3PreTrainedModel):
     def set_input_embeddings(self, value: nn.Module) -> None:
         self.text_model.set_input_embeddings(value)
 
-    @property
-    def final_norm(self) -> nn.Module:
-        return self.text_model.norm
-
-    @property
-    def embed_tokens(self) -> nn.Module:
-        return self.text_model.embed_tokens
-
-    @embed_tokens.setter
-    def embed_tokens(self, value: nn.Module) -> None:
-        self.text_model.embed_tokens = value
-
     @staticmethod
     def prepare_multimodal_rope_position_ids(
         position_ids: torch.Tensor,
@@ -1302,7 +1290,7 @@ class IsaacModel(Qwen3PreTrainedModel):
 
             hidden_states = layer_outputs[0] if isinstance(layer_outputs, tuple) else layer_outputs
 
-        hidden_states = self.final_norm(hidden_states)
+        hidden_states = self.text_model.norm(hidden_states)
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
@@ -1434,6 +1422,9 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         model_inputs["position_ids"] = position_ids if first_step else None
 
         return model_inputs
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.model.get_input_embeddings()
 
     def set_input_embeddings(self, value: nn.Module) -> None:
         self.model.set_input_embeddings(value)
