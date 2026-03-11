@@ -130,6 +130,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             _patch_no_accelerator(),
             patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=True),
             patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=True),
+            patch("transformers.quantizers.quantizer_mxfp4.Mxfp4HfQuantizer._lazy_import_kernels"),
         ):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -188,6 +189,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             _patch_no_accelerator(),
             patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=True),
             patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=True),
+            patch("transformers.quantizers.quantizer_mxfp4.Mxfp4HfQuantizer._lazy_import_kernels"),
         ):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
