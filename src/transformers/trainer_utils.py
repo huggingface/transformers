@@ -320,7 +320,7 @@ def sort_checkpoints(
     if use_mtime and len(checkpoints_sorted) > 1:
         mtime_diff = checkpoints_sorted[-1][0] - checkpoints_sorted[0][0]
         if mtime_diff < 1.0:
-            logger.warning("mtime may not be reliable on this filesystem, falling back to numerical ordering")
+            logger.warning_once("mtime may not be reliable on this filesystem, falling back to numerical ordering")
             return sort_checkpoints(
                 output_dir, checkpoint_prefix, use_mtime=False, best_model_checkpoint=best_model_checkpoint
             )
