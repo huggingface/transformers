@@ -19,19 +19,22 @@ FSDP-specific distributed trainer tests.
 import itertools
 import json
 import os
+import unittest
 from functools import partial
 from pathlib import Path
+from unittest.mock import patch
 
 from parameterized import parameterized
 
 from tests.trainer.trainer_test_utils import TrainerIntegrationCommon, get_regression_trainer  # noqa
-from transformers import is_torch_available
+from transformers import PreTrainedConfig, is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
     execute_subprocess_async,
     get_torch_dist_unique_port,
     mockenv_context,
+    require_torch,
     require_torch_accelerator,
     require_torch_multi_accelerator,
     slow,
@@ -49,7 +52,9 @@ from .test_trainer_distributed import CONFIGS_DIR, SCRIPTS_DIR, TRAIN_SCRIPT, Tr
 
 if is_torch_available():
     import torch
+    from torch import nn
 
+    from transformers import PreTrainedModel
     from transformers.trainer import FSDP_MODEL_NAME
 
 # Base accelerate configs (version only — model-specific settings via launch args)
@@ -99,6 +104,80 @@ if is_torch_available():
 
 if is_accelerate_available():
     from accelerate.utils.constants import FSDP_SHARDING_STRATEGY
+
+
+if is_torch_available():
+
+    class _BaseModel(PreTrainedModel):
+        base_model_prefix = "base"
+        config_class = PreTrainedConfig
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = nn.Linear(5, 5)
+            self.linear_2 = nn.Linear(5, 5)
+            self.post_init()
+
+        def forward(self, x):
+            return self.linear_2(self.linear(x))
+
+
+@require_torch
+class InitializeMissingKeysTest(unittest.TestCase):
+    """Tests for FSDP non-rank-0 weight initialization: params should be moved from meta to CPU
+    and marked as initialized without being re-initialized."""
+
+    def _clear_init_flags(self, model):
+        for module in model.modules():
+            if hasattr(module, "_is_hf_initialized"):
+                delattr(module, "_is_hf_initialized")
+        for param in model.parameters():
+            if hasattr(param, "_is_hf_initialized"):
+                delattr(param, "_is_hf_initialized")
+        for buffer in model.buffers():
+            if hasattr(buffer, "_is_hf_initialized"):
+                delattr(buffer, "_is_hf_initialized")
+
+    def test_move_missing_keys_fsdp_non_rank0_moves_meta_to_cpu(self):
+        """FSDP non-rank-0 path should move all params from meta to CPU."""
+        with torch.device("meta"):
+            model = _BaseModel(PreTrainedConfig())
+
+        for param in model.parameters():
+            self.assertEqual(param.device, torch.device("meta"))
+
+        with (
+            patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True),
+            patch("transformers.modeling_utils.is_local_dist_rank_0", return_value=False),
+        ):
+            model._move_missing_keys_from_meta_to_device(
+                missing_keys=set(), device_map=None, device_mesh=None, hf_quantizer=None
+            )
+
+        for name, param in model.named_parameters():
+            self.assertEqual(param.device, torch.device("cpu"), f"param {name} should be on CPU after FSDP move")
+
+    def test_fsdp_non_rank0_end_to_end_no_reinit(self):
+        """End-to-end: move from meta + _initialize_missing_keys should mark all params initialized
+        without changing their values."""
+        with torch.device("meta"):
+            model = _BaseModel(PreTrainedConfig())
+
+        with (
+            patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True),
+            patch("transformers.modeling_utils.is_local_dist_rank_0", return_value=False),
+        ):
+            model._move_missing_keys_from_meta_to_device(
+                missing_keys=set(), device_map=None, device_mesh=None, hf_quantizer=None
+            )
+            pre_init_values = {name: param.clone() for name, param in model.named_parameters()}
+            self._clear_init_flags(model)
+            model._initialize_missing_keys(is_quantized=False)
+
+        for name, param in model.named_parameters():
+            self.assertTrue(getattr(param, "_is_hf_initialized", False), f"param {name} not marked initialized")
+            torch.testing.assert_close(param, pre_init_values[name], msg=f"param {name} was re-initialized")
+        self.assertTrue(getattr(model, "_is_hf_initialized", False))
 
 
 def _parameterized_custom_name_func(func, param_num, param):

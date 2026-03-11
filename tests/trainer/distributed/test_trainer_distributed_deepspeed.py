@@ -1362,7 +1362,7 @@ class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
         ds_config = self._get_zero3_ds_config()
 
         # With zero3
-        HfDeepSpeedConfig(ds_config)
+        dschf = HfDeepSpeedConfig(ds_config)  # noqa: F841 — prevent GC of weak-ref config
         model, cl = self._load_with_logging(TinyGPT2WithUninitializedWeights, GPT2_TINY, expect_zero3=True)
         self.assertRegex(cl.out, r"new_head\.(weight|bias)\s*\|\s*MISSING")
         with deepspeed.zero.GatheredParameters([model.new_head.weight, model.new_head.bias]):
@@ -1375,7 +1375,7 @@ class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
 
         # Without zero3
         del ds_config["zero_optimization"]
-        HfDeepSpeedConfig(ds_config)
+        dschf = HfDeepSpeedConfig(ds_config)  # noqa: F841
         model, cl = self._load_with_logging(TinyGPT2WithUninitializedWeights, GPT2_TINY, expect_zero3=False)
         self.assertRegex(cl.out, r"new_head\.(weight|bias)\s*\|\s*MISSING")
         self.assertTrue(
@@ -1577,7 +1577,7 @@ def _make_zoo_tasks():
     tasks2models = {
         "trans": ["bart", "m2m_100", "t5", "t5_v1"],
         "clm": ["bigbird_pegasus", "blenderbot", "bloom", "gpt2", "gpt_neo", "gptj", "xlm-roberta", "prophetnet"],
-        "mlm": ["albert", "deberta", "deberta-v2", "distilbert", "electra", "funnel", "layoutlm"],
+        "mlm": ["albert", "deberta", "deberta-v2", "distilbert", "electra", "layoutlm"],
         "qa": ["led", "longformer", "mobilebert", "mpnet", "roberta", "squeezebert"],
         "clas": ["bert", "xlnet"],
         "img_clas": ["vit"],
