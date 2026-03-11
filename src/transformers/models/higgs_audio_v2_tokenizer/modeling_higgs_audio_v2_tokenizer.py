@@ -31,10 +31,12 @@ from ... import initialization as init
 from ...audio_utils import conv1d_output_length
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import ModelOutput, auto_docstring
+from ...utils.import_utils import requires
 from ..auto import AutoModel
 from .configuration_higgs_audio_v2_tokenizer import HiggsAudioV2TokenizerConfig
 
 
+@requires(backends=("torchaudio",))
 @auto_docstring
 class HiggsAudioV2TokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
     """
@@ -447,6 +449,7 @@ class HiggsAudioV2TokenizerResidualVectorQuantization(nn.Module):
         return quantized_out
 
 
+@requires(backends=("torchaudio",))
 @auto_docstring(custom_intro="""The HiggsAudioV2Tokenizer neural audio codec model.""")
 class HiggsAudioV2TokenizerModel(HiggsAudioV2TokenizerPreTrainedModel):
     def __init__(self, config):

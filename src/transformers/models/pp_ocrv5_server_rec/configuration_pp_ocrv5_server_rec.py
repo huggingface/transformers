@@ -20,12 +20,15 @@
 
 
 from ...configuration_utils import PreTrainedConfig
+from ...backbone_utils import consolidate_backbone_kwargs_to_config, load_backbone
+from ..auto import AutoConfig
 from ...utils import auto_docstring
 
 
 @auto_docstring(custom_intro="Configuration for the PP-OCRv5_server_rec model.")
 class PPOCRV5ServerRecConfig(PreTrainedConfig):
     model_type = "pp_ocrv5_server_rec"
+    sub_configs = {"backbone_config": AutoConfig}
     """
     This is the configuration class to store the configuration of a [`PPOCRV5ServerRec`]. It is used to instantiate a
     PPOCRV5 Server text recognition model according to the specified arguments, defining the model architecture.
@@ -38,6 +41,7 @@ class PPOCRV5ServerRecConfig(PreTrainedConfig):
 
     def __init__(
         self,
+        backbone_config=None,
         text_rec: bool = True,
         stem_channels: list = [3, 32, 48],
         det: bool = False,
@@ -54,6 +58,22 @@ class PPOCRV5ServerRecConfig(PreTrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
+
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=backbone_config,
+            default_config_type="hgnet_v2",
+            default_config_kwargs={
+                "arch": "L",
+                "return_idx": [0, 1, 2, 3],
+                "freeze_stem_only": True,
+                "freeze_at": 0,
+                "freeze_norm": True,
+                "lr_mult_list": [1.0, 1.0, 1.0, 1.0, 1.0],
+                "out_features": ["stage1", "stage2", "stage3", "stage4"],
+            },
+            **kwargs,
+        )
+        self.backbone_config = backbone_config
 
         self.text_rec = text_rec
         self.stem_channels = stem_channels

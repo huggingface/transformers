@@ -35,22 +35,6 @@ You can find all the original BERT checkpoints under the [BERT](https://huggingf
 The example below demonstrates how to use BertGeneration with [`EncoderDecoderModel`] for sequence-to-sequence tasks.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```python
-import torch
-from transformers import pipeline
-
-pipeline = pipeline(
-    task="text2text-generation",
-    model="google/roberta2roberta_L-24_discofuse",
-    dtype=torch.float16,
-    device=0
-)
-pipeline("Plants create energy through ")
-```
-
-</hfoption>
 <hfoption id="AutoModel">
 
 ```python
@@ -66,13 +50,6 @@ input_ids = tokenizer(
 
 outputs = model.generate(input_ids)
 print(tokenizer.decode(outputs[0]))
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create energy through " | transformers run --task text2text-generation --model "google/roberta2roberta_L-24_discofuse" --device 0
 ```
 
 </hfoption>
