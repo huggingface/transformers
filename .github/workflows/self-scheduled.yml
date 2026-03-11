@@ -449,7 +449,7 @@ jobs:
         working-directory: /transformers
         env:
           commit_sha: ${{ inputs.commit_sha || github.sha }}
-        run: git fetch && git checkout "$commit_sha"
+        run: git fetch origin "$commit_sha" && git checkout "$commit_sha"
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
