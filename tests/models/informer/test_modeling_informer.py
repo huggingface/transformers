@@ -339,7 +339,6 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                     "encoder_outputs",
                     "past_key_values",
                     "use_cache",
-                    "cache_position",
                 ]
                 if "future_observed_mask" in arg_names
                 else [
@@ -347,7 +346,6 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                     "encoder_outputs",
                     "past_key_values",
                     "use_cache",
-                    "cache_position",
                 ]
             )
 

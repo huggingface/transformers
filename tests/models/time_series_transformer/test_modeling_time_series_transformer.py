@@ -249,7 +249,6 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unit
                     "encoder_outputs",
                     "past_key_values",
                     "use_cache",
-                    "cache_position",
                     "kwargs",
                 ]
                 if "future_observed_mask" in arg_names
@@ -258,7 +257,6 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unit
                     "encoder_outputs",
                     "past_key_values",
                     "use_cache",
-                    "cache_position",
                     "kwargs",
                 ]
             )
