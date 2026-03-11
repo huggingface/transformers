@@ -501,8 +501,18 @@ class VideoPrismForVideoClassificationModelTester(ModelTesterMixin, VideoPrismVi
             vision_kwargs = {}
         super().__init__(parent, **vision_kwargs)
 
+    def get_config(self):
+        config = super().get_config()
+        config.num_labels = self.num_labels
+        return config
+
+    def prepare_config_and_inputs(self):
+        config, pixel_values = super().prepare_config_and_inputs()
+        labels = ids_tensor([self.batch_size], self.num_labels) if self.use_labels else None
+        return config, pixel_values, labels
+
     def prepare_config_and_inputs_for_common(self):
-        config, pixel_values = self.prepare_config_and_inputs()
+        config, pixel_values, _ = self.prepare_config_and_inputs()
         inputs_dict = {"pixel_values_videos": pixel_values}
         return config, inputs_dict
 
@@ -540,6 +550,13 @@ class VideoPrismForVideoClassificationTest(ModelTesterMixin, unittest.TestCase):
             hidden_size=37,
             common_properties=["num_channels", "hidden_size", "num_attention_heads"],
         )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
