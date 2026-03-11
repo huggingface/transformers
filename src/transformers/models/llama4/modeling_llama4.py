@@ -488,6 +488,8 @@ class Llama4PreTrainedModel(PreTrainedModel):
         if isinstance(module, Llama4TextExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, Llama4VisionRotaryEmbedding):
+            module.freqs_ci = module._compute_freqs_ci(module.config)
         elif isinstance(module, Llama4VisionModel):
             init.normal_(module.class_embedding, std=module.scale)
             init.normal_(module.positional_embedding_vlm, std=module.scale)
@@ -1037,8 +1039,6 @@ class Llama4VisionRotaryEmbedding(nn.Module):
         return freq_cis  # idx**2, idx**2, idx * 2
 
     def forward(self, hidden_states):
-        if self.freqs_ci.device.type == "meta":
-            self.freqs_ci = self._compute_freqs_ci(self.config)
         return self.freqs_ci.to(hidden_states.device)
 
 
