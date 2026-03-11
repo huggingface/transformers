@@ -178,6 +178,9 @@ if __name__ == "__main__":
     parser.add_argument("--cuda-graph", "-cg", help="Use cuda graphs", type=str, default=None)
     parser.add_argument("--compile", action="store_true", help="Compile the model using torch.compile")
     parser.add_argument("--use-async", action=argparse.BooleanOptionalAction, help="Use asynchronous batching")
+    parser.add_argument("--block-table", type=int, default=0, help="Block table size, ie. number of blocks / request")
+
+    # Generation parameters
     parser.add_argument("--do-sample", action="store_true", help="Activate sampling")
     parser.add_argument("--num-return-sequences", type=int, default=1, help="Number of return sequences")
 
@@ -302,6 +305,7 @@ if __name__ == "__main__":
         num_blocks=args.num_blocks,
         max_batch_tokens=args.max_batch_tokens,
         num_return_sequences=args.num_return_sequences,
+        max_blocks_per_request=args.block_table,
     )
 
     # Add a compile config if requested

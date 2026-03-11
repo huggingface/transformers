@@ -108,6 +108,8 @@ class HiggsAudioV2TokenizerConfig(XcodecConfig):
         return int(self.hop_length / (self.sample_rate / self.semantic_sample_rate) / self.downsample_factor)
 
 
+@requires(backends=("torchaudio",))
+@auto_docstring
 class HiggsAudioV2TokenizerPreTrainedModel(XcodecPreTrainedModel):
     _no_split_modules = ["HiggsAudioV2TokenizerResidualVectorQuantization", "DacResidualUnit"]
     _keys_to_ignore_on_load_unexpected = ["semantic_model.masked_spec_embed"]

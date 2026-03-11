@@ -74,13 +74,6 @@ print(f"Predicted token: {predicted_token}")
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create <mask> through a process known as photosynthesis." | transformers run --task fill-mask --model FacebookAI/xlm-mlm-en-2048 --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 ## XLMConfig
