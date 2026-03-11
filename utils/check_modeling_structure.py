@@ -20,6 +20,7 @@ import argparse
 import ast
 import subprocess
 import sys
+from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
@@ -303,7 +304,7 @@ def _class_methods(class_node: ast.ClassDef) -> dict[str, ast.FunctionDef]:
     return {item.name: item for item in class_node.body if isinstance(item, ast.FunctionDef)}
 
 
-def check_config_class_consistency(
+def trf001_check_config_class_consistency(
     tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]
 ) -> list[Violation]:
     class_to_bases = _collect_class_bases(tree)
@@ -339,7 +340,7 @@ def check_config_class_consistency(
     return violations
 
 
-def check_base_model_prefix(
+def trf002_check_base_model_prefix(
     tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]
 ) -> list[Violation]:
     class_to_bases = _collect_class_bases(tree)
@@ -414,7 +415,7 @@ def _has_return_dict_branching(function_node: ast.FunctionDef) -> bool:
     return False
 
 
-def check_return_dict_usage(
+def trf003_check_return_dict_usage(
     tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]
 ) -> list[Violation]:
     """TRF003: Detect old return_dict branching pattern; enforce capture_output/can_return_tuple."""
@@ -450,7 +451,7 @@ def check_return_dict_usage(
     return violations
 
 
-def check_tie_weights_ban(
+def trf004_check_tie_weights_ban(
     tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]
 ) -> list[Violation]:
     """TRF004: Hard ban on tie_weights overrides. Use _tied_weights_keys instead."""
@@ -479,7 +480,7 @@ def check_tie_weights_ban(
     return violations
 
 
-def check_no_split_modules_shape(
+def trf005_check_no_split_modules_shape(
     tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]
 ) -> list[Violation]:
     for node in tree.body:
@@ -522,7 +523,7 @@ def check_no_split_modules_shape(
     return violations
 
 
-def check_cache_argument_usage(
+def trf006_check_cache_argument_usage(
     tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]
 ) -> list[Violation]:
     for node in tree.body:
@@ -560,7 +561,7 @@ def check_cache_argument_usage(
     return violations
 
 
-def check_single_file_policy_imports(
+def trf009_check_single_file_policy_imports(
     tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]
 ) -> list[Violation]:
     if not file_path.name.startswith("modeling_"):
@@ -630,7 +631,7 @@ def check_single_file_policy_imports(
     return violations
 
 
-def check_post_init_order(
+def trf007_check_post_init_order(
     tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]
 ) -> list[Violation]:
     class_to_bases = _collect_class_bases(tree)
@@ -678,7 +679,7 @@ def check_post_init_order(
     return violations
 
 
-def check_doc_decorator_usage(
+def trf008_check_doc_decorator_usage(
     tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]
 ) -> list[Violation]:
     class_to_bases = _collect_class_bases(tree)
@@ -744,6 +745,23 @@ def get_changed_modeling_files(base_ref: str) -> set[Path]:
     return filtered_paths
 
 
+# Auto-discover check functions by convention: any function named `trfXXX_*` is
+# registered as the checker for rule TRFXXX. To add a new rule, just define a
+# function following this naming convention with the standard signature:
+#   (tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]) -> list[Violation]
+def _build_rule_checks() -> dict[str, Callable[[ast.Module, Path, list[str], list[Violation]], list[Violation]]]:
+    checks: dict[str, Callable[[ast.Module, Path, list[str], list[Violation]], list[Violation]]] = {}
+    for name, obj in globals().items():
+        if callable(obj) and name.startswith("trf") and "_" in name:
+            rule_id = name.split("_", 1)[0].upper()
+            if rule_id in TRF_RULE_SPECS:
+                checks[rule_id] = obj
+    return dict(sorted(checks.items()))
+
+
+TRF_RULE_CHECKS = _build_rule_checks()
+
+
 def analyze_file(file_path: Path, text: str, enabled_rules: set[str] | None = None) -> list[Violation]:
     if enabled_rules is None:
         enabled_rules = DEFAULT_ENABLED_TRF_RULES
@@ -755,24 +773,10 @@ def analyze_file(file_path: Path, text: str, enabled_rules: set[str] | None = No
     for node in ast.walk(tree):
         violations = check_init_weights(node, violations, file_path)
         violations = check_post_init(node, violations, file_path)
-    if TRF001 in enabled_rules:
-        violations = check_config_class_consistency(tree, file_path, source_lines, violations)
-    if TRF002 in enabled_rules:
-        violations = check_base_model_prefix(tree, file_path, source_lines, violations)
-    if TRF003 in enabled_rules:
-        violations = check_return_dict_usage(tree, file_path, source_lines, violations)
-    if TRF004 in enabled_rules:
-        violations = check_tie_weights_ban(tree, file_path, source_lines, violations)
-    if TRF005 in enabled_rules:
-        violations = check_no_split_modules_shape(tree, file_path, source_lines, violations)
-    if TRF006 in enabled_rules:
-        violations = check_cache_argument_usage(tree, file_path, source_lines, violations)
-    if TRF007 in enabled_rules:
-        violations = check_post_init_order(tree, file_path, source_lines, violations)
-    if TRF008 in enabled_rules:
-        violations = check_doc_decorator_usage(tree, file_path, source_lines, violations)
-    if TRF009 in enabled_rules:
-        violations = check_single_file_policy_imports(tree, file_path, source_lines, violations)
+
+    for rule_id, check_fn in TRF_RULE_CHECKS.items():
+        if rule_id in enabled_rules:
+            violations = check_fn(tree, file_path, source_lines, violations)
 
     return [
         violation
