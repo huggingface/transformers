@@ -1785,7 +1785,8 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
 
             if itm_labels is not None:
                 pos_pairs = itm_labels.ne(0)
-                pos_mask = torch.where(pos_pairs.any(), pos_pairs, pos_pairs.new([True]))
+                # If there are no positive pairs, we calculate loss on all pairs.
+                pos_mask = pos_pairs | ~pos_pairs.any()
                 if return_loss:
                     itm_loss = nn.functional.cross_entropy(itm_logits, itm_labels)
                     itm_loss *= self.itm_weight
