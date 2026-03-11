@@ -33,98 +33,6 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from .configuration_pp_ocrv5_server_det import PPOCRV5ServerDetConfig
 
 
-class PPOCRV5ServerDetDepthwiseSeparableConvolution(nn.Module):
-    """
-    Depthwise Separable Convolution block with an expanded intermediate state and residual connection.
-    This block mimics the inverted residual structure to reduce computation while maintaining capacity.
-
-    Args:
-        in_channels (`int`):
-            Number of input channels.
-        out_channels (`int`):
-            Number of output channels.
-        kernel_size (`int`):
-            Size of the convolving kernel for the depthwise step.
-        padding (`Union[int, str]`):
-            Padding for the depthwise convolution.
-        stride (`int`, *optional*, defaults to 1):
-            Stride for the spatial downsampling.
-        groups (`int`, *optional*):
-            Number of blocked connections. Defaults to `in_channels` for depthwise convolution.
-        hidden_act (`str`, *optional*, defaults to `"relu"`):
-            Activation type, supports `"relu"` or `"hardswish"`.
-    """
-
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        padding: int | str,
-        stride: int = 1,
-        groups: int | None = None,
-        hidden_act: str = "relu",
-        **kwargs,
-    ):
-        super().__init__()
-        if groups is None:
-            groups = in_channels
-
-        self.activation = ACT2FN[hidden_act]
-        self.convolution1 = nn.Conv2d(
-            in_channels=in_channels,
-            out_channels=in_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            padding=padding,
-            groups=groups,
-            bias=False,
-        )
-
-        self.normalization1 = nn.BatchNorm2d(num_features=in_channels)
-
-        self.convolution2 = nn.Conv2d(
-            in_channels=in_channels,
-            out_channels=int(in_channels * 4),
-            kernel_size=1,
-            stride=1,
-            bias=False,
-        )
-
-        self.normalization2 = nn.BatchNorm2d(num_features=int(in_channels * 4))
-
-        self.convolution3 = nn.Conv2d(
-            in_channels=int(in_channels * 4),
-            out_channels=out_channels,
-            kernel_size=1,
-            stride=1,
-            bias=False,
-        )
-        self.convolution_end = None
-        if in_channels != out_channels:
-            self.convolution_end = nn.Conv2d(
-                in_channels=in_channels,
-                out_channels=out_channels,
-                kernel_size=1,
-                stride=1,
-                bias=False,
-            )
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        original_hidden_states = hidden_states
-        hidden_states = self.convolution1(hidden_states)
-        hidden_states = self.normalization1(hidden_states)
-
-        hidden_states = self.convolution2(hidden_states)
-        hidden_states = self.normalization2(hidden_states)
-        hidden_states = self.activation(hidden_states)
-
-        hidden_states = self.convolution3(hidden_states)
-        if self.convolution_end is not None:
-            hidden_states = hidden_states + self.convolution_end(original_hidden_states)
-        return hidden_states
-
-
 class PPOCRV5ServerDetIntraclassBlock(nn.Module):
     """
     Intra-Class Relationship Block. It uses multi-scale convolution (7x7, 5x5, 3x3)
@@ -152,7 +60,6 @@ class PPOCRV5ServerDetIntraclassBlock(nn.Module):
         reduced_channels = in_channels // reduce_factor
 
         self.conv_reduce_channel = nn.Conv2d(in_channels, reduced_channels, *intraclass_block_config["reduce_channel"])
-        self.conv_return_channel = nn.Conv2d(reduced_channels, in_channels, *intraclass_block_config["return_channel"])
 
         self.vertical_long_to_small_conv_longratio = nn.Conv2d(
             reduced_channels, reduced_channels, *intraclass_block_config["v_layer_7x1"]
@@ -184,8 +91,14 @@ class PPOCRV5ServerDetIntraclassBlock(nn.Module):
             reduced_channels, reduced_channels, *intraclass_block_config["c_layer_3x3"]
         )
 
-        self.normalization = nn.BatchNorm2d(in_channels)
-        self.activation = ACT2FN[hidden_act]
+        self.layer = PPOCRV5ServerDetConvBNLayer(
+            in_channels=reduced_channels,
+            out_channels=in_channels,
+            kernel_size=intraclass_block_config["return_channel"][0],
+            stride=intraclass_block_config["return_channel"][1],
+            padding=intraclass_block_config["return_channel"][2],
+            bias=True,
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residual = hidden_states
@@ -207,9 +120,7 @@ class PPOCRV5ServerDetIntraclassBlock(nn.Module):
             + self.horizontal_small_to_long_conv_shortratio(hidden_states)
         )
 
-        hidden_states = self.conv_return_channel(hidden_states)
-        hidden_states = self.normalization(hidden_states)
-        hidden_states = self.activation(hidden_states)
+        hidden_states = self.layer(hidden_states)
 
         return residual + hidden_states
 
@@ -225,10 +136,7 @@ class PPOCRV5ServerDetNeck(nn.Module):
         super().__init__()
         self.interpolate_mode = config.interpolate_mode
 
-        if config.mode == "small":
-            self.convolution_class = PPOCRV5ServerDetDepthwiseSeparableConvolution
-        else:
-            self.convolution_class = nn.Conv2d
+        self.convolution_class = nn.Conv2d
 
         self.input_channel_adjustment_convolution = nn.ModuleList()
         self.input_feature_projection_convolution = nn.ModuleList()
@@ -275,86 +183,52 @@ class PPOCRV5ServerDetNeck(nn.Module):
             )
             self.path_aggregation_lateral_convolution.append(pan_lateral_convolution)
 
-        self.intraclass_block_stage2 = PPOCRV5ServerDetIntraclassBlock(
-            config.intraclass_block_config, config.neck_out_channels // 4, reduce_factor=config.reduce_factor
-        )
-        self.intraclass_block_stage3 = PPOCRV5ServerDetIntraclassBlock(
-            config.intraclass_block_config, config.neck_out_channels // 4, reduce_factor=config.reduce_factor
-        )
-        self.intraclass_block_stage4 = PPOCRV5ServerDetIntraclassBlock(
-            config.intraclass_block_config, config.neck_out_channels // 4, reduce_factor=config.reduce_factor
-        )
-        self.intraclass_block_stage5 = PPOCRV5ServerDetIntraclassBlock(
-            config.intraclass_block_config, config.neck_out_channels // 4, reduce_factor=config.reduce_factor
-        )
+        self.intraclass_blocks = nn.ModuleList()
+        for _ in range(config.intraclass_block_number):
+            self.intraclass_blocks.append(
+                PPOCRV5ServerDetIntraclassBlock(
+                    config.intraclass_block_config, config.neck_out_channels // 4, reduce_factor=config.reduce_factor
+                )
+            )
 
     def forward(self, backbone_stage_feature_maps: list[torch.Tensor], **kwargs) -> torch.Tensor:
-        backbone_stage2_feature = backbone_stage_feature_maps[0]
-        backbone_stage3_feature = backbone_stage_feature_maps[1]
-        backbone_stage4_feature = backbone_stage_feature_maps[2]
-        backbone_stage5_feature = backbone_stage_feature_maps[3]
+        channel_adjusted = [
+            self.input_channel_adjustment_convolution[i](feature)
+            for i, feature in enumerate(backbone_stage_feature_maps)
+        ]
 
-        channel_adjusted_stage2_feature = self.input_channel_adjustment_convolution[0](backbone_stage2_feature)
-        channel_adjusted_stage3_feature = self.input_channel_adjustment_convolution[1](backbone_stage3_feature)
-        channel_adjusted_stage4_feature = self.input_channel_adjustment_convolution[2](backbone_stage4_feature)
-        channel_adjusted_stage5_feature = self.input_channel_adjustment_convolution[3](backbone_stage5_feature)
+        top_down = [None] * 4
+        top_down[3] = channel_adjusted[3]
+        for i in range(2, -1, -1):
+            top_down[i] = channel_adjusted[i] + F.interpolate(
+                top_down[i + 1], scale_factor=2, mode=self.interpolate_mode
+            )
 
-        top_down_fused_stage4_feature = channel_adjusted_stage4_feature + F.interpolate(
-            channel_adjusted_stage5_feature, scale_factor=2, mode=self.interpolate_mode
-        )
-        top_down_fused_stage3_feature = channel_adjusted_stage3_feature + F.interpolate(
-            top_down_fused_stage4_feature, scale_factor=2, mode=self.interpolate_mode
-        )
-        top_down_fused_stage2_feature = channel_adjusted_stage2_feature + F.interpolate(
-            top_down_fused_stage3_feature, scale_factor=2, mode=self.interpolate_mode
-        )
+        projected = [
+            self.input_feature_projection_convolution[i](top_down[i] if i < 3 else channel_adjusted[3])
+            for i in range(4)
+        ]
 
-        projected_stage2_feature = self.input_feature_projection_convolution[0](top_down_fused_stage2_feature)
-        projected_stage3_feature = self.input_feature_projection_convolution[1](top_down_fused_stage3_feature)
-        projected_stage4_feature = self.input_feature_projection_convolution[2](top_down_fused_stage4_feature)
-        projected_stage5_feature = self.input_feature_projection_convolution[3](channel_adjusted_stage5_feature)
+        bottom_up = [None] * 4
+        bottom_up[0] = projected[0]
+        for i in range(1, 4):
+            bottom_up[i] = projected[i] + self.path_aggregation_head_convolution[i - 1](bottom_up[i - 1])
 
-        bottom_up_fused_stage3_feature = projected_stage3_feature + self.path_aggregation_head_convolution[0](
-            projected_stage2_feature
-        )
-        bottom_up_fused_stage4_feature = projected_stage4_feature + self.path_aggregation_head_convolution[1](
-            bottom_up_fused_stage3_feature
-        )
-        bottom_up_fused_stage5_feature = projected_stage5_feature + self.path_aggregation_head_convolution[2](
-            bottom_up_fused_stage4_feature
-        )
+        lateral_refined = [
+            self.path_aggregation_lateral_convolution[i](projected[0] if i == 0 else bottom_up[i]) for i in range(4)
+        ]
 
-        lateral_refined_stage2_feature = self.path_aggregation_lateral_convolution[0](projected_stage2_feature)
-        lateral_refined_stage3_feature = self.path_aggregation_lateral_convolution[1](bottom_up_fused_stage3_feature)
-        lateral_refined_stage4_feature = self.path_aggregation_lateral_convolution[2](bottom_up_fused_stage4_feature)
-        lateral_refined_stage5_feature = self.path_aggregation_lateral_convolution[3](bottom_up_fused_stage5_feature)
+        intraclass_refined = [block(feature) for block, feature in zip(self.intraclass_blocks, lateral_refined)]
 
-        intraclass_refined_stage2_feature = self.intraclass_block_stage2(lateral_refined_stage2_feature)
-        intraclass_refined_stage3_feature = self.intraclass_block_stage3(lateral_refined_stage3_feature)
-        intraclass_refined_stage4_feature = self.intraclass_block_stage4(lateral_refined_stage4_feature)
-        intraclass_refined_stage5_feature = self.intraclass_block_stage5(lateral_refined_stage5_feature)
+        scale_factors = [1, 2, 4, 8]
+        upsampled = [
+            F.interpolate(feature, scale_factor=scale_factor, mode=self.interpolate_mode)
+            if scale_factor > 1
+            else feature
+            for feature, scale_factor in zip(intraclass_refined, scale_factors)
+        ]
 
-        upsampled_stage3_feature = F.interpolate(
-            intraclass_refined_stage3_feature, scale_factor=2, mode=self.interpolate_mode
-        )
-        upsampled_stage4_feature = F.interpolate(
-            intraclass_refined_stage4_feature, scale_factor=4, mode=self.interpolate_mode
-        )
-        upsampled_stage5_feature = F.interpolate(
-            intraclass_refined_stage5_feature, scale_factor=8, mode=self.interpolate_mode
-        )
-
-        fused_multi_scale_feature = torch.cat(
-            [
-                upsampled_stage5_feature,
-                upsampled_stage4_feature,
-                upsampled_stage3_feature,
-                intraclass_refined_stage2_feature,
-            ],
-            dim=1,
-        )
-
-        return fused_multi_scale_feature
+        return torch.cat(upsampled[::-1], dim=1)
 
 
 class PPOCRV5ServerDetConvBNLayer(nn.Module):
@@ -376,25 +250,34 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
         in_channels: int,
         out_channels: int,
         kernel_size: int,
-        stride: int,
-        padding: int | str,
+        stride: int = 1,
+        padding: int | str = 1,
         groups: int = 1,
-        hidden_act: str = "relu",
+        activation: str = "relu",
+        bias: bool = False,
+        convolution_transpose: bool = False,
     ):
         super().__init__()
-        self.hidden_act = hidden_act
-        self.convolution = nn.Conv2d(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            padding=padding,
-            groups=groups,
-            bias=False,
-        )
+        if convolution_transpose:
+            self.convolution = nn.ConvTranspose2d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+            )
+        else:
+            self.convolution = nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                groups=groups,
+                bias=bias,
+            )
 
         self.normalization = nn.BatchNorm2d(out_channels)
-        self.activation = ACT2FN[hidden_act]
+        self.activation = nn.Identity() if activation is None else ACT2FN[activation]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.convolution(hidden_states)
@@ -419,29 +302,22 @@ class PPOCRV5ServerDetHead(nn.Module):
         self,
         in_channels: int,
         kernel_list: list[int] = [3, 2, 2],
-        hidden_act: str = "relu",
     ):
         super().__init__()
 
-        self.convolution1 = nn.Conv2d(
+        self.layer1 = PPOCRV5ServerDetConvBNLayer(
             in_channels=in_channels,
             out_channels=in_channels // 4,
             kernel_size=kernel_list[0],
             padding=int(kernel_list[0] // 2),
-            bias=False,
         )
-        self.normalization1 = nn.BatchNorm2d(in_channels // 4)
-        self.activation1 = ACT2FN[hidden_act]
-
-        self.convolution2 = nn.ConvTranspose2d(
+        self.layer2 = PPOCRV5ServerDetConvBNLayer(
             in_channels=in_channels // 4,
             out_channels=in_channels // 4,
             kernel_size=kernel_list[1],
             stride=2,
+            convolution_transpose=True,
         )
-
-        self.normalization2 = nn.BatchNorm2d(in_channels // 4)
-        self.activation2 = ACT2FN[hidden_act]
 
         self.convolution3 = nn.ConvTranspose2d(
             in_channels=in_channels // 4,
@@ -451,12 +327,8 @@ class PPOCRV5ServerDetHead(nn.Module):
         )
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        hidden_states = self.convolution1(hidden_states)
-        hidden_states = self.normalization1(hidden_states)
-        hidden_states = self.activation1(hidden_states)
-        hidden_states = self.convolution2(hidden_states)
-        hidden_states = self.normalization2(hidden_states)
-        hidden_states = self.activation2(hidden_states)
+        hidden_states = self.layer1(hidden_states)
+        hidden_states = self.layer2(hidden_states)
         feature = hidden_states
         hidden_states = self.convolution3(hidden_states)
         hidden_states = torch.sigmoid(hidden_states)
@@ -477,7 +349,12 @@ class PPOCRV5ServerDetLocalModule(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, hidden_act: str):
         super().__init__()
         self.convolution_backbone = PPOCRV5ServerDetConvBNLayer(
-            in_channels + 1, out_channels, 3, 1, 1, hidden_act=hidden_act
+            in_channels=in_channels + 1,
+            out_channels=out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            activation=hidden_act,
         )
         self.convolution_final = nn.Conv2d(
             in_channels=out_channels,
@@ -511,9 +388,9 @@ class PPOCRV5ServerDetPFHeadLocal(nn.Module):
         self.binarize = PPOCRV5ServerDetHead(in_channels=config.neck_out_channels, kernel_list=config.kernel_list)
         self.up_conv = nn.Upsample(scale_factor=config.scale_factor, mode=config.interpolate_mode)
 
-        out_channels = config.neck_out_channels // 4 if config.mode == "large" else config.neck_out_channels // 8
-
-        self.cbn_layer = PPOCRV5ServerDetLocalModule(config.neck_out_channels // 4, out_channels, config.hidden_act)
+        self.cbn_layer = PPOCRV5ServerDetLocalModule(
+            config.neck_out_channels // 4, config.neck_out_channels // 4, config.hidden_act
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states, feature = self.binarize(hidden_states)
@@ -548,27 +425,6 @@ class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        super()._init_weights(module)
-        if isinstance(module, PPOCRV5ServerDetConvBNLayer):
-            nn.init.kaiming_normal_(module.convolution.weight)
-
-        if isinstance(module, PPOCRV5ServerDetHead):
-            nn.init.constant_(module.normalization1.weight, 1.0)
-            nn.init.constant_(module.normalization1.bias, 1e-4)
-            nn.init.constant_(module.normalization2.weight, 1.0)
-            nn.init.constant_(module.normalization2.bias, 1e-4)
-            nn.init.kaiming_uniform_(module.convolution2.weight)
-            nn.init.kaiming_uniform_(module.convolution3.weight)
-
-        if isinstance(module, PPOCRV5ServerDetNeck):
-            for sub_module in module.modules():
-                if isinstance(sub_module, nn.ModuleList):
-                    for m in sub_module:
-                        nn.init.kaiming_uniform_(m.weight)
 
 
 @auto_docstring(

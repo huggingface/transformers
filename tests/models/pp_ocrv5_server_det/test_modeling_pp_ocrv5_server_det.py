@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_vision,
+    require_cv2,
     slow,
     torch_device,
 )
@@ -241,6 +242,7 @@ class PPOCRV5ServerDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 
 @require_torch
 @require_vision
+@require_cv2
 @slow
 class PPOCRV5ServerDetModelIntegrationTest(unittest.TestCase):
     def setUp(self):

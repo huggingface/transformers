@@ -54,8 +54,6 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
             The channel reduction factor used in the neck blocks to balance performance and complexity.
         intraclass_block_config (`dict`, *optional*, defaults to `None`):
             Configuration for the Intra-Class Block modules, if any, used for enhancing feature representation.
-        mode (`str`, *optional*, defaults to `"large"`):
-            The model scale mode, such as `"large"` or `"small"`, affecting the depth and width of the network.
         scale_factor (`int`, *optional*, defaults to 2):
             The scaling factor used for spatial resolution adjustments in the feature maps.
         hidden_act (`str`, *optional*, defaults to `"relu"`):
@@ -84,16 +82,13 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         backbone_config=None,
         neck_out_channels: int = 256,
         reduce_factor: int = 2,
+        intraclass_block_number: int = 4,
         intraclass_block_config: dict | None = None,
-        mode: str = "large",
         scale_factor: int = 2,
         hidden_act: str = "relu",
         kernel_list: list[int] = [3, 2, 2],
         **kwargs,
     ):
-        if mode not in ["small", "large"]:
-            raise ValueError(f"PPOCRV5ServerDetConfig mode can only be one of ['small', 'large'], but received {mode}")
-        self.mode = mode
         self.interpolate_mode = interpolate_mode
 
         # ---- backbone ----
@@ -116,6 +111,7 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         # ---- neck ----
         self.neck_out_channels = neck_out_channels
         self.reduce_factor = reduce_factor
+        self.intraclass_block_number = intraclass_block_number
         self.intraclass_block_config = intraclass_block_config
 
         # ---- head ----
