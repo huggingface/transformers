@@ -1049,11 +1049,6 @@ class IsaacModel(Qwen3PreTrainedModel):
         if not torch.any(image_token_mask):
             return embeds, modality
 
-        if vision_patches is None or vision_token_grids is None:
-            if torch.any(image_token_mask):
-                raise ValueError("Image placeholders require `vision_patches` and `vision_token_grids`.")
-            return embeds, modality
-
         image_attention_mask = (
             vision_image_attention_mask.to(device=embeds.device, dtype=torch.bool)
             if vision_image_attention_mask is not None
@@ -1217,6 +1212,9 @@ class IsaacModel(Qwen3PreTrainedModel):
             if modality_tensor is not None or has_vision_inputs:
                 if modality_tensor is None:
                     modality_tensor = torch.full_like(input_ids, ModalityType.text.value)
+                image_token_mask = modality_tensor == ModalityType.image.value
+                if torch.any(image_token_mask) and (vision_patches is None or vision_token_grids is None):
+                    raise ValueError("Image placeholders require `vision_patches` and `vision_token_grids`.")
                 inputs_embeds, modality_tensor = self.embed_multimodal_inputs(
                     input_ids=input_ids,
                     modality_tensor=modality_tensor,
