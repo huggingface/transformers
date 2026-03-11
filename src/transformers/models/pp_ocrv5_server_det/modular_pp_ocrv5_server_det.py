@@ -38,11 +38,11 @@ from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
-    TransformersKwargs, 
-    auto_docstring, 
-    can_return_tuple, 
-    is_cv2_available, 
-    logging, 
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_cv2_available,
+    logging,
     requires_backends,
 )
 from ...utils.generic import TensorType
@@ -273,10 +273,10 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
 
         contour_area = cv2.contourArea(contour_box)
         contour_perimeter = cv2.arcLength(contour_box, True)
-        
+
         if contour_perimeter == 0:
             return contour_box
-        
+
         expansion_distance = contour_area * unclip_ratio / contour_perimeter
 
         closed_contour = np.concatenate([contour_box, contour_box[0:1]], axis=0)
@@ -296,7 +296,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
 
             normal_prev_current = get_normal_vector(prev_point, current_point)
             normal_current_next = get_normal_vector(current_point, next_point)
-            
+
             combined_normal = normal_prev_current + normal_current_next
             cos_angle = np.dot(normal_prev_current, normal_current_next)
 
@@ -311,7 +311,6 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
             expanded_points.append(new_point)
 
         return np.array(expanded_points, dtype=np.float32)
-
 
     def _get_mini_boxes(self, contour):
         """
@@ -346,7 +345,6 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         box = [points[index_1], points[index_2], points[index_3], points[index_4]]
         return box, min(bounding_box[1])
 
-
     def _get_box_score(self, bitmap: np.ndarray, polygon_bounding_box: np.ndarray):
         """
         Computes the mean score of a bounding box region in the prediction map using
@@ -372,9 +370,8 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         cv2.fillPoly(mask, box.reshape(1, -1, 2).astype(np.int32), 1)
         return cv2.mean(bitmap[ymin : ymax + 1, xmin : xmax + 1], mask)[0]
 
-
     def _boxes_from_bitmap(
-        self, 
+        self,
         prediction: np.ndarray,
         bitmap: np.ndarray,
         dest_width: int,
@@ -408,7 +405,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         height_scale = dest_height / height
 
         outs = cv2.findContours((bitmap * 255).astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-        
+
         contours = outs[1] if len(outs) == 3 else outs[0]
 
         num_contours = min(len(contours), max_candidates)
@@ -496,7 +493,9 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         if resize_width <= 0 or resize_height <= 0:
             return None, (None, None)
 
-        return SizeDict(height=resize_height, width=resize_width), torch.tensor([height, width], dtype=torch.float32, device=image.device)
+        return SizeDict(height=resize_height, width=resize_width), torch.tensor(
+            [height, width], dtype=torch.float32, device=image.device
+        )
 
     def post_process_object_detection(
         self,
@@ -575,24 +574,47 @@ class PPOCRV5ServerDetIntraclassBlock(nn.Module):
             The factor used to compress channels for efficiency during relationship modeling.
     """
 
-    def __init__(self, intraclass_block_config: dict | None = None, in_channels: int = 96, reduce_factor: int = 4, hidden_act: str='relu'):
+    def __init__(
+        self,
+        intraclass_block_config: dict | None = None,
+        in_channels: int = 96,
+        reduce_factor: int = 4,
+    ):
         super().__init__()
 
         reduced_channels = in_channels // reduce_factor
 
         self.conv_reduce_channel = nn.Conv2d(in_channels, reduced_channels, *intraclass_block_config["reduce_channel"])
 
-        self.vertical_long_to_small_conv_longratio = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["v_layer_7x1"])
-        self.vertical_long_to_small_conv_midratio = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["v_layer_5x1"])
-        self.vertical_long_to_small_conv_shortratio = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["v_layer_3x1"])
+        self.vertical_long_to_small_conv_longratio = nn.Conv2d(
+            reduced_channels, reduced_channels, *intraclass_block_config["v_layer_7x1"]
+        )
+        self.vertical_long_to_small_conv_midratio = nn.Conv2d(
+            reduced_channels, reduced_channels, *intraclass_block_config["v_layer_5x1"]
+        )
+        self.vertical_long_to_small_conv_shortratio = nn.Conv2d(
+            reduced_channels, reduced_channels, *intraclass_block_config["v_layer_3x1"]
+        )
 
-        self.horizontal_small_to_long_conv_longratior = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["q_layer_1x7"])
-        self.horizontal_small_to_long_conv_midratio = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["q_layer_1x5"])
-        self.horizontal_small_to_long_conv_shortratio = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["q_layer_1x3"])
+        self.horizontal_small_to_long_conv_longratior = nn.Conv2d(
+            reduced_channels, reduced_channels, *intraclass_block_config["q_layer_1x7"]
+        )
+        self.horizontal_small_to_long_conv_midratio = nn.Conv2d(
+            reduced_channels, reduced_channels, *intraclass_block_config["q_layer_1x5"]
+        )
+        self.horizontal_small_to_long_conv_shortratio = nn.Conv2d(
+            reduced_channels, reduced_channels, *intraclass_block_config["q_layer_1x3"]
+        )
 
-        self.symmetric_conv_long_longratior = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["c_layer_7x7"])
-        self.symmetric_conv_long_midratio = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["c_layer_5x5"])
-        self.symmetric_conv_long_shortratio = nn.Conv2d(reduced_channels, reduced_channels, *intraclass_block_config["c_layer_3x3"])
+        self.symmetric_conv_long_longratior = nn.Conv2d(
+            reduced_channels, reduced_channels, *intraclass_block_config["c_layer_7x7"]
+        )
+        self.symmetric_conv_long_midratio = nn.Conv2d(
+            reduced_channels, reduced_channels, *intraclass_block_config["c_layer_5x5"]
+        )
+        self.symmetric_conv_long_shortratio = nn.Conv2d(
+            reduced_channels, reduced_channels, *intraclass_block_config["c_layer_3x3"]
+        )
 
         self.layer = PPOCRV5ServerDetConvBNLayer(
             in_channels=reduced_channels,
@@ -600,17 +622,28 @@ class PPOCRV5ServerDetIntraclassBlock(nn.Module):
             kernel_size=intraclass_block_config["return_channel"][0],
             stride=intraclass_block_config["return_channel"][1],
             padding=intraclass_block_config["return_channel"][2],
-            bias=True
+            bias=True,
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
         residual = hidden_states
         hidden_states = self.conv_reduce_channel(hidden_states)
 
-        hidden_states = self.symmetric_conv_long_longratior(hidden_states) + self.vertical_long_to_small_conv_longratio(hidden_states) + self.horizontal_small_to_long_conv_longratior(hidden_states)
-        hidden_states = self.symmetric_conv_long_midratio(hidden_states) + self.vertical_long_to_small_conv_midratio(hidden_states) + self.horizontal_small_to_long_conv_midratio(hidden_states)
-        hidden_states = self.symmetric_conv_long_shortratio(hidden_states) + self.vertical_long_to_small_conv_shortratio(hidden_states) + self.horizontal_small_to_long_conv_shortratio(hidden_states)
+        hidden_states = (
+            self.symmetric_conv_long_longratior(hidden_states)
+            + self.vertical_long_to_small_conv_longratio(hidden_states)
+            + self.horizontal_small_to_long_conv_longratior(hidden_states)
+        )
+        hidden_states = (
+            self.symmetric_conv_long_midratio(hidden_states)
+            + self.vertical_long_to_small_conv_midratio(hidden_states)
+            + self.horizontal_small_to_long_conv_midratio(hidden_states)
+        )
+        hidden_states = (
+            self.symmetric_conv_long_shortratio(hidden_states)
+            + self.vertical_long_to_small_conv_shortratio(hidden_states)
+            + self.horizontal_small_to_long_conv_shortratio(hidden_states)
+        )
 
         hidden_states = self.layer(hidden_states)
 
@@ -626,8 +659,8 @@ class PPOCRV5ServerDetNeck(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.interpolate_mode = config.interpolate_mode 
-        
+        self.interpolate_mode = config.interpolate_mode
+
         self.convolution_class = nn.Conv2d
 
         self.input_channel_adjustment_convolution = nn.ModuleList()
@@ -636,13 +669,13 @@ class PPOCRV5ServerDetNeck(nn.Module):
         self.path_aggregation_lateral_convolution = nn.ModuleList()
 
         backbone_stage_output_channels = config.backbone_config.stage_out_channels
-        
+
         for backbone_stage_index in range(len(backbone_stage_output_channels)):
             channel_adjustment_convolution = nn.Conv2d(
                 in_channels=backbone_stage_output_channels[backbone_stage_index],
                 out_channels=config.neck_out_channels,
                 kernel_size=1,
-                bias=False
+                bias=False,
             )
             self.input_channel_adjustment_convolution.append(channel_adjustment_convolution)
 
@@ -677,55 +710,49 @@ class PPOCRV5ServerDetNeck(nn.Module):
 
         self.intraclass_blocks = nn.ModuleList()
         for _ in range(config.intraclass_block_number):
-            self.intraclass_blocks.append(PPOCRV5ServerDetIntraclassBlock(
-                config.intraclass_block_config,
-                config.neck_out_channels // 4,
-                reduce_factor=config.reduce_factor
-            ))
+            self.intraclass_blocks.append(
+                PPOCRV5ServerDetIntraclassBlock(
+                    config.intraclass_block_config, config.neck_out_channels // 4, reduce_factor=config.reduce_factor
+                )
+            )
 
     def forward(self, backbone_stage_feature_maps: list[torch.Tensor], **kwargs) -> torch.Tensor:
         channel_adjusted = [
-            self.input_channel_adjustment_convolution[i](feature) 
+            self.input_channel_adjustment_convolution[i](feature)
             for i, feature in enumerate(backbone_stage_feature_maps)
         ]
-        
+
         top_down = [None] * 4
         top_down[3] = channel_adjusted[3]
         for i in range(2, -1, -1):
             top_down[i] = channel_adjusted[i] + F.interpolate(
-                top_down[i+1], scale_factor=2, mode=self.interpolate_mode
+                top_down[i + 1], scale_factor=2, mode=self.interpolate_mode
             )
-        
+
         projected = [
-            self.input_feature_projection_convolution[i](
-                top_down[i] if i < 3 else channel_adjusted[3]
-            ) for i in range(4)
+            self.input_feature_projection_convolution[i](top_down[i] if i < 3 else channel_adjusted[3])
+            for i in range(4)
         ]
-        
+
         bottom_up = [None] * 4
         bottom_up[0] = projected[0]
         for i in range(1, 4):
-            bottom_up[i] = projected[i] + self.path_aggregation_head_convolution[i-1](
-                bottom_up[i-1]
-            )
-        
+            bottom_up[i] = projected[i] + self.path_aggregation_head_convolution[i - 1](bottom_up[i - 1])
+
         lateral_refined = [
-            self.path_aggregation_lateral_convolution[i](
-                projected[0] if i == 0 else bottom_up[i]
-            ) for i in range(4)
+            self.path_aggregation_lateral_convolution[i](projected[0] if i == 0 else bottom_up[i]) for i in range(4)
         ]
-        
-        intraclass_refined = [
-            block(feature) for block, feature in zip(self.intraclass_blocks, lateral_refined)
-        ]
-        
+
+        intraclass_refined = [block(feature) for block, feature in zip(self.intraclass_blocks, lateral_refined)]
+
         scale_factors = [1, 2, 4, 8]
         upsampled = [
-            F.interpolate(feature, scale_factor=scale_factor, mode=self.interpolate_mode) 
-            if scale_factor > 1 else feature
+            F.interpolate(feature, scale_factor=scale_factor, mode=self.interpolate_mode)
+            if scale_factor > 1
+            else feature
             for feature, scale_factor in zip(intraclass_refined, scale_factors)
         ]
-        
+
         return torch.cat(upsampled[::-1], dim=1)
 
 
@@ -740,7 +767,9 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
         stride (`int`): Stride for the convolution.
         padding (`Union[int, str]`): Padding value or strategy.
         groups (`int`, *optional*, defaults to 1): Grouped convolution parameter.
-        hidden_act (`str`, *optional*): Type of activation ("relu" or "hardswish").
+        activation (`str`, *optional*): Type of activation ("relu" or "hardswish").
+        bias (`bool`, *optional*, defaults to `True`): Whether to use bias term.
+        convolution_transpose (`bool`, *optional*, defaults to `False`): Whether to use a transposed convolution.
     """
 
     def __init__(
@@ -778,7 +807,6 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
         self.activation = nn.Identity() if activation is None else ACT2FN[activation]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.convolution(hidden_states)
         hidden_states = self.normalization(hidden_states)
         hidden_states = self.activation(hidden_states)
@@ -805,17 +833,17 @@ class PPOCRV5ServerDetHead(nn.Module):
         super().__init__()
 
         self.layer1 = PPOCRV5ServerDetConvBNLayer(
-            in_channels=in_channels, 
-            out_channels=in_channels // 4, 
+            in_channels=in_channels,
+            out_channels=in_channels // 4,
             kernel_size=kernel_list[0],
-            padding=int(kernel_list[0] // 2)
+            padding=int(kernel_list[0] // 2),
         )
         self.layer2 = PPOCRV5ServerDetConvBNLayer(
-            in_channels=in_channels // 4, 
-            out_channels=in_channels // 4, 
+            in_channels=in_channels // 4,
+            out_channels=in_channels // 4,
             kernel_size=kernel_list[1],
             stride=2,
-            convolution_transpose=True
+            convolution_transpose=True,
         )
 
         self.convolution3 = nn.ConvTranspose2d(
@@ -826,7 +854,6 @@ class PPOCRV5ServerDetHead(nn.Module):
         )
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-
         hidden_states = self.layer1(hidden_states)
         hidden_states = self.layer2(hidden_states)
         feature = hidden_states
@@ -849,12 +876,12 @@ class PPOCRV5ServerDetLocalModule(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, hidden_act: str):
         super().__init__()
         self.convolution_backbone = PPOCRV5ServerDetConvBNLayer(
-            in_channels=in_channels + 1, 
-            out_channels=out_channels, 
-            kernel_size=3, 
-            stride=1, 
-            padding=1, 
-            activation=hidden_act
+            in_channels=in_channels + 1,
+            out_channels=out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            activation=hidden_act,
         )
         self.convolution_final = nn.Conv2d(
             in_channels=out_channels,
@@ -865,7 +892,6 @@ class PPOCRV5ServerDetLocalModule(nn.Module):
         )
 
     def forward(self, hidden_states: torch.Tensor, init_map: torch.Tensor) -> torch.Tensor:
-
         hidden_states = torch.cat([init_map, hidden_states], dim=1)
         # last Conv
         hidden_states = self.convolution_backbone(hidden_states)
@@ -877,11 +903,6 @@ class PPOCRV5ServerDetPFHeadLocal(nn.Module):
     """
     PPOCRV5ServerDetPFHeadLocal implements the Progressive Fusion Head with Local refinement,
     the core detection head of PP-OCRv5.
-
-    Args:
-        config (`PPOCRV5ServerDetConfig`):
-            Configuration object containing parameters for upsampling, mode selection,
-            and refinement hidden channels.
     """
 
     def __init__(self, config: PPOCRV5ServerDetConfig):
@@ -889,10 +910,11 @@ class PPOCRV5ServerDetPFHeadLocal(nn.Module):
         self.binarize_head = PPOCRV5ServerDetHead(in_channels=config.neck_out_channels, kernel_list=config.kernel_list)
         self.upsample_convolution = nn.Upsample(scale_factor=config.scale_factor, mode=config.interpolate_mode)
 
-        self.local_refinement_module = PPOCRV5ServerDetLocalModule(config.neck_out_channels // 4, config.neck_out_channels // 4, config.hidden_act)
+        self.local_refinement_module = PPOCRV5ServerDetLocalModule(
+            config.neck_out_channels // 4, config.neck_out_channels // 4, config.hidden_act
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
         hidden_states, feature = self.binarize_head(hidden_states)
         residual = hidden_states
         feature = self.upsample_convolution(feature)
@@ -900,18 +922,6 @@ class PPOCRV5ServerDetPFHeadLocal(nn.Module):
         hidden_states = torch.sigmoid(hidden_states)
 
         return 0.5 * (residual + hidden_states)
-
-
-@dataclass
-class PPOCRV5ServerDetModelOutput(BaseModelOutputWithNoAttention):
-    """
-    Output class for the PPOCRV5ServerDetModel.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, neck_out_channels, height, width)`, *optional*):
-            Fused feature maps from the neck (LKPAN). These are intermediate representations ready for the
-            detection head, not final predictions.
-    """
 
 
 class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
@@ -946,12 +956,12 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | PPOCRV5ServerDetModelOutput:
+    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
         backbone_outputs = self.backbone(pixel_values, **kwargs)
         hidden_state = backbone_outputs.feature_maps
         hidden_state = self.neck(hidden_state)
 
-        return PPOCRV5ServerDetModelOutput(
+        return BaseModelOutputWithNoAttention(
             last_hidden_state=hidden_state,
             hidden_states=backbone_outputs.hidden_states,
         )

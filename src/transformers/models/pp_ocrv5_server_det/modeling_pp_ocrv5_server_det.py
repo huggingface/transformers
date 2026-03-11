@@ -53,7 +53,6 @@ class PPOCRV5ServerDetIntraclassBlock(nn.Module):
         intraclass_block_config: dict | None = None,
         in_channels: int = 96,
         reduce_factor: int = 4,
-        hidden_act: str = "relu",
     ):
         super().__init__()
 
@@ -242,7 +241,9 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
         stride (`int`): Stride for the convolution.
         padding (`Union[int, str]`): Padding value or strategy.
         groups (`int`, *optional*, defaults to 1): Grouped convolution parameter.
-        hidden_act (`str`, *optional*): Type of activation ("relu" or "hardswish").
+        activation (`str`, *optional*): Type of activation ("relu" or "hardswish").
+        bias (`bool`, *optional*, defaults to `True`): Whether to use bias term.
+        convolution_transpose (`bool`, *optional*, defaults to `False`): Whether to use a transposed convolution.
     """
 
     def __init__(
@@ -376,11 +377,6 @@ class PPOCRV5ServerDetPFHeadLocal(nn.Module):
     """
     PPOCRV5ServerDetPFHeadLocal implements the Progressive Fusion Head with Local refinement,
     the core detection head of PP-OCRv5.
-
-    Args:
-        config (`PPOCRV5ServerDetConfig`):
-            Configuration object containing parameters for upsampling, mode selection,
-            and refinement hidden channels.
     """
 
     def __init__(self, config: PPOCRV5ServerDetConfig):
@@ -400,18 +396,6 @@ class PPOCRV5ServerDetPFHeadLocal(nn.Module):
         hidden_states = torch.sigmoid(hidden_states)
 
         return 0.5 * (residual + hidden_states)
-
-
-@dataclass
-class PPOCRV5ServerDetModelOutput(BaseModelOutputWithNoAttention):
-    """
-    Output class for the PPOCRV5ServerDetModel.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, neck_out_channels, height, width)`, *optional*):
-            Fused feature maps from the neck (LKPAN). These are intermediate representations ready for the
-            detection head, not final predictions.
-    """
 
 
 class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
@@ -446,12 +430,12 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | PPOCRV5ServerDetModelOutput:
+    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
         backbone_outputs = self.backbone(pixel_values, **kwargs)
         hidden_state = backbone_outputs.feature_maps
         hidden_state = self.neck(hidden_state)
 
-        return PPOCRV5ServerDetModelOutput(
+        return BaseModelOutputWithNoAttention(
             last_hidden_state=hidden_state,
             hidden_states=backbone_outputs.hidden_states,
         )

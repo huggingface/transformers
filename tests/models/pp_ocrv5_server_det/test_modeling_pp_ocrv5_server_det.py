@@ -29,10 +29,10 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    require_cv2,
     require_torch,
     require_torch_accelerator,
     require_vision,
-    require_cv2,
     slow,
     torch_device,
 )
