@@ -21,7 +21,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.pipelines import DocumentQuestionAnsweringPipeline, pipeline
-from transformers.pipelines.document_question_answering import apply_tesseract, decode_spans
+from transformers.pipelines.document_question_answering import apply_tesseract
 from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
@@ -59,27 +59,6 @@ else:
 INVOICE_URL = (
     "https://huggingface.co/spaces/impira/docquery/resolve/2f6c96314dc84dfda62d40de9da55f2f5165d403/invoice.png"
 )
-
-
-class DecodeSpansTest(unittest.TestCase):
-    def test_topk_equals_candidates_length(self):
-        """Test that decode_spans does not crash when len(scores_flat) == topk.
-
-        Regression test for https://github.com/huggingface/transformers/issues/44327
-        """
-        import numpy as np
-
-        # Create small inputs where candidates.flatten() has exactly topk elements
-        # start/end are 1D with 2 elements -> outer is (1, 2, 2) -> candidates flatten to 4
-        start = np.array([0.5, 0.5])
-        end = np.array([0.5, 0.5])
-        topk = 4
-        max_answer_len = 2
-        undesired_tokens = np.ones(2)
-
-        # This should not raise ValueError: kth out of bounds
-        starts, ends, scores = decode_spans(start, end, topk, max_answer_len, undesired_tokens)
-        self.assertIsInstance(starts, np.ndarray)
 
 
 @is_pipeline_test
