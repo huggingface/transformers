@@ -475,10 +475,12 @@ def is_torch_neuron_available(check_device: bool = False) -> bool:
         try:
             import torch_neuronx  # noqa: F401
 
-            # Will raise a RuntimeError if no Neuron is found, or AttributeError if torch.neuron is not available
-            _ = getattr(torch, "neuron").device_count()
-            return getattr(torch, "neuron").is_available()
-        except (AttributeError, RuntimeError):
+            # Will raise a RuntimeError if no Neuron is found
+            if hasattr(torch, "neuron"):
+                _ = torch.neuron.device_count()
+                return torch.neuron.is_available()
+            return False
+        except RuntimeError:
             return False
 
     return hasattr(torch, "neuron") and torch.neuron.is_available()
@@ -497,17 +499,17 @@ def is_torch_bf16_gpu_available() -> bool:
         return torch.xpu.is_bf16_supported()
     if is_torch_hpu_available():
         return True
-    if is_torch_npu_available():
-        return torch.npu.is_bf16_supported() if hasattr(torch, "npu") else False
+    if is_torch_npu_available() and hasattr(torch, "npu"):
+        return torch.npu.is_bf16_supported()
     if is_torch_mps_available():
         # Note: Emulated in software by Metal using fp32 for hardware without native support (like M1/M2)
         return torch.backends.mps.is_macos_or_newer(14, 0)
-    if is_torch_musa_available():
-        return getattr(torch, "musa").is_bf16_supported()
-    if is_torch_mlu_available():
-        return getattr(torch, "mlu").is_bf16_supported()
-    if is_torch_neuron_available():
-        return getattr(torch, "neuron").is_bf16_supported()
+    if is_torch_musa_available() and hasattr(torch, "musa"):
+        return torch.musa.is_bf16_supported()
+    if is_torch_mlu_available() and hasattr(torch, "mlu"):
+        return torch.mlu.is_bf16_supported()
+    if is_torch_neuron_available() and hasattr(torch, "neuron"):
+        return torch.neuron.is_bf16_supported()
     return False
 
 
@@ -566,11 +568,10 @@ def is_torch_tf32_available() -> bool:
 
     import torch
 
-    if is_torch_musa_available():
-        if hasattr(torch, "musa"):
-            device_info = torch.musa.get_device_properties(torch.musa.current_device())
-            if f"{device_info.major}{device_info.minor}" >= "22":
-                return True
+    if is_torch_musa_available() and hasattr(torch, "musa"):
+        device_info = torch.musa.get_device_properties(torch.musa.current_device())
+        if f"{device_info.major}{device_info.minor}" >= "22":
+            return True
         return False
     torch_version = getattr(torch, "version")
     if not torch.cuda.is_available() or torch_version.cuda is None:
@@ -1341,7 +1342,9 @@ def is_torchdynamo_compiling() -> bool:
     try:
         import torch
 
-        return getattr(torch, "compiler").is_compiling()
+        if hasattr(torch, "compiler"):
+            return torch.compiler.is_compiling()
+        return False
     except Exception:
         return False
 
@@ -1350,7 +1353,9 @@ def is_torchdynamo_exporting() -> bool:
     try:
         import torch
 
-        return getattr(torch, "compiler").is_exporting()
+        if hasattr(torch, "compiler"):
+            return torch.compiler.is_exporting()
+        return False
     except Exception:
         return False
 
