@@ -17,16 +17,17 @@ from functools import wraps
 
 from ..utils import logging
 from ..utils.generic import GeneralInterface
-from ..utils.import_utils import is_grouped_mm_available, is_torch_available, is_torchdynamo_compiling
+from ..utils.import_utils import is_torch_available, is_torchdynamo_compiling
 
 
 if is_torch_available():
     import torch
 
+
 logger = logging.get_logger(__name__)
 
 # Examples of experts class with its eager mm implementation
-# class Experts(nn.Module):
+# class Experts(torch.nn.Module):
 #     """Collection of expert weights stored as 3D tensors."""
 
 #     def __init__(self, config):
@@ -34,8 +35,8 @@ logger = logging.get_logger(__name__)
 #         self.num_experts = config.n_routed_experts
 #         self.hidden_dim = config.hidden_size
 #         self.intermediate_dim = config.moe_intermediate_size
-#         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
-#         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+#         self.gate_up_proj = torch.nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+#         self.down_proj = torch.nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
 #         self.act_fn = ACT2FN[config.hidden_act]
 
 #     def forward(
@@ -56,9 +57,9 @@ logger = logging.get_logger(__name__)
 #                 continue
 #             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
 #             current_state = hidden_states[token_idx]
-#             gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+#             gate, up = torch.nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
 #             current_hidden_states = self.act_fn(gate) * up
-#             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+#             current_hidden_states = torch.nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
 #             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
 #             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
@@ -133,28 +134,29 @@ def batched_mm_experts_forward(
         selected_biases = self.up_proj_bias[expert_ids] if self.has_bias else None
 
     # --- Up projection per expert (batched) ---
-    up_proj_out = _batched_linear(
+    proj_out = _batched_linear(
         selected_hidden_states, selected_weights, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, 2 * intermediate_dim) or  (S, intermediate_dim) depending on whether we have gating
 
-    # Apply gating or just activation
+    # Apply gating or activation
     if self.has_gate:
-        up_proj_out = self._apply_gate(up_proj_out)  # (S, intermediate_dim)
+        # for gated experts we apply the custom/default gating mechanism
+        proj_out = self._apply_gate(proj_out)  # (S, intermediate_dim)
     else:
         # for non-gated experts we just apply the activation function
-        up_proj_out = self.act_fn(up_proj_out)  # (S, intermediate_dim)
+        proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
     # Select down projection weights and biases for selected samples
     selected_weights = self.down_proj[expert_ids]
     selected_biases = self.down_proj_bias[expert_ids] if self.has_bias else None
 
     # --- Down projection per expert (batched) ---
-    down_proj_out = _batched_linear(
-        up_proj_out, selected_weights, bias=selected_biases, is_transposed=self.is_transposed
+    proj_out = _batched_linear(
+        proj_out, selected_weights, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
     # Apply routing weights and zero out invalid expert contributions
-    weighted_out = down_proj_out * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
+    weighted_out = proj_out * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
     weighted_out.masked_fill_(invalid_mask.unsqueeze(-1), 0.0)  # Zero out invalid expert contributions
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
@@ -263,7 +265,7 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
         # torch.grouped_mm is not supported in torch.compile with dtypes other than bfloat16
         return False
 
-    return is_grouped_mm_available()
+    return hasattr(torch.nn.functional, "grouped_mm") or hasattr(torch, "_grouped_mm")
 
 
 def _grouped_mm(
@@ -357,7 +359,9 @@ def grouped_mm_experts_forward(
 
     # Sort by expert for grouped processing
     perm = torch.argsort(expert_ids)
-    inv_perm = torch.argsort(perm)
+    inv_perm = torch.empty_like(perm)
+    inv_perm[perm] = torch.arange(perm.size(0), device=device)
+
     expert_ids_g = expert_ids[perm]
     sample_weights_g = sample_weights[perm]
     selected_hidden_states_g = selected_hidden_states[perm]
@@ -366,8 +370,8 @@ def grouped_mm_experts_forward(
     # using histc instead of bincount to avoid cuda graph issues
     # With deterministic algorithms, CPU only supports float input, CUDA only supports int input.
     histc_input = expert_ids_g.float() if device.type == "cpu" else expert_ids_g.int()
-    num_tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
-    offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
+    tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
+    offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
 
     # Select expert weights and biases
     # NOTE: We keep all experts here and rely on offsets to target the active ones.
@@ -382,28 +386,29 @@ def grouped_mm_experts_forward(
         selected_biases = self.up_proj_bias[expert_ids_g] if self.has_bias else None
 
     # --- Up projection per expert (grouped) ---
-    up_proj_out = _grouped_linear(
+    proj_out = _grouped_linear(
         selected_hidden_states_g, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, 2 * intermediate_dim) or  (S, intermediate_dim) depending on whether we have gating
 
-    # Apply gating or just activation
+    # Apply gating or activation
     if self.has_gate:
-        up_proj_out = self._apply_gate(up_proj_out)  # (S, intermediate_dim)
+        # for gated experts we apply the custom/default gating mechanism
+        proj_out = self._apply_gate(proj_out)  # (S, intermediate_dim)
     else:
         # for non-gated experts we just apply the activation function
-        up_proj_out = self.act_fn(up_proj_out)  # (S, intermediate_dim)
+        proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
     # Select down projection weights and biases
     selected_weights = self.down_proj
     selected_biases = self.down_proj_bias[expert_ids_g] if self.has_bias else None
 
     # --- Down projection per expert (grouped) ---
-    down_proj_out = _grouped_linear(
-        up_proj_out, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
+    proj_out = _grouped_linear(
+        proj_out, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
     # Apply routing weights
-    weighted_out = down_proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
+    weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
 
     # Restore original order
     weighted_out = weighted_out[inv_perm]  # (S, hidden_dim)
@@ -418,7 +423,7 @@ def grouped_mm_experts_forward(
 
 
 class ExpertsInterface(GeneralInterface):
-    """Interface for registering custom experts implementations."""
+    """Interface for registering custom experts forward functions."""
 
     _global_mapping = {
         "batched_mm": batched_mm_experts_forward,
@@ -460,6 +465,7 @@ def _default_apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
 def use_experts_implementation(
     experts_class: type[torch.nn.Module] | None = None,
     *,
+    experts_interface: ExpertsInterface = ALL_EXPERTS_FUNCTIONS,
     is_transposed: bool = False,
     has_bias: bool = False,
     has_gate: bool = True,
@@ -469,6 +475,8 @@ def use_experts_implementation(
     Args:
         experts_class (`type[torch.nn.Module]`, *optional*):
             The experts class to modify. If not provided, returns a decorator that can be applied to the class.
+        experts_interface (`ExpertsInterface`, *optional*, defaults to `ALL_EXPERTS_FUNCTIONS`):
+            The experts interface to use for dispatching the forward method.
         is_transposed (`bool`, *optional*, defaults to `False`):
             Whether the expert weights are stored in transposed format.
         has_bias (`bool`, *optional*, defaults to `False`):
@@ -492,9 +500,7 @@ def use_experts_implementation(
 
         @wraps(original_forward)
         def forward(self, *args, **kwargs):
-            experts_forward = ALL_EXPERTS_FUNCTIONS.get_interface(
-                self.config._experts_implementation, original_forward
-            )
+            experts_forward = experts_interface.get_interface(self.config._experts_implementation, original_forward)
             return experts_forward(self, *args, **kwargs)
 
         if not hasattr(experts_class, "_apply_gate"):

@@ -41,7 +41,7 @@ from .configuration_seed_oss import SeedOssConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "ByteDance-Seed/SeedOss-36B"
+_CHECKPOINT_FOR_DOC = "ByteDance-Seed/Seed-OSS-36B-Instruct"
 
 
 class SeedOssRMSNorm(LlamaRMSNorm):
@@ -165,8 +165,8 @@ class SeedOssForCausalLM(LlamaForCausalLM):
         ```python
         >>> from transformers import AutoTokenizer, SeedOssForCausalLM
 
-        >>> model = SeedOssForCausalLM.from_pretrained("ByteDance-Seed/SeedOss-36B")
-        >>> tokenizer = AutoTokenizer.from_pretrained("ByteDance-Seed/SeedOss-36B")
+        >>> model = SeedOssForCausalLM.from_pretrained("ByteDance-Seed/Seed-OSS-36B-Instruct")
+        >>> tokenizer = AutoTokenizer.from_pretrained("ByteDance-Seed/Seed-OSS-36B-Instruct")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")

@@ -57,17 +57,17 @@ from ..sam2_video.modeling_sam2_video import (
 )
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 class EdgeTamVideoPromptEncoderConfig(Sam2VideoPromptEncoderConfig):
     pass
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 class EdgeTamVideoMaskDecoderConfig(Sam2VideoMaskDecoderConfig):
     pass
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 class EdgeTamVideoConfig(Sam2VideoConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `EdgeTamVideoPromptEncoderConfig`], *optional*):

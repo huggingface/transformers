@@ -237,21 +237,6 @@ pip install transformers datasets evaluate sacrebleu
 >>> text = "translate English to French: Legumes share resources with nitrogen-fixing bacteria."
 ```
 
-파인튜닝된 모델로 추론하기에 제일 간단한 방법은 [`pipeline`]을 사용하는 것입니다. 해당 모델로 번역 `pipeline`을 만든 뒤, 텍스트를 전달하세요:
-
-```py
->>> from transformers import pipeline
-
-# Change `xx` to the language of the input and `yy` to the language of the desired output.
-# Examples: "en" for English, "fr" for French, "de" for German, "es" for Spanish, "zh" for Chinese, etc; translation_en_to_fr translates English to French
-# You can view all the lists of languages here - https://huggingface.co/languages
->>> translator = pipeline("translation_xx_to_yy", model="my_awesome_opus_books_model")
->>> translator(text)
-[{'translation_text': 'Legumes partagent des ressources avec des bactéries azotantes.'}]
-```
-
-원한다면 `pipeline`의 결과를 직접 복제할 수도 있습니다:
-
 텍스트를 토큰화하고 `input_ids`를 PyTorch 텐서로 반환하세요:
 
 ```py
