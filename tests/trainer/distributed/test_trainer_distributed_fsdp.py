@@ -42,7 +42,6 @@ from transformers.testing_utils import (
 )
 from transformers.trainer_utils import FSDPOption, set_seed
 from transformers.utils import (
-    is_accelerate_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
@@ -101,9 +100,6 @@ set_seed(42)
 if is_torch_available():
     # hack to restore original logging level pre #21700
     get_regression_trainer = partial(get_regression_trainer, log_level="info")
-
-if is_accelerate_available():
-    from accelerate.utils.constants import FSDP_SHARDING_STRATEGY
 
 
 if is_torch_available():
@@ -473,8 +469,11 @@ class TestTrainerDistributedFSDPCommon(
     # Mixed precision: model loaded in fp32, training with --bf16/--fp16
     @parameterized.expand(mixed_precision_params, name_func=_parameterized_custom_name_func)
     def test_training_mixed_precision(self, sharding_strategy, dtype, fsdp_version):
-        sharding_idx = FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1
-        launch_args = list(TRAIN_LAUNCH_ARGS) + ["--fsdp_sharding_strategy", str(sharding_idx)]
+        if fsdp_version == "fsdp2":
+            reshard = "true" if sharding_strategy == "full_shard" else "false"
+        else:
+            reshard = sharding_strategy.upper()
+        launch_args = list(TRAIN_LAUNCH_ARGS) + ["--fsdp_reshard_after_forward", reshard]
         self.check_mixed_precision(dtype, config_file=FSDP_CONFIGS[fsdp_version], launch_args=launch_args)
 
     @parameterized.expand(["true", "false"], name_func=_parameterized_custom_name_func)

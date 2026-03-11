@@ -232,10 +232,6 @@ class TestTrainerIntegrationDeepSpeed(TestCasePlus):
     def setUp(self):
         super().setUp()
 
-        args = TrainingArguments(".")
-        self.n_epochs = args.num_train_epochs
-        self.batch_size = args.train_batch_size
-
         master_port = get_torch_dist_unique_port()
         self.dist_env_1_gpu = {
             "MASTER_ADDR": "localhost",
@@ -733,7 +729,7 @@ class TestTrainerIntegrationDeepSpeed(TestCasePlus):
             )
             trainer.train()
 
-        total = int(self.n_epochs * 64 / self.batch_size)
+        total = int(3.0 * 64 / 8)  # n_epochs * train_len / per_device_train_batch_size
         self.check_saved_checkpoints_deepspeed(output_dir, freq, total, stage, dtype)
 
         # Verify we can resume training from the last checkpoint with a new trainer

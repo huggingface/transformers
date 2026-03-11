@@ -7,12 +7,12 @@ import traceback
 import zipfile
 from collections import Counter
 
+import logging
+
 import requests
 
-from transformers import logging
 
-
-logger = logging.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def get_jobs(workflow_run_id, token=None):

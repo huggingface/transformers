@@ -403,7 +403,7 @@ jobs:
       - name: Run all tests on GPU
         working-directory: ${{ inputs.working-directory-prefix }}/transformers
         run: |
-          python3 -m pytest -v --color=yes -rsfE --make-reports="${machine_type}_run_torch_cuda_extensions_gpu_test_reports" tests/trainer/distributed/test_trainer_distributed_deepspeed.py
+          script -q -c "python3 -m pytest -v -rsfE --make-reports=${machine_type}_run_torch_cuda_extensions_gpu_test_reports tests/trainer/distributed/test_trainer_distributed_deepspeed.py" test_outputs.txt
 
       - name: Failure short reports
         if: ${{ failure() }}
