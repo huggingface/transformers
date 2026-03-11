@@ -171,6 +171,8 @@
       title: FullyShardedDataParallel
     - local: deepspeed
       title: DeepSpeed
+    - local: tensor_parallelism
+      title: Tensor parallelism
     - local: debugging
       title: Multi-GPU debugging
     - local: perf_train_cpu_many
