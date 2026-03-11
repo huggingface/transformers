@@ -464,6 +464,9 @@ def convert_config(
         }
     )
 
+    qk_rope_head_dim = text_kwargs.get("qk_rope_head_dim", 64)
+    qk_nope_head_dim = text_kwargs.get("qk_nope_head_dim", 64)
+
     text_kwargs["rope_parameters"] = {
         "type": "yarn",
         "rope_theta": original_config.get("rope_theta", 10_000.0),
@@ -474,6 +477,7 @@ def convert_config(
         "mscale_all_dim": 1.0,
         "mscale": 1.0,
         "llama_4_scaling_beta": original_config.get("llama_4_scaling", {}).get("beta", 0.1),
+        "partial_rotary_factor": qk_rope_head_dim / (qk_nope_head_dim + qk_rope_head_dim),
     }
 
     quant_kwargs: dict[str, Any] = {}

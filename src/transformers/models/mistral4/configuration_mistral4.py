@@ -190,6 +190,7 @@ class Mistral4Config(PreTrainedConfig):
                 "mscale_all_dim": 1.0,
                 "mscale": 1.0,
                 "llama_4_scaling_beta": 0.1,
+                "partial_rotary_factor": qk_rope_head_dim / (qk_nope_head_dim + qk_rope_head_dim),
             }
 
         self.vocab_size = vocab_size
@@ -208,7 +209,7 @@ class Mistral4Config(PreTrainedConfig):
         self.v_head_dim = v_head_dim
         self.qk_nope_head_dim = qk_nope_head_dim
         self.qk_head_dim = qk_nope_head_dim + qk_rope_head_dim
-        self.head_dim = qk_rope_head_dim
+        self.head_dim = qk_nope_head_dim + qk_rope_head_dim
         self.n_group = n_group
         self.topk_group = topk_group
         self.num_experts_per_tok = num_experts_per_tok
@@ -229,6 +230,7 @@ class Mistral4Config(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
+        self.rope_parameters.setdefault("partial_rotary_factor", self.qk_rope_head_dim / self.head_dim)
 
         self.tie_word_embeddings = tie_word_embeddings
         self.pad_token_id = pad_token_id
