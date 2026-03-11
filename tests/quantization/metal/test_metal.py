@@ -635,6 +635,6 @@ class MetalSlowIntegrationTest(unittest.TestCase):
             self.assertIsNotNone(model)
             input = "Hello, how are you?"
             EXPECTED_OUTPUT = "Hello, how are you? I'm doing well, thanks for asking. I"
-            input_ids = tokenizer.encode(input, return_tensors="pt").to("mps")
+            input_ids = tokenizer.encode(input, return_tensors="pt").to(torch_device)
             output = model.generate(input_ids, max_new_tokens=10, do_sample=False)
             self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
