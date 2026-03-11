@@ -512,6 +512,15 @@ class TapasPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, TapasLMPredictionHead):
             init.zeros_(module.bias)
+        if isinstance(module, TapasForQuestionAnswering):
+            if module.config.init_cell_selection_weights_to_zero:
+                init.zeros_(module.output_weights)
+                init.zeros_(module.column_output_weights)
+            else:
+                init.normal_(module.output_weights, std=module.config.initializer_range)
+                init.normal_(module.column_output_weights, std=module.config.initializer_range)
+            init.zeros_(module.output_bias)
+            init.zeros_(module.column_output_bias)
 
 
 @auto_docstring
@@ -801,22 +810,10 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # cell selection heads
-        if config.init_cell_selection_weights_to_zero:
-            # init_cell_selection_weights_to_zero: Whether the initial weights should be
-            # set to 0. This ensures that all tokens have the same prior probability.
-            self.output_weights = nn.Parameter(torch.zeros(config.hidden_size))
-            self.column_output_weights = nn.Parameter(torch.zeros(config.hidden_size))
-        else:
-            self.output_weights = nn.Parameter(torch.empty(config.hidden_size))
-            init.normal_(
-                self.output_weights, std=config.initializer_range
-            )  # here, a truncated normal is used in the original implementation
-            self.column_output_weights = nn.Parameter(torch.empty(config.hidden_size))
-            init.normal_(
-                self.column_output_weights, std=config.initializer_range
-            )  # here, a truncated normal is used in the original implementation
-        self.output_bias = nn.Parameter(torch.zeros([]))
-        self.column_output_bias = nn.Parameter(torch.zeros([]))
+        self.output_weights = nn.Parameter(torch.empty(config.hidden_size))
+        self.column_output_weights = nn.Parameter(torch.empty(config.hidden_size))
+        self.output_bias = nn.Parameter(torch.empty([]))
+        self.column_output_bias = nn.Parameter(torch.empty([]))
 
         # aggregation head
         if config.num_aggregation_labels > 0:
