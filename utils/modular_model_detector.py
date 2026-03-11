@@ -983,7 +983,23 @@ def compute_model_class_match_summary(
     model_class_matches: dict[str, set[str]] = {}
     model_class_scores: dict[str, dict[str, float]] = {}
     for query_name, data in class_entries:
-        for identifier, _score in data.get("embedding", []):
+        # For each Sarvam class (query_name), compute the best score per identifier
+        # across all available metrics (embedding, jaccard). We then attribute that
+        # best score to the corresponding model. This way, if Jaccard provides a
+        # stronger signal than embeddings for a given model+class, it is the one
+        # that influences the summary.
+        best_per_identifier: dict[str, float] = {}
+
+        # 1) embedding scores
+        for identifier, score in data.get("embedding", []):
+            best_per_identifier[identifier] = max(best_per_identifier.get(identifier, float("-inf")), score)
+
+        # 2) jaccard scores (if present); override embedding if higher
+        for identifier, score in data.get("jaccard", []):
+            best_per_identifier[identifier] = max(best_per_identifier.get(identifier, float("-inf")), score)
+
+        # 3) Aggregate per model using the best score for that identifier
+        for identifier, best_score in best_per_identifier.items():
             try:
                 relative_path, _ = identifier.split(":", 1)
             except ValueError:
@@ -991,8 +1007,8 @@ def compute_model_class_match_summary(
             model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
             model_class_matches.setdefault(model_id, set()).add(query_name)
             per_model_scores = model_class_scores.setdefault(model_id, {})
-            if query_name not in per_model_scores or _score > per_model_scores[query_name]:
-                per_model_scores[query_name] = _score
+            if query_name not in per_model_scores or best_score > per_model_scores[query_name]:
+                per_model_scores[query_name] = best_score
 
     inheritance_map = _build_modular_inheritance_map()
     model_items = list(model_class_matches.items())
@@ -1256,91 +1272,23 @@ def main():
     # Model class match summary
     class_entries = grouped.get("class", [])
     if class_entries:
-        total_classes = len(class_entries)
-        model_class_matches: dict[str, set[str]] = {}
-        # Mean embedding score
-        model_class_scores: dict[str, dict[str, float]] = {}
-        for query_name, data in class_entries:
-            for identifier, _score in data.get("embedding", []):
-                try:
-                    relative_path, _ = identifier.split(":", 1)
-                except ValueError:
-                    continue
-                model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
-                model_class_matches.setdefault(model_id, set()).add(query_name)
-                per_model_scores = model_class_scores.setdefault(model_id, {})
-                if query_name not in per_model_scores or _score > per_model_scores[query_name]:
-                    per_model_scores[query_name] = _score
-
-        inheritance_map = _build_modular_inheritance_map()
-
-        # Filter out models whose matched‑class set is strictly contained in another model's set.
-        # let C_m be the set of classes matched by model m. If there exists a model n such that
-        # C_m ⊂ C_n, then m is considered redundant and removed.
-        # This de-emphasizes models that are "covered" by a more "core" model like Llama.
-        model_items = list(model_class_matches.items())
-        redundant_models: set[str] = set()
-        for i, (model_i, classes_i) in enumerate(model_items):
-            if not classes_i:
-                continue
-            for j, (model_j, classes_j) in enumerate(model_items):
-                if i == j:
-                    continue
-                if classes_i.issubset(classes_j) and len(classes_j) > len(classes_i):
-                    redundant_models.add(model_i)
-                    break
-
-        filtered_items = [(m, cls_set) for m, cls_set in model_items if m not in redundant_models]
-
-        def _compare_models(a: tuple[str, set[str]], b: tuple[str, set[str]]) -> int:
-            model_a, classes_a = a
-            model_b, classes_b = b
-
-            # Primary: number of matched classes (descending)
-            if len(classes_a) != len(classes_b):
-                return -1 if len(classes_a) > len(classes_b) else 1
-
-            # Secondary: if they cover the same number of classes and one inherits from the other,
-            # put the ancestor (base) model first. This ensures e.g. `llava` appears before
-            # `vipllava` when `vipllava` is modular-over-llava.
-            if _is_descendant(model_a, model_b, inheritance_map):
-                return 1  # a after b
-            if _is_descendant(model_b, model_a, inheritance_map):
-                return -1  # a before b
-
-            # Tertiary: mean score (descending)
-            scores_a = model_class_scores.get(model_a, {})
-            scores_b = model_class_scores.get(model_b, {})
-            mean_a = sum(scores_a.values()) / len(scores_a) if scores_a else 0.0
-            mean_b = sum(scores_b.values()) / len(scores_b) if scores_b else 0.0
-            if mean_a != mean_b:
-                return -1 if mean_a > mean_b else 1
-
-            # Final: lexicographic model id for deterministic ordering
-            if model_a < model_b:
-                return -1
-            if model_a > model_b:
-                return 1
-            return 0
-
-        sorted_models = sorted(filtered_items, key=cmp_to_key(_compare_models))
-        logging.info(_colorize_heading("Model class match summary"))
-        logging.info("")
-        logging.info(f"Total classes: {total_classes}")
-        logging.info("")
-        logging.info("Models with most matched classes:")
-        for model_id, matched in sorted_models[:15]:
-            pct = 100.0 * len(matched) / total_classes
-            scores_for_model = model_class_scores.get(model_id, {})
-            mean_score = sum(scores_for_model.values()) / len(scores_for_model) if scores_for_model else 0.0
-            logging.info(
-                f"  {model_id:25s}: {len(matched):2d}/{total_classes} classes ({pct:5.1f}%), "
-                f"mean score {mean_score:.4f}"
-            )
-            if matched:
-                class_list = ", ".join(sorted(matched))
-                logging.info(f"    Classes: {class_list}")
-        logging.info("")
+        total_classes, ordered_summary = compute_model_class_match_summary(results)
+        if total_classes and ordered_summary:
+            logging.info(_colorize_heading("Model class match summary"))
+            logging.info("")
+            logging.info(f"Total classes: {total_classes}")
+            logging.info("")
+            logging.info("Models with most matched classes:")
+            for item in ordered_summary[:15]:
+                model_id = item["model_id"]
+                num_matched = int(item["num_matched"])
+                pct = float(item["pct"])
+                mean_score = float(item["mean_score"])
+                logging.info(
+                    f"  {model_id:25s}: {num_matched:2d}/{total_classes} classes ({pct:5.1f}%), "
+                    f"mean score {mean_score:.4f}"
+                )
+            logging.info("")
 
 if __name__ == "__main__":
     main()
