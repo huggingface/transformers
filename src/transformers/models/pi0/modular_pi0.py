@@ -14,6 +14,7 @@
 """PI0 model: PaliGemma + Action Expert with flow matching for robot action prediction."""
 
 import math
+import numpy as np
 from collections.abc import Callable
 
 import torch
@@ -61,12 +62,19 @@ class PI0ProcessorKwargs(ProcessingKwargs, total=False):
 class PI0Processor(PaligemmaProcessor):
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.height, self.width = image_processor.size["height"], image_processor.size["width"]
+        self.state_mean = kwargs.get("state_mean", [-0.0419,  0.0354,  0.8257,  2.9083, -0.5562, -0.1665,  0.0283, -0.0286])
+        self.state_std = kwargs.get("state_std", [0.1074, 0.1442, 0.2572, 0.3441, 1.2344, 0.3580, 0.0133, 0.0132])
+        self.actions_mean = kwargs.get("actions_mean", [ 0.0182,  0.0586, -0.0559,  0.0046,  0.0029, -0.0077, -0.0916])
+        self.actions_std = kwargs.get("actions_std", [0.2825, 0.3590, 0.3674, 0.0377, 0.0543, 0.0872, 0.9958])
+        self.max_state_dim = kwargs.get("max_state_dim", 32)
         super().__init__(image_processor, tokenizer)
 
     def __call__(
         self,
         images: ImageInput | list[ImageInput] | list[list[ImageInput]] | None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        actions: list | np.ndarray | "torch.tensor" | None = None,
+        state: list | np.ndarray | "torch.tensor" | None = None,
         **kwargs: Unpack[PI0ProcessorKwargs],
     ) -> BatchFeature:
         output_kwargs = self._merge_kwargs(
@@ -116,7 +124,19 @@ class PI0Processor(PaligemmaProcessor):
             "pixel_values": padded_pixel_values,
             "pixel_attention_mask": pixel_attention_mask,
         }
+    
+        if actions is not None:
+            return_data["actions"] = (actions - self.actions_mean) / (self.actions_std + 1e-08)
+            if actions.shape[-1] < self.max_state_dim:
+                actions = F.pad(actions, (0, self.max_state_dim - actions.shape[-1]))
+
+        if state is not None:
+            return_data["state"] = (state - self.state_mean) / (self.state_std + 1e-08)
+            if state.shape[-1] < self.max_state_dim:
+                state = F.pad(state, (0, self.max_state_dim - state.shape[-1]))
+
         return BatchFeature(data=return_data, tensor_type=return_tensors)
+
 
     @property
     def model_input_names(self):
