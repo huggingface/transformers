@@ -236,7 +236,7 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
 
     @parameterized.expand(
         [
-            ("base", "", 1),
+            ("base", "--log_level info", 1),
             ("low", "--log_level debug --log_level_replica debug", 2),
             ("high", "--log_level error --log_level_replica debug", 1),
             ("mixed", "--log_level error --log_level_replica error", 0),

@@ -55,7 +55,9 @@ test_to_result_name = {
 }
 
 NON_MODEL_TEST_MODULES = [
+    "ddp",
     "deepspeed",
+    "fsdp",
     "fixtures",
     "generation",
     "onnx",
