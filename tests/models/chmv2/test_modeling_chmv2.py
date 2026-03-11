@@ -31,7 +31,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import CHMv2ForDepthEstimation
-    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
     from transformers.models.dinov3_vit.configuration_dinov3_vit import DINOv3ViTConfig
 
 if is_vision_available():
@@ -58,7 +57,7 @@ class CHMv2ModelTester:
         post_process_channels=(16, 16),
         fusion_hidden_size=16,
         head_hidden_size=16,
-        n_output_channels=4,
+        number_output_channels=4,
         readout_type="project",
         is_training=False,
     ):
@@ -77,7 +76,7 @@ class CHMv2ModelTester:
         self.post_process_channels = post_process_channels
         self.fusion_hidden_size = fusion_hidden_size
         self.head_hidden_size = head_hidden_size
-        self.n_output_channels = n_output_channels
+        self.number_output_channels = number_output_channels
         self.readout_type = readout_type
         self.is_training = is_training
         num_patches = (image_size // patch_size) ** 2
@@ -108,7 +107,7 @@ class CHMv2ModelTester:
             post_process_channels=list(self.post_process_channels),
             fusion_hidden_size=self.fusion_hidden_size,
             head_hidden_size=self.head_hidden_size,
-            n_output_channels=self.n_output_channels,
+            number_output_channels=self.number_output_channels,
             readout_type=self.readout_type,
         )
 
@@ -136,8 +135,6 @@ class CHMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = {"depth-estimation": CHMv2ForDepthEstimation} if is_torch_available() else {}
 
     test_resize_embeddings = False
-    test_head_masking = False
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = CHMv2ModelTester(self)
@@ -164,42 +161,13 @@ class CHMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config, pixel_values = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_depth_estimation(config, pixel_values)
 
+    @unittest.skip(reason="CHMv2 does not support training yet")
     def test_training(self):
-        for model_class in self.all_model_classes:
-            if model_class.__name__ == "CHMv2ForDepthEstimation":
-                continue
+        pass
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.return_dict = True
-
-            if model_class.__name__ in MODEL_MAPPING_NAMES.values():
-                continue
-
-            model = model_class(config)
-            model.to(torch_device)
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.backward()
-
+    @unittest.skip(reason="CHMv2 does not support training yet")
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
-        for model_class in self.all_model_classes:
-            if model_class.__name__ == "CHMv2ForDepthEstimation":
-                continue
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.use_cache = False
-            config.return_dict = True
-
-            if model_class.__name__ in MODEL_MAPPING_NAMES.values() or not model_class.supports_gradient_checkpointing:
-                continue
-            model = model_class(config)
-            model.to(torch_device)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.backward()
+        pass
 
 
 @require_torch

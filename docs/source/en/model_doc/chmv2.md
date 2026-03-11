@@ -40,10 +40,10 @@ Run inference on an image with the following code:
 from PIL import Image
 import torch
 
-from transformers import CHMv2ForDepthEstimation, CHMv2ImageProcessorFast
+from transformers import AutoModelForDepthEstimation, AutoImageProcessor
 
-processor = CHMv2ImageProcessorFast.from_pretrained("facebook/dinov3-vitl16-chmv2-dpt-head")
-model = CHMv2ForDepthEstimation.from_pretrained("facebook/dinov3-vitl16-chmv2-dpt-head").eval()
+processor = AutoImageProcessor.from_pretrained("facebook/dinov3-vitl16-chmv2-dpt-head")
+model = AutoModelForDepthEstimation.from_pretrained("facebook/dinov3-vitl16-chmv2-dpt-head")
 
 image = Image.open("image.tif")
 inputs = processor(images=image, return_tensors="pt")

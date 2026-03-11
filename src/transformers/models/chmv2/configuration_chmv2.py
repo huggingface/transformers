@@ -41,7 +41,7 @@ class CHMv2Config(PreTrainedConfig):
         The number of channels before fusion.
     head_hidden_size (`int`, *optional*, defaults to 128):
         The number of channels in the hidden layer of the depth estimation head.
-    n_output_channels (`int`, *optional*, defaults to 256):
+    number_output_channels (`int`, *optional*, defaults to 256):
         Number of output channels for the CHMv2 head (number of depth bins).
     readout_type (`str`, *optional*, defaults to `"project"`):
         Type of readout operation for the CLS token. One of `["ignore", "add", "project"]`.
@@ -75,7 +75,7 @@ class CHMv2Config(PreTrainedConfig):
         post_process_channels: list[int] | None = None,
         fusion_hidden_size: int | None = 256,
         head_hidden_size: int | None = 128,
-        n_output_channels: int | None = 256,
+        number_output_channels: int | None = 256,
         readout_type: str | None = "project",
         min_depth: float | None = 0.001,
         max_depth: float | None = 96.0,
@@ -117,7 +117,7 @@ class CHMv2Config(PreTrainedConfig):
         self.post_process_channels = post_process_channels
         self.fusion_hidden_size = fusion_hidden_size
         self.head_hidden_size = head_hidden_size
-        self.n_output_channels = n_output_channels
+        self.number_output_channels = number_output_channels
         self.readout_type = readout_type
 
         if bins_strategy not in ["linear", "log", "chmv2_mixlog"]:

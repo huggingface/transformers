@@ -358,7 +358,7 @@ class CHMv2ImageProcessorFast(BaseImageProcessorFast):
         for depth, target_size in zip(predicted_depth, target_sizes):
             if target_size is not None:
                 depth = torch.nn.functional.interpolate(
-                    depth.unsqueeze(0).unsqueeze(1), size=target_size, mode="bilinear", align_corners=True
+                    depth[None, None, ...], size=target_size, mode="bilinear", align_corners=True
                 ).squeeze()
 
             results.append({"predicted_depth": depth})

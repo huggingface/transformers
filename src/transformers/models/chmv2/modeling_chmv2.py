@@ -90,29 +90,28 @@ class CHMv2ReassembleStage(nn.Module):
     def forward(self, hidden_states: list[torch.Tensor], patch_height=None, patch_width=None) -> list[torch.Tensor]:
         out = []
 
-        for i, hidden_state in enumerate(hidden_states):
+        for layer_idx, hidden_state in enumerate(hidden_states):
             if isinstance(hidden_state, (tuple, list)) and len(hidden_state) == 2:
-                x, cls_token = hidden_state[0], hidden_state[1]
-                feature_shape = x.shape
+                hidden_state, cls_token = hidden_state[0], hidden_state[1]
+                feature_shape = hidden_state.shape
 
                 if self.readout_type == "project":
-                    x = x.flatten(2).permute((0, 2, 1))
-                    readout = cls_token.unsqueeze(1).expand_as(x)
-                    x = self.readout_projects[i](torch.cat((x, readout), -1))
-                    x = x.permute(0, 2, 1).reshape(feature_shape)
+                    hidden_state = hidden_state.flatten(2).transpose(1, 2)
+                    readout = cls_token.unsqueeze(1).expand_as(hidden_state)
+                    hidden_state = self.readout_projects[layer_idx](torch.cat((hidden_state, readout), -1))
+                    hidden_state = hidden_state.permute(0, 2, 1).reshape(feature_shape)
                 elif self.readout_type == "add":
-                    x = x.flatten(2) + cls_token.unsqueeze(-1)
-                    x = x.reshape(feature_shape)
+                    hidden_state = hidden_state.flatten(2) + cls_token.unsqueeze(-1)
+                    hidden_state = hidden_state.reshape(feature_shape)
             else:
-                x = hidden_state
-                if x.dim() == 3:
-                    x = x[:, 1:]
-                    batch_size, _, num_channels = x.shape
-                    x = x.reshape(batch_size, patch_height, patch_width, num_channels)
-                    x = x.permute(0, 3, 1, 2).contiguous()
+                if hidden_state.dim() == 3:
+                    hidden_state = hidden_state[:, 1:]
+                    batch_size, _, num_channels = hidden_state.shape
+                    hidden_state = hidden_state.reshape(batch_size, patch_height, patch_width, num_channels)
+                    hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
 
-            x = self.layers[i](x)
-            out.append(x)
+            hidden_state = self.layers[layer_idx](hidden_state)
+            out.append(hidden_state)
 
         return out
 
@@ -163,7 +162,6 @@ class CHMv2FeatureFusionLayer(nn.Module):
     def __init__(self, config: CHMv2Config, is_first_layer: bool = False):
         super().__init__()
         self.is_first_layer = is_first_layer
-        self.align_corners = True
 
         self.projection = nn.Conv2d(config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=1, bias=True)
 
@@ -175,8 +173,9 @@ class CHMv2FeatureFusionLayer(nn.Module):
     def forward(self, hidden_state, residual=None, size=None):
         if residual is not None and not self.is_first_layer:
             if hidden_state.shape != residual.shape:
+                _, _, height, width = hidden_state.shape
                 residual = nn.functional.interpolate(
-                    residual, size=(hidden_state.shape[2], hidden_state.shape[3]), mode="bilinear", align_corners=False
+                    residual, size=(height, width), mode="bilinear", align_corners=False
                 )
             hidden_state = hidden_state + self.residual_layer1(residual)
 
@@ -188,7 +187,7 @@ class CHMv2FeatureFusionLayer(nn.Module):
             hidden_state,
             **modifier,
             mode="bilinear",
-            align_corners=self.align_corners,
+            align_corners=True,
         )
 
         hidden_state = self.projection(hidden_state)
@@ -196,25 +195,29 @@ class CHMv2FeatureFusionLayer(nn.Module):
         return hidden_state
 
 
-class CHMv2UpConvHead(nn.Module):
+class CHMv2UpsampleConvHead(nn.Module):
     """
     Convolutional head with intermediate upsampling.
 
     Architecture: Conv3x3 -> 2x bilinear upsample -> Conv3x3 -> ReLU -> Conv1x1.
     """
 
-    def __init__(self, features, n_output_channels, n_hidden_channels=128):
+    def __init__(self, features, number_output_channels, n_hidden_channels=128):
         super().__init__()
-        self.head = nn.Sequential(
-            nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
-            nn.Conv2d(features // 2, n_hidden_channels, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(n_hidden_channels, n_output_channels, kernel_size=1, stride=1, padding=0),
+        self.head = nn.ModuleList(
+            [
+                nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
+                nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
+                nn.Conv2d(features // 2, n_hidden_channels, kernel_size=3, stride=1, padding=1),
+                nn.ReLU(),
+                nn.Conv2d(n_hidden_channels, number_output_channels, kernel_size=1, stride=1, padding=0),
+            ]
         )
 
-    def forward(self, x):
-        return self.head(x)
+    def forward(self, hidden_states):
+        for layer in self.head:
+            hidden_states = layer(hidden_states)
+        return hidden_states
 
 
 class CHMv2Head(nn.Module):
@@ -238,9 +241,9 @@ class CHMv2Head(nn.Module):
         for idx in range(len(config.post_process_channels)):
             self.fusion_layers.append(CHMv2FeatureFusionLayer(config, is_first_layer=(idx == 0)))
 
-        self.conv_depth = CHMv2UpConvHead(
+        self.conv_depth = CHMv2UpsampleConvHead(
             features=config.fusion_hidden_size,
-            n_output_channels=config.n_output_channels,
+            number_output_channels=config.number_output_channels,
             n_hidden_channels=config.head_hidden_size,
         )
 
@@ -262,54 +265,6 @@ class CHMv2Head(nn.Module):
         return out
 
 
-def _create_chmv2_mixlog_bins(min_depth: float, max_depth: float, n_bins: int, device: torch.device) -> torch.Tensor:
-    """
-    Creates mixed log bins interpolated between linear and log distributions.
-
-    The max_depth is divided by 8.0 internally; this scaling is reversed in
-    `_create_outputs_with_chmv2_mixlog_norm` by multiplying by 8.0.
-    """
-    scaled_max_depth = max_depth / 8.0
-    linear = torch.linspace(min_depth, scaled_max_depth, n_bins, device=device)
-    log = torch.exp(
-        torch.linspace(
-            torch.log(torch.tensor(min_depth, device=device)),
-            torch.log(torch.tensor(scaled_max_depth, device=device)),
-            n_bins,
-            device=device,
-        )
-    )
-    t = torch.linspace(1.0, 0.0, n_bins, device=device)
-    bins = t * log + (1.0 - t) * linear
-    return bins
-
-
-def _create_outputs_with_chmv2_mixlog_norm(
-    input: torch.Tensor,
-    bins: torch.Tensor,
-    max_clamp_value: float = 1e-4,
-    eps_shift: float = 1e-8,
-    eps: float = 1e-12,
-) -> torch.Tensor:
-    """Converts depth bin logits to depth values using mixlog normalization."""
-    y = torch.relu(input)
-
-    m = y.amin(dim=1, keepdim=True)
-    shift = (-m).clamp_min(0.0).clamp_max(max_clamp_value) + eps_shift
-    y_pos = y + shift
-
-    denom = y_pos.sum(dim=1, keepdim=True)
-    denom = torch.nan_to_num(denom, nan=1.0, posinf=1.0, neginf=1.0).clamp_min(eps)
-    weights = y_pos / denom
-
-    bins_broadcast = bins.view(1, -1, 1, 1).clamp_min(eps)
-    output = (weights * bins_broadcast).sum(dim=1, keepdim=True).clamp_min(eps)
-
-    output = output * 8.0
-
-    return output
-
-
 class CHMv2FeaturesToDepth(nn.Module):
     """Converts raw logits from the CHMv2 head into a depth map using depth bins."""
 
@@ -319,6 +274,49 @@ class CHMv2FeaturesToDepth(nn.Module):
         self.max_depth = config.max_depth
         self.bins_strategy = config.bins_strategy
         self.norm_strategy = config.norm_strategy
+        self._mixlog_max_clamp_value = 1e-4
+        self._mixlog_eps_shift = 1e-8
+        self._mixlog_eps = 1e-12
+
+    def _create_mixlog_bins(self, n_bins: int, device: torch.device) -> torch.Tensor:
+        """
+        Creates mixed log bins interpolated between linear and log distributions.
+
+        The max_depth is divided by 8.0 internally; this scaling is reversed in
+        `_create_outputs_with_mixlog_norm` by multiplying by 8.0.
+        """
+        scaled_max_depth = self.max_depth / 8.0
+        linear = torch.linspace(self.min_depth, scaled_max_depth, n_bins, device=device)
+        log = torch.exp(
+            torch.linspace(
+                torch.log(torch.tensor(self.min_depth, device=device)),
+                torch.log(torch.tensor(scaled_max_depth, device=device)),
+                n_bins,
+                device=device,
+            )
+        )
+        interp_weight = torch.linspace(1.0, 0.0, n_bins, device=device)
+        bins = interp_weight * log + (1.0 - interp_weight) * linear
+        return bins
+
+    def _create_outputs_with_mixlog_norm(self, input: torch.Tensor, bins: torch.Tensor) -> torch.Tensor:
+        """Converts depth bin logits to depth values using mixlog normalization."""
+        logits = torch.relu(input)
+
+        min_per_sample = logits.amin(dim=1, keepdim=True)
+        shift = (-min_per_sample).clamp_min(0.0).clamp_max(self._mixlog_max_clamp_value) + self._mixlog_eps_shift
+        logits_pos = logits + shift
+
+        denom = logits_pos.sum(dim=1, keepdim=True)
+        denom = torch.nan_to_num(denom, nan=1.0, posinf=1.0, neginf=1.0).clamp_min(self._mixlog_eps)
+        weights = logits_pos / denom
+
+        bins_broadcast = bins.view(1, -1, 1, 1).clamp_min(self._mixlog_eps)
+        output = (weights * bins_broadcast).sum(dim=1, keepdim=True).clamp_min(self._mixlog_eps)
+
+        output = output * 8.0
+
+        return output
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         n_bins = x.shape[1]
@@ -335,7 +333,7 @@ class CHMv2FeaturesToDepth(nn.Module):
                 )
                 bins = torch.exp(bins)
             else:
-                bins = _create_chmv2_mixlog_bins(self.min_depth, self.max_depth, n_bins, x.device)
+                bins = self._create_mixlog_bins(n_bins, x.device)
 
             if self.norm_strategy in ["linear", "softmax", "sigmoid"]:
                 if self.norm_strategy == "linear":
@@ -350,7 +348,7 @@ class CHMv2FeaturesToDepth(nn.Module):
                     logit = logit / logit.sum(dim=1, keepdim=True)
                 output = torch.einsum("ikmn,k->imn", [logit, bins]).unsqueeze(dim=1)
             else:
-                output = _create_outputs_with_chmv2_mixlog_norm(x, bins)
+                output = self._create_outputs_with_mixlog_norm(x, bins)
         else:
             output = torch.relu(x) + self.min_depth
 
@@ -364,20 +362,17 @@ class CHMv2PreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
-    _no_split_modules = ["DINOv3ViTLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
 
     def _init_weights(self, module) -> None:
+        super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
 
 @auto_docstring(
