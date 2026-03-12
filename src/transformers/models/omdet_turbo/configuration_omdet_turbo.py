@@ -149,7 +149,8 @@ class OmDetTurboConfig(PreTrainedConfig):
         # Init timm backbone with hardcoded values for BC
         timm_default_kwargs = {
             "out_indices": [1, 2, 3],
-            "timm_model_kwargs": {"img_size": image_size, "always_partition": True},
+            "img_size": image_size,
+            "always_partition": True,
         }
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
@@ -160,16 +161,11 @@ class OmDetTurboConfig(PreTrainedConfig):
             **kwargs,
         )
 
-        # BC: hub configs with backbone_kwargs pass img_size/always_partition as direct attrs
-        if getattr(backbone_config, "model_type", None) == "timm_backbone" and not getattr(
-            backbone_config, "timm_model_kwargs", None
-        ):
-            timm_extra = {}
+        timm_kwargs = {}
+        if getattr(backbone_config, "model_type", None) == "timm_backbone":
             for attr in ("img_size", "always_partition"):
                 if hasattr(backbone_config, attr):
-                    timm_extra[attr] = getattr(backbone_config, attr)
-            if timm_extra:
-                backbone_config.timm_model_kwargs = timm_extra
+                    timm_kwargs[attr] = getattr(backbone_config, attr)
 
         if text_config is None:
             logger.info("`text_config` is `None`. Initializing the config with the default `clip_text_model`")
@@ -222,8 +218,14 @@ class OmDetTurboConfig(PreTrainedConfig):
         self.eval_size = eval_size
         self.learn_initial_query = learn_initial_query
         self.cache_size = cache_size
+        self.timm_kwargs = timm_kwargs
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+
+    def to_dict(self):
+        output = super().to_dict()
+        output.pop("timm_kwargs", None)
+        return output
 
 
 __all__ = ["OmDetTurboConfig"]
