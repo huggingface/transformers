@@ -284,6 +284,13 @@ class StreamingTqdmWrapper:
     def __exit__(self, exc_type, exc_value, traceback):
         return self._wrapped.__exit__(exc_type, exc_value, traceback)
 
+    def __iter__(self):
+        # tqdm's __iter__ calls its own update() which doesn't trigger SSE
+        # We need to manually call our wrapper's update() to stream progress
+        for item in self._wrapped:
+            self.update(1)
+            yield item
+
 
 def create_generation_config_from_req(
     req: dict,
@@ -421,7 +428,10 @@ class Serve:
     def __init__(
         self,
         continuous_batching: Annotated[
-            bool, typer.Option(help="Whether to use continuous batching for chat completions. Will default to locally saved settings.")
+            bool,
+            typer.Option(
+                help="Whether to use continuous batching for chat completions. Will default to locally saved settings."
+            ),
         ] = None,
         device: Annotated[
             str,
@@ -440,9 +450,7 @@ class Serve:
         ] = False,
         attn_implementation: Annotated[
             str | None,
-            typer.Option(
-                help="Which attention implementation to use. Will default to locally saved settings."
-            ),
+            typer.Option(help="Which attention implementation to use. Will default to locally saved settings."),
         ] = None,
         quantization: Annotated[
             str | None,
@@ -527,8 +535,12 @@ class Serve:
         settings = Settings()
         logger.warning(settings)
 
-        self.attn_implementation = attn_implementation if attn_implementation is not None else settings.attention_method.label
-        self.continuous_batching = continuous_batching if continuous_batching is not None else settings.attention_method.paged
+        self.attn_implementation = (
+            attn_implementation if attn_implementation is not None else settings.attention_method.label
+        )
+        self.continuous_batching = (
+            continuous_batching if continuous_batching is not None else settings.attention_method.paged
+        )
 
         self.device = device or settings.device
         self.context_length = context_length or settings.context_length
@@ -1131,7 +1143,7 @@ class Serve:
             return_dict=True,
             tokenize=True,
         )
-        inputs = inputs['input_ids'][0].to(model.device)
+        inputs = inputs["input_ids"][0].to(model.device)
 
         def stream_chat_completion(request_id, decode_stream):
             from transformers.generation.continuous_batching import RequestStatus
