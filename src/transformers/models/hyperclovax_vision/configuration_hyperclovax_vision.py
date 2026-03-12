@@ -13,11 +13,10 @@
 # limitations under the License.
 """HyperClovaX model configuration"""
 
-import warnings
-
-from transformers.configuration_utils import PretrainedConfig
-from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
-from transformers.utils import logging
+from ...configuration_utils import PretrainedConfig
+from ...models.auto import CONFIG_MAPPING, AutoConfig
+from ...models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -47,7 +46,7 @@ class HyperClovaXConfig(PretrainedConfig):
                 Number of hidden layers in the Transformer decoder.
             num_attention_heads (`int`, *optional*, defaults to 32):
                 Number of attention heads for each attention layer in the Transformer decoder.
-            num_key_value_heads (`int`, *optional*):
+            num_key_value_heads (`int | None`, *optional*):
                 Number of key-value heads used for Grouped Query Attention (GQA). If `None`, defaults to
                 `num_attention_heads` (standard multi-head attention).
             hidden_act (`str`, *optional*, defaults to `"silu"`):
@@ -59,21 +58,21 @@ class HyperClovaXConfig(PretrainedConfig):
             rms_norm_eps (`float`, *optional*, defaults to 1e-06):
                 Epsilon value added to the denominator of RMSNorm layers for numerical stability.
             use_cache (`bool`, *optional*, defaults to `True`):
-                Whether the model should cache past key-value states to speed up decoding. Disable when training.
-            pad_token_id (`int`, *optional*):
+                Whether the model should cache past key-value states to speed up decoding. Disable during training.
+            pad_token_id (`int | None`, *optional*):
                 Token ID used for padding sequences to equal length in a batch.
             bos_token_id (`int`, *optional*, defaults to 1):
                 Token ID representing the beginning of a sequence.
             eos_token_id (`int`, *optional*, defaults to 2):
                 Token ID representing the end of a sequence.
             pretraining_tp (`int`, *optional*, defaults to 1):
-                Tensor parallelism degree used during pretraining. Values greater than 1 activate the Megatron-style
+                Tensor parallelism degree used during pretraining. Values greater than 1 activate Megatron-style
                 tensor parallel linear layers for reproducibility.
             tie_word_embeddings (`bool`, *optional*, defaults to `False`):
                 Whether to tie the input token embedding weights to the output projection (lm_head) weights.
             rope_theta (`float`, *optional*, defaults to 10000.0):
                 Base period of the Rotary Position Embedding (RoPE).
-            rope_scaling (`dict`, *optional*):
+            rope_scaling (`dict | None`, *optional*):
                 Dictionary containing RoPE scaling configuration. Supports keys `"rope_type"` (e.g. `"linear"`,
                 `"dynamic"`, `"yarn"`) and scaling-specific hyperparameters. If `None`, no scaling is applied.
             attention_bias (`bool`, *optional*, defaults to `False`):
@@ -83,7 +82,7 @@ class HyperClovaXConfig(PretrainedConfig):
             mlp_bias (`bool`, *optional*, defaults to `False`):
                 Whether to include a learnable bias term in the MLP up-projection, gate-projection, and
                 down-projection layers.
-            head_dim (`int`, *optional*):
+            head_dim (`int | None`, *optional*):
                 Dimension of each attention head. Defaults to `hidden_size // num_attention_heads`.
             embedding_multiplier (`float`, *optional*, defaults to 1.0):
                 Scalar multiplier applied to the token embeddings. Used for Maximal Update Parametrisation (MuP)
@@ -125,33 +124,34 @@ class HyperClovaXConfig(PretrainedConfig):
         num_hidden_layers: int = 32,
         num_attention_heads: int = 32,
         num_key_value_heads: int | None = None,
+        head_dim: int | None = None,
         hidden_act: str = "silu",
         max_position_embeddings: int = 2048,
+        # Rotary positional embedding
+        rope_theta: float = 10000.0,
+        rope_scaling: dict | None = None,
         initializer_range: float = 0.02,
         rms_norm_eps: float = 1e-6,
         use_cache: bool = True,
         pad_token_id: int | None = None,
         bos_token_id: int = 1,
         eos_token_id: int = 2,
-        pretraining_tp: int = 1,
-        tie_word_embeddings: bool = False,
-        rope_theta: float = 10000.0,
-        rope_scaling: dict | None = None,
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
-        mlp_bias: bool = False,
-        head_dim: int | None = None,
+        attention_multiplier: float = 1.0,
         # MuP parameters
         embedding_multiplier: float = 1.0,
         logits_scaling: float = 1.0,
-        attention_multiplier: float = 1.0,
         residual_multiplier: float = 1.0,
         # Post-norm (dual-norm)
         use_post_norm: bool = False,
+        tie_word_embeddings: bool = False,
         **kwargs,
     ):
-        # Strip legacy trust_remote_code auto_map if coming from old hub checkpoint
-        kwargs.pop("auto_map", None)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -159,46 +159,51 @@ class HyperClovaXConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+        self.head_dim = head_dim
         self.num_key_value_heads = num_key_value_heads
+
+        # Rotary positional embedding params
+        self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
+
+        # If num_key_value_heads is not provided, default to num_attention_heads (standard MHA)
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+
+        # If head_dim is not provided, default to hidden_size // num_attention_heads
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
 
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
-        self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.mlp_bias = mlp_bias
-        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-
-        # Normalise rope_scaling type key for BC
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-
+        self.attention_multiplier = attention_multiplier
         # MuP
         self.embedding_multiplier = embedding_multiplier
         self.logits_scaling = logits_scaling
-        self.attention_multiplier = attention_multiplier
         self.residual_multiplier = residual_multiplier
-
-        # Post-norm
+        # Post-norm flag
         self.use_post_norm = use_post_norm
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        if "auto_map" in kwargs:
+            auto_AutoConfig = kwargs["auto_map"].get("AutoConfig", None)
+            auto_AutoModel = kwargs["auto_map"].get("AutoModel", None)
+            auto_AutoModelForCausalLM = kwargs["auto_map"].get("AutoModelForCausalLM", None)
+
+            if auto_AutoConfig is not None:
+                kwargs["auto_map"].pop("AutoConfig")
+            if auto_AutoModel is not None:
+                kwargs["auto_map"].pop("AutoModel")
+            if auto_AutoModelForCausalLM is not None:
+                kwargs["auto_map"].pop("AutoModelForCausalLM")
+
+        super().__init__(**kwargs)
 
 
-class HyperClovaXVisionConfig(PretrainedConfig):
+class HCXVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a
     [`HCXVisionForConditionalGeneration`]. It is used to instantiate a HyperClovaX Vision
@@ -233,9 +238,6 @@ class HyperClovaXVisionConfig(PretrainedConfig):
             Configuration for the text (LLM) component. Defaults to a standard [`HyperClovaXConfig`].
         vision_config (`dict` or [`Qwen2_5_VLVisionConfig`], *optional*):
             Configuration for the vision encoder component (Qwen2.5-VL ViT).
-        mm_projector_type (`str`, *optional*, defaults to `"mlp"`):
-            Type of multimodal projector connecting vision and language spaces. One of
-            `"linear"`, `"mlp"`, `"inverted_mlp"`, `"cabstractor"`, `"qwen_merger"`.
         use_nth_layer (`int`, *optional*, defaults to -2):
             Index of the vision encoder layer whose features are used as input to the projector.
             Negative indices count from the end (e.g., -2 = second-to-last layer).
@@ -305,9 +307,8 @@ class HyperClovaXVisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        text_config: HyperClovaXConfig | dict | None = None,
-        vision_config: Qwen2_5_VLVisionConfig | dict | None = None,
-        mm_projector_type: str = "mlp",
+        text_config: AutoConfig | dict | None = None,
+        vision_config: AutoConfig | dict | None = None,
         use_nth_layer: int = -2,
         img_start_id: int = 128060,
         video_start_id: int = 128061,
@@ -329,67 +330,21 @@ class HyperClovaXVisionConfig(PretrainedConfig):
         possible_resolutions: list | None = None,
         **kwargs,
     ):
-        # ------------------------------------------------------------------ #
-        # Backward-compatibility: strip deprecated path-style arguments       #
-        # from the old trust_remote_code HCXVisionConfig.                    #
-        # ------------------------------------------------------------------ #
-        _deprecated = [
-            "text_model_name_or_path",
-            "vision_model_name_or_path",
-            "q_former_model_name_or_path",
-        ]
-        for _k in _deprecated:
-            if _k in kwargs:
-                warnings.warn(
-                    f"`{_k}` is no longer supported in `HyperClovaXVisionConfig` and will be "
-                    "ignored. Pass sub-configs directly via `text_config` / `vision_config`.",
-                    FutureWarning,
-                    stacklevel=2,
-                )
-                kwargs.pop(_k)
-
-        # BC: old hub checkpoint may pass language_config instead of text_config
-        if "language_config" in kwargs and text_config is None:
-            text_config = kwargs.pop("language_config")
-        else:
-            kwargs.pop("language_config", None)
-
-        # ------------------------------------------------------------------ #
-        # text_config                                                         #
-        # ------------------------------------------------------------------ #
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "hyperclovax")
-            # sub_configs mechanism handles auto-deserialisation for model_type="hyperclovax"
-            text_config = HyperClovaXConfig(**text_config)
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = HyperClovaXConfig()
-        self.text_config: HyperClovaXConfig = text_config
+        self.text_config = text_config
 
-        # ------------------------------------------------------------------ #
-        # vision_config                                                       #
-        # ------------------------------------------------------------------ #
         if isinstance(vision_config, dict):
-            _vtype = vision_config.get("model_type", "qwen2_5_vl")
-            # Accept both "qwen2_5_vl" (legacy hub value) and "qwen2_5_vl_visual"
-            if _vtype in ("qwen2_5_vl", "qwen2_5_vl_visual"):
-                vision_cfg_dict = {k: v for k, v in vision_config.items() if k != "model_type"}
-                vision_config = Qwen2_5_VLVisionConfig(**vision_cfg_dict)
+            if vision_config["architectures"][0] == "Qwen2_5_VisionTransformerPretrainedModel":
+                vision_config = Qwen2_5_VLVisionConfig(**vision_config)
             else:
-                raise ValueError(
-                    f"Unsupported vision_config model_type: '{_vtype}'. "
-                    "Only 'qwen2_5_vl' / 'qwen2_5_vl_visual' are currently supported."
-                )
+                vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
             vision_config = Qwen2_5_VLVisionConfig()
-        self.vision_config: Qwen2_5_VLVisionConfig = vision_config
+        self.vision_config = vision_config
 
-        # Expose hidden_size at top level (DeepSpeed ZeRO-3 memory estimation uses this)
-        self.hidden_size = getattr(self.text_config, "hidden_size", 4096)
-
-        # ------------------------------------------------------------------ #
-        # VLM-specific fields                                                 #
-        # ------------------------------------------------------------------ #
-        self.mm_projector_type = mm_projector_type
         self.use_nth_layer = use_nth_layer
         self.freeze_encoder = freeze_encoder
         self.freeze_decoder = freeze_decoder
@@ -416,14 +371,21 @@ class HyperClovaXVisionConfig(PretrainedConfig):
         self.proj_prenorm = proj_prenorm
         self.use_1x1_grid = use_1x1_grid
         self.possible_resolutions = possible_resolutions if possible_resolutions is not None else []
-        # Delegate token IDs from text_config so generation helpers work out-of-the-box
-        self.pad_token_id = self.text_config.pad_token_id
-        self.bos_token_id = self.text_config.bos_token_id
-        self.eos_token_id = self.text_config.eos_token_id
+
         # Expose initializer_range at top level for _init_weights
         self.initializer_range = self.text_config.initializer_range
+
+        if "auto_map" in kwargs:
+            # 일단 auto_map 때문에 model에서 AutoModel.from_config해서 불러올 때 remote_code를 우선적으로 불러오는 문제가 있다. 그래서
+
+            auto_AutoModelForCausalLM = kwargs["auto_map"].get("AutoModelForCausalLM", None)
+            auto_AutoConfig = kwargs["auto_map"].get("AutoConfig", None)
+            if auto_AutoModelForCausalLM is not None:
+                kwargs["auto_map"].pop("AutoModelForCausalLM")
+            if auto_AutoConfig is not None:
+                kwargs["auto_map"].pop("AutoConfig")
 
         super().__init__(**kwargs)
 
 
-__all__ = ["HyperClovaXConfig", "HyperClovaXVisionConfig"]
+__all__ = ["HyperClovaXConfig", "HCXVisionConfig"]
