@@ -33,7 +33,7 @@ from ..glm4_moe.modeling_glm4_moe import (
 )
 
 
-@auto_docstring(checkpoint="THUDM/GLM-4-100B-A10B")
+@auto_docstring(checkpoint="zai-org/GLM-4.5")
 class Glm4MoeLiteConfig(PreTrainedConfig):
     r"""
     rope_interleave (`bool`, *optional*, defaults to `True`):

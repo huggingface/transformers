@@ -21,7 +21,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 class Qwen3MoeConfig(PreTrainedConfig):
     r"""
     decoder_sparse_step (`int`, *optional*, defaults to 1):

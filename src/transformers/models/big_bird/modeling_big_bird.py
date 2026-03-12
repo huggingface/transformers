@@ -158,7 +158,6 @@ class BigBirdSelfAttention(nn.Module):
         encoder_attention_mask=None,
         past_key_values=None,
         output_attentions=False,
-        cache_position=None,
     ):
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
@@ -1180,7 +1179,6 @@ class BigBirdAttention(nn.Module):
         to_mask=None,
         from_blocked_mask=None,
         to_blocked_mask=None,
-        cache_position=None,
     ):
         # fp16 compatibility
         if band_mask is not None:
@@ -1197,7 +1195,6 @@ class BigBirdAttention(nn.Module):
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
         else:
             if encoder_hidden_states is not None:
@@ -1285,7 +1282,6 @@ class BigBirdLayer(GradientCheckpointingLayer):
         blocked_encoder_mask=None,
         past_key_values=None,
         output_attentions=False,
-        cache_position=None,
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attention_outputs = self.attention(
@@ -1300,7 +1296,6 @@ class BigBirdLayer(GradientCheckpointingLayer):
             to_mask=to_mask,
             from_blocked_mask=blocked_encoder_mask,
             to_blocked_mask=blocked_encoder_mask,
-            cache_position=cache_position,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -1318,7 +1313,6 @@ class BigBirdLayer(GradientCheckpointingLayer):
                 encoder_hidden_states=encoder_hidden_states,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
             attention_output = cross_attention_outputs[0]
             outputs = outputs + cross_attention_outputs[1:]  # add cross attentions if we output attention weights
@@ -1373,7 +1367,6 @@ class BigBirdEncoder(nn.Module):
         to_mask=None,
         blocked_encoder_mask=None,
         return_dict=True,
-        cache_position=None,
     ) -> BaseModelOutputWithPastAndCrossAttentions | tuple:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -1404,7 +1397,6 @@ class BigBirdEncoder(nn.Module):
                 blocked_encoder_mask,
                 past_key_values,
                 output_attentions,
-                cache_position,
             )
 
             hidden_states = layer_outputs[0]
@@ -1648,7 +1640,6 @@ class BigBirdModel(BigBirdPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,  # NOOP kwargs, for now
     ) -> BaseModelOutputWithPoolingAndCrossAttentions | tuple[torch.FloatTensor]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1779,7 +1770,6 @@ class BigBirdModel(BigBirdPreTrainedModel):
             to_mask=to_mask,
             blocked_encoder_mask=blocked_encoder_mask,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
         sequence_output = encoder_outputs[0]
 
@@ -2160,7 +2150,6 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> CausalLMOutputWithCrossAttentions | tuple[torch.FloatTensor]:
@@ -2185,7 +2174,6 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
             **kwargs,
         )
 

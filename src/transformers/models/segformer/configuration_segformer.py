@@ -20,7 +20,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="ByteDance-Seed/SeedOss-36B")
+@auto_docstring(checkpoint="ByteDance-Seed/Seed-OSS-36B-Instruct")
 class SegformerConfig(PreTrainedConfig):
     r"""
     num_encoder_blocks (`int`, *optional*, defaults to 4):
