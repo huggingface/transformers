@@ -635,7 +635,7 @@ class PeVideoModel(PeVideoPreTrainedModel):
         loss = None
         if return_loss:
             labels = torch.eye(logits_video_text.shape[0], device=logits_video_text.device)
-            loss = -F.logsigmoid(labels * logits_video_text).mean()
+            loss = -F.logsigmoid(labels * logits_video_text).sum() / logits_video_text.shape[0]
 
         return PeVideoOutput(
             logits_video_text=logits_video_text,
