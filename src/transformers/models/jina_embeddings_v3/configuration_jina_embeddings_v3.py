@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_jina_embeddings_v3.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2026 The Kyutai and HuggingFace Inc. teams. All rights reserved.
+# Copyright 2026 The Jina-AI and HuggingFace Inc. teams. All rights reserved.
 #
 #
 # Licensed under the Apache License, Version 2.0 (the "License");

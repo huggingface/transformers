@@ -1,4 +1,4 @@
-# Copyright 2026 The Kyutai and HuggingFace Inc. teams. All rights reserved.
+# Copyright 2026 The Jina-AI and HuggingFace Inc. teams. All rights reserved.
 #
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -296,17 +296,17 @@ class JinaEmbeddingsV3Layer(GPTNeoXLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
+        residual = hidden_states
         attention_output, _ = self.self_attn(
             hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             **kwargs,
         )
-
-        hidden_states = hidden_states + self.post_attention_dropout(attention_output)
+        hidden_states = residual + self.post_attention_dropout(attention_output)
         hidden_states = self.post_attention_layernorm(hidden_states)
-        residual = hidden_states
 
+        residual = hidden_states
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + self.post_mlp_dropout(hidden_states)
         hidden_states = self.post_mlp_layernorm(hidden_states)
