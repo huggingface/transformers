@@ -22,8 +22,6 @@ python src/transformers/models/gemma3n/convert_gemma3n_weights.py \
     --output_path="$HOME/checkpoints/gemma-3n-safetensors/"
 """
 
-import json
-import os
 import re
 from collections.abc import Iterable, Mapping
 from typing import Any
