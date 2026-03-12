@@ -34,5 +34,11 @@ class VibevoiceAcousticTokenizerAudioProcessor(TorchAudioBackend):
             audio_el = audio_el / (max_val + self.eps)
         return audio_el
 
+    def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
+        mask = torch.zeros((len(audio_ranges), padded_length), dtype=torch.int32)
+        for i, (start, end) in enumerate(audio_ranges):
+            mask[i, start:end] = 1
+        return {"audio_values_mask": mask}
+
 
 __all__ = ["VibevoiceAcousticTokenizerAudioProcessor"]

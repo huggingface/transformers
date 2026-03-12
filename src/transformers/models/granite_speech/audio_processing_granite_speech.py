@@ -70,7 +70,7 @@ class GraniteSpeechAudioProcessor(TorchAudioBackend):
         audio_lengths = [a.shape[-1] for a in audio]
 
         # Pad audio to longest in batch
-        audio = self.pad(audio, padding=True, max_length=max_length)
+        audio, _audio_ranges = self.pad(audio, padding=True, max_length=max_length)
 
         # Stack and extract spectrogram
         audio_stacked = torch.stack(audio)

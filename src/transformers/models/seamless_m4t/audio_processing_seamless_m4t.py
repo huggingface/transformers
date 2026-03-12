@@ -15,7 +15,7 @@
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, mel_filter_bank, spectrogram, window_function
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, spectrogram, window_function
 from ...feature_extraction_utils import BatchFeature
 
 
@@ -52,19 +52,6 @@ class SeamlessM4tAudioProcessor(NumpyAudioBackend):
         super().__init__(**kwargs)
         self.window = window_function(400, "povey", periodic=False)
 
-    def _mel_filter_bank(self, spectrogram_config):
-        mel_cfg = spectrogram_config.mel_scale_config
-        return mel_filter_bank(
-            num_frequency_bins=257,
-            num_mel_filters=mel_cfg.n_mels,
-            min_frequency=mel_cfg.f_min,
-            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate // 2,
-            sampling_rate=self.sample_rate,
-            norm=mel_cfg.norm,
-            mel_scale=mel_cfg.mel_scale,
-            triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
-        )
-
     def _extract_fbank_features(self, waveform):
         waveform = np.squeeze(waveform) * (2**15)  # Kaldi compliance: 16-bit signed integers
         features = spectrogram(
@@ -84,7 +71,6 @@ class SeamlessM4tAudioProcessor(NumpyAudioBackend):
         return features
 
     def feature_normalize(self, features):
-        # Per-mel-bin normalization with ddof=1 for variance
         normalized = []
         for f in features:
             mean = np.expand_dims(f.mean(axis=0), 0)
@@ -93,36 +79,43 @@ class SeamlessM4tAudioProcessor(NumpyAudioBackend):
         return normalized
 
     def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
-        # Extract Kaldi-style features matching the FE exactly
+        # Extract features from raw (unpadded) audio, then pad at feature level
         features = [self._extract_fbank_features(waveform) for waveform in audio]
-
-        # Per-mel-bin normalization
         features = self.feature_normalize(features)
 
-        # Pad features to longest (pad_to_multiple_of=2 for stride)
-        max_len = max(f.shape[0] for f in features)
+        feature_lengths = [f.shape[0] for f in features]
+
+        # Pad features to longest (pad_to_multiple_of stride)
+        max_len = max(feature_lengths)
         if max_len % self.stride != 0:
             max_len = ((max_len // self.stride) + 1) * self.stride
         padded = []
         for f in features:
             if f.shape[0] < max_len:
-                pad_amount = max_len - f.shape[0]
-                f = np.pad(f, ((0, pad_amount), (0, 0)), mode="constant", constant_values=0.0)
+                f = np.pad(f, ((0, max_len - f.shape[0]), (0, 0)), mode="constant", constant_values=0.0)
             padded.append(f)
 
-        stacked = np.stack(padded, axis=0)  # (batch, frames, n_mels)
+        stacked = np.stack(padded, axis=0)
         batch_size, num_frames, num_channels = stacked.shape
+
+        # Feature-level attention_mask
+        attention_mask = np.zeros((batch_size, num_frames), dtype=np.int32)
+        for i, length in enumerate(feature_lengths):
+            attention_mask[i, :length] = 1
 
         # Stride concatenation
         remainder = num_frames % self.stride
         if remainder != 0:
             stacked = stacked[:, : num_frames - remainder, :]
+            attention_mask = attention_mask[:, : num_frames - remainder]
             num_frames = num_frames - remainder
 
         stacked = stacked.reshape(batch_size, num_frames // self.stride, num_channels * self.stride)
+        indices = np.arange(0, num_frames)
+        attention_mask = attention_mask[:, indices % self.stride == 1]
 
-        output_key = "audio_features"
-        return BatchFeature(data={output_key: stacked}, tensor_type=return_tensors)
+        data = {"audio_features": stacked, "audio_features_mask": attention_mask}
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
 
 __all__ = ["SeamlessM4tAudioProcessor"]

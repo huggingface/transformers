@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from spectrograms import numpy_mel_spectrogram as _np_spec
+
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import mel_filter_bank
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 from ...feature_extraction_utils import BatchFeature
 
 
@@ -30,18 +32,33 @@ class Phi4MultimodalAudioProcessor(TorchAudioBackend):
     audio_compression_rate = 8
     audio_downsample_rate = 1
     audio_feat_stride = 1
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.mel_filters = mel_filter_bank(
-            num_frequency_bins=self.n_fft // 2 + 1,
-            num_mel_filters=self.n_mels,
-            min_frequency=self.mel_min_frequency,
-            max_frequency=self.mel_max_frequency,
-            sampling_rate=self.sample_rate,
-            triangularize_in_mel_space=True,
+    spectrogram_config = SpectrogramConfig(
+        stft_config=StftConfig(n_fft=512),
+        mel_scale_config=MelScaleConfig(
+            n_mels=80,
+            f_min=0,
+            f_max=7690,
             mel_scale="kaldi",
+            triangularize_in_mel_space=True,
+        ),
+    )
+
+    def _mel_filter_bank(self, spectrogram_config):
+        import torch
+
+        stft_cfg = spectrogram_config.stft_config
+        mel_cfg = spectrogram_config.mel_scale_config
+        mel_filters_np = _np_spec.mel_filter_bank(
+            num_frequency_bins=1 + stft_cfg.n_fft // 2,
+            num_mel_filters=mel_cfg.n_mels,
+            min_frequency=mel_cfg.f_min,
+            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
+            sampling_rate=self.sample_rate,
+            norm=mel_cfg.norm,
+            mel_scale=mel_cfg.mel_scale,
+            triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
         )
+        return torch.from_numpy(mel_filters_np).to(torch.float32)
 
     def extract_spectrogram(self, audio, **kwargs):
         import torch
@@ -84,7 +101,7 @@ class Phi4MultimodalAudioProcessor(TorchAudioBackend):
         spec_power = torch.abs(S) ** 2
 
         # Mel filterbank + log
-        mel_filters = torch.from_numpy(self.mel_filters).to(torch.float32)
+        mel_filters = self.mel_filters.to(torch.float32)
         log_spec = torch.clamp(spec_power @ mel_filters, min=1.0)
         log_spec = torch.log(log_spec)
 
@@ -118,7 +135,7 @@ class Phi4MultimodalAudioProcessor(TorchAudioBackend):
         audio_lengths = torch.tensor([a.shape[-1] for a in audio])
 
         # Pad and truncate
-        audio = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
+        audio, _audio_ranges = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
 
         # Extract spectrogram
         features = self.extract_spectrogram(audio, audio_lengths=audio_lengths)

@@ -96,7 +96,7 @@ class SpeechToTextAudioProcessor(NumpyAudioBackend):
         return x.astype(np.float32)
 
     def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
-        # Extract Kaldi-style features matching the FE exactly
+        # Extract features from raw (unpadded) audio, then pad at feature level
         features = [self._extract_fbank_features(waveform) for waveform in audio]
         lengths = [f.shape[0] for f in features]
 
@@ -105,8 +105,7 @@ class SpeechToTextAudioProcessor(NumpyAudioBackend):
         padded = []
         for f in features:
             if f.shape[0] < max_len:
-                pad_amount = max_len - f.shape[0]
-                f = np.pad(f, ((0, pad_amount), (0, 0)), mode="constant", constant_values=0.0)
+                f = np.pad(f, ((0, max_len - f.shape[0]), (0, 0)), mode="constant", constant_values=0.0)
             padded.append(f)
 
         # Utterance CMVN normalization
@@ -115,9 +114,16 @@ class SpeechToTextAudioProcessor(NumpyAudioBackend):
             for f, length in zip(padded, lengths)
         ]
 
-        output_key = "audio_features"
         stacked = np.stack(normalized, axis=0)
-        return BatchFeature(data={output_key: stacked}, tensor_type=return_tensors)
+        data = {"audio_features": stacked}
+
+        if self.return_attention_mask:
+            attention_mask = np.zeros((len(lengths), max_len), dtype=np.int32)
+            for i, length in enumerate(lengths):
+                attention_mask[i, :length] = 1
+            data["audio_features_mask"] = attention_mask
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
 
 __all__ = ["SpeechToTextAudioProcessor"]

@@ -14,8 +14,10 @@
 
 import torch
 
+from spectrograms import numpy_mel_spectrogram as _np_spec
+
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, mel_filter_bank
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 class VoxtralRealtimeAudioProcessor(TorchAudioBackend):
@@ -73,11 +75,15 @@ class VoxtralRealtimeAudioProcessor(TorchAudioBackend):
             processed.append(spec)
         return processed
 
+    def _get_features_lengths(self, audio_lengths, spectrogram_config, include_center_frame=False):
+        stft_cfg = spectrogram_config.stft_config
+        win_length = stft_cfg.win_length or stft_cfg.n_fft
+        return (audio_lengths - win_length) // stft_cfg.hop_length + 1
+
     def _mel_filter_bank(self, spectrogram_config):
-        """Override to use numpy mel_filter_bank for exact match with feature extractor."""
         stft_cfg = spectrogram_config.stft_config
         mel_cfg = spectrogram_config.mel_scale_config
-        mel_filters_np = mel_filter_bank(
+        mel_filters_np = _np_spec.mel_filter_bank(
             num_frequency_bins=1 + stft_cfg.n_fft // 2,
             num_mel_filters=mel_cfg.n_mels,
             min_frequency=mel_cfg.f_min,
@@ -85,6 +91,7 @@ class VoxtralRealtimeAudioProcessor(TorchAudioBackend):
             sampling_rate=self.sample_rate,
             norm=mel_cfg.norm,
             mel_scale=mel_cfg.mel_scale,
+            triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
         )
         return torch.from_numpy(mel_filters_np).to(torch.float32)
 

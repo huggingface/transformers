@@ -62,6 +62,11 @@ class LasrAudioProcessor(TorchAudioBackend):
             upper_edge_hertz=7500.0,
         )
 
+    def _get_features_lengths(self, audio_lengths, spectrogram_config, include_center_frame=False):
+        stft_cfg = spectrogram_config.stft_config
+        win_length = stft_cfg.win_length or stft_cfg.n_fft
+        return (audio_lengths - win_length) // stft_cfg.hop_length + 1
+
     def extract_spectrogram(self, audio, *, spectrogram_config=None, **kwargs):
         import torch
 
