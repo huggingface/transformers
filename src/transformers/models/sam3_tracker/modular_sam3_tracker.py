@@ -41,7 +41,7 @@ from ..sam2.modeling_sam2 import (
 from ..sam2.processing_sam2 import Sam2Processor
 
 
-@auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
+@auto_docstring(checkpoint="facebook/sam3")
 class Sam3TrackerPromptEncoderConfig(Sam2PromptEncoderConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -69,17 +69,17 @@ class Sam3TrackerPromptEncoderConfig(Sam2PromptEncoderConfig):
         super().__init__(**kwargs)
 
 
-@auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
+@auto_docstring(checkpoint="facebook/sam3")
 class Sam3TrackerProcessor(Sam2Processor):
     pass
 
 
-@auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
+@auto_docstring(checkpoint="facebook/sam3")
 class Sam3TrackerMaskDecoderConfig(Sam2MaskDecoderConfig):
     pass
 
 
-@auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
+@auto_docstring(checkpoint="facebook/sam3")
 class Sam3TrackerConfig(Sam2Config):
     r"""
     prompt_encoder_config (Union[`dict`, `Sam3TrackerPromptEncoderConfig`], *optional*):

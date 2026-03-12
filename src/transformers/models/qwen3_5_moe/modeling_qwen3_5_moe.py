@@ -1500,7 +1500,7 @@ class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
             2. Attending to all inputs
         """
         linear_attn_mask = attention_mask
-        if (past_key_values is not None and past_key_values.get_seq_length() > 0) or (
+        if (past_key_values is not None and past_key_values.has_previous_state) or (
             attention_mask is not None and torch.all(attention_mask == 1)
         ):
             linear_attn_mask = None
