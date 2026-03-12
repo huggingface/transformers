@@ -180,6 +180,17 @@ qwen3_schema = {
     },
 }
 
+prefix_items_schema = {
+    # Not intended to be "realistic", just checks that prefixItems can handle a heterogeneous array
+    "x-regex-iterator": r"<block>(.*?)<\/block>",
+    "type": "array",
+    "prefixItems": [
+        {"type": "string"},
+        {"type": "integer"},
+        {"type": "string"},
+    ],
+}
+
 
 @require_jmespath
 class ChatSchemaParserTest(unittest.TestCase):
@@ -428,6 +439,21 @@ class ChatSchemaParserTest(unittest.TestCase):
         model_out = "<think>Just thinking.</think>"
         parsed = recursive_parse(model_out, schema)
         self.assertEqual(parsed, {"role": "assistant", "thinking": "Just thinking."})
+
+    def test_prefix_items(self):
+        model_out = "<block>hello</block><block>42</block><block>world</block>"
+        parsed = recursive_parse(model_out, prefix_items_schema)
+        self.assertEqual(parsed, ["hello", 42, "world"])
+
+    def test_prefix_items_wrong_length_raises(self):
+        model_out = "<block>hello</block><block>42</block>"
+        with self.assertRaises(ValueError):
+            recursive_parse(model_out, prefix_items_schema)
+
+    def test_prefix_items_wrong_type_raises(self):
+        model_out = "<block>hello</block><block>world</block><block>42</block>"
+        with self.assertRaises(ValueError):
+            recursive_parse(model_out, prefix_items_schema)
 
     def test_type_any_passthrough(self):
         """Test that type 'any' passes content through without transformation."""
