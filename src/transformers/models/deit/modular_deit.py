@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MaskedImageModelingOutput,
@@ -26,7 +27,7 @@ class DeiTEmbeddings(ViTEmbeddings):
     """
 
     def __init__(self, config: DeiTConfig, use_mask_token: bool = False) -> None:
-        super().__init__()
+        super().__init__(config, use_mask_token=use_mask_token)
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 2, config.hidden_size))
@@ -79,7 +80,7 @@ class DeiTEmbeddings(ViTEmbeddings):
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
         _, _, height, width = pixel_values.shape
-        embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        embeddings = self.patch_embeddings(pixel_values)
 
         batch_size, seq_length, _ = embeddings.size()
 
@@ -90,42 +91,35 @@ class DeiTEmbeddings(ViTEmbeddings):
             embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-
         distillation_tokens = self.distillation_token.expand(batch_size, -1, -1)
-
         embeddings = torch.cat((cls_tokens, distillation_tokens, embeddings), dim=1)
-        position_embeddings = self.position_embeddings
 
         if interpolate_pos_encoding:
-            position_embeddings = self.interpolate_pos_encoding(embeddings, height, width)
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            if height != self.image_size[0] or width != self.image_size[1]:
+                raise ValueError(
+                    f"Input image size ({height}*{width}) doesn't match model"
+                    f" ({self.image_size[0]}*{self.image_size[1]})."
+                )
+            embeddings = embeddings + self.position_embeddings
 
-        embeddings = embeddings + position_embeddings
         embeddings = self.dropout(embeddings)
         return embeddings
 
 
 class DeiTPreTrainedModel(ViTPreTrainedModel):
-    _no_split_modules = ["DeiTLayer"]
+    _no_split_modules = ["DeiTEmbeddings", "DeiTLayer"]
 
     def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(
-                module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
-            ).to(module.weight.dtype)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, DeiTEmbeddings):
-            module.cls_token.data.zero_()
-            module.position_embeddings.data.zero_()
-            module.distillation_token.data.zero_()
+        super()._init_weights(module)
+        if isinstance(module, DeiTEmbeddings):
+            init.zeros_(module.cls_token)
+            init.zeros_(module.position_embeddings)
+            init.zeros_(module.distillation_token)
             if module.mask_token is not None:
-                module.mask_token.data.zero_()
+                init.zeros_(module.mask_token)
 
 
 class DeiTModel(ViTModel):

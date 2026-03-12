@@ -64,7 +64,7 @@ class IJepaEmbeddings(ViTEmbeddings):
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
-        embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        embeddings = self.patch_embeddings(pixel_values)
 
         if bool_masked_pos is not None:
             seq_length = embeddings.shape[1]
@@ -77,6 +77,11 @@ class IJepaEmbeddings(ViTEmbeddings):
         if interpolate_pos_encoding:
             embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
         else:
+            if height != self.image_size[0] or width != self.image_size[1]:
+                raise ValueError(
+                    f"Input image size ({height}*{width}) doesn't match model"
+                    f" ({self.image_size[0]}*{self.image_size[1]})."
+                )
             embeddings = embeddings + self.position_embeddings
 
         embeddings = self.dropout(embeddings)

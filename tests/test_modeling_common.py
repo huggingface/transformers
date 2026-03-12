@@ -327,6 +327,10 @@ def _test_eager_matches_sdpa_inference(
                         seqlen = inputs_dict.get("decoder_input_ids", processed_inputs[model.main_input_name]).shape[
                             -1
                         ]
+                    elif model.main_input_name == "pixel_values" and hasattr(self.model_tester, "seq_length"):
+                        # For vision models, pixel_values.shape[-1] is image width, not sequence length.
+                        # Use model_tester.seq_length (num_patches + 1 for ViT) instead.
+                        seqlen = self.model_tester.seq_length
                     else:
                         seqlen = processed_inputs[model.main_input_name].shape[-1]
                     dummy_attention_mask = torch.ones(batch_size, seqlen).to(torch.int64).to(torch_device)

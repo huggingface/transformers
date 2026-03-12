@@ -84,6 +84,7 @@ class BeitModelTester:
         out_features=["stage1", "stage2", "stage3", "stage4"],
         attn_implementation="eager",
         mask_ratio=0.5,
+        use_relative_position_bias=False,
     ):
         self.parent = parent
         self.vocab_size = vocab_size
@@ -113,6 +114,7 @@ class BeitModelTester:
         self.mask_length = self.seq_length - 1
         self.num_masks = int(mask_ratio * self.seq_length)
         self.attn_implementation = attn_implementation
+        self.use_relative_position_bias = use_relative_position_bias
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -145,6 +147,7 @@ class BeitModelTester:
             out_indices=self.out_indices,
             out_features=self.out_features,
             attn_implementation=self.attn_implementation,
+            use_relative_position_bias=self.use_relative_position_bias,
         )
 
     def create_and_check_model(self, config, pixel_values, labels, pixel_labels):
@@ -281,6 +284,16 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="BEiT does not support feedforward chunking yet")
     def test_feed_forward_chunking(self):
         pass
+
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        # The conversion mapping has an entry for relative_position_bias, which only exists in the model when
+        # use_relative_position_bias=True. Enable it temporarily so the test can verify the mapping, using
+        # eager attention since flex_attention is incompatible with relative position bias.
+        self.model_tester.use_relative_position_bias = True
+        try:
+            super().test_reverse_loading_mapping(check_keys_were_modified)
+        finally:
+            self.model_tester.use_relative_position_bias = False
 
     @unittest.skip(reason="BEiT can't compile dynamic")
     @pytest.mark.torch_compile_test

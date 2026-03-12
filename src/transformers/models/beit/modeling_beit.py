@@ -19,7 +19,6 @@
 # limitations under the License.
 
 import collections.abc
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -27,9 +26,10 @@ import torch
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import DropPath, GradientCheckpointingLayer, drop_path_schedule
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutput,
@@ -43,7 +43,8 @@ from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, torch_int
 from ...utils.backbone_utils import BackboneMixin
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_beit import BeitConfig
 
 
@@ -69,7 +70,7 @@ class BeitPatchEmbeddings(nn.Module):
     Transformer.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: BeitConfig):
         super().__init__()
         image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
@@ -83,19 +84,15 @@ class BeitPatchEmbeddings(nn.Module):
         self.num_patches = num_patches
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
-        patch_shape = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
-        self.patch_shape = patch_shape
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         num_channels = pixel_values.shape[1]
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+                f" Expected {self.num_channels} but got {num_channels}."
             )
-
-        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
-
-        return embeddings
+        return self.projection(pixel_values).flatten(2).transpose(1, 2)
 
 
 class BeitEmbeddings(nn.Module):
@@ -113,11 +110,6 @@ class BeitEmbeddings(nn.Module):
             self.mask_token = None
         self.patch_embeddings = BeitPatchEmbeddings(config)
         self.patch_size = config.patch_size
-        self.image_size = (
-            config.image_size
-            if isinstance(config.image_size, collections.abc.Iterable)
-            else (config.image_size, config.image_size)
-        )
         num_patches = self.patch_embeddings.num_patches
         if config.use_absolute_position_embeddings:
             self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
@@ -169,14 +161,7 @@ class BeitEmbeddings(nn.Module):
         self,
         pixel_values: torch.Tensor,
         bool_masked_pos: torch.BoolTensor | None = None,
-        interpolate_pos_encoding: bool | None = None,
     ) -> torch.Tensor:
-        if self.position_embeddings is not None and interpolate_pos_encoding is not None:
-            warnings.warn(
-                "`interpolate_pos_encoding` argument has no effect for BEiTEmbeddings, embeddings are always "
-                "interpolated to the input image size. The argument will be removed in transformers v4.51.0."
-            )
-
         _, _, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values)
         batch_size, seq_len, _ = embeddings.size()
@@ -199,10 +184,13 @@ class BeitEmbeddings(nn.Module):
 
 
 class BeitRelativePositionBias(nn.Module):
-    def __init__(self, config: BeitConfig, window_size: tuple) -> None:
+    def __init__(self, config: BeitConfig) -> None:
         super().__init__()
-        self.window_size = window_size
-        self.num_relative_distance = (2 * window_size[0] - 1) * (2 * window_size[1] - 1) + 3
+        image_size = config.image_size
+        if not isinstance(image_size, (tuple, list)):
+            image_size = (image_size, image_size)
+        self.window_size = (image_size[0] // config.patch_size, image_size[1] // config.patch_size)
+        self.num_relative_distance = (2 * self.window_size[0] - 1) * (2 * self.window_size[1] - 1) + 3
         self.relative_position_bias_table = nn.Parameter(
             torch.zeros(self.num_relative_distance, config.num_attention_heads)
         )  # 2*Wh-1 * 2*Ww-1, nH
@@ -300,7 +288,7 @@ def eager_attention_forward(
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     attn_output = torch.matmul(attn_weights, value)
@@ -319,7 +307,6 @@ class BeitAttention(nn.Module):
         self.hidden_dropout = config.hidden_dropout_prob
         self.scaling = self.head_dim**-0.5
         self.is_causal = False
-
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
         self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
@@ -381,9 +368,10 @@ class BeitMLP(nn.Module):
 class BeitLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: BeitConfig, window_size: tuple | None = None):
+    def __init__(self, config: BeitConfig, drop_path_rate: float = 0.0):
         super().__init__()
         self.config = config
+        self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.attention = BeitAttention(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -395,9 +383,9 @@ class BeitLayer(GradientCheckpointingLayer):
         else:
             self.lambda_1, self.lambda_2 = None, None
         # Create per-layer relative position bias if needed
-        self.has_relative_position_bias = bool(window_size)
+        self.has_relative_position_bias = config.use_relative_position_bias
         if self.has_relative_position_bias:
-            self.relative_position_bias = BeitRelativePositionBias(config, window_size=window_size)
+            self.relative_position_bias = BeitRelativePositionBias(config)
 
     def forward(
         self,
@@ -428,31 +416,26 @@ class BeitLayer(GradientCheckpointingLayer):
         )
         if self.lambda_1 is not None:
             hidden_states = self.lambda_1 * hidden_states
-        hidden_states = hidden_states + residual
+        hidden_states = self.drop_path(hidden_states) + residual
         residual = hidden_states
         hidden_states = self.layernorm_after(hidden_states)
         hidden_states = self.mlp(hidden_states)
         if self.lambda_2 is not None:
             hidden_states = self.lambda_2 * hidden_states
-        hidden_states = hidden_states + residual
+        hidden_states = self.drop_path(hidden_states) + residual
 
         return hidden_states
 
 
 class BeitEncoder(nn.Module):
-    def __init__(self, config: BeitConfig, window_size: tuple | None = None) -> None:
+    def __init__(self, config: BeitConfig) -> None:
         super().__init__()
         self.config = config
         self.has_relative_position_bias = config.use_shared_relative_position_bias
         if self.has_relative_position_bias:
-            self.relative_position_bias = BeitRelativePositionBias(config, window_size=window_size)
+            self.relative_position_bias = BeitRelativePositionBias(config)
 
-        self.layer = nn.ModuleList(
-            [
-                BeitLayer(config, window_size=window_size if config.use_relative_position_bias else None)
-                for _ in range(config.num_hidden_layers)
-            ]
-        )
+        self.layer = nn.ModuleList([BeitLayer(config, drop_path_rate=r) for r in drop_path_schedule(config)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -493,7 +476,7 @@ class BeitEncoder(nn.Module):
 class BeitPreTrainedModel(PreTrainedModel):
     config: BeitConfig
     base_model_prefix = "beit"
-    input_modalities = "image"
+    input_modalities = ("image",)
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["BeitLayer"]
@@ -506,41 +489,22 @@ class BeitPreTrainedModel(PreTrainedModel):
         "hidden_states": BeitLayer,
         "attentions": BeitAttention,
     }
-    _checkpoint_conversion_mapping = {
-        "attention.query": "q_proj",
-        "attention.key": "k_proj",
-        "attention.value": "v_proj",
-        "attention.output.dense": "attention.o_proj",
-        "intermediate.dense": "mlp.fc1",
-        "output.dense": "mlp.fc2",
-        "attention.attention.relative_position_bias": "relative_position_bias",
-    }
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, BeitEmbeddings):
-            module.cls_token.data.zero_()
+        super()._init_weights(module)
+        if isinstance(module, BeitEmbeddings):
+            init.zeros_(module.cls_token)
             if module.mask_token is not None:
-                module.mask_token.data.zero_()
+                init.zeros_(module.mask_token)
             if module.position_embeddings is not None:
-                module.position_embeddings.data.zero_()
+                init.zeros_(module.position_embeddings)
         elif isinstance(module, BeitRelativePositionBias):
-            module.relative_position_bias_table.data.zero_()
+            init.zeros_(module.relative_position_bias_table)
         elif isinstance(module, BeitLayer):
             if module.lambda_1 is not None:
-                module.lambda_1.data.fill_(self.config.layer_scale_init_value)
-                module.lambda_2.data.fill_(self.config.layer_scale_init_value)
+                init.constant_(module.lambda_1, self.config.layer_scale_init_value)
+                init.constant_(module.lambda_2, self.config.layer_scale_init_value)
 
 
 @auto_docstring
@@ -554,7 +518,7 @@ class BeitModel(BeitPreTrainedModel):
         self.config = config
 
         self.embeddings = BeitEmbeddings(config)
-        self.encoder = BeitEncoder(config, window_size=self.embeddings.patch_embeddings.patch_shape)
+        self.encoder = BeitEncoder(config)
 
         self.layernorm = (
             nn.Identity() if config.use_mean_pooling else nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -567,7 +531,8 @@ class BeitModel(BeitPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -1142,21 +1107,13 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
     BEiT backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
+class BeitBackbone(BackboneMixin, BeitPreTrainedModel):
     _checkpoint_conversion_mapping = {
-        "attention.query": "q_proj",
-        "attention.key": "k_proj",
-        "attention.value": "v_proj",
-        "attention.output.dense": "attention.o_proj",
-        "intermediate.dense": "mlp.fc1",
-        "output.dense": "mlp.fc2",
-        "attention.attention.relative_position_bias": "relative_position_bias",
         "^embeddings": "encoder.embeddings",
     }
 
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.encoder = BeitModel(config, add_pooling_layer=False)

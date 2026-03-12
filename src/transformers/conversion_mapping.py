@@ -35,6 +35,8 @@ if TYPE_CHECKING:
 
 
 _MODEL_TO_CONVERSION_PATTERN = {
+    # ViT-style vision models (old HuggingFace checkpoint format → new modular format)
+    "deit": "vit",
     # Mixtral-style MoE
     "mixtral": "mixtral",
     "minimax": "mixtral",
@@ -63,11 +65,39 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "rt_detr_v2": "rt_detr",
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
+    "segformer": "segformer",
 }
 
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "vit": [
+            WeightRenaming("attention.query", "q_proj"),
+            WeightRenaming("attention.key", "k_proj"),
+            WeightRenaming("attention.value", "v_proj"),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            WeightRenaming("intermediate.dense", "mlp.fc1"),
+            WeightRenaming("output.dense", "mlp.fc2"),
+        ],
+        "segformer": [
+            # Structural: three parallel ModuleLists collapsed into SegformerStage (4 stages for all variants)
+            WeightRenaming(r"encoder.patch_embeddings.(\d+).", r"encoder.stages.\1.patch_embeddings."),
+            WeightRenaming(r"encoder.block.(\d+).", r"encoder.stages.\1.blocks."),
+            WeightRenaming(r"encoder.layer_norm.(\d+)", r"encoder.stages.\1.layer_norm"),
+            # Attention projection renames
+            WeightRenaming("attention.self.query", "attention.q_proj"),
+            WeightRenaming("attention.self.key", "attention.k_proj"),
+            WeightRenaming("attention.self.value", "attention.v_proj"),
+            WeightRenaming("attention.self.sr", "attention.sr"),
+            WeightRenaming("attention.self.layer_norm", "attention.layer_norm"),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            # MLP renames
+            WeightRenaming("mlp.dense1", "mlp.fc1"),
+            WeightRenaming("mlp.dense2", "mlp.fc2"),
+            # LayerNorm renames
+            WeightRenaming("layer_norm_1", "layernorm_before"),
+            WeightRenaming("layer_norm_2", "layernorm_after"),
+        ],
         "timesfm2_5": [
             WeightRenaming("ff0", "fc1"),
             WeightRenaming("ff1", "fc2"),
@@ -368,6 +398,11 @@ def _build_checkpoint_conversion_mapping():
             operations=[MergeModulelist(dim=0), Force16BytesAlignment()],
         ),
     ]
+    mapping["beit"] = mapping["vit"].copy()
+    mapping["beit"] += [
+        WeightRenaming("attention.attention.relative_position_bias", "relative_position_bias"),
+    ]
+
     mapping["minimax_m2"] = mapping["mixtral"].copy()
     mapping["minimax_m2"] += [
         WeightRenaming(".block_sparse_moe.e_score_correction_bias", ".mlp.e_score_correction_bias"),

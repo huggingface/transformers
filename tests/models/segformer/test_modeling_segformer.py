@@ -203,6 +203,12 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(
+        reason="SegFormer test config uses head_dim=8 which is below the minimum of 16 required by Flex attention"
+    )
+    def test_flex_attention_with_grads(self):
+        pass
+
     @unittest.skip(reason="SegFormer does not have get_input_embeddings method and get_output_embeddings methods")
     def test_model_get_set_embeddings(self):
         pass

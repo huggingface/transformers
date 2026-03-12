@@ -47,12 +47,14 @@ class OutputRecorder:
         index (Optional[int]): If the output is a tuple/list, optionally record only at a specific index.
         layer_name (Optional[str]): Name of the submodule to target (if needed), e.g., "transformer.layer.3.attn".
         class_name (Optional[str]): Name of the class to which the hook will be attached. Could be the suffix of class name in some cases.
+        capture_initial_input (bool): Whether to prepend the first module's input as the initial hidden state.
     """
 
     target_class: type[nn.Module]
     index: int = 0
     layer_name: str | None = None
     class_name: str | None = None
+    capture_initial_input: bool = True
 
 
 class CompileableContextVar:
@@ -100,7 +102,7 @@ class CompileableContextVar:
 _active_collector = CompileableContextVar("output_collector", default=None)
 
 
-def install_output_capuring_hook(module: nn.Module, key: str, index: int) -> None:
+def install_output_capuring_hook(module: nn.Module, key: str, index: int, capture_initial_input: bool = True) -> None:
     """Install the forward hook needed to capture the output described by `key` and `index` in `module`."""
 
     def output_capturing_hook(module, args, output):
@@ -110,7 +112,7 @@ def install_output_capuring_hook(module: nn.Module, key: str, index: int) -> Non
         if collected_outputs is None or key not in collected_outputs.keys():
             return
 
-        if key == "hidden_states" and len(collected_outputs[key]) == 0:
+        if capture_initial_input and key == "hidden_states" and len(collected_outputs[key]) == 0:
             collected_outputs[key].append(args[0])
         if not isinstance(output, tuple):
             collected_outputs[key].append(output)
@@ -149,7 +151,7 @@ def recursively_install_hooks(
         ):
             if specs.layer_name is not None and specs.layer_name not in module_name:
                 continue
-            install_output_capuring_hook(parent_module, key, specs.index)
+            install_output_capuring_hook(parent_module, key, specs.index, specs.capture_initial_input)
 
 
 def install_all_output_capturing_hooks(model: PreTrainedModel, prefix: str | None = None) -> None:
