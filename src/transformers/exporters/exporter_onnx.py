@@ -260,6 +260,34 @@ def _patch_full(original):
     return patch
 
 
+def _patch_masked_mean(original):
+    """Manual masked mean: avoids sum/int_count Div type mismatch in ONNX."""
+
+    def patch(input, *, mask, dim=None, keepdim=False, dtype=None):
+        mask_float = mask.float()
+        n = mask_float.sum(dim=dim, keepdim=True).clamp(min=1.0)
+        result = (input * mask_float).sum(dim=dim, keepdim=keepdim) / (n if keepdim else n.squeeze())
+        return result.to(dtype) if dtype is not None else result
+
+    return patch
+
+
+def _patch_masked_var(original):
+    """Manual masked var: avoids sum/int_count Div type mismatch in ONNX."""
+
+    def patch(input, *, mask, dim=None, keepdim=False, unbiased=True):
+        mask_float = mask.float()
+        n = mask_float.sum(dim=dim, keepdim=True).clamp(min=1.0)
+        mean = (input * mask_float).sum(dim=dim, keepdim=True) / n
+        var = ((input - mean).pow(2) * mask_float).sum(dim=dim, keepdim=keepdim)
+        denom = (n - 1.0) if unbiased else n
+        if not keepdim:
+            denom = denom.squeeze()
+        return var / denom.clamp(min=1.0)
+
+    return patch
+
+
 def _patch_masked_scatter(original):
     """Cumsum-gather-where strategy for masked_scatter (avoids ScatterND ORT failures)."""
 
@@ -289,6 +317,8 @@ _TORCH_PATCH_TABLE = [
     (torch, "bucketize", _patch_bucketize),
     (torch.Tensor, "masked_scatter", _patch_masked_scatter),
     (torch, "full", _patch_full),
+    (torch.masked, "mean", _patch_masked_mean),
+    (torch.masked, "var", _patch_masked_var),
 ]
 
 
