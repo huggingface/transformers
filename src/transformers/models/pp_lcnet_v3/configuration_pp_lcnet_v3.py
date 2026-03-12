@@ -57,20 +57,19 @@ class PPLCNetV3Config(BackboneConfigMixin, PreTrainedConfig):
 
     def __init__(
         self,
-        scale=1.0,
-        hidden_act="hardswish",
-        out_features=None,
-        out_indices=None,
-        stem_channels=16,
-        stem_stride=2,
-        block_configs=None,
-        reduction=4,
-        divisor=8,
-        conv_symmetric_num=4,
+        scale: float = 1.0,
+        hidden_act: str | None = "hardswish",
+        out_features: list | None = None,
+        out_indices: list | None = None,
+        stem_channels: int = 16,
+        stem_stride: int = 2,
+        block_configs: list | None = None,
+        reduction: int = 4,
+        divisor: int = 8,
+        conv_symmetric_num: int = 4,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.conv_symmetric_num = conv_symmetric_num
         self.scale = scale
         self.hidden_act = hidden_act
         self.stem_channels = stem_channels
@@ -106,6 +105,7 @@ class PPLCNetV3Config(BackboneConfigMixin, PreTrainedConfig):
         self.depths = [len(blocks) for blocks in self.block_configs]
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.block_configs) + 1)]
         self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
+        self.conv_symmetric_num = conv_symmetric_num
 
 
 __all__ = ["PPLCNetV3Config"]

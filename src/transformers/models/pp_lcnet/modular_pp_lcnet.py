@@ -27,6 +27,7 @@ from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import (
     SizeDict,
 )
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutputWithNoAttention,
@@ -75,17 +76,17 @@ class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
 
     def __init__(
         self,
-        scale=1.0,
-        hidden_act="hardswish",
-        out_features=None,
-        out_indices=None,
-        stem_channels=16,
-        stem_stride=2,
-        block_configs=None,
-        reduction=4,
-        hidden_dropout_prob=0.2,
-        class_expand=1280,
-        divisor=8,
+        scale: float = 1.0,
+        block_configs: list | None = None,
+        stem_channels: int = 16,
+        stem_stride: int = 2,
+        reduction: int = 4,
+        class_expand: int = 1280,
+        divisor: int = 8,
+        hidden_act: str | None = "hardswish",
+        out_features: list | None = None,
+        out_indices: list | None = None,
+        hidden_dropout_prob: float = 0.2,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -179,7 +180,9 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
         resize_images = []
         if do_resize:
             for image in images:
-                # Calculate the target image size while preserving the aspect ratio
+                # Unlike BaseImageProcessorFast, which resizes to a fixed target,
+                # this implementation first calculates the target size dynamically to preserve
+                # the aspect ratio, using the shorter edge as a reference.
                 if self.resize_short is not None:
                     size = self.get_image_size(
                         image, target_short_edge=self.resize_short, size_divisor=self.size_divisor
@@ -205,9 +208,8 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
         # RGB -> BGR
         images = [image[[2, 1, 0], :, :] for image in images]
         data.update({"pixel_values": torch.stack(images, dim=0)})
-        encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
 
-        return encoded_inputs
+        return BatchFeature(data, tensor_type=return_tensors)
 
     def get_image_size(
         self,
@@ -248,7 +250,7 @@ class PPLCNetConvLayer(ResNetConvLayer):
         )
 
 
-class PPLCNetDepthwiseSeparableConvLayer(nn.Module):
+class PPLCNetDepthwiseSeparableConvLayer(GradientCheckpointingLayer):
     """
     Depthwise Separable Convolution Layer: Depthwise Conv -> SE Module (optional) -> Pointwise Conv
     Core component of lightweight models (e.g., MobileNet, PP-LCNet) that significantly reduces
@@ -369,7 +371,8 @@ class PPLCNetPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True
-    _no_split_modules = ["PPLCNetBlock"]
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["PPLCNetDepthwiseSeparableConvLayer"]
     _can_record_outputs = {
         "hidden_states": PPLCNetBlock,
     }
@@ -483,12 +486,11 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
             padding=0,
             bias=False,
         )
-        self.activation = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.hidden_dropout_prob = config.hidden_dropout_prob
-        fc_in_channels = config.class_expand
 
         self.flatten = nn.Flatten(start_dim=1, end_dim=-1)
-        self.head = nn.Linear(fc_in_channels, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        self.head = nn.Linear(config.class_expand, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
         self.post_init()
 
@@ -525,7 +527,7 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
         last_hidden_state = self.avg_pool(outputs.last_hidden_state)
 
         last_hidden_state = self.last_convolution(last_hidden_state)
-        last_hidden_state = self.activation(last_hidden_state)
+        last_hidden_state = self.act_fn(last_hidden_state)
         last_hidden_state = last_hidden_state * (1 - self.hidden_dropout_prob)
 
         last_hidden_state = self.flatten(last_hidden_state)

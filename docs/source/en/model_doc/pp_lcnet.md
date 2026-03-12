@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-09-17 and added to Hugging Face Transformers on 2026-03-11.*
+*This model was released on 2021-09-17 and added to Hugging Face Transformers on 2026-03-13.*
 
 # PP-LCNet
 
@@ -70,7 +70,7 @@ model = AutoModelForImageClassification.from_pretrained(model_path, device_map="
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg", stream=True).raw)
-inputs = image_processor(images=image, return_tensors="pt")
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 predicted_label = outputs.logits.argmax(-1).item()
 print(model.config.id2label[predicted_label])
@@ -110,7 +110,7 @@ from transformers import AutoImageProcessor, AutoModelForImageClassification
 
 model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
 model = AutoModelForImageClassification.from_pretrained(model_path, device_map="auto")
-image_processor = AutoImageProcessor.from_pretrained(model_path)
+image_processor = AutoImageProcessor.from_pretrained(model_path).to(model.device)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg", stream=True).raw)
 inputs = image_processor(images=[image, image], return_tensors="pt")

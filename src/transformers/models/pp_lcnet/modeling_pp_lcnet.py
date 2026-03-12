@@ -25,6 +25,7 @@ from torch import Tensor
 
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -64,7 +65,7 @@ class PPLCNetConvLayer(nn.Module):
         return hidden_state
 
 
-class PPLCNetDepthwiseSeparableConvLayer(nn.Module):
+class PPLCNetDepthwiseSeparableConvLayer(GradientCheckpointingLayer):
     """
     Depthwise Separable Convolution Layer: Depthwise Conv -> SE Module (optional) -> Pointwise Conv
     Core component of lightweight models (e.g., MobileNet, PP-LCNet) that significantly reduces
@@ -198,7 +199,8 @@ class PPLCNetPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True
-    _no_split_modules = ["PPLCNetBlock"]
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["PPLCNetDepthwiseSeparableConvLayer"]
     _can_record_outputs = {
         "hidden_states": PPLCNetBlock,
     }
@@ -312,12 +314,11 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
             padding=0,
             bias=False,
         )
-        self.activation = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.hidden_dropout_prob = config.hidden_dropout_prob
-        fc_in_channels = config.class_expand
 
         self.flatten = nn.Flatten(start_dim=1, end_dim=-1)
-        self.head = nn.Linear(fc_in_channels, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        self.head = nn.Linear(config.class_expand, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
         self.post_init()
 
@@ -354,7 +355,7 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
         last_hidden_state = self.avg_pool(outputs.last_hidden_state)
 
         last_hidden_state = self.last_convolution(last_hidden_state)
-        last_hidden_state = self.activation(last_hidden_state)
+        last_hidden_state = self.act_fn(last_hidden_state)
         last_hidden_state = last_hidden_state * (1 - self.hidden_dropout_prob)
 
         last_hidden_state = self.flatten(last_hidden_state)

@@ -65,22 +65,22 @@ class PPLCNetV3Config(PPLCNetConfig):
 
     def __init__(
         self,
-        scale=1.0,
-        hidden_act="hardswish",
-        out_features=None,
-        out_indices=None,
-        stem_channels=16,
-        stem_stride=2,
-        block_configs=None,
-        reduction=4,
-        divisor=8,
-        conv_symmetric_num=4,
+        scale: float = 1.0,
+        hidden_act: str | None = "hardswish",
+        out_features: list | None = None,
+        out_indices: list | None = None,
+        stem_channels: int = 16,
+        stem_stride: int = 2,
+        block_configs: list | None = None,
+        reduction: int = 4,
+        divisor: int = 8,
+        conv_symmetric_num: int = 4,
         **kwargs,
     ):
-        self.conv_symmetric_num = conv_symmetric_num
         super().__init__(**kwargs)
         del self.hidden_dropout_prob
         del self.class_expand
+        self.conv_symmetric_num = conv_symmetric_num
         # Default block configs for PP-LCNetV3
         # Each tuple: (kernel_size, in_channels, out_channels, stride, use_squeeze_excitation)
         self.block_configs = (

@@ -1,5 +1,5 @@
 # coding = utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     is_flaky,
+    require_cv2,
     require_torch,
     require_torch_accelerator,
     require_vision,
@@ -55,12 +56,10 @@ class PPOCRV5MobileDetModelTester:
         num_channels=3,
         num_stages=5,
         is_training=False,
-        conv_kxk_number=4,
         reduction=4,
         hidden_act="hardswish",
         layer_list_out_channels=[12, 24, 42, 360],
         neck_out_channels=96,
-        shortcut=True,
         kernel_list=[3, 2, 2],
         interpolate_mode="nearest",
     ):
@@ -69,12 +68,10 @@ class PPOCRV5MobileDetModelTester:
         self.num_channels = num_channels
         self.num_stages = num_stages
         self.is_training = is_training
-        self.conv_kxk_number = conv_kxk_number
         self.reduction = reduction
         self.hidden_act = hidden_act
         self.layer_list_out_channels = layer_list_out_channels
         self.neck_out_channels = neck_out_channels
-        self.shortcut = shortcut
         self.kernel_list = kernel_list
         self.interpolate_mode = interpolate_mode
 
@@ -112,12 +109,10 @@ class PPOCRV5MobileDetModelTester:
         }
         config = PPOCRV5MobileDetConfig(
             backbone_config=backbone_config,
-            conv_kxk_number=self.conv_kxk_number,
             reduction=self.reduction,
             hidden_act=self.hidden_act,
             layer_list_out_channels=self.layer_list_out_channels,
             neck_out_channels=self.neck_out_channels,
-            shortcut=self.shortcut,
             kernel_list=self.kernel_list,
             interpolate_mode=self.interpolate_mode,
         )
@@ -189,6 +184,7 @@ class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    # PPOCRV5MobileDet have no seq_length
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
@@ -237,6 +233,7 @@ class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
 
+@require_cv2
 @require_torch
 @require_vision
 @slow

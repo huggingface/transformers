@@ -69,7 +69,9 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
         resize_images = []
         if do_resize:
             for image in images:
-                # Calculate the target image size while preserving the aspect ratio
+                # Unlike BaseImageProcessorFast, which resizes to a fixed target,
+                # this implementation first calculates the target size dynamically to preserve
+                # the aspect ratio, using the shorter edge as a reference.
                 if self.resize_short is not None:
                     size = self.get_image_size(
                         image, target_short_edge=self.resize_short, size_divisor=self.size_divisor
@@ -95,9 +97,8 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
         # RGB -> BGR
         images = [image[[2, 1, 0], :, :] for image in images]
         data.update({"pixel_values": torch.stack(images, dim=0)})
-        encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
 
-        return encoded_inputs
+        return BatchFeature(data, tensor_type=return_tensors)
 
     def get_image_size(
         self,

@@ -4,6 +4,20 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_pp_ocrv5_mobile_det.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -51,13 +65,14 @@ class PPOCRV5MobileDetSqueezeExcitationModule(nn.Module):
             stride=1,
             padding=0,
         )
-        self.activation = ACT2FN[activation]
+        self.act_fn = ACT2FN[activation]
 
-    def forward(self, inputs):
-        outputs = self.avg_pool(inputs)
-        outputs = self.conv2(self.activation(self.conv1(outputs)))
-        outputs = torch.clamp(0.2 * outputs + 0.5, min=0.0, max=1.0)
-        return inputs * outputs
+    def forward(self, hidden_states):
+        residual = hidden_states
+        hidden_states = self.avg_pool(hidden_states)
+        hidden_states = self.conv2(self.act_fn(self.conv1(hidden_states)))
+        hidden_states = torch.clamp(0.2 * hidden_states + 0.5, min=0.0, max=1.0)
+        return residual * hidden_states
 
 
 class PPOCRV5MobileDetResidualSqueezeExcitationLayer(nn.Module):
@@ -75,11 +90,11 @@ class PPOCRV5MobileDetResidualSqueezeExcitationLayer(nn.Module):
             padding=int(kernel_size // 2),
             bias=False,
         )
-        self.se_block = PPOCRV5MobileDetSqueezeExcitationModule(out_channels, reduction)
+        self.squeeze_excitation_block = PPOCRV5MobileDetSqueezeExcitationModule(out_channels, reduction)
 
     def forward(self, hidden_states):
         hidden_states = self.in_conv(hidden_states)
-        hidden_states = hidden_states + self.se_block(hidden_states)
+        hidden_states = hidden_states + self.squeeze_excitation_block(hidden_states)
 
         return hidden_states
 
@@ -87,7 +102,7 @@ class PPOCRV5MobileDetResidualSqueezeExcitationLayer(nn.Module):
 class PPOCRV5MobileDetNeck(nn.Module):
     """
     Neck network for PPOCRV5 Mobile Det, responsible for multi-scale feature fusion.
-    Uses RSELayers to process backbone features and upsampling to fuse features at the same spatial scale,
+    Uses Residual Squeeze-and-Excitation layers to process backbone features and upsampling to fuse features at the same spatial scale,
     then concatenates the fused features for input to the head network.
     """
 
@@ -113,17 +128,25 @@ class PPOCRV5MobileDetNeck(nn.Module):
             )
 
     def forward(self, feature_maps):
-        fused = [conv(feature) for conv, feature in zip(self.insert_conv, feature_maps)]  # [p2, p3, p4, p5]
+        fused = []
+        for conv, feature in zip(self.insert_conv, feature_maps):  # [p2, p3, p4, p5]
+            hidden_states = conv(feature)
+            fused.append(hidden_states)
 
         for i in range(2, -1, -1):  # p4 -> p3-> p2
             fused[i] = fused[i] + F.interpolate(fused[i + 1], scale_factor=2, mode=self.interpolate_mode)
 
-        processed = [conv(feat) for conv, feat in zip(self.input_conv, [fused[0], fused[1], fused[2], fused[3]])]
+        fused = [conv(feat) for conv, feat in zip(self.input_conv, [fused[0], fused[1], fused[2], fused[3]])]
         upsample_scales = [1, 2, 4, 8]  # p2, p3, p4, p5
-        processed = [
-            F.interpolate(feat, scale_factor=scale, mode=self.interpolate_mode) if scale != 1 else feat
-            for feat, scale in zip(processed, upsample_scales)
-        ]
+
+        processed = []
+        for feat, scale in zip(fused, upsample_scales):
+            if scale != 1:
+                hidden_states = F.interpolate(feat, scale_factor=scale, mode=self.interpolate_mode)
+            else:
+                hidden_states = feat
+            processed.append(hidden_states)
+
         fused_feature_map = torch.cat(processed[::-1], dim=1)  # [p5, p4, p3, p2]
         return fused_feature_map
 
@@ -201,9 +224,10 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
         outputs = self.backbone(hidden_states, **kwargs)
-        feature_maps = outputs.feature_maps
-        hidden_states = [self.layer[i](feature_maps[i]) for i in range(len(feature_maps))]
-        hidden_states = self.neck(hidden_states)
+        feature_maps = list(outputs.feature_maps)
+        for i in range(len(feature_maps)):
+            feature_maps[i] = self.layer[i](feature_maps[i])
+        hidden_states = self.neck(feature_maps)
 
         return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=outputs.hidden_states)
 

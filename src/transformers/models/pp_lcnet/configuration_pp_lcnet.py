@@ -53,17 +53,17 @@ class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
 
     def __init__(
         self,
-        scale=1.0,
-        hidden_act="hardswish",
-        out_features=None,
-        out_indices=None,
-        stem_channels=16,
-        stem_stride=2,
-        block_configs=None,
-        reduction=4,
-        hidden_dropout_prob=0.2,
-        class_expand=1280,
-        divisor=8,
+        scale: float = 1.0,
+        block_configs: list | None = None,
+        stem_channels: int = 16,
+        stem_stride: int = 2,
+        reduction: int = 4,
+        class_expand: int = 1280,
+        divisor: int = 8,
+        hidden_act: str | None = "hardswish",
+        out_features: list | None = None,
+        out_indices: list | None = None,
+        hidden_dropout_prob: float = 0.2,
         **kwargs,
     ):
         super().__init__(**kwargs)
