@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="adept/persimmon-8b-base")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class PersimmonConfig(PreTrainedConfig):
     r""".
     qk_layernorm (`bool`, *optional*, default to `True`):

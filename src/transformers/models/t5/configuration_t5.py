@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google-t5/t5-small")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class T5Config(PreTrainedConfig):
     r"""
     relative_attention_num_buckets (`int`, *optional*, defaults to 32):

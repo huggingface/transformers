@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="studio-ousia/luke-base")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class LukeConfig(PreTrainedConfig):
     r"""
     entity_vocab_size (`int`, *optional*, defaults to 500000):

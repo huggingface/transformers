@@ -23,7 +23,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="Qwen/Qwen2-Audio-7B")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class Qwen2AudioEncoderConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
@@ -64,7 +64,7 @@ class Qwen2AudioEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="Qwen/Qwen2-Audio-7B")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class Qwen2AudioConfig(PreTrainedConfig):
     r"""
     Example:

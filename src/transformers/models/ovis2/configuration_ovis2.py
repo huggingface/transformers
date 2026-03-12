@@ -23,7 +23,7 @@ from ..qwen2.configuration_qwen2 import Qwen2Config
 
 @auto_docstring(checkpoint="thisisiron/Ovis2-1B-hf")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class Ovis2VisionConfig(PreTrainedConfig):
     r"""
     hidden_stride (`int`, *optional*, defaults to 1):
@@ -57,7 +57,7 @@ class Ovis2VisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="thisisiron/Ovis2-1B-hf")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class Ovis2Config(PreTrainedConfig):
     r"""
     visual_indicator_token_ids (`List[int]`, *optional*, defaults to `[151666, 151667, 151668, 151669, 151670]`):

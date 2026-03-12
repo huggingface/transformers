@@ -28,7 +28,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="lightonai/LightOnOCR-1B-1025")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class LightOnOcrConfig(PretrainedConfig):
     r"""
     Example:

@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="YituTech/conv-bert-base")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class ConvBertConfig(PreTrainedConfig):
     r"""
     head_ratio (`int`, *optional*, defaults to 2):

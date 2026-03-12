@@ -29,7 +29,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class GlmImageVQVAEConfig(PreTrainedConfig):
     r"""
     num_embeddings (`int`, *optional*, defaults to 16384):
@@ -48,7 +48,7 @@ class GlmImageVQVAEConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class GlmImageVisionConfig(PreTrainedConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 4096):
@@ -89,7 +89,7 @@ class GlmImageVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class GlmImageTextConfig(PreTrainedConfig):
     r"""
     vision_vocab_size (`int`, *optional*, defaults to 16512):
@@ -157,7 +157,7 @@ class GlmImageTextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class GlmImageConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 16384):

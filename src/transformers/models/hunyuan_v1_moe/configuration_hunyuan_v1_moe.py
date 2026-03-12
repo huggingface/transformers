@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="tencent/Hunyuan-A13B-Instruct")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class HunYuanMoEV1Config(PreTrainedConfig):
     r"""
     eod_token_id (int, *optional*, defaults to 3):

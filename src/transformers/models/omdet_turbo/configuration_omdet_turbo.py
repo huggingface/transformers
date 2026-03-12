@@ -29,7 +29,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="omlab/omdet-turbo-swin-tiny-hf")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class OmDetTurboConfig(PreTrainedConfig):
     r"""
     apply_layernorm_after_vision_backbone (`bool`, *optional*, defaults to `True`):

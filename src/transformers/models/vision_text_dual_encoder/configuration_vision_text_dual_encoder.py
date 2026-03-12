@@ -34,7 +34,7 @@ VISION_MODEL_CONFIGS = {
 
 @auto_docstring
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class VisionTextDualEncoderConfig(PreTrainedConfig):
     r"""
     Examples:

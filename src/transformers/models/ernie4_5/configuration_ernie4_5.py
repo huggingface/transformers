@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-0.3B-PT")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class Ernie4_5Config(PreTrainedConfig):
     r"""
     use_bias (`bool`, *optional*, defaults to `False`):

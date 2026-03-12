@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="uclanlp/plbart-base")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class PLBartConfig(PreTrainedConfig):
     r"""
     Example:

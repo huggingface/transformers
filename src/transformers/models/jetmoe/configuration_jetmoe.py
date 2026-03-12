@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="jetmoe/jetmoe-8b")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class JetMoeConfig(PreTrainedConfig):
     r"""
     kv_channels (`int`, *optional*, defaults to 128):

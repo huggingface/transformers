@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="EleutherAI/gpt-neox-20b")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class GPTNeoXConfig(PreTrainedConfig):
     r"""
     use_parallel_residual (`bool`, *optional*, defaults to `True`):

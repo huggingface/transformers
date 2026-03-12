@@ -24,7 +24,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="google/shieldgemma-2-4b-it")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class ShieldGemma2Config(PreTrainedConfig):
     r"""
     mm_tokens_per_image (`int`, *optional*, defaults to 256):

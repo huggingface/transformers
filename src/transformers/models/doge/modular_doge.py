@@ -58,7 +58,7 @@ if is_torch_flex_attn_available():
 
 @auto_docstring(checkpoint="SmallDoge/Doge-320M")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class DogeConfig(PreTrainedConfig):
     r"""
     keep_window_size (`int`, *optional*, defaults to 2048):

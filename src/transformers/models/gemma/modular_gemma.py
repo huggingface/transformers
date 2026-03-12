@@ -49,7 +49,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="google/gemma-7b")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class GemmaConfig(PreTrainedConfig):
     r"""
     use_bidirectional_attention (`bool`, *optional*):

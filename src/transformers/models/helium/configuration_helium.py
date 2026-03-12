@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="kyutai/helium-1-preview")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class HeliumConfig(PreTrainedConfig):
     r"""
     Example:

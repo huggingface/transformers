@@ -55,7 +55,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="google/gemma2-7b")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class Gemma2Config(PreTrainedConfig):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):

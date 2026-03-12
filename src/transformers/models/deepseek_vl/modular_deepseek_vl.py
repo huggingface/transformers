@@ -43,7 +43,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="deepseek-community/deepseek-vl-1.3b-chat")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class DeepseekVLConfig(PreTrainedConfig):
     r"""
     Example:

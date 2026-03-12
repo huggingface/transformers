@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="itazap/blt-1b-hf")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class BltLocalEncoderConfig(PreTrainedConfig):
     r"""
     cross_attn_k (`int`, *optional*, defaults to 2):
@@ -66,7 +66,7 @@ class BltLocalEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="itazap/blt-1b-hf")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class BltLocalDecoderConfig(PreTrainedConfig):
     r"""
     cross_attn_k (`int`, *optional*, defaults to 2):
@@ -110,7 +110,7 @@ class BltLocalDecoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="itazap/blt-1b-hf")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class BltGlobalTransformerConfig(PreTrainedConfig):
     model_type = "blt_global_transformer"
     default_theta = 500000.0
@@ -139,7 +139,7 @@ class BltGlobalTransformerConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="itazap/blt-1b-hf")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class BltPatcherConfig(PreTrainedConfig):
     model_type = "blt_patcher"
 
@@ -168,7 +168,7 @@ class BltPatcherConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="itazap/blt-1b-hf")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class BltConfig(PreTrainedConfig):
     r"""
     patch_in_forward (`bool`, *optional*, defaults to `True`):

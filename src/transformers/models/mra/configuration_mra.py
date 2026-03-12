@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="uw-madison/mra-base-512-4")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class MraConfig(PreTrainedConfig):
     r"""
     block_per_row (`int`, *optional*, defaults to 4):

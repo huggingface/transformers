@@ -43,7 +43,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class MMGroundingDinoConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 900):

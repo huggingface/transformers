@@ -72,7 +72,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV3_safetensors")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class PPDocLayoutV3Config(PreTrainedConfig):
     r"""
     initializer_bias_prior_prob (`float`, *optional*):

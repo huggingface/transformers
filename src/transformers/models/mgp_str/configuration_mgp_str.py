@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="alibaba-damo/mgp-str-base")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class MgpstrConfig(PreTrainedConfig):
     r"""
     max_token_length (`int`, *optional*, defaults to 27):

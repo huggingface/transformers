@@ -35,7 +35,7 @@ from ..vit.modeling_vit import ViTAttention, ViTPatchEmbeddings, ViTPreTrainedMo
 
 @auto_docstring(checkpoint="facebook/pixio-huge")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class PixioConfig(Dinov2Config):
     r"""
     n_cls_tokens (`int`, *optional*, defaults to 8):

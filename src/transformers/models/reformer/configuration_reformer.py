@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/reformer-crime-and-punishment")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class ReformerConfig(PreTrainedConfig):
     r"""
     attention_head_size (`int`, *optional*, defaults to 64):

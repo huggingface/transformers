@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="tau/splinter-base")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class SplinterConfig(PreTrainedConfig):
     r"""
     question_token_id (`int`, *optional*, defaults to 104):

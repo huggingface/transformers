@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="magic-leap-community/superpoint")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class SuperPointConfig(PreTrainedConfig):
     r"""
     encoder_hidden_sizes (`List`, *optional*, defaults to `[64, 64, 128, 128]`):

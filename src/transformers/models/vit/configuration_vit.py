@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/vit-base-patch16-224")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class ViTConfig(PreTrainedConfig):
     r"""
     encoder_stride (`int`, *optional*, defaults to 16):

@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="EleutherAI/gpt-neo-1.3B")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class GPTNeoConfig(PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 256):

@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="sail/poolformer_s12")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class PoolFormerConfig(PreTrainedConfig):
     r"""
     stride (`int`, *optional*, defaults to 16):

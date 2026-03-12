@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="mosaicml/mpt-7b")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class MptAttentionConfig(PreTrainedConfig):
     """
     attn_type (`str`, *optional*, defaults to `"multihead_attention"`):
@@ -70,7 +70,7 @@ class MptAttentionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="mosaicml/mpt-7b")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class MptConfig(PreTrainedConfig):
     """
     expansion_ratio (`int`, *optional*, defaults to 4):

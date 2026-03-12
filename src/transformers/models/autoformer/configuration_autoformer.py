@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="huggingface/autoformer-tourism-monthly")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class AutoformerConfig(PreTrainedConfig):
     r"""
     prediction_length (`int`):

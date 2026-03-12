@@ -81,7 +81,7 @@ class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class Qwen3VLVisionConfig(PreTrainedConfig):
     r"""
     num_position_embeddings (`int`, *optional*, defaults to 2304):
@@ -112,7 +112,7 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class Qwen3VLTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -161,7 +161,7 @@ class Qwen3VLTextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class Qwen3VLConfig(PreTrainedConfig):
     r"""
     Example:

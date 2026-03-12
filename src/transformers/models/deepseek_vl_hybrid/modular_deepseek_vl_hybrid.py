@@ -86,7 +86,7 @@ DEEPSEEK_VL_COMMON_CUSTOM_ARGS = r"""
 
 @auto_docstring(checkpoint="deepseek-community/deepseek-vl-7b-chat")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class DeepseekVLHybridConfig(DeepseekVLConfig):
     r"""
     high_res_vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SamVisionConfig`):

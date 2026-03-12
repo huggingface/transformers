@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="Qwen/Qwen1.5-MoE-A2.7B")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class Qwen2MoeConfig(PreTrainedConfig):
     r"""
     max_window_layers (`int`, *optional*, defaults to 28):

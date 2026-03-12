@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/electra-small-discriminator")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class ElectraConfig(PreTrainedConfig):
     r"""
     summary_type (`str`, *optional*, defaults to `"first"`):

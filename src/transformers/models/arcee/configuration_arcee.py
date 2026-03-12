@@ -30,7 +30,7 @@ from ...modeling_rope_utils import RopeParameters
 
 @auto_docstring(checkpoint="arcee-ai/AFM-4.5B")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class ArceeConfig(PreTrainedConfig):
     r"""
     ```python

@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="bigscience/bloom")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class BloomConfig(PreTrainedConfig):
     r"""
     apply_residual_connection_post_layernorm (`bool`, *optional*, defaults to `False`):

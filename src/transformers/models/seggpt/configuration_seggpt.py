@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="BAAI/seggpt-vit-large")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class SegGptConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*):

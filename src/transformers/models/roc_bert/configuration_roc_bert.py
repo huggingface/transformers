@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="weiweishi/roc-bert-base-zh")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class RoCBertConfig(PreTrainedConfig):
     r"""
     enable_pronunciation (`bool`, *optional*, defaults to `True`):

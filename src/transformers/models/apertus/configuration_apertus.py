@@ -29,7 +29,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="swiss-ai/Apertus-8B-Instruct-2509")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class ApertusConfig(PreTrainedConfig):
     r"""
     ```python

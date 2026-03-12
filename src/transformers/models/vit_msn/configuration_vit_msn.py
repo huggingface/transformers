@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/vit_msn_base")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class ViTMSNConfig(PreTrainedConfig):
     r"""
     Example:

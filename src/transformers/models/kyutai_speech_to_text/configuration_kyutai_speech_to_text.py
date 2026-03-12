@@ -28,7 +28,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="kyutai/stt-2.6b-en-trfs")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class KyutaiSpeechToTextConfig(PreTrainedConfig):
     r"""
     codebook_vocab_size (`int`, *optional*, defaults to 2049):

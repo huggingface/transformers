@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/fnet-base")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class FNetConfig(PreTrainedConfig):
     r"""
     use_tpu_fourier_optimizations (`bool`, *optional*, defaults to `False`):

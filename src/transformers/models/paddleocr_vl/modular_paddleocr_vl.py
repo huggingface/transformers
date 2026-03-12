@@ -582,7 +582,7 @@ class PaddleOCRVLProcessor(ProcessorMixin):
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class PaddleOCRVisionConfig(SiglipVisionConfig):
     r"""
     Example:
@@ -615,14 +615,14 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class PaddleOCRTextConfig(Ernie4_5Config):
     model_type = "paddleocr_vl_text"
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class PaddleOCRVLConfig(Qwen2VLConfig):
     r"""
     Example:

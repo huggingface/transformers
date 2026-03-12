@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="MCG-NJU/videomae-base")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class VideoMAEConfig(PreTrainedConfig):
     r"""
     num_frames (`int`, *optional*, defaults to 16):

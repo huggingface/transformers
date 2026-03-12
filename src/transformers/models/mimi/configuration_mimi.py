@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="kyutai/mimi")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class MimiConfig(PreTrainedConfig):
     r"""
     num_quantizers (`int`, *optional*, defaults to 32):

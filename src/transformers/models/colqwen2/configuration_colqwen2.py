@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="vidore/colqwen2-v1.0-hf")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class ColQwen2Config(PreTrainedConfig):
     r"""
     Example:

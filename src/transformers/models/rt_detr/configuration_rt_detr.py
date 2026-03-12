@@ -25,7 +25,7 @@ from ..auto import AutoConfig
 
 @auto_docstring(checkpoint="PekingU/rtdetr_r50vd")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class RTDetrConfig(PreTrainedConfig):
     r"""
     initializer_bias_prior_prob (`float`, *optional*):

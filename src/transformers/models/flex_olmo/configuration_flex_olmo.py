@@ -30,7 +30,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="allenai/FlexOlmo-7x7B-1T")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class FlexOlmoConfig(PreTrainedConfig):
     r"""
     Example:

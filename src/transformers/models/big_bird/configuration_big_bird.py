@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/bigbird-roberta-base")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class BigBirdConfig(PreTrainedConfig):
     r"""
     attention_type (`str`, *optional*, defaults to `"block_sparse"`):

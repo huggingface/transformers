@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="mistralai/Mixtral-8x7B-v0.1")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class MixtralConfig(PreTrainedConfig):
     r"""
     Example:

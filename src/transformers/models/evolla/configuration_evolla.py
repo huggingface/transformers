@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="westlake-repl/Evolla-10B-hf")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class SaProtConfig(PreTrainedConfig):
     r"""
     mask_token_id (`int`, *optional*, defaults to 4):
@@ -60,7 +60,7 @@ class SaProtConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="westlake-repl/Evolla-10B-hf")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class EvollaConfig(PreTrainedConfig):
     r"""
     protein_encoder_config (`dict`, *optional*):

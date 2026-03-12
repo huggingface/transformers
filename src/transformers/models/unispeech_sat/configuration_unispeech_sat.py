@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/unispeech-sat-base-100h-libri-ft")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class UniSpeechSatConfig(PreTrainedConfig):
     r"""
     feat_proj_dropout (`float`, *optional*, defaults to 0.0):

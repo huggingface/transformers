@@ -23,7 +23,7 @@ from transformers.utils import auto_docstring
 
 @auto_docstring(checkpoint="ibm-granite/granite-timeseries-patchtst")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class PatchTSTConfig(PreTrainedConfig):
     r"""
     context_length (`int`, *optional*, defaults to 32):

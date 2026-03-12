@@ -30,7 +30,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="KamilaMila/FastVLM-7B")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class FastVlmConfig(PreTrainedConfig):
     r"""
     Example:

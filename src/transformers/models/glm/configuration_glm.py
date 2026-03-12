@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="THUDM/glm-4-9b-chat")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class GlmConfig(PreTrainedConfig):
     r"""
     Example:

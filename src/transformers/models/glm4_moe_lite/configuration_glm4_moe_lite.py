@@ -30,7 +30,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class Glm4MoeLiteConfig(PreTrainedConfig):
     r"""
     rope_interleave (`bool`, *optional*, defaults to `True`):

@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="unc-nlp/lxmert-base-uncased")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class LxmertConfig(PreTrainedConfig):
     r"""
     num_qa_labels (`int`, *optional*, defaults to 9500):

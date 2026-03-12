@@ -29,7 +29,7 @@ if is_timm_available():
 
 @auto_docstring(checkpoint="resnet50")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class TimmWrapperConfig(PreTrainedConfig):
     r"""
     architecture (`str`, *optional*, defaults to `"resnet50"`):

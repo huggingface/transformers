@@ -30,7 +30,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-Text-01-hf")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class MiniMaxM2Config(PreTrainedConfig):
     r"""
     Example:

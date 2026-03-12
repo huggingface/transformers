@@ -51,7 +51,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="florence-community/Florence-2-base")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class Florence2VisionConfig(PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 12):
@@ -108,7 +108,7 @@ class Florence2VisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="florence-community/Florence-2-base")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class Florence2Config(PreTrainedConfig):
     r"""
     Example:

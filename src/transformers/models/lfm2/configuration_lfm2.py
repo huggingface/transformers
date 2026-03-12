@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="LiquidAI/LFM2-1.2B")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class Lfm2Config(PreTrainedConfig):
     r"""
     conv_bias (`bool`, *optional*, defaults to `False`):

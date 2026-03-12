@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="uw-madison/yoso-4096")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class YosoConfig(PreTrainedConfig):
     r"""
     use_expectation (`bool`, *optional*, defaults to `True`):

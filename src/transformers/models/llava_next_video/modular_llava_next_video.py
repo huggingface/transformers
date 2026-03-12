@@ -46,7 +46,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="llava-hf/LLaVA-NeXT-Video-7B-hf")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class LlavaNextVideoConfig(PreTrainedConfig):
     r"""
     image_grid_pinpoints (`List`, *optional*, defaults to `[[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]`):

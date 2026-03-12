@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/switch-base-8")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class SwitchTransformersConfig(PreTrainedConfig):
     r"""
     num_sparse_encoder_layers (`int`, *optional*, defaults to 3):

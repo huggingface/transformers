@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/mpnet-base")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class MPNetConfig(PreTrainedConfig):
     r"""
     relative_attention_num_buckets (`int`, *optional*, defaults to 32):

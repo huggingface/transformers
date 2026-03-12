@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="facebook/chameleon-7b")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class ChameleonVQVAEConfig(PreTrainedConfig):
     r"""
     base_channels (`int`, *optional*, defaults to 128):
@@ -66,7 +66,7 @@ class ChameleonVQVAEConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="facebook/chameleon-7b")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class ChameleonConfig(PreTrainedConfig):
     r"""
     model_parallel_size (`int`, *optional*, defaults to 1):

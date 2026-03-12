@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/blenderbot-3B")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class BlenderbotConfig(PreTrainedConfig):
     r"""
     encoder_no_repeat_ngram_size (`int`, *optional*, defaults to 3):

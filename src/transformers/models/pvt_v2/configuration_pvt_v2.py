@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="OpenGVLab/pvt_v2_b0")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class PvtV2Config(BackboneConfigMixin, PreTrainedConfig):
     r"""
     sr_ratios (`list[int]`, *optional*, defaults to `[8, 4, 2, 1]`):

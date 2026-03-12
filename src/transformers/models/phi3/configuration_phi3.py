@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/Phi-3-mini-4k-instruct")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class Phi3Config(PreTrainedConfig):
     r"""
     original_max_position_embeddings (`int`, *optional*, defaults to 4096):

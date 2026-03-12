@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="nvidia/megatron-bert-uncased-345m")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class MegatronBertConfig(PreTrainedConfig):
     r"""
     Examples:

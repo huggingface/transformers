@@ -30,7 +30,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="rhymes-ai/Aria")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class AriaTextConfig(PreTrainedConfig):
     r"""
     moe_num_experts (`int`, *optional*, defaults to 8):
@@ -104,7 +104,7 @@ class AriaTextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="rhymes-ai/Aria")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class AriaConfig(PreTrainedConfig):
     r"""
     projector_patch_to_query_dict (`dict`, *optional*):

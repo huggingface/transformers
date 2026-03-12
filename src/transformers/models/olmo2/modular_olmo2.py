@@ -47,7 +47,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="allenai/Olmo2-7B-1124-hf")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class Olmo2Config(OlmoConfig):
     r"""
     Example:

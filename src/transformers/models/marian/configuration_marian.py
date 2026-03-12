@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="Helsinki-NLP/opus-mt-en-de")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class MarianConfig(PreTrainedConfig):
     r"""
     share_encoder_decoder_embeddings (`bool`, *optional*, defaults to `True`):

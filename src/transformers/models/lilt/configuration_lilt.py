@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="SCUT-DLVCLab/lilt-roberta-en-base")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class LiltConfig(PreTrainedConfig):
     r"""
     channel_shrink_ratio (`int`, *optional*, defaults to 4):

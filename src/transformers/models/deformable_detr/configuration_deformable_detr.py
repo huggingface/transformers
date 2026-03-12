@@ -25,7 +25,7 @@ from ..auto import AutoConfig
 
 @auto_docstring(checkpoint="SenseTime/deformable-detr")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class DeformableDetrConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 300):

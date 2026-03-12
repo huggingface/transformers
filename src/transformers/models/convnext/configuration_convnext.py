@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/convnext-tiny-224")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class ConvNextConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     num_stages (`int`, *optional*, defaults to 4):

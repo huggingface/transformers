@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class DecisionTransformerConfig(PreTrainedConfig):
     """
     state_dim (`int`, *optional*, defaults to 17):

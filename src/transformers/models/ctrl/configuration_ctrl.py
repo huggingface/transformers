@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="Salesforce/ctrl")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class CTRLConfig(PreTrainedConfig):
     r"""
     dff (`int`, *optional*, defaults to 8192):

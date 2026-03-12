@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="LanguageBind/Video-LLaVA-7B-hf")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class VideoLlavaConfig(PreTrainedConfig):
     r"""
     Example:

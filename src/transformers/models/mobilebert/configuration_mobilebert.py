@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/mobilebert-uncased")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class MobileBertConfig(PreTrainedConfig):
     r"""
     embedding_size (`int`, *optional*, defaults to 128):

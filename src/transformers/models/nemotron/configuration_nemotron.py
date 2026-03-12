@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="thhaus/nemotron3-8b")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class NemotronConfig(PreTrainedConfig):
     r"""
     Example:

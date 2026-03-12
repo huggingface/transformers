@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="Qwen/Qwen3-8B")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class Qwen3Config(PreTrainedConfig):
     r"""
     max_window_layers (`int`, *optional*, defaults to 28):

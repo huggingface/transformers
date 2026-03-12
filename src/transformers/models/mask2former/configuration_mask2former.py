@@ -28,7 +28,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="facebook/mask2former-swin-small-coco-instance")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class Mask2FormerConfig(PreTrainedConfig):
     r"""
     feature_size (`int`, *optional*, defaults to 256):

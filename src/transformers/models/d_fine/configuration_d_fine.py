@@ -31,7 +31,7 @@ from ..auto import AutoConfig
 # as well as super() call parsing because otherwise we cannot re-write args after initialization
 @auto_docstring(checkpoint="ustc-community/dfine-xlarge-coco")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class DFineConfig(PreTrainedConfig):
     """
     initializer_bias_prior_prob (`float`, *optional*):

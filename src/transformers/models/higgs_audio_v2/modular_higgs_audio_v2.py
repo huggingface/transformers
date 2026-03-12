@@ -43,7 +43,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="bosonai/higgs-audio-v2-generation-3B-base")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class HiggsAudioV2Config(LlamaConfig):
     r"""
     audio_bos_token_id (`int`, *optional*, defaults to 128013):

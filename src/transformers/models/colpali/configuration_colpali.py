@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="vidore/colpali-v1.2")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class ColPaliConfig(PreTrainedConfig):
     r"""
     Example:

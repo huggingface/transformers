@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/bitnet-b1.58-2B-4T")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class BitNetConfig(PreTrainedConfig):
     r"""
     ```python

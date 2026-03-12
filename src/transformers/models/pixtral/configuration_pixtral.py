@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="mistral-labs/pixtral-12b")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class PixtralVisionConfig(PreTrainedConfig):
     r"""
     Example:

@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/biogpt")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class BioGptConfig(PreTrainedConfig):
     r"""
     Example:

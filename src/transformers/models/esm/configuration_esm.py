@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 
 
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class StructureModuleConfig(PreTrainedConfig):
     """
     Args:
@@ -81,7 +81,7 @@ class StructureModuleConfig(PreTrainedConfig):
 
 
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class TrunkConfig(PreTrainedConfig):
     sub_configs = {"structure_module": StructureModuleConfig}
 
@@ -133,7 +133,7 @@ class TrunkConfig(PreTrainedConfig):
 
 
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class EsmFoldConfig(PreTrainedConfig):
     sub_configs = {"trunk": TrunkConfig}
 
@@ -158,7 +158,7 @@ class EsmFoldConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="facebook/esm-1b")
 @strict(accept_kwargs=True)
-@dataclass
+@dataclass(repr=False)
 class EsmConfig(PreTrainedConfig):
     r"""
     is_folding_model (`bool`, defaults to `False`):
