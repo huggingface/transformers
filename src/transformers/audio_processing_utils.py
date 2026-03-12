@@ -137,7 +137,8 @@ class BaseAudioProcessor(AudioProcessingMixin):
         raise NotImplementedError
 
     def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
-        """Build an attention mask from audio_ranges. Implemented by backend subclasses."""
+        """Build attention mask dict from audio_ranges. Returns a dict of {key: mask} to merge into output.
+        Implemented by backend subclasses."""
         raise NotImplementedError
 
     def _preprocess(
@@ -161,18 +162,13 @@ class BaseAudioProcessor(AudioProcessingMixin):
             audio = self._to_batch(audio) if do_batch_spectrogram else audio
             feature = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config)
             output = {"audio_features": feature}
-
-            if self.return_attention_mask:
-                output["audio_features_mask"] = self._get_mask(
-                    audio_ranges, padded_length, do_extract_spectrogram=True, spectrogram_config=spectrogram_config
-                )
         else:
-            output = {"audio_values": audio}
+            output = {"audio_values": self._to_batch(audio)}
 
-            if self.return_attention_mask:
-                output["audio_values_mask"] = self._get_mask(
-                    audio_ranges, padded_length, do_extract_spectrogram=False, spectrogram_config=None
-                )
+        if self.return_attention_mask:
+            output.update(self._get_mask(
+                audio_ranges, padded_length, do_extract_spectrogram=do_extract_spectrogram, spectrogram_config=spectrogram_config
+            ))
 
         return BatchFeature(data=output, tensor_type=return_tensors)
 

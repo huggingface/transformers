@@ -179,6 +179,7 @@ class NumpyAudioBackend(BaseAudioProcessor):
             norm=mel_cfg.norm,
             mel_scale=mel_cfg.mel_scale,
             triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
+            frequency_bin_mode=mel_cfg.frequency_bin_mode,
         )
 
     def _to_batch(self, audio):
@@ -190,13 +191,13 @@ class NumpyAudioBackend(BaseAudioProcessor):
             audio_lengths = np.array([end - start for start, end in audio_ranges])
             features_lengths = self._get_features_lengths(audio_lengths, spec_cfg)
             n_features = self._get_features_lengths(padded_length, spec_cfg, include_center_frame=True)
-            mask = np.arange(n_features)[None, :] < features_lengths[:, None]
-            return mask.astype(np.int32)
+            mask = (np.arange(n_features)[None, :] < features_lengths[:, None]).astype(np.int32)
+            return {"audio_features_mask": mask}
         else:
             mask = np.zeros((len(audio_ranges), padded_length), dtype=np.int32)
             for i, (start, end) in enumerate(audio_ranges):
                 mask[i, start:end] = 1
-            return mask
+            return {"audio_values_mask": mask}
 
 
 class TorchAudioBackend(BaseAudioProcessor):
@@ -367,6 +368,7 @@ class TorchAudioBackend(BaseAudioProcessor):
             norm=mel_cfg.norm,
             mel_scale=mel_cfg.mel_scale,
             triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
+            frequency_bin_mode=mel_cfg.frequency_bin_mode,
         )
 
     def _to_batch(self, audio):
@@ -378,9 +380,10 @@ class TorchAudioBackend(BaseAudioProcessor):
             audio_lengths = torch.tensor([end - start for start, end in audio_ranges])
             features_lengths = self._get_features_lengths(audio_lengths, spec_cfg)
             n_features = self._get_features_lengths(padded_length, spec_cfg, include_center_frame=True)
-            return (torch.arange(n_features)[None, :] < features_lengths[:, None]).to(torch.int32)
+            mask = (torch.arange(n_features)[None, :] < features_lengths[:, None]).to(torch.int32)
+            return {"audio_features_mask": mask}
         else:
             mask = torch.zeros((len(audio_ranges), padded_length), dtype=torch.int32)
             for i, (start, end) in enumerate(audio_ranges):
                 mask[i, start:end] = 1
-            return mask
+            return {"audio_values_mask": mask}
