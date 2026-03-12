@@ -29,51 +29,27 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast,
-)
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.auto import AutoModel
-from ...models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionTransformerPretrainedModel
+from ...models.qwen2_5_vl.modeling_qwen2_5_vl import (
+    Qwen2_5_VisionTransformerPretrainedModel,
+    Qwen2_5_VLModelOutputWithPast,
+)
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from .configuration_hyperclovax_vision import HyperClovaXConfig, HyperClovaXVisionConfig
+from .configuration_hyperclovax_vision import HCXVisionConfig, HyperClovaXConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for [`HCXVisionModel`] outputs, extending [`BaseModelOutputWithPast`] with
-    multimodal fields for rope position deltas and image hidden states.
-    """
-)
-class HCXVisionModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-        The difference between the multimodal sequence length (text + vision tokens) and the
-        pure text sequence length. Used to correctly apply rotary position embeddings across
-        mixed text-vision sequences.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(num_images, num_patches, hidden_size)`.
-        Hidden states produced by the vision encoder and passed through the multimodal
-        projector before being merged into the language model input embeddings.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-    image_hidden_states: torch.FloatTensor | None = None
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -94,41 +70,66 @@ class HyperCLOVAXRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+def _compute_default_rope_parameters(
+    config: PreTrainedConfig | None = None,
+    device: torch.device | None = None,
+    seq_len: int | None = None,
+) -> tuple["torch.Tensor", float]:
+    """
+    Computes the inverse frequencies according to the original RoPE implementation
+    Args:
+        config ([`~transformers.PreTrainedConfig`]):
+            The model configuration. This function assumes that the config will provide at least the following
+            properties:
+
+            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
+            *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
+
+            Additionally, this function will make use of the following properties if they are found in the config:
+
+            *   head_dim (`int`, *optional*): The size of the key-value heads in the model. If None, this value will be
+                derived as hidden_size // num_attention_heads.
+            *   partial_rotary_factor (`float`, *optional*): If less than 1.0, inverse frequencies will be returned for
+                the first fraction of the head_dim. Defaults to 1.0.
+        device (`torch.device`):
+            The device to use for initialization of the inverse frequencies.
+        seq_len (`int`, *optional*):
+            The current sequence length. Unused for this type of RoPE.
+
+    Returns:
+        Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+        post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+    """
+    base = config.rope_theta
+    partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+    head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+    dim = int(head_dim * partial_rotary_factor)
+
+    attention_factor = 1.0  # Unused in this type of RoPE
+
+    # Compute the inverse frequencies
+    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim))
+    return inv_freq, attention_factor
+
+
 class HyperCLOVAXRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: HyperClovaXConfig, device=None):
         super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
         self.config = config
 
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        if config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "linear"
 
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+        inv_freq, self.attention_scaling = _compute_default_rope_parameters(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: HyperClovaXConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        """Computes the inverse frequencies according to the original RoPE implementation."""
-        base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        self.register_buffer("original_inv_freq", inv_freq, persistent=False)
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -185,9 +186,9 @@ class HyperCLOVAXMLP(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
@@ -346,7 +347,6 @@ class HyperCLOVAXDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
-        # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -376,7 +376,7 @@ class HyperCLOVAXDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class HCXVisionPreTrainedModel(PreTrainedModel):
-    config_class = HyperClovaXVisionConfig
+    config_class = HCXVisionConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["HyperCLOVAXDecoderLayer", "Qwen2_5_VLVisionBlock"]
@@ -419,10 +419,7 @@ class HCXVisionPreTrainedModel(PreTrainedModel):
             init.normal_(module, mean=0.0, std=embed_std)
 
         if isinstance(module, HyperCLOVAXRotaryEmbedding):
-            rope_init_fn = HyperCLOVAXRotaryEmbedding.compute_default_rope_parameters
-            if module.rope_type != "default":
-                rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type]
-            inv_freq, _ = rope_init_fn(module.config)
+            inv_freq, _ = _compute_default_rope_parameters(module.config)
             init.copy_(module.inv_freq, inv_freq)
             init.copy_(module.original_inv_freq, inv_freq)
 
@@ -480,6 +477,7 @@ class HyperClovaXTextModel(HCXVisionPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
+        inputs_embeds = inputs_embeds * self.embedding_multiplier  # mup
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
@@ -489,9 +487,7 @@ class HyperClovaXTextModel(HCXVisionPreTrainedModel):
             position_ids=position_ids,
         )
 
-        hidden_states = inputs_embeds * self.embedding_multiplier  # mup
-
-        # create position embeddings to be shared across the decoder layers
+        hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
@@ -601,105 +597,16 @@ class HyperClovaXForCausalLM(HCXVisionPreTrainedModel, GenerationMixin):
 
 
 class HCXVisionMultiModalProjector(nn.Module):
-    def __init__(self, config: HyperClovaXVisionConfig) -> None:
+    def __init__(self, config: HCXVisionConfig) -> None:
         super().__init__()
-        self.mm_projector_type = config.mm_projector_type
 
         vision_config = config.vision_config
         text_config = config.text_config
 
-        # Determine vision encoder output dimension
         input_hidden_size = getattr(vision_config, "out_hidden_size", vision_config.hidden_size)
         output_hidden_size = text_config.hidden_size
 
-        if self.mm_projector_type == "linear":
-            self.proj = nn.Linear(input_hidden_size, output_hidden_size)
-
-        elif self.mm_projector_type == "mlp":
-            self.proj = nn.Sequential(
-                nn.Linear(input_hidden_size, input_hidden_size),
-                nn.GELU(),
-                nn.Linear(input_hidden_size, output_hidden_size),
-            )
-
-        elif self.mm_projector_type == "inverted_mlp":
-            self.proj = nn.Sequential(
-                nn.Linear(input_hidden_size, 2 * input_hidden_size),
-                nn.GELU(),
-                nn.Linear(2 * input_hidden_size, output_hidden_size),
-            )
-
-        elif self.mm_projector_type == "qwen_merger":
-            spatial_merge_size = getattr(vision_config, "spatial_merge_size", 2)
-            self.hidden_size = input_hidden_size * (spatial_merge_size**2)
-            self.norm = nn.RMSNorm(input_hidden_size, eps=1e-6)
-            self.proj = nn.Sequential(
-                nn.Linear(self.hidden_size, self.hidden_size),
-                nn.GELU(),
-                nn.Linear(self.hidden_size, output_hidden_size),
-            )
-
-        elif self.mm_projector_type == "cabstractor":
-            try:
-                from einops import rearrange  # noqa: F401
-                from timm.layers import LayerNorm2d
-                from timm.models.regnet import RegStage
-            except ImportError as e:
-                raise ImportError(
-                    "CAbstractor projector requires `timm` and `einops`. Install them with: pip install timm einops"
-                ) from e
-
-            from functools import partial
-
-            num_queries = config.num_queries_vis_abstractor
-            num_input_tokens = (vision_config.image_size // vision_config.patch_size) ** 2
-            depth = 3
-            mlp_depth = 2
-
-            assert (num_queries**0.5).is_integer(), "num_queries_vis_abstractor must be a perfect square"
-
-            hw = int(num_queries**0.5)
-
-            # Positional embedding
-            if config.proj_pos_emb:
-                self.pos_emb = nn.Parameter(torch.zeros(1, num_input_tokens, input_hidden_size))
-                nn.init.normal_(self.pos_emb, mean=0.0, std=0.02)
-            else:
-                self.pos_emb = None
-
-            # Pre-normalization
-            if config.proj_prenorm:
-                self.prenorm = nn.LayerNorm(input_hidden_size)
-            else:
-                self.prenorm = None
-
-            # RegBlock = ResBlock + SE (Squeeze-and-Excitation)
-            RegBlock = partial(
-                RegStage,
-                stride=1,
-                dilation=1,
-                act_layer=nn.SiLU,
-                norm_layer=LayerNorm2d,
-            )
-
-            s1 = RegBlock(depth, input_hidden_size, input_hidden_size)
-            sampler = nn.AdaptiveAvgPool2d((hw, hw))
-            s2 = RegBlock(depth, input_hidden_size, input_hidden_size)
-
-            self.net = nn.Sequential(s1, sampler, s2)
-
-            # Readout MLP
-            readout_layers = [nn.Linear(input_hidden_size, output_hidden_size)]
-            for _ in range(1, mlp_depth):
-                readout_layers.append(nn.SiLU())
-                readout_layers.append(nn.Linear(output_hidden_size, output_hidden_size))
-            self.readout = nn.Sequential(*readout_layers)
-
-        else:
-            raise ValueError(
-                f"Unknown mm_projector_type: '{self.mm_projector_type}'. "
-                "Supported types: 'linear', 'mlp', 'inverted_mlp', 'qwen_merger', 'cabstractor'."
-            )
+        self.proj = nn.Linear(input_hidden_size, output_hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """Project vision features to the text decoder hidden space.
@@ -713,69 +620,23 @@ class HCXVisionMultiModalProjector(nn.Module):
         Returns:
             Projected features with last dimension equal to ``text_config.hidden_size``.
         """
-        if self.mm_projector_type == "qwen_merger":
-            # Support both plain tensor and (tensor, window_index) tuple
-            if isinstance(hidden_states, tuple):
-                x, window_index = hidden_states
-                x = self.proj(self.norm(x).view(-1, self.hidden_size))
-                reverse_indices = torch.argsort(window_index)
-                return x[reverse_indices, :]
-            else:
-                return self.proj(self.norm(hidden_states).view(-1, self.hidden_size))
 
-        elif self.mm_projector_type == "cabstractor":
-            from einops import rearrange
-
-            x = hidden_states
-            if self.prenorm is not None:
-                x = self.prenorm(x)
-            if self.pos_emb is not None:
-                x = x + self.pos_emb
-
-            # Reshape to 2D spatial layout
-            hw = int(x.size(1) ** 0.5)
-            x = rearrange(x, "b (h w) d -> b d h w", h=hw, w=hw)
-            x = self.net(x)
-            x = rearrange(x, "b d h w -> b (h w) d")
-            x = self.readout(x)
-            return x
-
-        else:
-            # linear, mlp, inverted_mlp
-            return self.proj(hidden_states)
+        return self.proj(hidden_states)
 
 
 @auto_docstring
 class HCXVisionModel(HCXVisionPreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        "mm_projector": "multi_modal_projector.proj",
-        # Handle checkpoints that used HyperClovaXForCausalLM (with nested .model) instead of HyperClovaXTextModel
-        "^language_model.model": "language_model",
-    }
-
-    def __init__(self, config: HyperClovaXVisionConfig) -> None:
+    def __init__(self, config: HCXVisionConfig) -> None:
         super().__init__(config)
 
-        self.config = config
+        if config.vision_config.architectures[0] == "Qwen2_5_VisionTransformerPretrainedModel":
+            vision_config = Qwen2_5_VisionTransformerPretrainedModel(config.vision_config)
+        else:
+            vision_config = AutoModel.from_config(config.vision_config)
+        self.vision_model = vision_config
 
         self.multi_modal_projector = HCXVisionMultiModalProjector(config)
-
-        if config.vision_config.model_type == "qwen2_5_vl":
-            vision_model = Qwen2_5_VisionTransformerPretrainedModel(config.vision_config)
-        else:
-            vision_model = AutoModel.from_config(config.vision_config)
-        self.vision_model = vision_model
-
-        if config.text_config.model_type == "hyperclovax":
-            language_model = HyperClovaXTextModel(config.text_config)
-        else:
-            language_model = AutoModel.from_config(config.text_config)
-        self.language_model = language_model
-
-        self.except_modalities = (
-            self.vision_model.input_modalities if hasattr(self.vision_model, "input_modalities") else []
-        )
-
+        self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -875,6 +736,7 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
@@ -883,7 +745,7 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
     ) -> tuple | CausalLMOutputWithPast:
         r"""
         pixel_values (`torch.FloatTensor`, *optional*):
-            Pixel values of input images after preprocessing by [`HyperClovaXVisionImageProcessor`].
+            Pixel values of input images after preprocessing by [`Qwen2VLImageProcessor`].
             A 2D tensor of shape `(total_num_patches, channels * patch_size^2 * temporal_patch_size)`.
             In the input token sequence, each image position should contain `config.img_start_id`.
         pixel_values_videos (`torch.FloatTensor`, *optional*):
@@ -900,7 +762,13 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if "image" in self.except_modalities and pixel_values is not None:
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+
+        if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw).pooler_output
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
@@ -908,7 +776,7 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if "video" in self.except_modalities and pixel_values_videos is not None:
+        if pixel_values_videos is not None:
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw).pooler_output
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
@@ -916,24 +784,24 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
-        # Call the text model (HyperClovaXTextModel) to get hidden states.
-        # language_model is HyperClovaXTextModel (the bare text model without lm_head),
-        # so we call it directly rather than going through a CausalLM wrapper.
         outputs = self.language_model(
-            input_ids=None,  # inputs_embeds already computed; passing both causes a validation error
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
+            input_ids=None,
             position_ids=position_ids,
+            attention_mask=attention_mask,
             past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            cache_position=cache_position,
             **kwargs,
         )
-        return HCXVisionModelOutputWithPast(
+        output = Qwen2VLModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            rope_deltas=self.rope_deltas,
         )
+        return output if return_dict else output.to_tuple()
 
 
 @auto_docstring
@@ -949,7 +817,7 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
     }
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
-    def __init__(self, config: HyperClovaXVisionConfig):
+    def __init__(self, config: HCXVisionConfig):
         super().__init__(config)
         self.model = HCXVisionModel(config)
         self.vocab_size = config.text_config.vocab_size
@@ -1011,7 +879,7 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
     ) -> tuple | CausalLMOutputWithPast:
         r"""
         pixel_values (`torch.FloatTensor`, *optional*):
-            Pixel values of input images after preprocessing by [`HyperClovaXVisionImageProcessor`].
+            Pixel values of input images after preprocessing by [`Qwen2VLImageProcessor`].
             For any-resolution mode, this is a 2D tensor of shape
             `(total_num_patches, channels * patch_size^2 * temporal_patch_size)` where
             `total_num_patches` is the sum of patches across all images in the batch.
@@ -1139,95 +1007,6 @@ class HCXVisionForSequenceClassification(HCXVisionPreTrainedModel, GenericForSeq
         "^model.language_model.model": "model.language_model",
         "^model.language_model.lm_head": "lm_head",
     }
-
-    def __init__(self, config: HyperClovaXVisionConfig):
-        super().__init__(config)
-        self.num_labels = config.num_labels if hasattr(config, "num_labels") else 2
-        self.model = HCXVisionModel(config)
-        self.score = nn.Linear(config.text_config.hidden_size, self.num_labels, bias=False)
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
-        image_grid_thw: torch.LongTensor | None = None,
-        video_grid_thw: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> SequenceClassifierOutputWithPast:
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width dimensions of the feature grid for each image.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width dimensions of the feature grid for each video.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in
-            `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is
-            computed (Mean-Square loss), if `config.num_labels > 1` a classification loss is
-            computed (Cross-Entropy).
-        """
-        outputs: BaseModelOutputWithPast = self.model(
-            pixel_values=pixel_values,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            image_grid_thw=image_grid_thw,
-            pixel_values_videos=pixel_values_videos,
-            video_grid_thw=video_grid_thw,
-        )
-        hidden_states = outputs[0]
-        logits = self.score(hidden_states)
-
-        if input_ids is not None:
-            batch_size = input_ids.shape[0]
-        else:
-            batch_size = inputs_embeds.shape[0]
-
-        if self.config.pad_token_id is None and batch_size != 1:
-            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-        if self.config.pad_token_id is None:
-            last_non_pad_token = -1
-        elif input_ids is not None:
-            # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
-            non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
-            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
-            last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
-        else:
-            last_non_pad_token = -1
-
-        pooled_logits = logits[torch.arange(batch_size, device=logits.device), last_non_pad_token]
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
-
-        return SequenceClassifierOutputWithPast(
-            loss=loss,
-            logits=pooled_logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
 
 
 __all__ = [
