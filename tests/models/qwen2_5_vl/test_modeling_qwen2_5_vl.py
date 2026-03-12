@@ -498,11 +498,6 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
-        EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-        ]  # fmt: skip
-
         expected_decoded_texts = Expectations(
             {
                 (None, None): [
@@ -567,7 +562,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
                     'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, an AI language model created by Alibaba Cloud. I am designed to assist with various tasks such as answering questions, providing information,'
                 ],
                 ("rocm", (9, 4)): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is evident in', 
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is evident in',
                     'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to assist with a wide range of tasks, from answering questions and'
                 ],
                 ("xpu", None): [
@@ -611,7 +606,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
                     'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is evident in',
                 ],
                 ("rocm", None): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is often reflected', 
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is often reflected',
                     'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is evident in'
                 ],
                 ("xpu", None): [
@@ -691,7 +686,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
                 "system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\n�\n\n addCriterion\nI'm sorry, but I don't understand your question. Could you please provide more context or clarify what you're asking",
             ],
             ("rocm", (9, 4)): [
-                'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in', 
+                'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
                 'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to assist with a wide range of tasks, from answering questions and'
             ],
             ("xpu", None): [
