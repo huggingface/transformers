@@ -140,14 +140,14 @@ class Qwen3OmniMoeAudioEncoderConfig(Qwen2_5OmniAudioEncoderConfig):
     downsample_hidden_size: int = 480
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen3OmniMoeVisionEncoderConfig(Qwen3VLMoeVisionConfig):
     pass
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen3OmniMoeTextConfig(PreTrainedConfig):
@@ -228,7 +228,7 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
@@ -310,7 +310,7 @@ class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
         self.sliding_window = self.sliding_window
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
@@ -405,7 +405,7 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
@@ -462,7 +462,7 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         return ["sliding_attention"] * self.num_hidden_layers
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen3OmniMoeConfig(PreTrainedConfig):

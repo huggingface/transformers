@@ -27,7 +27,7 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 @strict(accept_kwargs=True)
 @dataclass
 class EdgeTamVideoPromptEncoderConfig(PreTrainedConfig):
@@ -52,7 +52,7 @@ class EdgeTamVideoPromptEncoderConfig(PreTrainedConfig):
     scale: int = 1
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 @strict(accept_kwargs=True)
 @dataclass
 class EdgeTamVideoMaskDecoderConfig(PreTrainedConfig):
@@ -91,7 +91,7 @@ class EdgeTamVideoMaskDecoderConfig(PreTrainedConfig):
     dynamic_multimask_stability_thresh: float = 0.98
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 @strict(accept_kwargs=True)
 @dataclass
 class EdgeTamVideoConfig(PreTrainedConfig):

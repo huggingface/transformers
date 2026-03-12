@@ -41,21 +41,21 @@ from ..sam.modeling_sam import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
 @strict(accept_kwargs=True)
 @dataclass
 class SamHQPromptEncoderConfig(SamPromptEncoderConfig):
     pass
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
 @strict(accept_kwargs=True)
 @dataclass
 class SamHQVisionConfig(SamVisionConfig):
     pass
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
 @strict(accept_kwargs=True)
 @dataclass
 class SamHQMaskDecoderConfig(SamMaskDecoderConfig):
@@ -77,7 +77,7 @@ class SamHQMaskDecoderConfig(SamMaskDecoderConfig):
     vit_dim: int = 768
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
 @strict(accept_kwargs=True)
 @dataclass
 class SamHQConfig(SamConfig):

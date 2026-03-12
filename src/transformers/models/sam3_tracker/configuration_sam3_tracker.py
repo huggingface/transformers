@@ -27,7 +27,7 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
+@auto_docstring(checkpoint="facebook/sam3")
 @strict(accept_kwargs=True)
 @dataclass
 class Sam3TrackerPromptEncoderConfig(PreTrainedConfig):
@@ -53,7 +53,7 @@ class Sam3TrackerPromptEncoderConfig(PreTrainedConfig):
     scale: int = 1
 
 
-@auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
+@auto_docstring(checkpoint="facebook/sam3")
 @strict(accept_kwargs=True)
 @dataclass
 class Sam3TrackerMaskDecoderConfig(PreTrainedConfig):
@@ -92,7 +92,7 @@ class Sam3TrackerMaskDecoderConfig(PreTrainedConfig):
     dynamic_multimask_stability_thresh: float = 0.98
 
 
-@auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
+@auto_docstring(checkpoint="facebook/sam3")
 @strict(accept_kwargs=True)
 @dataclass
 class Sam3TrackerConfig(PreTrainedConfig):

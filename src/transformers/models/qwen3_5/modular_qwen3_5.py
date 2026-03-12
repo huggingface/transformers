@@ -57,7 +57,7 @@ from ..qwen3_vl.modeling_qwen3_vl import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
+@auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen3_5TextConfig(Qwen3NextConfig):
@@ -123,14 +123,14 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
         del self.mlp_only_layers
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
+@auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen3_5VisionConfig(Qwen3VLVisionConfig):
     deepstack_visual_indexes = AttributeError()
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
+@auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen3_5Config(Qwen3VLConfig):

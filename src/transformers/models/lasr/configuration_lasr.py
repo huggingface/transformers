@@ -26,7 +26,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="TODO")
+@auto_docstring(checkpoint="google/medasr")
 @strict(accept_kwargs=True)
 @dataclass
 class LasrEncoderConfig(PreTrainedConfig):
@@ -101,7 +101,7 @@ class LasrEncoderConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="TODO")
+@auto_docstring(checkpoint="google/medasr")
 @strict(accept_kwargs=True)
 @dataclass
 class LasrCTCConfig(PreTrainedConfig):

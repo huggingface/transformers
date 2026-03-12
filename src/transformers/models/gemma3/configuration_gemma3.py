@@ -31,7 +31,7 @@ from ..siglip import SiglipVisionConfig
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="google/gemma3_text-7b")
+@auto_docstring(checkpoint="google/gemma-3-4b-it")
 @strict(accept_kwargs=True)
 @dataclass
 class Gemma3TextConfig(PreTrainedConfig):
@@ -156,7 +156,7 @@ class Gemma3TextConfig(PreTrainedConfig):
         return kwargs
 
 
-@auto_docstring(checkpoint="google/gemma3_text-7b")
+@auto_docstring(checkpoint="google/gemma-3-4b-it")
 @strict(accept_kwargs=True)
 @dataclass
 class Gemma3Config(PreTrainedConfig):

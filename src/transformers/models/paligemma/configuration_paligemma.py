@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring(checkpoint="paligemma-hf/paligemma-2b")
+@auto_docstring(checkpoint="google/paligemma-3b-pt-224")
 @strict(accept_kwargs=True)
 @dataclass
 class PaliGemmaConfig(PreTrainedConfig):

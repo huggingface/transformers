@@ -580,7 +580,7 @@ class PaddleOCRVLProcessor(ProcessorMixin):
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
+@auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
 @strict(accept_kwargs=True)
 @dataclass
 class PaddleOCRVisionConfig(SiglipVisionConfig):
@@ -613,14 +613,14 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
     spatial_merge_size: int = 2
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
+@auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
 @strict(accept_kwargs=True)
 @dataclass
 class PaddleOCRTextConfig(Ernie4_5Config):
     model_type = "paddleocr_vl_text"
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
+@auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
 @strict(accept_kwargs=True)
 @dataclass
 class PaddleOCRVLConfig(Qwen2VLConfig):

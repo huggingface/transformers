@@ -1248,8 +1248,8 @@ class DabDetrModel(DabDetrPreTrainedModel):
         >>> with httpx.stream("GET", url) as response:
         ...     image = Image.open(BytesIO(response.read()))
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("IDEA-Research/dab_detr-base")
-        >>> model = AutoModel.from_pretrained("IDEA-Research/dab_detr-base")
+        >>> image_processor = AutoImageProcessor.from_pretrained("IDEA-Research/dab-detr-resnet-50")
+        >>> model = AutoModel.from_pretrained("IDEA-Research/dab-detr-resnet-50")
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt")

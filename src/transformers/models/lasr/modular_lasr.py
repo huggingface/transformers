@@ -149,7 +149,7 @@ class LasrProcessor(ParakeetProcessor):
     pass
 
 
-@auto_docstring(checkpoint="TODO")
+@auto_docstring(checkpoint="google/medasr")
 @strict(accept_kwargs=True)
 @dataclass
 class LasrEncoderConfig(ParakeetEncoderConfig):
@@ -210,7 +210,7 @@ class LasrEncoderConfig(ParakeetEncoderConfig):
     scale_input = AttributeError()
 
 
-@auto_docstring(checkpoint="TODO")
+@auto_docstring(checkpoint="google/medasr")
 @strict(accept_kwargs=True)
 @dataclass
 class LasrCTCConfig(ParakeetCTCConfig):

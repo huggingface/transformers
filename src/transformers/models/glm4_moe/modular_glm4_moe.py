@@ -39,7 +39,7 @@ from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb  # noqa
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="THUDM/GLM-4-100B-A10B")
+@auto_docstring(checkpoint="zai-org/GLM-4.5")
 @strict(accept_kwargs=True)
 @dataclass
 class Glm4MoeConfig(PreTrainedConfig):

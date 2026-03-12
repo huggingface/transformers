@@ -22,7 +22,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="ibm-fms/FalconH1-9.8b-2.2T-hf")
+@auto_docstring(checkpoint="tiiuae/Falcon-H1-1.5B-Deep-Instruct")
 @strict(accept_kwargs=True)
 @dataclass
 class FalconH1Config(PreTrainedConfig):

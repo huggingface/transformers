@@ -27,7 +27,7 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 @strict(accept_kwargs=True)
 @dataclass
 class EdgeTamVisionConfig(PreTrainedConfig):
@@ -89,7 +89,7 @@ class EdgeTamVisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 @strict(accept_kwargs=True)
 @dataclass
 class EdgeTamPromptEncoderConfig(PreTrainedConfig):
@@ -114,7 +114,7 @@ class EdgeTamPromptEncoderConfig(PreTrainedConfig):
     scale: int = 1
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 @strict(accept_kwargs=True)
 @dataclass
 class EdgeTamMaskDecoderConfig(PreTrainedConfig):
@@ -153,7 +153,7 @@ class EdgeTamMaskDecoderConfig(PreTrainedConfig):
     dynamic_multimask_stability_thresh: float = 0.98
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 @strict(accept_kwargs=True)
 @dataclass
 class EdgeTamConfig(PreTrainedConfig):

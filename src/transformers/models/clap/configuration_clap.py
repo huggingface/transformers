@@ -24,7 +24,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="calp-hsat-fused")
+@auto_docstring(checkpoint="laion/clap-htsat-fused")
 @strict(accept_kwargs=True)
 @dataclass
 class ClapTextConfig(PreTrainedConfig):
@@ -67,7 +67,7 @@ class ClapTextConfig(PreTrainedConfig):
     projection_hidden_act: str = "relu"
 
 
-@auto_docstring(checkpoint="calp-hsat-fused")
+@auto_docstring(checkpoint="laion/clap-htsat-fused")
 @strict(accept_kwargs=True)
 @dataclass
 class ClapAudioConfig(PreTrainedConfig):
@@ -145,7 +145,7 @@ class ClapAudioConfig(PreTrainedConfig):
     initializer_factor: float = 1.0
 
 
-@auto_docstring(checkpoint="calp-hsat-fused")
+@auto_docstring(checkpoint="laion/clap-htsat-fused")
 @strict(accept_kwargs=True)
 @dataclass
 class ClapConfig(PreTrainedConfig):

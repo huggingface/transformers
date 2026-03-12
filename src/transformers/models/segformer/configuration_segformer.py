@@ -21,7 +21,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="ByteDance-Seed/SeedOss-36B")
+@auto_docstring(checkpoint="ByteDance-Seed/Seed-OSS-36B-Instruct")
 @strict(accept_kwargs=True)
 @dataclass
 class SegformerConfig(PreTrainedConfig):

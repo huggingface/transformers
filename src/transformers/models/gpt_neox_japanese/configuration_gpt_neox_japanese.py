@@ -22,7 +22,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="EleutherAI/gpt-neox-japanese-2.7b")
+@auto_docstring(checkpoint="abeja/gpt-neox-japanese-2.7b")
 @strict(accept_kwargs=True)
 @dataclass
 class GPTNeoXJapaneseConfig(PreTrainedConfig):

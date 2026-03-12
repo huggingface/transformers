@@ -67,7 +67,7 @@ class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
     downsample_hidden_size: int = 480
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
@@ -98,7 +98,7 @@ class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen3OmniMoeTextConfig(PreTrainedConfig):
@@ -179,7 +179,7 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
@@ -319,7 +319,7 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
@@ -405,7 +405,7 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
@@ -500,7 +500,7 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
@@ -557,7 +557,7 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         return ["sliding_attention"] * self.num_hidden_layers
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen3OmniMoeConfig(PreTrainedConfig):

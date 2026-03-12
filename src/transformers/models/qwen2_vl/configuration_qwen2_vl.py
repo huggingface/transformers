@@ -23,7 +23,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="Qwen2-VL-7B-Instruct")
+@auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen2VLVisionConfig(PreTrainedConfig):
@@ -43,7 +43,7 @@ class Qwen2VLVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
-@auto_docstring(checkpoint="Qwen2-VL-7B-Instruct")
+@auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen2VLTextConfig(PreTrainedConfig):
@@ -137,7 +137,7 @@ class Qwen2VLTextConfig(PreTrainedConfig):
         return kwargs
 
 
-@auto_docstring(checkpoint="Qwen2-VL-7B-Instruct")
+@auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen2VLConfig(PreTrainedConfig):

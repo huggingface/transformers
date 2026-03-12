@@ -26,7 +26,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
 @strict(accept_kwargs=True)
 @dataclass
 class SamHQPromptEncoderConfig(PreTrainedConfig):
@@ -52,7 +52,7 @@ class SamHQPromptEncoderConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
 @strict(accept_kwargs=True)
 @dataclass
 class SamHQVisionConfig(PreTrainedConfig):
@@ -118,7 +118,7 @@ class SamHQVisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
 @strict(accept_kwargs=True)
 @dataclass
 class SamHQMaskDecoderConfig(PreTrainedConfig):
@@ -153,7 +153,7 @@ class SamHQMaskDecoderConfig(PreTrainedConfig):
     vit_dim: int = 768
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
 @strict(accept_kwargs=True)
 @dataclass
 class SamHQConfig(PreTrainedConfig):

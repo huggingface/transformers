@@ -36,7 +36,7 @@ from ..glm4_moe.modeling_glm4_moe import (
 )
 
 
-@auto_docstring(checkpoint="THUDM/GLM-4-100B-A10B")
+@auto_docstring(checkpoint="zai-org/GLM-4.5")
 @strict(accept_kwargs=True)
 @dataclass
 class Glm4MoeLiteConfig(PreTrainedConfig):

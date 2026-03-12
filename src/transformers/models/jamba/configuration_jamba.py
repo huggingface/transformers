@@ -22,7 +22,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="inceptionai/Jais-2-8B-Chat")
+@auto_docstring(checkpoint="ai21labs/Jamba-v0.1")
 @strict(accept_kwargs=True)
 @dataclass
 class JambaConfig(PreTrainedConfig):

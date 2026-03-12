@@ -21,7 +21,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="pixtral-hf/pixtral-9b")
+@auto_docstring(checkpoint="uclanlp/plbart-base")
 @strict(accept_kwargs=True)
 @dataclass
 class PLBartConfig(PreTrainedConfig):

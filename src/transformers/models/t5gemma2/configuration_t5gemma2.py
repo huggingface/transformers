@@ -31,7 +31,7 @@ from ..siglip import SiglipVisionConfig
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="google/t5gemma2_text-7b")
+@auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
 @strict(accept_kwargs=True)
 @dataclass
 class T5Gemma2TextConfig(PreTrainedConfig):
@@ -138,7 +138,7 @@ class T5Gemma2TextConfig(PreTrainedConfig):
         return kwargs
 
 
-@auto_docstring(checkpoint="google/t5gemma2_text-7b")
+@auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
 @strict(accept_kwargs=True)
 @dataclass
 class T5Gemma2EncoderConfig(PreTrainedConfig):
@@ -208,7 +208,7 @@ class T5Gemma2EncoderConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="google/t5gemma2_text-7b")
+@auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
 @strict(accept_kwargs=True)
 @dataclass
 class T5Gemma2DecoderConfig(PreTrainedConfig):
@@ -315,7 +315,7 @@ class T5Gemma2DecoderConfig(PreTrainedConfig):
         return kwargs
 
 
-@auto_docstring(checkpoint="google/t5gemma2_text-7b")
+@auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
 @strict(accept_kwargs=True)
 @dataclass
 class T5Gemma2Config(PreTrainedConfig):

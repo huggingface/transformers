@@ -39,7 +39,7 @@ from ..sam2.modeling_sam2 import (
 )
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 @strict(accept_kwargs=True)
 @dataclass
 class EdgeTamVisionConfig(PreTrainedConfig):
@@ -101,21 +101,21 @@ class EdgeTamVisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 @strict(accept_kwargs=True)
 @dataclass
 class EdgeTamPromptEncoderConfig(Sam2PromptEncoderConfig):
     pass
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 @strict(accept_kwargs=True)
 @dataclass
 class EdgeTamMaskDecoderConfig(Sam2MaskDecoderConfig):
     pass
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 @strict(accept_kwargs=True)
 @dataclass
 class EdgeTamConfig(Sam2Config):

@@ -22,7 +22,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen3MoeConfig(PreTrainedConfig):

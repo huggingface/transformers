@@ -21,7 +21,7 @@ from transformers.configuration_utils import PreTrainedConfig
 from transformers.utils import auto_docstring
 
 
-@auto_docstring(checkpoint="ibm/patchtst")
+@auto_docstring(checkpoint="ibm-granite/granite-timeseries-patchtst")
 @strict(accept_kwargs=True)
 @dataclass
 class PatchTSTConfig(PreTrainedConfig):

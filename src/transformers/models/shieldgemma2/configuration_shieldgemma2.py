@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring(checkpoint="google/gemma-3-4b")
+@auto_docstring(checkpoint="google/shieldgemma-2-4b-it")
 @strict(accept_kwargs=True)
 @dataclass
 class ShieldGemma2Config(PreTrainedConfig):

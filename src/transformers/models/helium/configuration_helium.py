@@ -23,7 +23,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="kyutai/helium-2b")
+@auto_docstring(checkpoint="kyutai/helium-1-preview")
 @strict(accept_kwargs=True)
 @dataclass
 class HeliumConfig(PreTrainedConfig):

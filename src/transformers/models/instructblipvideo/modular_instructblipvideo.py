@@ -13,6 +13,10 @@
 # limitations under the License.
 
 
+from dataclasses import dataclass
+
+from huggingface_hub.dataclasses import strict
+
 import torch
 
 from transformers.models.instructblip.configuration_instructblip import (
@@ -37,15 +41,57 @@ from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple
 
 
+
+@auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
+@strict(accept_kwargs=True)
+@dataclass
 class InstructBlipVideoVisionConfig(InstructBlipVisionConfig):
-    pass
+    r"""
+    Example:
+
+    ```python
+    >>> from transformers import InstructBlipVideoVisionConfig, InstructBlipVideoVisionModel
+
+    >>> # Initializing a InstructBlipVideoVisionConfig with Salesforce/instructblip-flan-t5-xl style configuration
+    >>> configuration = InstructBlipVideoVisionConfig()
+
+    >>> # Initializing a InstructBlipVideoVisionModel (with random weights) from the Salesforce/instructblip-flan-t5-xl style configuration
+    >>> model = InstructBlipVideoVisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
 
+@auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
+@strict(accept_kwargs=True)
+@dataclass
 class InstructBlipVideoQFormerConfig(InstructBlipQFormerConfig):
-    pass
+    r"""
+    cross_attention_frequency (`int`, *optional*, defaults to 2):
+        The frequency of adding cross-attention to the Transformer layers.
+    encoder_hidden_size (`int`, *optional*, defaults to 1408):
+        The hidden size of the hidden states for cross-attention.
+
+    Examples:
+
+    ```python
+    >>> from transformers import InstructBlipVideoQFormerConfig, InstructBlipVideoQFormerModel
+
+    >>> # Initializing a InstructBlipVideo Salesforce/instructblip-flan-t5-xl style configuration
+    >>> configuration = InstructBlipVideoQFormerConfig()
+
+    >>> # Initializing a model (with random weights) from the Salesforce/instructblip-flan-t5-xl style configuration
+    >>> model = InstructBlipVideoQFormerModel(configuration)
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
 
-class InstructBlipVideoConfig(InstructBlipConfig):
+@auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
+@strict(accept_kwargs=True)
+@dataclass
+class InstructBlipVideoConfig(PreTrainedConfig):
     r"""
     qformer_config (`dict`, *optional*):
         Dictionary of configuration options used to initialize [`InstructBlipVideoQFormerConfig`].
@@ -63,10 +109,10 @@ class InstructBlipVideoConfig(InstructBlipConfig):
     ...     InstructBlipVideoForConditionalGeneration,
     ... )
 
-    >>> # Initializing a InstructBlipVideoConfig with Salesforce/instruct-blip-flan-t5 style configuration
+    >>> # Initializing a InstructBlipVideoConfig with Salesforce/instructblip-flan-t5-xl style configuration
     >>> configuration = InstructBlipVideoConfig()
 
-    >>> # Initializing a InstructBlipVideoForConditionalGeneration (with random weights) from the Salesforce/instruct-blip-flan-t5 style configuration
+    >>> # Initializing a InstructBlipVideoForConditionalGeneration (with random weights) from the Salesforce/instructblip-flan-t5-xl style configuration
     >>> model = InstructBlipVideoForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration

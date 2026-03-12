@@ -25,7 +25,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="meta/chameleon-7B")
+@auto_docstring(checkpoint="facebook/chameleon-7b")
 @strict(accept_kwargs=True)
 @dataclass
 class ChameleonVQVAEConfig(PreTrainedConfig):
@@ -64,7 +64,7 @@ class ChameleonVQVAEConfig(PreTrainedConfig):
     initializer_range = 0.02
 
 
-@auto_docstring(checkpoint="meta/chameleon-7B")
+@auto_docstring(checkpoint="facebook/chameleon-7b")
 @strict(accept_kwargs=True)
 @dataclass
 class ChameleonConfig(PreTrainedConfig):

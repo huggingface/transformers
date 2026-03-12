@@ -28,7 +28,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="google/vaultgemma-7b")
+@auto_docstring(checkpoint="google/vaultgemma-1b")
 @strict(accept_kwargs=True)
 @dataclass
 class VaultGemmaConfig(PreTrainedConfig):

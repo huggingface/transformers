@@ -56,7 +56,7 @@ from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
+@auto_docstring(checkpoint="Qwen/Qwen3.5-35B-A3B")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen3_5MoeTextConfig(Qwen3NextConfig):
@@ -120,14 +120,14 @@ class Qwen3_5MoeTextConfig(Qwen3NextConfig):
         del self.mlp_only_layers
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
+@auto_docstring(checkpoint="Qwen/Qwen3.5-35B-A3B")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen3_5MoeVisionConfig(Qwen3_5VisionConfig):
     pass
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
+@auto_docstring(checkpoint="Qwen/Qwen3.5-35B-A3B")
 @strict(accept_kwargs=True)
 @dataclass
 class Qwen3_5MoeConfig(Qwen3VLConfig):
