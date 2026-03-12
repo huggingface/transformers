@@ -85,7 +85,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("bridgetower", "RobertaTokenizer"),
         ("bros", "BertTokenizer" if is_tokenizers_available() else None),
         ("byt5", "ByT5Tokenizer"),
-        ("camembert", "CamembertTokenizer" if is_tokenizers_available() else None),
+      #  ("camembert", "CamembertTokenizer" if is_tokenizers_available() else None),
         ("canine", "CanineTokenizer"),
         ("chinese_clip", "BertTokenizer" if is_tokenizers_available() else None),
         ("clap", "RobertaTokenizer"),
@@ -341,6 +341,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
 # These models will be forced to use TokenizersBackend.
 MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "arctic",
+    "camembert".
     "chameleon",
     "deepseek_vl",
     "deepseek_vl_v2",
