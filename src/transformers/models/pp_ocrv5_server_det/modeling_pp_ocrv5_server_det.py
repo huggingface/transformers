@@ -127,8 +127,6 @@ class PPOCRV5ServerDetNeck(nn.Module):
         self.scale_factor_list = config.scale_factor_list
         self.num_backbone_stages = len(config.backbone_config.stage_out_channels)
 
-        self.convolution_class = nn.Conv2d
-
         self.input_channel_adjustment_convolution = nn.ModuleList()
         self.input_feature_projection_convolution = nn.ModuleList()
         self.path_aggregation_head_convolution = nn.ModuleList()
@@ -145,7 +143,7 @@ class PPOCRV5ServerDetNeck(nn.Module):
             )
             self.input_channel_adjustment_convolution.append(channel_adjustment_convolution)
 
-            feature_projection_convolution = self.convolution_class(
+            feature_projection_convolution = nn.Conv2d(
                 in_channels=config.neck_out_channels,
                 out_channels=config.neck_out_channels // 4,
                 kernel_size=9,
@@ -165,7 +163,7 @@ class PPOCRV5ServerDetNeck(nn.Module):
                 )
                 self.path_aggregation_head_convolution.append(pan_head_convolution)
 
-            pan_lateral_convolution = self.convolution_class(
+            pan_lateral_convolution = nn.Conv2d(
                 in_channels=config.neck_out_channels // 4,
                 out_channels=config.neck_out_channels // 4,
                 kernel_size=9,

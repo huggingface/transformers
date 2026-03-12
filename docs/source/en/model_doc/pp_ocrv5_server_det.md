@@ -129,7 +129,7 @@ from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
 model_path = "PaddlePaddle/PP-OCRV5_server_det_safetensors"
 model = AutoModelForObjectDetection.from_pretrained(
-    model_path，
+    model_path,
     device_map="auto",
 )
 image_processor = AutoImageProcessor.from_pretrained(model_path)

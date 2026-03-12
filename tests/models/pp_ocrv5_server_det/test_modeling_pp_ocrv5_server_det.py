@@ -269,7 +269,7 @@ class PPOCRV5ServerDetModelIntegrationTest(unittest.TestCase):
         results = self.image_processor.post_process_object_detection(outputs, target_sizes=inputs["target_sizes"])
 
         expected_shape_logits = torch.Size((bs, c // 3, h, w))
-        breakpoint()
+
         expected_logits = torch.tensor(
             [
                 [0.0004, 0.0003, 0.0002],

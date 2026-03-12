@@ -390,18 +390,9 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
             size = size.cpu().detach().numpy()
             src_height, src_width = size
             mask = prediction > threshold
-            boxes_polygon, scores = self._boxes_from_bitmap(
+            boxes, scores = self._boxes_from_bitmap(
                 prediction, mask, src_width, src_height, box_threshold, unclip_ratio, min_size, max_candidates
             )
-
-            # Convert polygon (N, 4, 2) to axis-aligned corners [xmin, ymin, xmax, ymax]
-            if len(boxes_polygon) == 0:
-                boxes = np.zeros((0, 4), dtype=np.float32)
-            else:
-                boxes = np.array(
-                    [[p[:, 0].min(), p[:, 1].min(), p[:, 0].max(), p[:, 1].max()] for p in boxes_polygon],
-                    dtype=np.float32,
-                )
 
             results.append(
                 {
