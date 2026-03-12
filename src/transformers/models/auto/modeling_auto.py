@@ -1083,6 +1083,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
         ("pp_doclayout_v2", "PPDocLayoutV2ForObjectDetection"),
         ("pp_doclayout_v3", "PPDocLayoutV3ForObjectDetection"),
         ("pp_ocrv5_mobile_det", "PPOCRV5MobileDetForObjectDetection"),
+        ("pp_ocrv5_server_det", "PPOCRV5ServerDetForObjectDetection"),
         ("rt_detr", "RTDetrForObjectDetection"),
         ("rt_detr_v2", "RTDetrV2ForObjectDetection"),
         ("table-transformer", "TableTransformerForObjectDetection"),
