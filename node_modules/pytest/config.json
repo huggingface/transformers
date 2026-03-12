@@ -1,0 +1,15 @@
+{
+  "index":"index.html",
+  "port":8888,
+  "message":"ok",
+  "root":"www",
+  "type":{
+    ".jpg":"image/jpeg",
+    ".jpeg":"image/jpeg",
+    ".png":"image/png",
+    ".css":"text/css",
+    ".html":"text/html",
+    ".js":"application/x-javascript"
+  },
+  "last-modified":true
+}

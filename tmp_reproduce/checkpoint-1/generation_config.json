@@ -1,0 +1,9 @@
+{
+  "_from_model_config": true,
+  "bos_token_id": 1,
+  "eos_token_id": 2,
+  "output_attentions": false,
+  "output_hidden_states": false,
+  "transformers_version": "5.3.0.dev0",
+  "use_cache": true
+}
