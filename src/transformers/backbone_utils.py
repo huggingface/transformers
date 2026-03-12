@@ -20,6 +20,7 @@ import inspect
 from huggingface_hub import repo_exists
 
 from .utils import logging
+from .utils.output_capturing import maybe_install_capturing_hooks
 
 
 logger = logging.get_logger(__name__)
@@ -180,6 +181,18 @@ class BackboneMixin:
             self._init_transformers_backbone()
         else:
             raise ValueError(f"backbone_type {self.backbone_type} not supported.")
+
+    def post_init(self):
+        """
+        Override `post_init` to always install capturing hooks, as backbone will ALWAYS capture outputs. We need to do
+        it in `post_init`, as modules need to be already instantiated.
+        It avoids some mixups with `torch.compile`, as the first hook installation will need/create a graph break,
+        which can clash with external user call such as `model = torch.compile(model...)`.
+        """
+        # NOTE: Since this class is ALWAYS used as a Mixin with another PreTrainedModel class, this `super` call
+        # will call the PreTrained's `post_init`
+        super().post_init()
+        maybe_install_capturing_hooks(self)
 
     def _init_timm_backbone(self, backbone) -> None:
         """
