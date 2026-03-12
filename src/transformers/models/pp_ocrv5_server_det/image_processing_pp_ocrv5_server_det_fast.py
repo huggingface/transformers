@@ -37,12 +37,7 @@ if is_cv2_available():
     import cv2
 
 
-@auto_docstring(
-    custom_intro=r"""
-    Image processor for PPOCRV5 Server Det model, handling preprocessing (resizing, normalization)
-    and post-processing (converting model outputs to text boxes).
-    """
-)
+@auto_docstring
 class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
     resample = 2
     image_mean = [0.406, 0.456, 0.485]
@@ -388,9 +383,9 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         if target_sizes is None:
             raise ValueError("target_sizes must be provided for post_process_object_detection")
 
-        device = predictions.logits.device
+        device = predictions.last_hidden_state.device
         results = []
-        for prediction, size in zip(predictions.logits, target_sizes):
+        for prediction, size in zip(predictions.last_hidden_state, target_sizes):
             prediction = prediction[0, :, :].cpu().detach().numpy()
             size = size.cpu().detach().numpy()
             src_height, src_width = size

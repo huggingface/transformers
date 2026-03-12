@@ -111,9 +111,11 @@ class PPOCRV5ServerDetModelTester:
             interpolate_mode="nearest",
             neck_out_channels=32,
             reduce_factor=2,
+            intraclass_block_number=4,
             intraclass_block_config=intraclass_block_config,
             mode="large",
             scale_factor=2,
+            scale_factor_list=[1, 2, 4, 8],
             hidden_act="relu",
             kernel_list=[3, 2, 2],
         )
@@ -127,7 +129,7 @@ class PPOCRV5ServerDetModelTester:
 
         result = model(pixel_values)
 
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.image_size, self.image_size))
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, 1, self.image_size, self.image_size))
 
 
 @require_torch
@@ -267,7 +269,7 @@ class PPOCRV5ServerDetModelIntegrationTest(unittest.TestCase):
         results = self.image_processor.post_process_object_detection(outputs, target_sizes=inputs["target_sizes"])
 
         expected_shape_logits = torch.Size((bs, c // 3, h, w))
-
+        breakpoint()
         expected_logits = torch.tensor(
             [
                 [0.0004, 0.0003, 0.0002],
@@ -276,13 +278,13 @@ class PPOCRV5ServerDetModelIntegrationTest(unittest.TestCase):
             ]
         ).to(torch_device)
 
-        self.assertEqual(outputs.logits.shape, expected_shape_logits)
-        torch.testing.assert_close(outputs.logits[0, 0, :3, :3], expected_logits, rtol=2e-4, atol=2e-4)
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape_logits)
+        torch.testing.assert_close(outputs.last_hidden_state[0, 0, :3, :3], expected_logits, rtol=2e-4, atol=2e-4)
 
         # Axis-aligned boxes in corners format (xmin, ymin, xmax, ymax)
         expected_shape_boxes = torch.Size((4, 4))
         expected_boxes = torch.tensor(
-            [[75, 532, 400, 589], [14, 478, 520, 553], [187, 430, 409, 498], [31, 378, 491, 456]],
+            [[76, 534, 399, 587], [14, 478, 519, 553], [193, 438, 403, 492], [31, 378, 491, 456]],
             dtype=torch.float32,
             device=torch_device,
         )

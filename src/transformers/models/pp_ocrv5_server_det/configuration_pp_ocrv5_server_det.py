@@ -39,6 +39,8 @@ from ..auto import AutoConfig
         Configuration for the Intra-Class Block modules, if any, used for enhancing feature representation.
     scale_factor (`int`, *optional*, defaults to 2):
         The scaling factor used for spatial resolution adjustments in the feature maps.
+    scale_factor_list (`list[int]`, *optional*, defaults to `None`):
+        A list of scaling factors used for spatial resolution adjustments in the feature maps.
     kernel_list (`list[int]`, *optional*, defaults to `[3, 2, 2]`):
         The list of kernel sizes for convolutional layers in the head network for multi-scale feature extraction.
     """,
@@ -56,6 +58,7 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         intraclass_block_number: int = 4,
         intraclass_block_config: dict | None = None,
         scale_factor: int = 2,
+        scale_factor_list: list | None = None,
         hidden_act: str = "relu",
         kernel_list: list | None = None,
         **kwargs,
@@ -82,6 +85,7 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         # ---- neck ----
         self.neck_out_channels = neck_out_channels
         self.reduce_factor = reduce_factor
+        self.scale_factor_list = scale_factor_list
         self.intraclass_block_number = intraclass_block_number
         self.intraclass_block_config = intraclass_block_config
 

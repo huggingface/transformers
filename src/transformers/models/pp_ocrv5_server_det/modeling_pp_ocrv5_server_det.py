@@ -18,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -38,14 +36,6 @@ class PPOCRV5ServerDetIntraclassBlock(nn.Module):
     Intra-Class Relationship Block. It uses multi-scale convolution (7x7, 5x5, 3x3)
     and asymmetric kernels (e.g., 7x1, 1x7) to capture long-range spatial dependencies
     within text regions.
-
-    Args:
-        intraclass_block_config (`dict`, *optional*):
-            Configuration dictionary specifying kernel sizes and paddings for all sub-layers.
-        in_channels (`int`, *optional*, defaults to 96):
-            Number of channels in the input feature map.
-        reduce_factor (`int`, *optional*, defaults to 4):
-            The factor used to compress channels for efficiency during relationship modeling.
     """
 
     def __init__(
@@ -90,7 +80,7 @@ class PPOCRV5ServerDetIntraclassBlock(nn.Module):
             reduced_channels, reduced_channels, *intraclass_block_config["symmetric_conv_long_shortratio"]
         )
 
-        self.layer = PPOCRV5ServerDetConvBatchnormLayer(
+        self.conv_final = PPOCRV5ServerDetConvBatchnormLayer(
             in_channels=reduced_channels,
             out_channels=in_channels,
             kernel_size=intraclass_block_config["return_channel"][0],
@@ -119,7 +109,7 @@ class PPOCRV5ServerDetIntraclassBlock(nn.Module):
             + self.horizontal_small_to_long_conv_shortratio(hidden_states)
         )
 
-        hidden_states = self.layer(hidden_states)
+        hidden_states = self.conv_final(hidden_states)
 
         return residual + hidden_states
 
@@ -134,6 +124,8 @@ class PPOCRV5ServerDetNeck(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.interpolate_mode = config.interpolate_mode
+        self.scale_factor_list = config.scale_factor_list
+        self.num_backbone_stages = len(config.backbone_config.stage_out_channels)
 
         self.convolution_class = nn.Conv2d
 
@@ -196,35 +188,37 @@ class PPOCRV5ServerDetNeck(nn.Module):
             for i, feature in enumerate(backbone_stage_feature_maps)
         ]
 
-        top_down = [None] * 4
+        top_down = [None] * self.num_backbone_stages
         top_down[3] = channel_adjusted[3]
-        for i in range(2, -1, -1):
+        for i in range(self.num_backbone_stages - 2, -1, -1):
             top_down[i] = channel_adjusted[i] + F.interpolate(
                 top_down[i + 1], scale_factor=2, mode=self.interpolate_mode
             )
 
         projected = [
-            self.input_feature_projection_convolution[i](top_down[i] if i < 3 else channel_adjusted[3])
-            for i in range(4)
+            self.input_feature_projection_convolution[i](
+                top_down[i] if i < self.num_backbone_stages - 1 else channel_adjusted[-1]
+            )
+            for i in range(self.num_backbone_stages)
         ]
 
-        bottom_up = [None] * 4
+        bottom_up = [None] * self.num_backbone_stages
         bottom_up[0] = projected[0]
-        for i in range(1, 4):
+        for i in range(1, self.num_backbone_stages):
             bottom_up[i] = projected[i] + self.path_aggregation_head_convolution[i - 1](bottom_up[i - 1])
 
         lateral_refined = [
-            self.path_aggregation_lateral_convolution[i](projected[0] if i == 0 else bottom_up[i]) for i in range(4)
+            self.path_aggregation_lateral_convolution[i](projected[0] if i == 0 else bottom_up[i])
+            for i in range(self.num_backbone_stages)
         ]
 
         intraclass_refined = [block(feature) for block, feature in zip(self.intraclass_blocks, lateral_refined)]
 
-        scale_factors = [1, 2, 4, 8]
         upsampled = [
             F.interpolate(feature, scale_factor=scale_factor, mode=self.interpolate_mode)
             if scale_factor > 1
             else feature
-            for feature, scale_factor in zip(intraclass_refined, scale_factors)
+            for feature, scale_factor in zip(intraclass_refined, self.scale_factor_list)
         ]
 
         return torch.cat(upsampled[::-1], dim=1)
@@ -233,17 +227,6 @@ class PPOCRV5ServerDetNeck(nn.Module):
 class PPOCRV5ServerDetConvBatchnormLayer(nn.Module):
     """
     A basic wrapper for Convolution-BatchNorm-Activation, typically used for head components.
-
-    Args:
-        in_channels (`int`): Input channel count.
-        out_channels (`int`): Output channel count.
-        kernel_size (`int`): Size of the kernel.
-        stride (`int`): Stride for the convolution.
-        padding (`Union[int, str]`): Padding value or strategy.
-        groups (`int`, *optional*, defaults to 1): Grouped convolution parameter.
-        activation (`str`, *optional*): Type of activation ("relu" or "hardswish").
-        bias (`bool`, *optional*, defaults to `True`): Whether to use bias term.
-        convolution_transpose (`bool`, *optional*, defaults to `False`): Whether to use a transposed convolution.
     """
 
     def __init__(
@@ -291,12 +274,6 @@ class PPOCRV5ServerDetSegmentationHead(nn.Module):
     """
     Standard segmentation head for generating probability maps. It uses transposed
     convolution to upsample the feature map back to the original image size.
-
-    Args:
-        in_channels (`int`):
-            Number of input channels from the neck (e.g., PPOCRV5ServerDetNeck).
-        kernel_list (`List[int]`, *optional*, defaults to `[3, 2, 2]`):
-            List of kernel sizes for the sequence of [Conv2d, ConvTranspose2d, ConvTranspose2d].
     """
 
     def __init__(
@@ -340,11 +317,6 @@ class PPOCRV5ServerDetLocalModule(nn.Module):
     """
     Local Refinement Module that refines the initial probability map by
     concatenating it with higher-resolution features.
-
-    Args:
-        in_channels (`int`): Number of channels in the feature map `hidden_states`.
-        out_channels (`int`): Hidden channel size for the refinement layers.
-        hidden_act (`str`): Activation function name.
     """
 
     def __init__(self, in_channels: int, out_channels: int, hidden_act: str):
@@ -375,7 +347,7 @@ class PPOCRV5ServerDetLocalModule(nn.Module):
 
 class PPOCRV5ServerDetHead(nn.Module):
     """
-    PPOCRV5ServerDetPFHeadLocal implements the Progressive Fusion Head with Local refinement,
+    PPOCRV5ServerDetHead implements the Progressive Fusion Head with Local refinement,
     the core detection head of PP-OCRv5.
     """
 
@@ -413,12 +385,7 @@ class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
 
 
-@auto_docstring(
-    custom_intro="""
-    Core PPOCRV5 Server Det model.
-    Integration of HGNetV2 (Backbone), PPOCRV5ServerDetNeck (Neck), and PPOCRV5ServerDetPFHeadLocal (Head).
-    """
-)
+@auto_docstring
 class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
     def __init__(self, config: PPOCRV5ServerDetConfig):
         super().__init__(config)
@@ -443,23 +410,6 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
         )
 
 
-@auto_docstring
-@dataclass
-class PPOCRV5ServerDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
-    r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, neck_out_channels, height, width)`, *optional*):
-        Fused feature maps from the neck (LKPAN) before the detection head.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-        Tuple of feature maps from backbone stages when `output_hidden_states=True`.
-    logits (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`):
-        The predicted text mask (binary probability maps). Values in [0, 1] indicate probability of text
-        presence at each pixel. Use [`PPOCRV5ServerDetImageProcessorFast.post_process_object_detection`]
-        to convert to bounding boxes.
-    """
-
-    logits: torch.FloatTensor | None = None
-
-
 @auto_docstring(
     custom_intro="""
     PPOCRV5 Server Det model for object (text) detection tasks. Wraps the core PPOCRV5ServerDetModel
@@ -476,18 +426,16 @@ class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | PPOCRV5ServerDetForObjectDetectionOutput:
+    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
         outputs = self.model(pixel_values, **kwargs)
         logits = self.head(outputs.last_hidden_state)
 
-        return PPOCRV5ServerDetForObjectDetectionOutput(
-            logits=logits,
-            last_hidden_state=outputs.last_hidden_state,
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=logits,
             hidden_states=outputs.hidden_states,
         )
 
