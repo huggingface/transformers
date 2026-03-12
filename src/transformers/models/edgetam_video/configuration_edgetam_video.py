@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 class EdgeTamVideoPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -59,7 +59,7 @@ class EdgeTamVideoPromptEncoderConfig(PreTrainedConfig):
         self.scale = scale
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 class EdgeTamVideoMaskDecoderConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*, defaults to 2048):
@@ -117,7 +117,7 @@ class EdgeTamVideoMaskDecoderConfig(PreTrainedConfig):
         self.attention_downsample_rate = attention_downsample_rate
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 class EdgeTamVideoConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `EdgeTamVideoPromptEncoderConfig`], *optional*):

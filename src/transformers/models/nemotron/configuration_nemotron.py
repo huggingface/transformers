@@ -22,7 +22,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="nvidia/nemotron-3-8b-base-4k-hf")
+@auto_docstring(checkpoint="thhaus/nemotron3-8b")
 class NemotronConfig(PreTrainedConfig):
     r"""
     Example:

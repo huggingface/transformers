@@ -230,7 +230,6 @@ class TimesFm2_5Attention(ApertusAttention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values=None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         input_shape = hidden_states.shape[:-1]
@@ -250,8 +249,7 @@ class TimesFm2_5Attention(ApertusAttention):
         query_states = query_states * scale[None, None, None, :]
 
         if past_key_values is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -478,10 +476,7 @@ class TimesFm2_5Model(TimesFm2_5PreTrainedModel):
         position_ids = torch.arange(sequence_length, device=input_embeddings.device).unsqueeze(0) - num_masked
 
         padding_mask = (~patch_padding).to(torch.int64)
-        cache_position = torch.arange(sequence_length, device=input_embeddings.device)
-        attention_mask = create_causal_mask(
-            self.config, input_embeddings, padding_mask, cache_position, past_key_values=None
-        )
+        attention_mask = create_causal_mask(self.config, input_embeddings, padding_mask, past_key_values=None)
         position_embeddings = self.rotary_emb(input_embeddings, position_ids)
 
         hidden_states = input_embeddings
