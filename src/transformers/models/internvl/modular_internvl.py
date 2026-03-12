@@ -485,8 +485,8 @@ class InternVLModel(LlavaModel):
 
         return vision_features
 
-    @can_return_tuple
     @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -548,7 +548,6 @@ class InternVLModel(LlavaModel):
         inputs_embeds: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | InternVLModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -575,7 +574,6 @@ class InternVLModel(LlavaModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             **kwargs,
         )
 

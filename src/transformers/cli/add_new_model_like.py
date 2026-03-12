@@ -312,7 +312,7 @@ def insert_model_in_doc_toc(
         old_lowercase_name (`str`):
             The old lowercase model name.
         new_lowercase_name (`str`):
-            The old lowercase model name.
+            The new lowercase model name.
         new_model_paper_name (`str`):
             The fully cased name (as in the official paper name) of the new model.
     """

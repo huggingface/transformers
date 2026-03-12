@@ -88,10 +88,6 @@ class AyaVisionMultiModalProjector(nn.Module):
 
 class AyaVisionPreTrainedModel(LlavaPreTrainedModel):
     _can_compile_fullgraph = False
-    _can_record_outputs = {
-        "hidden_states": "DecoderLayer",
-        "attentions": "Attention",
-    }
 
 
 class AyaVisionCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
@@ -104,8 +100,8 @@ class AyaVisionModelOutputWithPast(LlavaModelOutputWithPast):
 
 class AyaVisionModel(LlavaModel):
     # Unlike LLaVA, the model doesn't have to deal with Pixtral-style image states
-    @can_return_tuple
     @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -156,7 +152,6 @@ class AyaVisionModel(LlavaModel):
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | AyaVisionModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -184,7 +179,6 @@ class AyaVisionModel(LlavaModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -209,7 +203,6 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -260,7 +253,6 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
             labels=labels,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             image_sizes=image_sizes,
             **kwargs,

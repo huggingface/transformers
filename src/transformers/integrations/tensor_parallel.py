@@ -63,7 +63,7 @@ def initialize_tensor_parallelism(
                 local_rank = int(os.environ["LOCAL_RANK"])
                 world_size = int(os.environ["WORLD_SIZE"])
 
-                backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "xccl", "hpu": "hccl"}
+                backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "xccl", "hpu": "hccl", "neuron": "neuron"}
                 backend = backend_map.get(device_type)
 
                 torch.distributed.init_process_group(backend=backend, rank=rank, world_size=world_size)
@@ -82,13 +82,6 @@ def initialize_tensor_parallelism(
             index = current_device.current_device()
             tp_device = torch.device(device_type, index)
             device_map = tp_device
-            # Silence output for non-primary ranks
-            if index > 0:
-                import sys
-
-                sys.stdout = open(os.devnull, "w")
-                sys.stderr = open(os.devnull, "w")
-
         else:
             tp_device = torch.device(device_type)
             device_map = device_type or {}
@@ -974,7 +967,7 @@ class EmbeddingParallel(TensorParallelLayer):
             input_mask = mod._input_mask
             # Use multiplication instead of in-place assignment to preserve gradients
             mask_expanded = input_mask.unsqueeze(-1).expand_as(outputs)
-            outputs = outputs * (~mask_expanded).float()
+            outputs = outputs * (~mask_expanded).to(outputs.dtype)
             del mod._input_mask
 
         return all_reduce_forward(outputs, device_mesh)

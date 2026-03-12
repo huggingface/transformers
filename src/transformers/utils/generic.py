@@ -939,7 +939,7 @@ def merge_with_config_defaults(func):
 class GeneralInterface(MutableMapping):
     """
     Dict-like object keeping track of a class-wide mapping, as well as a local one. Allows to have library-wide
-    modifications though the class mapping, as well as local modifications in a single file with the local mapping.
+    modifications through the class mapping, as well as local modifications in a single file with the local mapping.
     """
 
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
