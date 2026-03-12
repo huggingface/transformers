@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 import math
-import pickle
 from contextlib import contextmanager
 from typing import Iterable, Sequence
 
@@ -30,6 +29,49 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+# Stable dtype ↔ integer mapping used in tensor metadata encoding (no pickle).
+_DTYPE_TO_ID: dict = {}
+_ID_TO_DTYPE: dict = {}
+
+def _build_dtype_maps():
+    import torch
+    pairs = [
+        (torch.float32, 0), (torch.float16, 1), (torch.bfloat16, 2),
+        (torch.float64, 3), (torch.int64, 4), (torch.int32, 5),
+        (torch.int16, 6), (torch.int8, 7), (torch.uint8, 8), (torch.bool, 9),
+    ]
+    for dtype, idx in pairs:
+        _DTYPE_TO_ID[dtype] = idx
+        _ID_TO_DTYPE[idx] = dtype
+
+def _encode_tensor_meta(tensors) -> "torch.Tensor":
+    """Encode shapes/dtypes into a flat int64 tensor — no pickle."""
+    if not _DTYPE_TO_ID:
+        _build_dtype_maps()
+    # Format: [N, ndim_0, d0_0, ..., dtype_id_0, ndim_1, ...]
+    import torch
+    values = [len(tensors)]
+    for t in tensors:
+        values.append(len(t.shape))
+        values.extend(t.shape)
+        values.append(_DTYPE_TO_ID[t.dtype])
+    return torch.tensor(values, dtype=torch.int64)
+
+
+def _decode_tensor_meta(meta_tensor) -> list:
+    """Decode shapes/dtypes from a flat int64 tensor."""
+    if not _ID_TO_DTYPE:
+        _build_dtype_maps()
+    data = meta_tensor.tolist()
+    n, idx, result = data[0], 1, []
+    for _ in range(n):
+        ndim = data[idx]; idx += 1
+        shape = tuple(data[idx : idx + ndim]); idx += ndim
+        dtype = _ID_TO_DTYPE[data[idx]]; idx += 1
+        result.append((shape, dtype))
+    return result
 
 
 class PipelineParallelSkipped(nn.Module):
@@ -169,9 +211,7 @@ def send_tensors(tensors: Sequence[torch.Tensor], dst: int, group=None, use_cuda
 
     if len(tensors) == 0:
         return
-    meta = [(tuple(t.shape), t.dtype) for t in tensors]
-    meta_bytes = pickle.dumps(meta)
-    meta_tensor = torch.tensor(list(meta_bytes), dtype=torch.uint8)
+    meta_tensor = _encode_tensor_meta(tensors)
     meta_len = torch.tensor([meta_tensor.numel()], dtype=torch.int64)
     dist.send(meta_len, dst=dst, group=group)
     dist.send(meta_tensor, dst=dst, group=group)
@@ -195,9 +235,9 @@ def recv_tensors(count: int, src: int, device, group=None, use_cuda_stream: bool
 
     meta_len = torch.empty(1, dtype=torch.int64)
     dist.recv(meta_len, src=src, group=group)
-    meta_tensor = torch.empty(int(meta_len.item()), dtype=torch.uint8)
+    meta_tensor = torch.empty(int(meta_len.item()), dtype=torch.int64)
     dist.recv(meta_tensor, src=src, group=group)
-    meta = pickle.loads(bytes(meta_tensor.tolist()))
+    meta = _decode_tensor_meta(meta_tensor)
     tensors: list[torch.Tensor] = []
     stream = torch.cuda.Stream() if use_cuda_stream and torch.cuda.is_available() and device is not None and torch.device(device).type == "cuda" else None
     handles = []
