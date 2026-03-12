@@ -587,7 +587,7 @@ class Gemma3nRMSNorm(Gemma3RMSNorm):
         if self.with_scale:
             self.weight = nn.Parameter(torch.ones(dim))
         else:
-            self.register_buffer("weight", torch.tensor(1.0), persistent=False)
+            self.weight = nn.parameter.Buffer(torch.tensor(1.0), persistent=False)
 
     def _norm(self, x):
         return x / torch.sqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
@@ -620,8 +620,7 @@ class Gemma3nAudioRelativePositionEmbedding(nn.Module):
         num_timescales = self.channels // 2
         log_timescale_increment = math.log(float(max_timescale) / float(min_timescale)) / max(num_timescales - 1, 1)
         inv_timescales = min_timescale * torch.exp(torch.arange(num_timescales) * -log_timescale_increment)
-        self.register_buffer(
-            "inv_timescales",
+        self.inv_timescales = nn.parameter.Buffer(
             inv_timescales.float().unsqueeze(0).unsqueeze(0),
             persistent=False,
         )
@@ -796,13 +795,12 @@ class Gemma3nAudioAttention(nn.Module):
 
         q_scale = self.head_dim**-0.5
         r_softplus_0 = 1.0 / torch.nn.functional.softplus(torch.tensor(0.0))
-        self.register_buffer("q_scale", (q_scale * r_softplus_0).clone().detach(), persistent=False)
+        self.q_scale = nn.parameter.Buffer((q_scale * r_softplus_0).clone().detach(), persistent=False)
 
         local_causal_valid_mask = self.create_local_causal_valid_mask()
-        self.register_buffer("local_causal_valid_mask", local_causal_valid_mask, persistent=False)
+        self.local_causal_valid_mask = nn.parameter.Buffer(local_causal_valid_mask, persistent=False)
 
-        self.register_buffer(
-            "softcap",
+        self.softcap = nn.parameter.Buffer(
             torch.tensor(self.attention_logits_soft_cap).float(),
             persistent=False,
         )
@@ -1256,7 +1254,7 @@ class Gemma3nAudioConformerAttention(nn.Module):
         super().__init__()
         self.config = config
         self.post_in_features = self.config.hidden_size
-        self.register_buffer("gradient_clipping", torch.tensor(self.config.gradient_clipping), persistent=False)
+        self.gradient_clipping = nn.parameter.Buffer(torch.tensor(self.config.gradient_clipping), persistent=False)
         self.pre_attn_norm = Gemma3nRMSNorm(self.config.hidden_size)
         self.attn = Gemma3nAudioAttention(config)
         self.post = nn.Linear(self.post_in_features, self.config.hidden_size, bias=False)
@@ -1284,7 +1282,7 @@ class Gemma3nAudioConformerFeedForward(nn.Module):
         super().__init__()
         self.config = config
 
-        self.register_buffer("gradient_clipping", torch.tensor(self.config.gradient_clipping), persistent=False)
+        self.gradient_clipping = nn.parameter.Buffer(torch.tensor(self.config.gradient_clipping), persistent=False)
 
         self.pre_layer_norm = Gemma3nRMSNorm(self.config.hidden_size)
         self.ffw_layer_1 = nn.Linear(self.config.hidden_size, self.config.hidden_size * 4, bias=False)
@@ -1320,7 +1318,7 @@ class Gemma3nAudioConformerLightConv1d(nn.Module):
             groups=self.config.hidden_size,  # Depthwise
             bias=False,
         )
-        self.register_buffer("gradient_clipping", torch.tensor(self.config.gradient_clipping), persistent=False)
+        self.gradient_clipping = nn.parameter.Buffer(torch.tensor(self.config.gradient_clipping), persistent=False)
         self.conv_norm = Gemma3nRMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
         self.linear_end = nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False)
 
@@ -1356,7 +1354,7 @@ class Gemma3nAudioConformerBlock(nn.Module):
         self.attention = Gemma3nAudioConformerAttention(self.config)
         self.lconv1d = Gemma3nAudioConformerLightConv1d(self.config)
         self.ffw_layer_end = Gemma3nAudioConformerFeedForward(self.config)
-        self.register_buffer("gradient_clipping", torch.tensor(self.config.gradient_clipping), persistent=False)
+        self.gradient_clipping = nn.parameter.Buffer(torch.tensor(self.config.gradient_clipping), persistent=False)
         self.norm = Gemma3nRMSNorm(self.config.hidden_size)
 
     def forward(self, audio_encodings: torch.Tensor, audio_mel_mask: torch.BoolTensor) -> torch.Tensor:
@@ -1451,7 +1449,7 @@ class Gemma3nTextAltUp(nn.Module):
         self.prediction_coefs = nn.Linear(self.config.altup_num_inputs, self.config.altup_num_inputs**2, bias=False)
         self.modality_router = nn.Linear(self.config.hidden_size, self.config.altup_num_inputs, bias=False)
         self.router_norm = Gemma3nRMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
-        self.register_buffer("router_input_scale", torch.tensor(self.config.hidden_size**-1.0), persistent=False)
+        self.router_input_scale = nn.parameter.Buffer(torch.tensor(self.config.hidden_size**-1.0), persistent=False)
 
     def compute_router_modalities(self, x: torch.Tensor) -> torch.Tensor:
         router_inputs = self.router_norm(x) * self.router_input_scale
@@ -1876,8 +1874,8 @@ class Gemma3nTextModel(Gemma3TextModel):
             [nn.Linear(self.hidden_size, self.hidden_size, bias=False) for _ in range(1, self.config.altup_num_inputs)]
         )
 
-        self.register_buffer("per_layer_projection_scale", torch.tensor(self.hidden_size**-0.5), persistent=False)
-        self.register_buffer("per_layer_input_scale", torch.rsqrt(torch.tensor(2.0)), persistent=False)
+        self.per_layer_projection_scale = nn.parameter.Buffer(torch.tensor(self.hidden_size**-0.5), persistent=False)
+        self.per_layer_input_scale = nn.parameter.Buffer(torch.rsqrt(torch.tensor(2.0)), persistent=False)
 
     def get_per_layer_inputs(self, input_ids: torch.LongTensor) -> torch.Tensor:
         return self.embed_tokens_per_layer(input_ids).reshape(
