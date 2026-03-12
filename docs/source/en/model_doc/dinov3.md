@@ -74,6 +74,33 @@ print("Pooled output shape:", pooled_output.shape)
 ```
 
 </hfoption>
+<hfoption id="AutoModelForImageClassification">
+
+```py
+import torch
+from transformers import AutoImageProcessor, AutoModelForImageClassification
+from transformers.image_utils import load_image
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = load_image(url)
+
+checkpoint = "dimidagd/dinov3-vit7b16-pretrain-lvd1689m-imagenet1k-lc"
+processor = AutoImageProcessor.from_pretrained(checkpoint)
+model = AutoModelForImageClassification.from_pretrained(
+    checkpoint,
+    dtype=torch.bfloat16,
+    device_map="auto",
+)
+
+inputs = processor(images=image, return_tensors="pt").to(model.device)
+with torch.inference_mode():
+    outputs = model(**inputs)
+
+predicted_class_idx = outputs.logits.argmax(-1).item()
+print(model.config.id2label[predicted_class_idx])
+```
+
+</hfoption>
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
@@ -172,6 +199,11 @@ print("Pooled output shape:", pooled_output.shape)
 ## DINOv3ViTBackbone
 
 [[autodoc]] DINOv3ViTBackbone
+
+## DINOv3ViTForImageClassification
+
+[[autodoc]] DINOv3ViTForImageClassification
+    - forward
 
 ## DINOv3ConvNextModel
 
