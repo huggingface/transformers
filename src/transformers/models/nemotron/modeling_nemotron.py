@@ -72,7 +72,12 @@ class NemotronLayerNorm1P(nn.LayerNorm):
         super().__init__(normalized_shape, eps, elementwise_affine, bias, device, dtype)
 
     def forward(self, input: Tensor) -> Tensor:
-        return F.layer_norm(input, self.normalized_shape, self.weight + 1.0, self.bias, self.eps)
+        device_type = input.device.type if input.device.type != "mps" else "cpu"
+        args = _cast_if_autocast_enabled(
+            device_type, input, self.normalized_shape, self.weight + 1.0, self.bias, self.eps
+        )
+        with maybe_autocast(device_type=input.device.type, enabled=False):
+            return F.layer_norm(*args)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
