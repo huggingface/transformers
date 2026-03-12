@@ -56,7 +56,7 @@ from ..qwen3_vl.modeling_qwen3_vl import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
+@auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
 class Qwen3_5TextConfig(Qwen3NextConfig):
     r"""
     linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
@@ -144,7 +144,7 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
         del self.router_aux_loss_coef
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
+@auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
 class Qwen3_5VisionConfig(Qwen3VLVisionConfig):
     model_type = "qwen3_5"
 
@@ -168,7 +168,7 @@ class Qwen3_5VisionConfig(Qwen3VLVisionConfig):
         del self.deepstack_visual_indexes
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
+@auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
 class Qwen3_5Config(Qwen3VLConfig):
     r"""
     Example:

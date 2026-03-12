@@ -18,7 +18,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="ByteDance-Seed/SeedOss-36B")
+@auto_docstring(checkpoint="ByteDance-Seed/Seed-OSS-36B-Instruct")
 class SeedOssConfig(PreTrainedConfig):
     r"""
     attention_out_bias (`bool`, *optional*, defaults to `False`):

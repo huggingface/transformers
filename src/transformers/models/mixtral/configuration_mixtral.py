@@ -21,7 +21,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="mixtralai/Mixtral-8x7B")
+@auto_docstring(checkpoint="mistralai/Mixtral-8x7B-v0.1")
 class MixtralConfig(PreTrainedConfig):
     r"""
     Example:
