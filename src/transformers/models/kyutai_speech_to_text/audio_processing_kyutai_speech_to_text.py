@@ -28,35 +28,33 @@ class KyutaiSpeechToTextAudioProcessor(NumpyAudioBackend):
         self.audio_silence_prefix_seconds = audio_silence_prefix_seconds
         super().__init__(**kwargs)
 
+    def _to_batch(self, audio):
+        return np.stack(audio)[:, np.newaxis, :]  # (batch, 1, length)
+
+    def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
+        mask = np.zeros((len(audio_ranges), padded_length), dtype=np.int32)
+        for i, (start, end) in enumerate(audio_ranges):
+            mask[i, start:end] = 1
+        return {"audio_values_mask": mask}
+
     def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
-        # Track lengths for padding_mask
-        lengths = [a.shape[-1] for a in audio]
-
         # Pad audio to batch longest
-        audio = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
-        padded_length = max(a.shape[-1] for a in audio)
+        audio, audio_ranges = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
+        padded_length = audio[0].shape[-1]
 
-        # Create padding_mask (1 for real audio, 0 for padding)
-        padding_mask = np.array([[1] * l + [0] * (padded_length - l) for l in lengths])
-
-        # Stack audio with channel dim
-        stacked = np.stack(audio)[:, np.newaxis, :]  # (batch, 1, length)
+        stacked = self._to_batch(audio)
+        mask_dict = self._get_mask(audio_ranges, padded_length, do_extract_spectrogram=False, spectrogram_config=None)
+        audio_values_mask = mask_dict["audio_values_mask"]
 
         # Add silence prefix (left) and delay (right) padding
         pad_left = int(self.audio_silence_prefix_seconds * self.sample_rate)
         pad_right = int((self.audio_delay_seconds + 1.0) * self.sample_rate)
 
         if pad_left > 0 or pad_right > 0:
-            # Pad audio
-            audio_pad_width = [(0, 0), (0, 0), (pad_left, pad_right)]
-            stacked = np.pad(stacked, audio_pad_width, mode="constant", constant_values=0.0)
+            stacked = np.pad(stacked, [(0, 0), (0, 0), (pad_left, pad_right)], mode="constant", constant_values=0.0)
+            audio_values_mask = np.pad(audio_values_mask, [(0, 0), (pad_left, pad_right)], mode="constant", constant_values=0)
 
-            # Pad padding_mask
-            mask_pad_width = [(0, 0), (pad_left, pad_right)]
-            padding_mask = np.pad(padding_mask, mask_pad_width, mode="constant", constant_values=0)
-
-        output = BatchFeature({"audio_values": stacked, "padding_mask": padding_mask}, tensor_type=return_tensors)
-        return output
+        return BatchFeature({"audio_values": stacked, "audio_values_mask": audio_values_mask}, tensor_type=return_tensors)
 
 
 __all__ = ["KyutaiSpeechToTextAudioProcessor"]

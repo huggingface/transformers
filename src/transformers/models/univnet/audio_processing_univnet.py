@@ -15,7 +15,7 @@
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_utils import mel_filter_bank, spectrogram, window_function
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, spectrogram, window_function
 from ...feature_extraction_utils import BatchFeature
 
 
@@ -34,19 +34,20 @@ class UnivNetAudioProcessor(NumpyAudioBackend):
     normalize_min = -11.512925148010254
     normalize_max = 2.3143386840820312
     max_length_s = 10
+    spectrogram_config = SpectrogramConfig(
+        stft_config=StftConfig(n_fft=1024),
+        mel_scale_config=MelScaleConfig(
+            n_mels=100,
+            f_min=0.0,
+            f_max=12000.0,
+            mel_scale="slaney",
+            norm="slaney",
+        ),
+    )
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.num_max_samples = self.max_length_s * self.sample_rate
-        self.mel_filters = mel_filter_bank(
-            num_frequency_bins=1 + self.n_fft // 2,
-            num_mel_filters=self.n_mels,
-            min_frequency=self.fmin,
-            max_frequency=self.fmax,
-            sampling_rate=self.sample_rate,
-            norm="slaney",
-            mel_scale="slaney",
-        )
         self.window = window_function(self.n_fft, "hann", periodic=True)
 
     def mel_spectrogram(self, waveform):
@@ -94,7 +95,7 @@ class UnivNetAudioProcessor(NumpyAudioBackend):
     def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, generator=None, **kwargs):
         # Pad raw audio
         if padding:
-            audio = self.pad(audio, padding=True, max_length=max_length)
+            audio, _audio_ranges = self.pad(audio, padding=True, max_length=max_length)
 
         # Extract mel spectrograms
         features = self.extract_spectrogram(audio, spectrogram_config=None)

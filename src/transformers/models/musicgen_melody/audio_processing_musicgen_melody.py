@@ -81,7 +81,7 @@ class MusicgenMelodyAudioProcessor(TorchAudioBackend):
 
         # Pad raw audio
         if padding:
-            audio = self.pad(audio, padding=True, max_length=max_length)
+            audio, _audio_ranges = self.pad(audio, padding=True, max_length=max_length)
 
         # Extract chroma features
         features = self.extract_spectrogram(audio, spectrogram_config=None)

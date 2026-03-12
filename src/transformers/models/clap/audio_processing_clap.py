@@ -15,7 +15,7 @@
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, mel_filter_bank, spectrogram, window_function
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, spectrogram, window_function
 from ...feature_extraction_utils import BatchFeature
 
 
@@ -88,19 +88,6 @@ class ClapAudioProcessor(NumpyAudioBackend):
         else:
             # For other modes, use standard padding via parent's _pad_single
             return super()._pad_single(audio, max_length)
-
-    def _mel_filter_bank(self, spectrogram_config):
-        stft_cfg = spectrogram_config.stft_config
-        mel_cfg = spectrogram_config.mel_scale_config
-        return mel_filter_bank(
-            num_frequency_bins=(stft_cfg.n_fft // 2) + 1,
-            num_mel_filters=mel_cfg.n_mels,
-            min_frequency=mel_cfg.f_min,
-            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
-            sampling_rate=self.sample_rate,
-            norm=mel_cfg.norm,
-            mel_scale=mel_cfg.mel_scale,
-        )
 
     def _extract_single_mel(self, waveform, spectrogram_config=None):
         """Extract mel spectrogram for a single waveform using audio_utils.spectrogram."""
@@ -229,7 +216,7 @@ class ClapAudioProcessor(NumpyAudioBackend):
                 padding_strategy = PaddingStrategy.LONGEST  # Default to longest for unknown string values
             else:
                 padding_strategy = padding_mode
-            audio = self.pad(audio, padding_strategy, nb_max_samples, truncation=False, pad_to_multiple_of=pad_to_multiple_of)
+            audio, _audio_ranges = self.pad(audio, padding_strategy, nb_max_samples, truncation=False, pad_to_multiple_of=pad_to_multiple_of)
 
         # Process each waveform through CLAP's mel extraction (handles truncation internally)
         padded_inputs = [
