@@ -272,7 +272,7 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         """
         # Create a tensor to slice the static kv at the correct indices
         kv_length = key_states.shape[-2]
-        cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_cache_length
+        cache_position = torch.arange(kv_length, device=key_states.device) + self.cumulative_cache_length
         # Note that has to be performed in-place, as we have a static address that we need to keep
         self.cumulative_cache_length.add_(kv_length)
 
@@ -682,16 +682,12 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
 
         # Same way as we have to slice sliding vs full attn, we need to find attn block cache
+        # TODO: create cache as class and new mask API
         is_attention_block = [block == "attention" for block in self.config.layers_block_type]
         layer_idx = is_attention_block.index(True)
         past_seq_length = self.layers[layer_idx].temporal_block.cumulative_cache_length
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_seq_length,  # FIXME: raushan
-            position_ids=position_ids,
-        )
+        cache_position = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seq_length
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
 
         hidden_states = hidden_states * self.normalizer.type(hidden_states.dtype)
 
@@ -714,6 +710,36 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
         )
+
+    def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
+        dtype, device = input_tensor.dtype, input_tensor.device
+        min_dtype = torch.finfo(dtype).min
+        sequence_length = input_tensor.shape[1]
+        target_length = max(self.config.attention_window_size, sequence_length)
+
+        diagonal = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
+        causal_mask = diagonal
+        if sequence_length != 1:
+            causal_mask = torch.triu(diagonal, diagonal=-1)
+
+        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+        causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
+        if attention_mask is not None:
+            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+            if attention_mask.dim() == 2:
+                # Crop the attention mask to the target length.
+                attention_mask = attention_mask[:, -target_length:]
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
+                causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
+
+        if attention_mask is not None and attention_mask.device.type in ["cuda", "xpu", "npu"]:
+            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
+            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+            # Details: https://github.com/pytorch/pytorch/issues/110213
+            causal_mask = causal_mask.mul(~torch.all(causal_mask == min_dtype, dim=-1, keepdim=True))
+
+        return causal_mask
 
 
 # TODO: re-enable check: Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->RECURRENTGEMMA,Llama->RecurrentGemma,llama->gemma
