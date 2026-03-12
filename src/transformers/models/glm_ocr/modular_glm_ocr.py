@@ -30,6 +30,8 @@ from ..glm4v.modeling_glm4v import (
     Glm4vPreTrainedModel,
     Glm4vRMSNorm,
     Glm4vTextAttention,
+    Glm4vTextDecoderLayer,
+    Glm4vTextModel,
     Glm4vVisionAttention,
     Glm4vVisionBlock,
     Glm4vVisionModel,
@@ -147,6 +149,10 @@ class GlmOcrTextAttention(Glm4vTextAttention, nn.Module):
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+
+
+class GlmOcrTextDecoderLayer(Glm4vTextDecoderLayer):
+    pass
 
 
 class GlmOcrPreTrainedModel(Glm4vPreTrainedModel):
@@ -305,6 +311,13 @@ class GlmOcrVisionModel(Glm4vVisionModel):
         )
 
 
+class GlmOcrTextModel(Glm4vTextModel):
+    _can_record_outputs = {
+        "hidden_states": GlmOcrTextDecoderLayer,
+        "attentions": GlmOcrTextAttention,
+    }
+
+
 class GlmOcrModel(Glm4vModel):
     pass
 
@@ -317,7 +330,7 @@ __all__ = [
     "GlmOcrConfig",
     "GlmOcrTextConfig",
     "GlmOcrVisionConfig",
-    "GlmOcrTextModel",  # noqa: F822
+    "GlmOcrTextModel",
     "GlmOcrVisionModel",
     "GlmOcrModel",
     "GlmOcrPreTrainedModel",

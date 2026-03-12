@@ -357,6 +357,7 @@ class Glm4vVisionBlock(GradientCheckpointingLayer):
         self.attn = Glm4vVisionAttention(config)
         self.mlp = Glm4VisionMlp(config, bias=False)
 
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -365,6 +366,12 @@ class Glm4vVisionBlock(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
+        r"""
+        cu_seqlens (`torch.Tensor`):
+            Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
+        rotary_pos_emb (`torch.Tensor`, *optional*):
+            Precomputed rotary positional embeddings applied to the vision attention query/key states.
+        """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,
@@ -675,10 +682,6 @@ class Glm4vPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": Glm4vTextDecoderLayer,
-        "attentions": Glm4vTextAttention,
-    }
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -820,6 +823,10 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
 class Glm4vTextModel(Glm4vPreTrainedModel):
     config: Glm4vTextConfig
     input_modalities = ("text",)
+    _can_record_outputs = {
+        "hidden_states": Glm4vTextDecoderLayer,
+        "attentions": Glm4vTextAttention,
+    }
 
     def __init__(self, config: Glm4vTextConfig):
         super().__init__(config)
@@ -1159,7 +1166,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
         vision_outputs.pooler_output = image_embeds

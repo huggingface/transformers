@@ -26,13 +26,13 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_tracing
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_pixio import PixioConfig
 
@@ -196,7 +196,11 @@ class PixioSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
         new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
 
@@ -217,6 +221,7 @@ class PixioSelfAttention(nn.Module):
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
+            **kwargs,
         )
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -248,8 +253,12 @@ class PixioAttention(nn.Module):
         self.attention = PixioSelfAttention(config)
         self.output = PixioSelfOutput(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states, **kwargs)
         output = self.output(self_attn_output, hidden_states)
         return output
 
@@ -313,9 +322,9 @@ class PixioLayer(GradientCheckpointingLayer):
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = PixioMLP(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
         hidden_states_norm = self.norm1(hidden_states)
-        self_attention_output = self.attention(hidden_states_norm)
+        self_attention_output = self.attention(hidden_states_norm, **kwargs)
 
         hidden_states = self.drop_path(self_attention_output) + hidden_states
 
@@ -325,26 +334,6 @@ class PixioLayer(GradientCheckpointingLayer):
         layer_output = self.drop_path(layer_output) + hidden_states
 
         return layer_output
-
-
-class PixioEncoder(nn.Module):
-    def __init__(self, config: PixioConfig):
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([PixioLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(self, hidden_states: torch.Tensor, output_hidden_states: bool = False) -> BaseModelOutput:
-        all_hidden_states = [hidden_states] if output_hidden_states else None
-        for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(hidden_states)
-            if all_hidden_states:
-                all_hidden_states.append(hidden_states)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=tuple(all_hidden_states) if all_hidden_states else None,
-        )
 
 
 @auto_docstring
@@ -381,6 +370,22 @@ class PixioPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.mask_token)
 
 
+class PixioEncoder(PixioPreTrainedModel):
+    def __init__(self, config: PixioConfig):
+        super().__init__(config)
+        self.layer = nn.ModuleList([PixioLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states, **kwargs)
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
 @auto_docstring
 class PixioModel(PixioPreTrainedModel):
     def __init__(self, config: PixioConfig):
@@ -397,24 +402,19 @@ class PixioModel(PixioPreTrainedModel):
     def get_input_embeddings(self) -> PixioPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
-
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         embedding_output = self.embeddings(pixel_values)
 
-        encoder_outputs: BaseModelOutput = self.encoder(embedding_output, output_hidden_states=output_hidden_states)
+        encoder_outputs: BaseModelOutput = self.encoder(embedding_output, **kwargs)
         sequence_output = encoder_outputs.last_hidden_state
         sequence_output = self.layernorm(sequence_output)
         pooled_output = sequence_output[:, : self.embeddings.n_cls_tokens, :].mean(dim=1)
@@ -423,6 +423,7 @@ class PixioModel(PixioPreTrainedModel):
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
 
@@ -447,12 +448,10 @@ class PixioBackbone(BackboneMixin, PixioPreTrainedModel):
     def get_input_embeddings(self) -> PixioPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @merge_with_config_defaults
-    @capture_outputs
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
-    def forward(
-        self, pixel_values: torch.Tensor, output_hidden_states: bool | None = None, **kwargs
-    ) -> BackboneOutput:
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
         r"""
         Examples:
 
@@ -479,11 +478,10 @@ class PixioBackbone(BackboneMixin, PixioPreTrainedModel):
         >>> list(feature_maps[-1].shape)
         [1, 1280, 16, 16]
         ```"""
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
 
         embedding_output = self.embeddings(pixel_values)
-        output: BaseModelOutput = self.encoder(embedding_output, output_hidden_states=True)
+        output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
         hidden_states = output.hidden_states
 
         feature_maps = []
@@ -501,7 +499,8 @@ class PixioBackbone(BackboneMixin, PixioPreTrainedModel):
 
         return BackboneOutput(
             feature_maps=tuple(feature_maps),
-            hidden_states=hidden_states if output_hidden_states else None,
+            hidden_states=hidden_states,
+            attentions=output.attentions,
         )
 
 

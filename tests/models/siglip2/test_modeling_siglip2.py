@@ -654,6 +654,13 @@ class Siglip2ForImageClassificationModelTest(Siglip2ModelTesterMixin, PipelineTe
     def setUp(self):
         self.model_tester = Siglip2ForImageClassificationModelTester(self)
 
+    def _set_subconfig_attributes(self, config, attribute_name, value):
+        """Overwritten to skip timm workaround skip on `output_attentions`"""
+        for k in config.sub_configs:
+            if getattr(config, k) is not None:
+                setattr(getattr(config, k), attribute_name, value)
+                self._set_subconfig_attributes(getattr(config, k), attribute_name, value)
+
     @unittest.skip(reason="Siglip2ForImageClassification does not support inputs_embeds")
     def test_inputs_embeds(self):
         pass
