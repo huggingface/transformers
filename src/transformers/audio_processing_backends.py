@@ -359,6 +359,7 @@ class TorchAudioBackend(BaseAudioProcessor):
     def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):
         stft_cfg = spectrogram_config.stft_config
         mel_cfg = spectrogram_config.mel_scale_config
+        computation_dtype = getattr(torch, mel_cfg.computation_dtype) if mel_cfg.computation_dtype else None
         return _torch_spec.mel_filter_bank_torch(
             num_frequency_bins=1 + stft_cfg.n_fft // 2,
             num_mel_filters=mel_cfg.n_mels,
@@ -369,6 +370,7 @@ class TorchAudioBackend(BaseAudioProcessor):
             mel_scale=mel_cfg.mel_scale,
             triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
             frequency_bin_mode=mel_cfg.frequency_bin_mode,
+            computation_dtype=computation_dtype,
         )
 
     def _to_batch(self, audio):

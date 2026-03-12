@@ -14,8 +14,6 @@
 
 import torch
 
-from spectrograms import numpy_mel_spectrogram as _np_spec
-
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
@@ -36,6 +34,7 @@ class WhisperAudioProcessor(TorchAudioBackend):
             n_mels=80,
             mel_scale="slaney",
             norm="slaney",
+            computation_dtype="float64",
         ),
         log_mode="log10",
     )
@@ -50,28 +49,8 @@ class WhisperAudioProcessor(TorchAudioBackend):
 
         return features
 
-    def _mel_filter_bank(self, spectrogram_config):
-        stft_cfg = spectrogram_config.stft_config
-        mel_cfg = spectrogram_config.mel_scale_config
-        mel_filters_np = _np_spec.mel_filter_bank(
-            num_frequency_bins=1 + stft_cfg.n_fft // 2,
-            num_mel_filters=mel_cfg.n_mels,
-            min_frequency=mel_cfg.f_min,
-            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
-            sampling_rate=self.sample_rate,
-            norm=mel_cfg.norm,
-            mel_scale=mel_cfg.mel_scale,
-            triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
-        )
-        return torch.from_numpy(mel_filters_np).to(torch.float32)
-
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
-        """
-        Override to use the same matrix multiplication order as WhisperFeatureExtractor
-        for exact numerical compatibility. FeatureExtractor uses (n_mels, n_freq) @ (n_freq, time),
-        while the generic spectrograms module uses (time, n_freq) @ (n_freq, n_mels) then transpose.
-        The different summation order produces slightly different rounding (1 ULP).
-        """
+        # Override to match WhisperFeatureExtractor's mel transformation order for numerical compatibility.
         stacked = torch.stack(features) if isinstance(features, list) else features
         mel_spec = torch.matmul(self.mel_filters.T, stacked)
         return torch.clamp(mel_spec, min=spectrogram_config.mel_floor)
