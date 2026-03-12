@@ -19,7 +19,7 @@ from ...configuration_utils import PretrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
+@auto_docstring(checkpoint="microsoft/VibeVoice-AcousticTokenizer")
 class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
     r"""
     channels (`int`, *optional*, defaults to 1):
@@ -101,16 +101,32 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
         return VibeVoiceAcousticTokenizerDecoderConfig(**config_dict)
 
 
-@auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
+@auto_docstring(checkpoint="microsoft/VibeVoice-AcousticTokenizer")
 class VibeVoiceAcousticTokenizerEncoderConfig(VibeVoiceAcousticTokenizerConfig):
     model_type = "vibevoice_acoustic_tokenizer_encoder"
     base_config_key = "encoder_config"
 
+    @property
+    def encoder_config(self):
+        return None
 
-@auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
+    @property
+    def decoder_config(self):
+        return None
+
+
+@auto_docstring(checkpoint="microsoft/VibeVoice-AcousticTokenizer")
 class VibeVoiceAcousticTokenizerDecoderConfig(VibeVoiceAcousticTokenizerConfig):
     model_type = "vibevoice_acoustic_tokenizer_decoder"
     base_config_key = "decoder_config"
+
+    @property
+    def encoder_config(self):
+        return None
+
+    @property
+    def decoder_config(self):
+        return None
 
     @property
     def upsampling_ratios(self):
