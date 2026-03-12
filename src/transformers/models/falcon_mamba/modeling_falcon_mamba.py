@@ -106,7 +106,7 @@ class FalconMambaCache:
         self.intermediate_size = config.intermediate_size
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
-        self.is_initialized = torch.tensor([False] * config.num_hidden_layers, device=device, dtype=bool)
+        self.has_previous_state = torch.tensor([False] * config.num_hidden_layers, device=device, dtype=bool)
 
         self.conv_states: list[torch.Tensor] = []
         self.ssm_states: list[torch.Tensor] = []
@@ -135,7 +135,7 @@ class FalconMambaCache:
     def update_conv_state(self, layer_idx: int, new_conv_state: torch.Tensor) -> torch.Tensor:
         # This `if` blocks is only reached in multigpu and if `layer_device_map` is not passed. It is used
         # when the cache is initialized in the forward pass (e.g. FalconMamba)
-        self.is_initialized[layer_idx] = True
+        self.has_previous_state[layer_idx] = True
         if self.conv_states[layer_idx].device != new_conv_state.device:
             self.conv_states[layer_idx] = self.conv_states[layer_idx].to(new_conv_state.device)
 
@@ -337,7 +337,7 @@ class FalconMambaMixer(nn.Module):
 
             # 2. Convolution sequence transformation
             conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
-            if cache_params is not None and cache_params.is_initialized[self.layer_idx]:
+            if cache_params is not None and cache_params.has_previous_state[self.layer_idx]:
                 hidden_states = causal_conv1d_update(
                     hidden_states.squeeze(-1),
                     cache_params.conv_states[self.layer_idx],
@@ -380,7 +380,7 @@ class FalconMambaMixer(nn.Module):
             A = -torch.exp(self.A_log.float())
             # 3.c perform the recurrence y ← SSM(A, B, C)(x)
             time_proj_bias = self.dt_proj.bias.float() if hasattr(self.dt_proj, "bias") else None
-            if cache_params is not None and cache_params.is_initialized[self.layer_idx]:
+            if cache_params is not None and cache_params.has_previous_state[self.layer_idx]:
                 scan_outputs = selective_state_update(
                     cache_params.ssm_states[self.layer_idx],
                     hidden_states[..., 0],
@@ -433,7 +433,7 @@ class FalconMambaMixer(nn.Module):
             ssm_state = cache_params.ssm_states[self.layer_idx].clone()
             ssm_state = ssm_state.to(hidden_states.device)
             # check whether we are in prefill
-            if not cache_params.is_initialized[self.layer_idx]:
+            if not cache_params.has_previous_state[self.layer_idx]:
                 conv_state = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
 
                 cache_params.update_conv_state(self.layer_idx, conv_state)
@@ -838,7 +838,7 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
             model_inputs["cache_params"] = FalconMambaCache(
                 self.backbone.config, max_batch_size, device=self.device, dtype=self.dtype
             )
-        elif cache_params is not None and cache_params.is_initialized[0]:
+        elif cache_params is not None and cache_params.has_previous_state[0]:
             model_inputs["attention_mask"] = None
 
         return model_inputs

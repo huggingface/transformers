@@ -138,7 +138,7 @@ class Mamba2Cache:
         self.num_heads = config.num_heads
         self.head_dim = config.head_dim
         self.intermediate_size = int(config.expand * config.hidden_size)
-        self.is_initialized = torch.tensor([False] * config.num_hidden_layers, device=device, dtype=bool)
+        self.has_previous_state = torch.tensor([False] * config.num_hidden_layers, device=device, dtype=bool)
 
         self.conv_states = torch.zeros(
             config.num_hidden_layers,
@@ -161,7 +161,7 @@ class Mamba2Cache:
     def update_conv_state(
         self, layer_idx: int, new_conv_state: torch.Tensor, cache_init: bool = False
     ) -> torch.Tensor:
-        self.is_initialized[layer_idx] = True
+        self.has_previous_state[layer_idx] = True
         if cache_init:
             self.conv_states[layer_idx] = new_conv_state.to(self.conv_states.device)
         else:
@@ -334,7 +334,7 @@ class Mamba2Mixer(nn.Module):
         ) // 2
 
         # Single step calculations via cache
-        if cache_params is not None and cache_params.is_initialized[self.layer_idx]:
+        if cache_params is not None and cache_params.has_previous_state[self.layer_idx]:
             _, _, gate, hidden_states_B_C, dt = projected_states.squeeze(1).split(
                 [d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
             )
@@ -493,7 +493,7 @@ class Mamba2Mixer(nn.Module):
         )
 
         # 2. Convolution sequence transformation
-        if cache_params is not None and cache_params.is_initialized[self.layer_idx]:
+        if cache_params is not None and cache_params.has_previous_state[self.layer_idx]:
             cache_params.update_conv_state(layer_idx=self.layer_idx, new_conv_state=hidden_states_B_C, cache_init=False)
 
             # We need to guarantee that anything regarding the cache is on the same device
@@ -525,7 +525,7 @@ class Mamba2Mixer(nn.Module):
 
         # 3. SSM transformation
         A = -torch.exp(self.A_log.float())                            # [num_heads]
-        if cache_params is not None and cache_params.is_initialized[self.layer_idx]:
+        if cache_params is not None and cache_params.has_previous_state[self.layer_idx]:
             # We need to guarantee that anything regarding the cache is on the same device
             cache_device = cache_params.ssm_states.device
 
@@ -630,7 +630,7 @@ class Mamba2Mixer(nn.Module):
 
             # 3. Compute the inter-chunk SSM recurrence; produces correct SSM states at chunk boundaries
             # (middle term of factorization of off-diag blocks; A terms)
-            if cache_params is not None and cache_params.is_initialized[self.layer_idx]:
+            if cache_params is not None and cache_params.has_previous_state[self.layer_idx]:
                 previous_states = cache_params.ssm_states[self.layer_idx][:, None, ...].to(device=states.device)
             else:
                 previous_states = torch.zeros_like(states[:, :1])

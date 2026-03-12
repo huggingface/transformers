@@ -238,6 +238,7 @@ class UMT5Attention(nn.Module):
         if device is None:
             device = self.relative_attention_bias.weight.device
         context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
+        context_position = context_position[:key_length, :]
         memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
         relative_position = memory_position - context_position  # shape (query_length, key_length)
         relative_position_bucket = self._relative_position_bucket(relative_position)
@@ -253,6 +254,7 @@ class UMT5Attention(nn.Module):
         attention_mask: torch.Tensor | None = None,
     ):
         batch_size, seq_length = hidden_states.shape[:2]
+        real_seq_length = seq_length + past_key_values.get_seq_length() if past_key_values is not None else seq_length
 
         # if encoder_hidden_states are provided this layer is used as a cross-attention layer for the decoder
         is_cross_attention = encoder_hidden_states is not None
@@ -293,9 +295,6 @@ class UMT5Attention(nn.Module):
 
         # compute scores, equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
         scores = torch.matmul(query_states, key_states.transpose(3, 2))
-
-        # cache position is 0-indexed so we add 1 to get the real length of queries (aka with past)
-        real_seq_length = seq_length + past_key_values.get_seq_length() if past_key_values is not None else seq_length
         key_length = key_states.shape[-2]
         if not self.has_relative_attention_bias:
             position_bias = torch.zeros(
