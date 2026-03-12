@@ -1045,7 +1045,6 @@ class LongT5LayerCrossAttention(nn.Module):
 class LongT5Block(GradientCheckpointingLayer):
     def __init__(self, config, has_relative_attention_bias=False, layer_idx: int | None = None):
         super().__init__()
-        self.layer_idx = layer_idx
         self.is_decoder = config.is_decoder
         if config.is_decoder:
             attention_layer = LongT5LayerSelfAttention
