@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+import functools
 import importlib
 import inspect
 from typing import TYPE_CHECKING, Any
@@ -187,24 +188,24 @@ def register_for_export(object_cls: type):
             raise
 
 
-def _iter_leaf_tensors(obj: Any, prefix: str = ""):
+def _iter_leaf_tensors(obj: Any, prefix: str = "", default: str = "output"):
     if isinstance(obj, torch.Tensor):
-        yield prefix, obj
+        yield prefix or default, obj
     elif isinstance(obj, (list, tuple, set)):
         for index, item in enumerate(obj):
             path = f"{prefix}.{index}" if prefix else str(index)
-            yield from _iter_leaf_tensors(item, path)
+            yield from _iter_leaf_tensors(item, path, default)
     elif isinstance(obj, dict):
         for key, value in obj.items():
             path = f"{prefix}.{key}" if prefix else key
-            yield from _iter_leaf_tensors(value, path)
+            yield from _iter_leaf_tensors(value, path, default)
     elif hasattr(obj, "__dict__"):
-        yield from _iter_leaf_tensors(vars(obj), prefix)
+        yield from _iter_leaf_tensors(vars(obj), prefix, default)
 
 
-def get_leaf_tensors(obj: Any) -> dict[str, torch.Tensor]:
+def get_leaf_tensors(obj: Any, default: str = "output") -> dict[str, torch.Tensor]:
     """Recursively retrieves all leaf tensors from a potentially nested structure."""
-    return dict(_iter_leaf_tensors(obj))
+    return dict(_iter_leaf_tensors(obj, default=default))
 
 
 def register_pytrees_for_model(model: "PreTrainedModel"):
@@ -278,7 +279,7 @@ def prepare_model_for_export(
 def inject_cache_into_inputs(
     model: "PreTrainedModel",
     inputs: dict[str, Any],
-) -> tuple[dict[str, Any], Any]:
+) -> dict[str, Any]:
     """Run one prefill forward pass and inject the resulting KV cache back into inputs.
 
     Mirrors what the generation loop does between prefill and the first decode step: the
@@ -331,18 +332,20 @@ def inject_cache_into_inputs(
                 | saved
             )
 
-    return inputs, outputs
+    return inputs
 
 
-def get_inputs_outputs_names(inputs: dict[str, Any], outputs: dict[str, Any]) -> tuple[list[str], list[str]]:
+def get_inputs_outputs_names(model: "PreTrainedModel", inputs: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """Get input/output names for export, disambiguating collisions with input./output. prefixes."""
+
+    with torch.no_grad():
+        outputs = model(**copy.deepcopy(inputs))
+
     inputs_names = list(get_leaf_tensors(inputs).keys())
     outputs_names = list(get_leaf_tensors(outputs).keys())
     for name in set(inputs_names).intersection(set(outputs_names)):
         inputs_names[inputs_names.index(name)] = f"input.{name}"
         outputs_names[outputs_names.index(name)] = f"output.{name}"
-
-    if outputs_names == [""]:
-        outputs_names = ["output"]
 
     return inputs_names, outputs_names
 
@@ -392,13 +395,31 @@ def _cast_inputs(obj: Any, device: "torch.device", dtype: "torch.dtype") -> Any:
     return obj
 
 
+def wrap_forward_for_export(model: "PreTrainedModel") -> None:
+    """Wrap model.forward to always return a flat dict[str, Tensor] with deduped outputs."""
+
+    def patch_model_forward(original_forward):
+        @functools.wraps(original_forward)
+        def patched_forward(*args, **kwargs):
+            outputs = original_forward(*args, **kwargs)
+            dedupped = dedup_output_tensors(outputs)
+            dictified = get_leaf_tensors(dedupped, default="output")
+            return dictified
+
+        return patched_forward
+
+    model.forward = patch_model_forward(model.forward)
+    return model
+
+
 def prepare_for_export(
     model: "PreTrainedModel",
     inputs: dict[str, torch.Tensor | Cache],
-) -> tuple["PreTrainedModel", dict[str, torch.Tensor | Cache], dict[str, Any] | None]:
+) -> tuple["PreTrainedModel", dict[str, torch.Tensor | Cache]]:
     model, inputs = prepare_model_for_export(model, inputs)
-    inputs, outputs = inject_cache_into_inputs(model, inputs)
-    return model, inputs, outputs
+    inputs = inject_cache_into_inputs(model, inputs)
+    model = wrap_forward_for_export(model)
+    return model, inputs
 
 
 # Dynamic shapes utilities

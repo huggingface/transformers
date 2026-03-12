@@ -56,14 +56,13 @@ class DynamoExporter(HfExporter):
 
         # we use a copy to avoid side effects
         inputs = copy.deepcopy(sample_inputs)
-        model, inputs, _ = prepare_for_export(model, inputs)
+        model, inputs = prepare_for_export(model, inputs)
 
         dynamic_shapes = self.export_config.dynamic_shapes
         if self.export_config.dynamic and dynamic_shapes is None:
             dynamic_shapes = get_auto_dynamic_shapes(inputs)
 
         register_pytrees_for_model(model)
-
         exported_program: ExportedProgram = torch.export.export(
             model,
             args=(),

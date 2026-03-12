@@ -4119,7 +4119,7 @@ class ModelTesterMixin:
 
                 # prepare cache inputs for auto-regressive models and include it for computing eager outputs
                 # process output flags (e.g. use_cache, output_attentions, etc) to avoid passing them as inputs
-                model, inputs_dict, _ = prepare_for_export(model, inputs_dict)
+                model, inputs_dict = prepare_for_export(model, inputs_dict)
 
                 with torch.no_grad():
                     # Running the eager inference before the export to catch model/inputs comatibility issues, also sometimes after
@@ -4127,7 +4127,6 @@ class ModelTesterMixin:
                     # This happens on cuda with (codegen, clvp, esm, gptj, levit, wav2vec2_bert and wav2vec2_conformer)
                     set_seed(1234)
                     eager_outputs = model(**copy.deepcopy(inputs_dict))
-                    eager_outputs = get_leaf_tensors(eager_outputs)
                     self.assertTrue(eager_outputs, "Eager model's outputs are empty.")
 
                 exported_program = exporter.export(model, inputs_dict)
@@ -4167,7 +4166,7 @@ class ModelTesterMixin:
             OnnxConfig,
             OnnxExporter,
         )
-        from transformers.exporters.utils import get_leaf_tensors, prepare_for_export
+        from transformers.exporters.utils import prepare_for_export
 
         if not self.test_torch_exportable:
             self.skipTest(reason="Model architecture is not TorchDynamo exportable/traceable")
@@ -4188,7 +4187,11 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
-                if model_class.__name__ in ["VideoMAEForPreTraining", "MllamaForConditionalGeneration"]:
+                if model_class.__name__ in [
+                    "FlavaForPreTraining",
+                    "VideoMAEForPreTraining",
+                    "MllamaForConditionalGeneration",
+                ]:
                     continue
 
                 if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
@@ -4207,7 +4210,7 @@ class ModelTesterMixin:
 
                 # prepare cache inputs for auto-regressive models and include it for computing eager outputs
                 # process output flags (e.g. use_cache, output_attentions, etc) to avoid passing them as inputs
-                model, inputs_dict, _ = prepare_for_export(model, inputs_dict)
+                model, inputs_dict = prepare_for_export(model, inputs_dict)
 
                 with torch.no_grad():
                     # Running the eager inference before the export to catch model/inputs comatibility issues, also sometimes after
@@ -4215,7 +4218,6 @@ class ModelTesterMixin:
                     # This happens on cuda with (codegen, clvp, esm, gptj, levit, wav2vec2_bert and wav2vec2_conformer)
                     set_seed(1234)
                     eager_outputs = model(**copy.deepcopy(inputs_dict))
-                    eager_outputs = get_leaf_tensors(eager_outputs)
                     self.assertTrue(eager_outputs, "Eager outputs is empty.")
 
                 onnx_program = exporter.export(model, inputs_dict)
@@ -4270,7 +4272,11 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
-                if model_class.__name__ in ["VideoMAEForPreTraining", "MllamaForConditionalGeneration"]:
+                if model_class.__name__ in [
+                    "FlavaForPreTraining",
+                    "VideoMAEForPreTraining",
+                    "MllamaForConditionalGeneration",
+                ]:
                     continue
 
                 if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):

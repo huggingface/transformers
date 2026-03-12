@@ -34,14 +34,13 @@ The export pipeline has four stages, each with its own set of patches/fixes:
 
 import copy
 from contextlib import contextmanager
-from functools import wraps
 from typing import TYPE_CHECKING, Any
 
 from ..utils import logging
 from ..utils.export_config import OnnxConfig
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
 from .exporter_dynamo import DynamoExporter
-from .utils import dedup_output_tensors, get_inputs_outputs_names, get_leaf_tensors, prepare_for_export
+from .utils import get_inputs_outputs_names, prepare_for_export
 
 
 if is_torch_available():
@@ -79,10 +78,10 @@ class OnnxExporter(DynamoExporter):
     def export(self, model: "PreTrainedModel", sample_inputs: dict[str, Any]) -> "ONNXProgram":
         """Export a model to ONNX using TorchDynamo."""
         inputs = copy.deepcopy(sample_inputs)
-        model, inputs, outputs = prepare_for_export(model, inputs)
-        inputs_names, outputs_names = get_inputs_outputs_names(inputs, outputs)
+        model, inputs = prepare_for_export(model, inputs)
+        inputs_names, outputs_names = get_inputs_outputs_names(model, inputs)
 
-        with patch_torch_ops(model):
+        with patch_torch_ops():
             exported_program: ExportedProgram = super().export(model, inputs)
             patch_fx_graph(exported_program.graph_module)
             onnx_program: ONNXProgram = torch.onnx.export(
@@ -323,18 +322,8 @@ _TORCH_PATCH_TABLE = [
 
 
 @contextmanager
-def patch_torch_ops(model):
-    """Context manager: install torch patches and wrap model.forward for ONNX export."""
-    original_forward = model.forward
-
-    @wraps(original_forward)
-    def _patched_forward(*args, **kwargs):
-        outputs = original_forward(*args, **kwargs)
-        deduped = dedup_output_tensors(outputs)
-        return get_leaf_tensors(deduped)
-
-    model.forward = _patched_forward
-
+def patch_torch_ops():
+    """Context manager: install torch patches for ONNX export."""
     originals = []
     for obj, attr, factory in _TORCH_PATCH_TABLE:
         original = getattr(obj, attr)
@@ -344,7 +333,6 @@ def patch_torch_ops(model):
     try:
         yield
     finally:
-        model.forward = original_forward
         for obj, attr, original in originals:
             setattr(obj, attr, original)
 
