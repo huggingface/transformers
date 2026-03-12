@@ -292,7 +292,7 @@ class PPOCRV5ServerDetModelIntegrationTest(unittest.TestCase):
             dtype=torch.short,
             device=torch_device,
         )
-        breakpoint()
+
         self.assertEqual(results[0]["boxes"].shape, expected_shape_boxes)
         torch.testing.assert_close(results[0]["boxes"], expected_boxes, rtol=2e-2, atol=2e-2)
 

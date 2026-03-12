@@ -241,13 +241,13 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
 
         # --- 2. Determine polygon orientation and edge normals ---
         x, y = polygon[:, 0], polygon[:, 1]
-        is_ccw = (x @ np.roll(y, -1) - y @ np.roll(x, -1)) > 0.0
+        is_counter_clockwise = (x @ np.roll(y, -1) - y @ np.roll(y, -1)) > 0.0
 
         edges = np.roll(polygon, -1, axis=0) - polygon
         edge_lengths = np.linalg.norm(edges, axis=1, keepdims=True)
         edge_directions = edges / np.maximum(edge_lengths, 1e-6)
 
-        if is_ccw:
+        if is_counter_clockwise:
             normals = np.stack([edge_directions[:, 1], -edge_directions[:, 0]], axis=1)
         else:
             normals = np.stack([-edge_directions[:, 1], edge_directions[:, 0]], axis=1)
