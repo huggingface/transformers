@@ -1,7 +1,7 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-.PHONY: style check-repo check-model-rules check-model-rules-all fix-repo test test-examples benchmark
+.PHONY: style check-repo check-model-rules check-model-rules-pr check-model-rules-all fix-repo test test-examples benchmark
 
 check_dirs := examples tests src utils scripts benchmark benchmark_v2
 exclude_folders :=  ""
@@ -50,6 +50,10 @@ check-repo:
 
 
 check-model-rules:
+	python utils/check_modeling_structure.py --changed-only --base-ref origin/main
+
+
+check-model-rules-pr:
 	python utils/check_modeling_structure.py --changed-only --base-ref origin/main --github-annotations
 
 

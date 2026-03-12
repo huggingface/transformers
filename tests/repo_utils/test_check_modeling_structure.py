@@ -253,23 +253,64 @@ from transformers.models.llama.modeling_llama import LlamaAttention
 
     @patch("check_modeling_structure.subprocess.run")
     def test_get_changed_modeling_files_filters_non_model_files(self, mock_run):
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=["git", "diff"],
-            returncode=0,
-            stdout=(
-                "src/transformers/models/foo/modeling_foo.py\n"
-                "src/transformers/models/foo/modular_foo.py\n"
-                "src/transformers/models/foo/configuration_foo.py\n"
-                "docs/source/en/index.md\n"
+        mock_run.side_effect = [
+            subprocess.CompletedProcess(
+                args=["git", "diff"],
+                returncode=0,
+                stdout=(
+                    "src/transformers/models/foo/modeling_foo.py\n"
+                    "src/transformers/models/foo/modular_foo.py\n"
+                    "src/transformers/models/foo/configuration_foo.py\n"
+                    "docs/source/en/index.md\n"
+                ),
+                stderr="",
             ),
-            stderr="",
-        )
+            subprocess.CompletedProcess(args=["git", "diff"], returncode=0, stdout="", stderr=""),
+            subprocess.CompletedProcess(args=["git", "diff", "--cached"], returncode=0, stdout="", stderr=""),
+            subprocess.CompletedProcess(args=["git", "ls-files"], returncode=0, stdout="", stderr=""),
+        ]
         changed_files = cms.get_changed_modeling_files("origin/main")
         self.assertEqual(
             changed_files,
             {
                 Path("src/transformers/models/foo/modeling_foo.py"),
                 Path("src/transformers/models/foo/modular_foo.py"),
+            },
+        )
+
+    @patch("check_modeling_structure.subprocess.run")
+    def test_get_changed_modeling_files_includes_uncommitted_worktree_changes(self, mock_run):
+        mock_run.side_effect = [
+            subprocess.CompletedProcess(args=["git", "diff"], returncode=0, stdout="", stderr=""),
+            subprocess.CompletedProcess(args=["git", "diff"], returncode=0, stdout="", stderr=""),
+            subprocess.CompletedProcess(
+                args=["git", "diff"],
+                returncode=0,
+                stdout="src/transformers/models/helium/modeling_helium.py\n",
+                stderr="",
+            ),
+            subprocess.CompletedProcess(
+                args=["git", "diff", "--cached"],
+                returncode=0,
+                stdout="src/transformers/models/foo/modular_foo.py\n",
+                stderr="",
+            ),
+            subprocess.CompletedProcess(
+                args=["git", "ls-files"],
+                returncode=0,
+                stdout=("src/transformers/models/bar/modeling_bar.py\ndocs/source/en/index.md\n"),
+                stderr="",
+            ),
+        ]
+
+        changed_files = cms.get_changed_modeling_files("origin/main")
+
+        self.assertEqual(
+            changed_files,
+            {
+                Path("src/transformers/models/helium/modeling_helium.py"),
+                Path("src/transformers/models/foo/modular_foo.py"),
+                Path("src/transformers/models/bar/modeling_bar.py"),
             },
         )
 

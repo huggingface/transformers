@@ -40,7 +40,7 @@ CLI usage
 ---------
 - ``python utils/check_modeling_structure.py``: check all modeling and modular files.
 - ``python utils/check_modeling_structure.py --changed-only --base-ref origin/main``: only check files changed
-  against a git base ref.
+  against a git base ref, plus local staged, unstaged, and untracked modeling files.
 - ``python utils/check_modeling_structure.py --list-rules``: print all available TRF rules and their default state.
 - ``python utils/check_modeling_structure.py --rule TRF001``: show the detailed documentation for one rule from the
   TOML file.
@@ -752,14 +752,24 @@ def _is_modeling_candidate(path: Path) -> bool:
     return path.suffix == ".py" and path.name.startswith(("modeling_", "modular_")) and MODELS_ROOT in path.parents
 
 
-def _git_diff(base_ref: str, triple_dot: bool) -> list[str]:
-    diff_operator = "..." if triple_dot else ".."
-    range_ref = f"{base_ref}{diff_operator}HEAD"
-    command = ["git", "diff", "--name-only", "--diff-filter=ACMR", range_ref]
+def _git_name_only(command: list[str]) -> list[str]:
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         return []
     return [line for line in result.stdout.splitlines() if line.strip()]
+
+
+def _git_diff(base_ref: str, triple_dot: bool) -> list[str]:
+    diff_operator = "..." if triple_dot else ".."
+    range_ref = f"{base_ref}{diff_operator}HEAD"
+    return _git_name_only(["git", "diff", "--name-only", "--diff-filter=ACMR", range_ref])
+
+
+def _git_worktree_changes() -> set[Path]:
+    changed_paths = set(_git_name_only(["git", "diff", "--name-only", "--diff-filter=ACMR"]))
+    changed_paths.update(_git_name_only(["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR"]))
+    changed_paths.update(_git_name_only(["git", "ls-files", "--others", "--exclude-standard"]))
+    return {Path(path_str) for path_str in changed_paths}
 
 
 def get_changed_modeling_files(base_ref: str) -> set[Path]:
@@ -768,8 +778,7 @@ def get_changed_modeling_files(base_ref: str) -> set[Path]:
         changed_paths = _git_diff(base_ref, triple_dot=False)
 
     filtered_paths: set[Path] = set()
-    for path_str in changed_paths:
-        path = Path(path_str)
+    for path in {Path(path_str) for path_str in changed_paths}.union(_git_worktree_changes()):
         if _is_modeling_candidate(path):
             filtered_paths.add(path)
     return filtered_paths
@@ -847,7 +856,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--changed-only",
         action="store_true",
-        help="Only check changed modeling/modular files compared to --base-ref.",
+        help="Only check changed modeling/modular files compared to --base-ref, plus local worktree changes.",
     )
     parser.add_argument(
         "--base-ref",
@@ -952,10 +961,10 @@ def maybe_handle_rule_docs_cli(args: argparse.Namespace) -> bool:
     return False
 
 
-def main():
+def main() -> int:
     args = parse_args()
     if maybe_handle_rule_docs_cli(args):
-        return
+        return 0
 
     violations: list[Violation] = []
     enabled_rules = resolve_enabled_rules(args)
@@ -982,10 +991,12 @@ def main():
         violations = sorted(violations, key=lambda v: (str(v.file_path), v.line_number, v.message))
         for violation in violations:
             emit_violation(violation, github_annotations=args.github_annotations)
-        raise ValueError("Some errors in modelings. Check the above message")
+        print(f"Found {len(violations)} modeling structure violation(s).", file=sys.stderr)
+        return 1
 
     print("OK")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
