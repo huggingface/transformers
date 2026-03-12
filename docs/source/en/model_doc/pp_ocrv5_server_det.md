@@ -163,8 +163,3 @@ for result in results:
 ## PPOCRV5ServerDetImageProcessorFast
 
 [[autodoc]] PPOCRV5ServerDetImageProcessorFast
-
-## PPOCRV5ServerDetImageProcessor
-
-[[autodoc]] PPOCRV5ServerDetImageProcessor
- 
