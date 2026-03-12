@@ -74,7 +74,7 @@ model = AutoModelForObjectDetection.from_pretrained(
     model_path,
     device_map="auto"
 )
-image_processor = AutoImageProcessor.from_pretrained(model_path)
+image_processor = AutoImageProcessor.from_pretrained(model_path).to(model.device)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True).raw).convert("RGB")
 inputs = image_processor(images=image, return_tensors="pt")
@@ -132,7 +132,7 @@ model = AutoModelForObjectDetection.from_pretrained(
     model_path,
     device_map="auto",
 )
-image_processor = AutoImageProcessor.from_pretrained(model_path)
+image_processor = AutoImageProcessor.from_pretrained(model_path).to(model.device)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True).raw).convert("RGB")
 inputs = image_processor(images=[image, image], return_tensors="pt")
