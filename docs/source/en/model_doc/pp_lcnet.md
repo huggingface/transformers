@@ -47,9 +47,11 @@ The example below demonstrates how to classify image with PP-LCNet using [`Pipel
 import requests
 from PIL import Image
 from transformers import pipeline
+
 model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
+image_classifier = pipeline("image-classification", model=model_path, function_to_apply="none", device_map="auto")
+
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg", stream=True).raw)
-image_classifier = pipeline("image-classification", model=model_path, function_to_apply="none")
 result = image_classifier(image)
 print(result)
 ```
@@ -64,14 +66,12 @@ from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForImageClassification
 
 model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
-model = AutoModelForImageClassification.from_pretrained(model_path)
+model = AutoModelForImageClassification.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg", stream=True).raw)
-
 inputs = image_processor(images=image, return_tensors="pt")
 outputs = model(**inputs)
-print(outputs)
 predicted_label = outputs.logits.argmax(-1).item()
 print(model.config.id2label[predicted_label])
 ```
@@ -90,12 +90,13 @@ Here is how you can do it with PP-LCNet using [`Pipeline`] or the [`AutoModel`]:
 import requests
 from PIL import Image
 from transformers import pipeline
+
 model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
+image_classifier = pipeline("image-classification", model=model_path, function_to_apply="none", device_map="auto")
+
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg", stream=True).raw)
-image_classifier = pipeline("image-classification", model=model_path, function_to_apply="none")
 result = image_classifier([image, image])
 print(result)
-
 ```
 
 </hfoption>
@@ -108,11 +109,10 @@ from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForImageClassification
 
 model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
-model = AutoModelForImageClassification.from_pretrained(model_path)
+model = AutoModelForImageClassification.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg", stream=True).raw)
-
 inputs = image_processor(images=[image, image], return_tensors="pt")
 outputs = model(**inputs)
 

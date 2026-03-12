@@ -1,5 +1,4 @@
 import math
-from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -8,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms.v2.functional as tvF
 
+from ...activations import ACT2FN
 from ...backbone_utils import consolidate_backbone_kwargs_to_config, load_backbone
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
@@ -17,13 +17,15 @@ from ...image_utils import (
 )
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     is_cv2_available,
     logging,
 )
-from ...utils.generic import TensorType
+from ...utils.generic import TensorType, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
 
@@ -35,51 +37,27 @@ if is_cv2_available():
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5_mobile_det_safetensors")
+@auto_docstring(
+    checkpoint="PaddlePaddle/PP-OCRv5_mobile_det_safetensors",
+    custom_args=r"""
+    reduction (`int`, *optional*, defaults to 4):
+        The reduction factor for feature channel dimensions, used to reduce the number of model parameters and
+        computational complexity while maintaining feature representability.
+    neck_out_channels (`int`, *optional*, defaults to 96):
+        The number of output channels from the neck network, which is responsible for feature fusion and
+        refinement before passing features to the head network.
+    interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
+        The interpolation mode used for upsampling or downsampling feature maps in the neck network. Supported
+        modes include `"nearest"` (nearest neighbor interpolation) and `"bilinear"`.
+    kernel_list (`List[int]`, *optional*, defaults to `[3, 2, 2]`):
+        The list of kernel sizes for convolutional layers in the head network, used for multi-scale feature
+        extraction to detect text regions of different sizes.
+    layer_list_out_channels (`List[int]`, *optional*, defaults to `[12, 18, 42, 360]`):
+        The list of output channels for each backbone stage, used to configure the input channels of the RSE layers
+        in the neck network for multi-scale feature fusion.
+    """,
+)
 class PPOCRV5MobileDetConfig(PreTrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`PPOCRV5MobileDet`]. It is used to instantiate a
-    PPOCRV5 Mobile text detection model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the PPOCRV5 Mobile Det
-    [PaddlePaddle/PP-OCRv5-mobile-det](https://huggingface.co/PaddlePaddle/PP-OCRv5-mobile-det) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `None`):
-            The configuration of the backbone model. If `None`, the default backbone configuration for PPOCRV5 Mobile Det
-            will be used.
-        reduction (`int`, *optional*, defaults to 4):
-            The reduction factor for feature channel dimensions, used to reduce the number of model parameters and
-            computational complexity while maintaining feature representability.
-        neck_out_channels (`int`, *optional*, defaults to 96):
-            The number of output channels from the neck network, which is responsible for feature fusion and
-            refinement before passing features to the head network.
-        shortcut (`bool`, *optional*, defaults to `True`):
-            Whether to use shortcut connections (residual connections) in the neck network. Shortcut connections help
-            alleviate the vanishing gradient problem and improve feature propagation across layers.
-        interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
-            The interpolation mode used for upsampling or downsampling feature maps in the neck network. Supported
-            modes include `"nearest"` (nearest neighbor interpolation) and `"bilinear"`.
-        kernel_list (`List[int]`, *optional*, defaults to `[3, 2, 2]`):
-            The list of kernel sizes for convolutional layers in the head network, used for multi-scale feature
-            extraction to detect text regions of different sizes.
-        layer_list_out_channels (`List[int]`, *optional*, defaults to `[12, 18, 42, 360]`):
-            The list of output channels for each backbone stage, used to configure the input channels of the RSE layers
-            in the neck network for multi-scale feature fusion.
-
-    Examples:
-    ```python
-    >>> from transformers import PPOCRV5MobileDetConfig, PPOCRV5MobileDetForTextDetection
-    >>> # Initializing a PPOCRV5 Mobile Det configuration
-    >>> configuration = PPOCRV5MobileDetConfig()
-    >>> # Initializing a model (with random weights) from the configuration
-    >>> model = PPOCRV5MobileDetForTextDetection(configuration)
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    """
-
     model_type = "pp_ocrv5_mobile_det"
     sub_configs = {"backbone_config": AutoConfig}
 
@@ -88,7 +66,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         backbone_config=None,
         reduction=4,
         neck_out_channels=96,
-        shortcut=True,
         interpolate_mode="nearest",
         kernel_list=[3, 2, 2],
         layer_list_out_channels=[12, 18, 42, 360],
@@ -111,7 +88,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
 
         # ---- Neck ----
         self.neck_out_channels = neck_out_channels
-        self.shortcut = shortcut
         self.interpolate_mode = interpolate_mode
 
         # ---- Head ----
@@ -634,7 +610,7 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
         """
 
         results = []
-        for logit, size in zip(outputs.logits, target_sizes):
+        for logit, size in zip(outputs.last_hidden_state, target_sizes):
             logit = logit[0, :, :].cpu().detach().numpy()
             size = size.cpu().detach().numpy()
 
@@ -651,18 +627,18 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
 @auto_docstring
 class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
     config: PPOCRV5MobileDetConfig
-    base_model_prefix = "pp_ocrv5_mobile_det"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 
 
-class PPOCRV5MobileDetSEModule(nn.Module):
+class PPOCRV5MobileDetSqueezeExcitationModule(nn.Module):
     """
     Simplified Squeeze-and-Excitation (SE) Module for the neck network.
     Applies channel-wise recalibration with a clamped activation to stabilize training.
     """
 
-    def __init__(self, in_channels, reduction=4):
+    def __init__(self, in_channels, reduction, activation="relu"):
         super().__init__()
 
         self.avg_pool = nn.AdaptiveAvgPool2d(output_size=1)
@@ -680,34 +656,23 @@ class PPOCRV5MobileDetSEModule(nn.Module):
             stride=1,
             padding=0,
         )
+        self.activation = ACT2FN[activation]
 
     def forward(self, inputs):
-        """
-        Apply simplified squeeze-and-excitation to the input tensor.
-
-        Args:
-            inputs (torch.Tensor): Input feature tensor of shape (B, C, H, W).
-
-        Returns:
-            torch.Tensor: Recalibrated feature tensor of shape (B, C, H, W).
-        """
         outputs = self.avg_pool(inputs)
-        outputs = self.conv1(outputs)
-        outputs = F.relu(outputs)
-        outputs = self.conv2(outputs)
+        outputs = self.conv2(self.activation(self.conv1(outputs)))
         outputs = torch.clamp(0.2 * outputs + 0.5, min=0.0, max=1.0)
         return inputs * outputs
 
 
-class PPOCRV5MobileDetRSELayer(nn.Module):
+class PPOCRV5MobileDetResidualSqueezeExcitationLayer(nn.Module):
     """
     Residual Squeeze-and-Excitation (RSE) Layer for the neck network.
-    Combines a 1x1/3x3 convolution with an SE Module and an optional residual shortcut connection.
+    Combines a 1x1/3x3 convolution with an SE Module.
     """
 
-    def __init__(self, in_channels, out_channels, kernel_size, reduction, shortcut=True):
+    def __init__(self, in_channels, out_channels, kernel_size, reduction):
         super().__init__()
-        self.shortcut = shortcut
         self.in_conv = nn.Conv2d(
             in_channels=in_channels,
             out_channels=out_channels,
@@ -715,14 +680,13 @@ class PPOCRV5MobileDetRSELayer(nn.Module):
             padding=int(kernel_size // 2),
             bias=False,
         )
-        self.se_block = PPOCRV5MobileDetSEModule(out_channels, reduction)
+        self.se_block = PPOCRV5MobileDetSqueezeExcitationModule(out_channels, reduction)
 
-    def forward(self, hidden_state):
-        conv_output = self.in_conv(hidden_state)
-        se_output = self.se_block(conv_output)
-        hidden_state = conv_output + se_output if self.shortcut else se_output
+    def forward(self, hidden_states):
+        hidden_states = self.in_conv(hidden_states)
+        hidden_states = hidden_states + self.se_block(hidden_states)
 
-        return hidden_state
+        return hidden_states
 
 
 class PPOCRV5MobileDetNeck(nn.Module):
@@ -736,31 +700,30 @@ class PPOCRV5MobileDetNeck(nn.Module):
         super().__init__()
         self.interpolate_mode = config.interpolate_mode
 
-        self.ins_conv = nn.ModuleList()
-        self.inp_conv = nn.ModuleList()
+        self.insert_conv = nn.ModuleList()
+        self.input_conv = nn.ModuleList()
         for i in range(len(config.layer_list_out_channels)):
-            self.ins_conv.append(
-                PPOCRV5MobileDetRSELayer(
+            self.insert_conv.append(
+                PPOCRV5MobileDetResidualSqueezeExcitationLayer(
                     config.layer_list_out_channels[i],
                     config.neck_out_channels,
                     1,
                     config.reduction,
-                    config.shortcut,
                 )
             )
-            self.inp_conv.append(
-                PPOCRV5MobileDetRSELayer(
-                    config.neck_out_channels, config.neck_out_channels // 4, 3, config.reduction, config.shortcut
+            self.input_conv.append(
+                PPOCRV5MobileDetResidualSqueezeExcitationLayer(
+                    config.neck_out_channels, config.neck_out_channels // 4, 3, config.reduction
                 )
             )
 
     def forward(self, feature_maps):
-        fused = [conv(feature) for conv, feature in zip(self.ins_conv, feature_maps)]  # [p2, p3, p4, p5]
+        fused = [conv(feature) for conv, feature in zip(self.insert_conv, feature_maps)]  # [p2, p3, p4, p5]
 
         for i in range(2, -1, -1):  # p4 -> p3-> p2
             fused[i] = fused[i] + F.interpolate(fused[i + 1], scale_factor=2, mode=self.interpolate_mode)
 
-        processed = [conv(feat) for conv, feat in zip(self.inp_conv, [fused[0], fused[1], fused[2], fused[3]])]
+        processed = [conv(feat) for conv, feat in zip(self.input_conv, [fused[0], fused[1], fused[2], fused[3]])]
         upsample_scales = [1, 2, 4, 8]  # p2, p3, p4, p5
         processed = [
             F.interpolate(feat, scale_factor=scale, mode=self.interpolate_mode) if scale != 1 else feat
@@ -777,9 +740,11 @@ class PPOCRV5MobileDetHead(nn.Module):
     and a sigmoid activation to produce binary segmentation logits.
     """
 
-    def __init__(self, in_channels, kernel_list=[3, 2, 2]):
+    def __init__(self, config):
         super().__init__()
 
+        in_channels = config.neck_out_channels
+        kernel_list = config.kernel_list
         self.conv1 = nn.Conv2d(
             in_channels=in_channels,
             out_channels=in_channels // 4,
@@ -806,37 +771,11 @@ class PPOCRV5MobileDetHead(nn.Module):
             stride=2,
         )
 
-    def forward(self, hidden_state):
-        hidden_state = self.relu1(self.bn1(self.conv1(hidden_state)))
-        hidden_state = self.relu2(self.bn2(self.conv2(hidden_state)))
-        hidden_state = torch.sigmoid(self.conv3(hidden_state))
-        return hidden_state
-
-
-class PPOCRV5MobileDetDBHead(nn.Module):
-    """
-    Head network for PPOCRV5 Mobile Det, wrapping the Head sub-module to generate text segmentation maps.
-    """
-
-    def __init__(self, config: PPOCRV5MobileDetConfig):
-        super().__init__()
-        self.binarize = PPOCRV5MobileDetHead(config.neck_out_channels, config.kernel_list)
-
-    def forward(self, hidden_state):
-        shrink_maps = self.binarize(hidden_state)
-        return shrink_maps
-
-
-@dataclass
-class PPOCRV5MobileDetModelOutput(BaseModelOutputWithNoAttention):
-    """
-    Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
-            Binary segmentation probability maps from the head. Higher values indicate
-            higher probability of text presence.
-    """
-
-    logits: torch.FloatTensor | None = None
+    def forward(self, hidden_states):
+        hidden_states = self.relu1(self.bn1(self.conv1(hidden_states)))
+        hidden_states = self.relu2(self.bn2(self.conv2(hidden_states)))
+        hidden_states = torch.sigmoid(self.conv3(hidden_states))
+        return hidden_states
 
 
 @auto_docstring(
@@ -851,42 +790,27 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
 
         self.backbone = load_backbone(config)
         out_channels = [self.backbone.num_features[i] for i in self.backbone.out_indices]
-        self.layer_list = nn.ModuleList()
+        self.layer = nn.ModuleList()
         for idx, out_channel in enumerate(out_channels):
-            self.layer_list.append(nn.Conv2d(out_channel, config.layer_list_out_channels[idx], 1, 1, 0))
+            self.layer.append(nn.Conv2d(out_channel, config.layer_list_out_channels[idx], 1, 1, 0))
 
         self.neck = PPOCRV5MobileDetNeck(config)
 
         self.post_init()
 
+    @merge_with_config_defaults
     @capture_outputs
-    @can_return_tuple
     def forward(
         self,
-        hidden_state: torch.FloatTensor,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor] | PPOCRV5MobileDetModelOutput:
-        feature_maps = self.backbone(hidden_state).feature_maps
-        hidden_state = [self.layer_list[i](feature_maps[i]) for i in range(len(feature_maps))]
-        hidden_state = self.neck(hidden_state)
+        hidden_states: torch.FloatTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+        outputs = self.backbone(hidden_states, **kwargs)
+        feature_maps = outputs.feature_maps
+        hidden_states = [self.layer[i](feature_maps[i]) for i in range(len(feature_maps))]
+        hidden_states = self.neck(hidden_states)
 
-        return PPOCRV5MobileDetModelOutput(logits=hidden_state)
-
-
-@auto_docstring(
-    custom_intro="""
-    Output class for PPOCRV5MobileDetForObjectDetection.
-    """
-)
-@dataclass
-class PPOCRV5MobileDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
-    """
-    Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
-            The predicted text mask.
-    """
-
-    logits: torch.FloatTensor | None = None
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=outputs.hidden_states)
 
 
 @auto_docstring(
@@ -900,7 +824,7 @@ class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
     def __init__(self, config: PPOCRV5MobileDetConfig):
         super().__init__(config)
         self.model = PPOCRV5MobileDetModel(config)
-        self.head = PPOCRV5MobileDetDBHead(config)
+        self.head = PPOCRV5MobileDetHead(config)
 
         self.post_init()
 
@@ -909,12 +833,12 @@ class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor] | PPOCRV5MobileDetForObjectDetectionOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
         outputs = self.model(pixel_values, **kwargs)
-        logits = self.head(outputs.logits)
+        hidden_states = self.head(outputs.last_hidden_state)
 
-        return PPOCRV5MobileDetForObjectDetectionOutput(logits=logits)
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=outputs.hidden_states)
 
 
 __all__ = [

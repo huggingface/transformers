@@ -53,12 +53,12 @@ class PPOCRV5MobileDetModelTester:
         batch_size=3,
         image_size=128,
         num_channels=3,
-        num_stages=6,
+        num_stages=5,
         is_training=False,
         conv_kxk_number=4,
         reduction=4,
         hidden_act="hardswish",
-        layer_list_out_channels=[12, 18, 42, 360],
+        layer_list_out_channels=[12, 24, 42, 360],
         neck_out_channels=96,
         shortcut=True,
         kernel_list=[3, 2, 2],
@@ -92,10 +92,23 @@ class PPOCRV5MobileDetModelTester:
     def get_config(self) -> PPOCRV5MobileDetConfig:
         backbone_config = {
             "model_type": "pp_lcnet_v3",
-            "scale": 0.75,
+            "scale": 1,
             "out_features": ["stage2", "stage3", "stage4", "stage5"],
             "out_indices": [2, 3, 4, 5],
             "divisor": 16,
+            "block_configs": [
+                [[3, 16, 32, 1, False]],
+                [[3, 32, 32, 2, False], [3, 32, 32, 1, False]],
+                [[3, 32, 32, 2, False], [3, 32, 32, 1, False]],
+                [
+                    [3, 32, 32, 2, False],
+                    [5, 32, 32, 1, False],
+                    [5, 32, 32, 1, False],
+                    [5, 32, 32, 1, False],
+                    [5, 32, 32, 1, False],
+                ],
+                [[5, 32, 32, 2, True], [5, 32, 32, 1, True], [5, 32, 32, 1, False], [5, 32, 32, 1, False]],
+            ],
         }
         config = PPOCRV5MobileDetConfig(
             backbone_config=backbone_config,
@@ -154,20 +167,8 @@ class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="PPOCRV5MobileDet does not support this test")
-    def test_model_is_small(self):
-        pass
-
     @unittest.skip(reason="PPOCRV5MobileDet does not support attention")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(reason="PPOCRV5MobileDet does not support attention")
-    def test_attention_outputs(self):
-        pass
-
-    @unittest.skip(reason="PPOCRV5MobileDet does not output hidden_states.")
-    def test_hidden_states_output(self):
         pass
 
     @unittest.skip(reason="PPOCRV5MobileDet does not support input and output embeddings")
@@ -187,6 +188,31 @@ class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
             arg_names = [*signature.parameters.keys()]
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.hidden_states
+            expected_num_stages = self.model_tester.num_stages
+
+            self.assertEqual(len(hidden_states), expected_num_stages + 1)
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
     @require_torch_accelerator

@@ -4,58 +4,33 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_pp_ocrv5_mobile_det.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5_mobile_det_safetensors")
+@auto_docstring(
+    checkpoint="PaddlePaddle/PP-OCRv5_mobile_det_safetensors",
+    custom_args=r"""
+    reduction (`int`, *optional*, defaults to 4):
+        The reduction factor for feature channel dimensions, used to reduce the number of model parameters and
+        computational complexity while maintaining feature representability.
+    neck_out_channels (`int`, *optional*, defaults to 96):
+        The number of output channels from the neck network, which is responsible for feature fusion and
+        refinement before passing features to the head network.
+    interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
+        The interpolation mode used for upsampling or downsampling feature maps in the neck network. Supported
+        modes include `"nearest"` (nearest neighbor interpolation) and `"bilinear"`.
+    kernel_list (`List[int]`, *optional*, defaults to `[3, 2, 2]`):
+        The list of kernel sizes for convolutional layers in the head network, used for multi-scale feature
+        extraction to detect text regions of different sizes.
+    layer_list_out_channels (`List[int]`, *optional*, defaults to `[12, 18, 42, 360]`):
+        The list of output channels for each backbone stage, used to configure the input channels of the RSE layers
+        in the neck network for multi-scale feature fusion.
+    """,
+)
 class PPOCRV5MobileDetConfig(PreTrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`PPOCRV5MobileDet`]. It is used to instantiate a
-    PPOCRV5 Mobile text detection model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the PPOCRV5 Mobile Det
-    [PaddlePaddle/PP-OCRv5-mobile-det](https://huggingface.co/PaddlePaddle/PP-OCRv5-mobile-det) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `None`):
-            The configuration of the backbone model. If `None`, the default backbone configuration for PPOCRV5 Mobile Det
-            will be used.
-        reduction (`int`, *optional*, defaults to 4):
-            The reduction factor for feature channel dimensions, used to reduce the number of model parameters and
-            computational complexity while maintaining feature representability.
-        neck_out_channels (`int`, *optional*, defaults to 96):
-            The number of output channels from the neck network, which is responsible for feature fusion and
-            refinement before passing features to the head network.
-        shortcut (`bool`, *optional*, defaults to `True`):
-            Whether to use shortcut connections (residual connections) in the neck network. Shortcut connections help
-            alleviate the vanishing gradient problem and improve feature propagation across layers.
-        interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
-            The interpolation mode used for upsampling or downsampling feature maps in the neck network. Supported
-            modes include `"nearest"` (nearest neighbor interpolation) and `"bilinear"`.
-        kernel_list (`List[int]`, *optional*, defaults to `[3, 2, 2]`):
-            The list of kernel sizes for convolutional layers in the head network, used for multi-scale feature
-            extraction to detect text regions of different sizes.
-        layer_list_out_channels (`List[int]`, *optional*, defaults to `[12, 18, 42, 360]`):
-            The list of output channels for each backbone stage, used to configure the input channels of the RSE layers
-            in the neck network for multi-scale feature fusion.
-
-    Examples:
-    ```python
-    >>> from transformers import PPOCRV5MobileDetConfig, PPOCRV5MobileDetForTextDetection
-    >>> # Initializing a PPOCRV5 Mobile Det configuration
-    >>> configuration = PPOCRV5MobileDetConfig()
-    >>> # Initializing a model (with random weights) from the configuration
-    >>> model = PPOCRV5MobileDetForTextDetection(configuration)
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    """
-
     model_type = "pp_ocrv5_mobile_det"
     sub_configs = {"backbone_config": AutoConfig}
 
@@ -64,7 +39,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         backbone_config=None,
         reduction=4,
         neck_out_channels=96,
-        shortcut=True,
         interpolate_mode="nearest",
         kernel_list=[3, 2, 2],
         layer_list_out_channels=[12, 18, 42, 360],
@@ -87,7 +61,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
 
         # ---- Neck ----
         self.neck_out_channels = neck_out_channels
-        self.shortcut = shortcut
         self.interpolate_mode = interpolate_mode
 
         # ---- Head ----

@@ -19,23 +19,15 @@ import unittest
 from transformers import (
     PPLCNetV3Backbone,
     PPLCNetV3Config,
-    is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
+    is_torch_available,
     require_torch,
 )
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import floats_tensor
-
-
-if is_torch_available():
-    pass
-
-if is_vision_available():
-    pass
 
 
 class PPLCNetV3ModelTester:

@@ -26,7 +26,9 @@ from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_pp_lcnet_v3 import PPLCNetV3Config
 
@@ -61,48 +63,15 @@ class PPLCNetV3ConvLayer(nn.Module):
         return hidden_state
 
 
-def make_divisible(value: int, divisor: int = 8, min_value: int | None = None) -> int:
-    """
-    Ensure that all layers have a channel count that is divisible by `divisor`.
-    """
-    if min_value is None:
-        min_value = divisor
-    new_value = max(min_value, int(value + divisor / 2) // divisor * divisor)
-    # Make sure that round down does not go down by more than 10%.
-    if new_value < 0.9 * value:
-        new_value += divisor
-    return int(new_value)
-
-
-class PPLCNetV3Embeddings(nn.Module):
-    """
-    PPLCNetV3 Embeddings (Stem): Initial convolutional layer for processing input images.
-    """
-
-    def __init__(self, config: PPLCNetV3Config):
-        super().__init__()
-        self.convolution = PPLCNetV3ConvLayer(
-            in_channels=3,
-            kernel_size=3,
-            out_channels=make_divisible(config.stem_channels * config.scale, config.divisor),
-            stride=config.stem_stride,
-            activation=None,
-        )
-
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        embedding = self.convolution(pixel_values)
-
-        return embedding
-
-
 class PPLCNetV3LearnableAffineBlock(nn.Module):
     def __init__(self, scale_value: float = 1.0, bias_value: float = 0.0):
         super().__init__()
-        self.scale = nn.Parameter(torch.tensor([scale_value]))
-        self.bias = nn.Parameter(torch.tensor([bias_value]))
+        self.scale = nn.Parameter(torch.tensor([scale_value]), requires_grad=True)
+        self.bias = nn.Parameter(torch.tensor([bias_value]), requires_grad=True)
 
-    def forward(self, hidden_state):
-        return hidden_state * self.scale + self.bias
+    def forward(self, hidden_state: Tensor) -> Tensor:
+        hidden_state = self.scale * hidden_state + self.bias
+        return hidden_state
 
 
 class PPLCNetV3Act(nn.Module):
@@ -149,7 +118,7 @@ class PPLCNetV3LearnableRepLayer(nn.Module):
             nn.BatchNorm2d(num_features=in_channels) if out_channels == in_channels and stride == 1 else None
         )
 
-        self.conv_kxk = nn.ModuleList(
+        self.conv_symmetric = nn.ModuleList(
             [
                 PPLCNetV3ConvLayer(
                     in_channels,
@@ -163,7 +132,7 @@ class PPLCNetV3LearnableRepLayer(nn.Module):
             ]
         )
 
-        self.conv_1x1 = (
+        self.conv_small_symmetric = (
             PPLCNetV3ConvLayer(in_channels, out_channels, 1, stride, groups=groups, activation=None)
             if kernel_size > 1
             else None
@@ -178,13 +147,13 @@ class PPLCNetV3LearnableRepLayer(nn.Module):
         if self.identity is not None:
             output = self.identity(hidden_state)
 
-        if self.conv_1x1 is not None:
-            branch = self.conv_1x1(hidden_state)
-            output = branch if output is None else output + branch
+        if self.conv_small_symmetric is not None:
+            residual = self.conv_small_symmetric(hidden_state)
+            output = residual if output is None else output + residual
 
-        for conv in self.conv_kxk:
-            branch = conv(hidden_state)
-            output = branch if output is None else output + branch
+        for conv in self.conv_symmetric:
+            residual = conv(hidden_state)
+            output = residual if output is None else output + residual
 
         hidden_state = self.lab(output)
         if self.stride != 2:
@@ -192,7 +161,7 @@ class PPLCNetV3LearnableRepLayer(nn.Module):
         return hidden_state
 
 
-class PPLCNetV3SEModule(nn.Module):
+class PPLCNetV3SqueezeExcitationModule(nn.Module):
     """
     Squeeze-and-Excitation (SE) Module: Adaptive feature recalibration
     Enhances the model's ability to focus on important channels by learning channel-wise attention weights.
@@ -201,40 +170,30 @@ class PPLCNetV3SEModule(nn.Module):
     def __init__(self, channel, reduction=4):
         super().__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.convolution1 = nn.Conv2d(
-            in_channels=channel,
-            out_channels=channel // reduction,
-            kernel_size=1,
-            stride=1,
-            padding=0,
-            bias=True,
-        )
-        self.convolution2 = nn.Conv2d(
-            in_channels=channel // reduction,
-            out_channels=channel,
-            kernel_size=1,
-            stride=1,
-            padding=0,
-            bias=True,
-        )
-        self.activation1 = nn.ReLU()
-        self.activation2 = nn.Hardsigmoid()
+
+        self.convolutions = nn.ModuleList()
+        for in_channels, out_channels, activation in [
+            [channel, channel // reduction, nn.ReLU()],
+            [channel // reduction, channel, nn.Hardsigmoid()],
+        ]:
+            self.convolutions.append(
+                nn.Conv2d(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    kernel_size=1,
+                    stride=1,
+                    padding=0,
+                    bias=True,
+                )
+            )
+            self.convolutions.append(activation)
 
     def forward(self, hidden_state):
-        """
-        Forward propagation logic.
-
-        Args:
-            hidden_state (FloatTensor): Input feature map with shape [B, C, H, W].
-
-        Returns:
-            FloatTensor: Attention-weighted feature map with shape [B, C, H, W].
-        """
-        identity = hidden_state
+        residual = hidden_state
         hidden_state = self.avg_pool(hidden_state)
-        hidden_state = self.activation1(self.convolution1(hidden_state))
-        hidden_state = self.activation2(self.convolution2(hidden_state))
-        hidden_state = identity * hidden_state
+        for layer in self.convolutions:
+            hidden_state = layer(hidden_state)
+        hidden_state = residual * hidden_state
 
         return hidden_state
 
@@ -262,36 +221,42 @@ class PPLCNetV3DepthwiseSeparableConvLayer(nn.Module):
             kernel_size=kernel_size,
             stride=stride,
             groups=in_channels,
-            num_conv_branches=config.conv_kxk_num,
+            num_conv_branches=config.conv_symmetric_num,
             activation=config.hidden_act,
         )
         self.squeeze_excitation_module = (
-            PPLCNetV3SEModule(in_channels, config.reduction) if use_squeeze_excitation else nn.Identity()
+            PPLCNetV3SqueezeExcitationModule(in_channels, config.reduction)
+            if use_squeeze_excitation
+            else nn.Identity()
         )
         self.pointwise_convolution = PPLCNetV3LearnableRepLayer(
             in_channels=in_channels,
             kernel_size=1,
             out_channels=out_channels,
             stride=1,
-            num_conv_branches=config.conv_kxk_num,
+            num_conv_branches=config.conv_symmetric_num,
             activation=config.hidden_act,
         )
 
     def forward(self, hidden_state):
-        """
-        Forward propagation logic.
-
-        Args:
-            hidden_state (FloatTensor): Input feature map with shape [B, C, H, W].
-
-        Returns:
-            FloatTensor: Output feature map with shape [B, out_channels, H', W'].
-        """
         hidden_state = self.depthwise_convolution(hidden_state)
         hidden_state = self.squeeze_excitation_module(hidden_state)
         hidden_state = self.pointwise_convolution(hidden_state)
 
         return hidden_state
+
+
+def make_divisible(value: int, divisor: int = 8, min_value: int | None = None) -> int:
+    """
+    Ensure that all layers have a channel count that is divisible by `divisor`.
+    """
+    if min_value is None:
+        min_value = divisor
+    new_value = max(min_value, int(value + divisor / 2) // divisor * divisor)
+    # Make sure that round down does not go down by more than 10%.
+    if new_value < 0.9 * value:
+        new_value += divisor
+    return int(new_value)
 
 
 class PPLCNetV3Block(nn.Module):
@@ -302,7 +267,7 @@ class PPLCNetV3Block(nn.Module):
         blocks = config.block_configs[stage_index]
 
         self.layers = nn.ModuleList()
-        for kernel_size, in_channels, out_channels, stride, use_se in blocks:
+        for kernel_size, in_channels, out_channels, stride, use_squeeze_excitation in blocks:
             scaled_in_channels = make_divisible(in_channels * config.scale, config.divisor)
             scaled_out_channels = make_divisible(out_channels * config.scale, config.divisor)
 
@@ -311,15 +276,15 @@ class PPLCNetV3Block(nn.Module):
                 out_channels=scaled_out_channels,
                 kernel_size=kernel_size,
                 stride=stride,
-                use_squeeze_excitation=use_se,
+                use_squeeze_excitation=use_squeeze_excitation,
                 config=config,
             )
             self.layers.append(depthwise_block)
 
-    def forward(self, x):
+    def forward(self, hidden_states):
         for layer in self.layers:
-            x = layer(x)
-        return x
+            hidden_states = layer(hidden_states)
+        return hidden_states
 
 
 @auto_docstring
@@ -330,31 +295,14 @@ class PPLCNetV3PreTrainedModel(PreTrainedModel):
     """
 
     config: PPLCNetV3Config
-    base_model_prefix = "pp_lcnet_v3"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
+    _can_compile_fullgraph = True
+    _no_split_modules = ["PPLCNetV3Block"]
     _can_record_outputs = {
         "hidden_states": PPLCNetV3Block,
     }
-
-
-class PPLCNetV3Encoder(PPLCNetV3PreTrainedModel):
-    def __init__(self, config: PPLCNetV3Config):
-        super().__init__(config)
-        self.config = config
-        self.blocks = nn.ModuleList([])
-        for stage_index in range(len(config.block_configs)):
-            block = PPLCNetV3Block(config, stage_index)
-            self.blocks.append(block)
-
-        self.post_init()
-
-    @capture_outputs
-    def forward(self, hidden_state: torch.Tensor, **kwargs) -> BaseModelOutputWithNoAttention:
-        for block in self.blocks:
-            hidden_state = block(hidden_state)
-
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_state)
 
 
 @auto_docstring(
@@ -371,16 +319,16 @@ class PPLCNetV3Backbone(BackboneMixin, PPLCNetV3PreTrainedModel):
         for block in config.block_configs:
             num_features.append(int(block[-1][2] * config.scale))
         self.num_features = num_features
-        self.embedder = PPLCNetV3Embeddings(config)
         self.encoder = PPLCNetV3Encoder(config)
 
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -400,8 +348,8 @@ class PPLCNetV3Backbone(BackboneMixin, PPLCNetV3PreTrainedModel):
         >>> feature_maps = outputs.feature_maps
         >>> list(feature_maps[-1].shape)
         ```"""
-        embedding_output = self.embedder(pixel_values)
-        hidden_states = self.encoder(embedding_output, output_hidden_states=True).hidden_states
+        kwargs["output_hidden_states"] = True
+        hidden_states = self.encoder(pixel_values, **kwargs).hidden_states
 
         feature_maps = ()
         for idx, stage in enumerate(self.stage_names):
@@ -410,8 +358,39 @@ class PPLCNetV3Backbone(BackboneMixin, PPLCNetV3PreTrainedModel):
 
         return BackboneOutput(
             feature_maps=feature_maps,
-            hidden_states=hidden_states if kwargs.get("output_hidden_states", False) else None,
+            hidden_states=hidden_states,
         )
+
+
+class PPLCNetV3Encoder(PPLCNetV3PreTrainedModel):
+    def __init__(self, config: PPLCNetV3Config):
+        super().__init__(config)
+        self.config = config
+
+        # stem
+        self.convolution = PPLCNetV3ConvLayer(
+            in_channels=3,
+            kernel_size=3,
+            out_channels=make_divisible(config.stem_channels * config.scale, config.divisor),
+            stride=config.stem_stride,
+            activation=None,
+        )
+        # stages
+        self.blocks = nn.ModuleList([])
+        for stage_index in range(len(config.block_configs)):
+            block = PPLCNetV3Block(config, stage_index)
+            self.blocks.append(block)
+
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    def forward(self, pixel_values: torch.Tensor, **kwargs) -> BaseModelOutputWithNoAttention:
+        hidden_state = self.convolution(pixel_values)
+        for block in self.blocks:
+            hidden_state = block(hidden_state)
+
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_state)
 
 
 __all__ = ["PPLCNetV3Backbone", "PPLCNetV3PreTrainedModel"]

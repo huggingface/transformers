@@ -535,7 +535,7 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
         """
 
         results = []
-        for logit, size in zip(outputs.logits, target_sizes):
+        for logit, size in zip(outputs.last_hidden_state, target_sizes):
             logit = logit[0, :, :].cpu().detach().numpy()
             size = size.cpu().detach().numpy()
 

@@ -1664,7 +1664,6 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("maskformer-swin", "MaskFormerSwinBackbone"),
         ("pixio", "PixioBackbone"),
         ("pp_lcnet", "PPLCNetBackbone"),
-        ("pp_lcnet", "PPLCNetBackbone"),
         ("pp_lcnet_v3", "PPLCNetV3Backbone"),
         ("pvt_v2", "PvtV2Backbone"),
         ("resnet", "ResNetBackbone"),

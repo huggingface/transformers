@@ -1,5 +1,5 @@
 # coding = utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -197,12 +197,12 @@ class PPLCNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="PPLCNet does not support attention")
-    def test_attention_outputs(self):
-        pass
-
     @unittest.skip(reason="PPLCNet does not support train")
     def test_problem_types(self):
+        pass
+
+    @unittest.skip(reason="PPLCNet does not support model parallelism")
+    def test_model_parallelism(self):
         pass
 
     def test_forward_signature(self):

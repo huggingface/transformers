@@ -23,69 +23,32 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors")
+@auto_docstring(
+    checkpoint="PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors",
+    custom_args=r"""
+    scale (`float`, *optional*, defaults to 1.0):
+        The scaling factor for the model's channel dimensions, used to adjust the model size and computational cost
+        without changing the overall architecture (e.g., 0.25, 0.5, 1.0, 1.5).
+    block_configs (`list[list[tuple]]`, *optional*, defaults to `None`):
+        Configuration for each block in each stage. Each tuple contains:
+        (kernel_size, in_channels, out_channels, stride, use_squeeze_excitation).
+        If `None`, uses the default PP-LCNet configuration.
+    stem_channels (`int`, *optional*, defaults to 16):
+        The number of output channels for the stem layer.
+    stem_stride (`int`, *optional*, defaults to 2):
+        The stride for the stem convolution layer.
+    reduction (`int`, *optional*, defaults to 4):
+        The reduction factor for feature channel dimensions in the squeeze-and-excitation (SE) blocks, used to
+        reduce the number of model parameters and computational complexity while maintaining feature representability.
+    class_expand (`int`, *optional*, defaults to 1280):
+        The number of hidden units in the expansion layer of the classification head, used to enhance the model's
+        feature representation capability before the final classification layer.
+    divisor (`int`, *optional*, defaults to 8):
+        The divisor used to ensure that various model parameters (e.g., channel dimensions, kernel sizes) are
+        multiples of this value, promoting efficient model implementation and resource utilization.
+    """,
+)
 class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`PPLCNet`]. It is used to instantiate a
-    PP-LCNet model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the PP-LCNet
-    [PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors](https://huggingface.co/PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors) architecture.
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        scale (`float`, *optional*, defaults to 1.0):
-            The scaling factor for the model's channel dimensions, used to adjust the model size and computational cost
-            without changing the overall architecture (e.g., 0.25, 0.5, 1.0, 1.5).
-        hidden_act (`str`, *optional*, defaults to `"hardswish"`):
-            The non-linear activation function used in the model's hidden layers. Supported functions include
-            `"hardswish"`, `"relu"`, `"silu"`, and `"gelu"`. `"hardswish"` is preferred for lightweight and efficient
-            inference on edge devices.
-        out_features (`list[str]`, *optional*):
-            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
-            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        out_indices (`list[int]`, *optional*):
-            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
-            If unset and `out_features` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        stem_channels (`int`, *optional*, defaults to 16):
-            The number of output channels for the stem layer.
-        stem_stride (`int`, *optional*, defaults to 2):
-            The stride for the stem convolution layer.
-        block_configs (`list[list[tuple]]`, *optional*, defaults to `None`):
-            Configuration for each block in each stage. Each tuple contains:
-            (kernel_size, in_channels, out_channels, stride, use_squeeze_excitation).
-            If `None`, uses the default PP-LCNet configuration.
-        reduction (`int`, *optional*, defaults to 4):
-            The reduction factor for feature channel dimensions in the squeeze-and-excitation (SE) blocks, used to
-            reduce the number of model parameters and computational complexity while maintaining feature representability.
-        dropout_prob (`float`, *optional*, defaults to 0.2):
-            The dropout probability for the classification head, used to prevent overfitting by randomly zeroing out
-            a fraction of the neurons during training.
-        class_expand (`int`, *optional*, defaults to 1280):
-            The number of hidden units in the expansion layer of the classification head, used to enhance the model's
-            feature representation capability before the final classification layer.
-        use_last_convolution (`bool`, *optional*, defaults to `True`):
-            Whether to use the final convolutional layer in the classification head. Setting this to `True` helps
-            extract more discriminative features for the classification task.
-        divisor (`int`, *optional*, defaults to 8):
-            The divisor used to ensure that various model parameters (e.g., channel dimensions, kernel sizes) are
-            multiples of this value, promoting efficient model implementation and resource utilization.
-
-    Examples:
-    ```python
-    >>> from transformers import PPLCNetConfig, PPLCNetForImageClassification
-    >>> # Initializing a PP-LCNet configuration
-    >>> configuration = PPLCNetConfig()
-    >>> # Initializing a model (with random weights) from the configuration
-    >>> model = PPLCNetForImageClassification(configuration)
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    """
-
     model_type = "pp_lcnet"
 
     def __init__(
@@ -98,9 +61,8 @@ class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
         stem_stride=2,
         block_configs=None,
         reduction=4,
-        dropout_prob=0.2,
+        hidden_dropout_prob=0.2,
         class_expand=1280,
-        use_last_convolution=True,
         divisor=8,
         **kwargs,
     ):
@@ -110,9 +72,8 @@ class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
         self.stem_channels = stem_channels
         self.stem_stride = stem_stride
         self.reduction = reduction
-        self.dropout_prob = dropout_prob
+        self.hidden_dropout_prob = hidden_dropout_prob
         self.class_expand = class_expand
-        self.use_last_convolution = use_last_convolution
         self.divisor = divisor
 
         # Default block configs for PP-LCNet
@@ -140,7 +101,8 @@ class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
             if block_configs is None
             else block_configs
         )
-
+        if len(self.block_configs) != 5:
+            raise ValueError(f"block_configs must have 5 stages, but got {len(self.block_configs)}")
         self.depths = [len(blocks) for blocks in self.block_configs]
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.block_configs) + 1)]
         self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
