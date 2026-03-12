@@ -73,12 +73,7 @@ class CompileableContextVar:
         if self.compiling:
             return self.global_var
         else:
-            # Set was maybe never called, so still check it here
-            if is_torchdynamo_compiling():
-                self.is_compiling = True
-                return self.global_var
-            else:
-                return self.context_var.get()
+            return self.context_var.get()
 
     def set(self, value):
         if is_torchdynamo_compiling():
