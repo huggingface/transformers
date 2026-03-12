@@ -76,10 +76,6 @@ logger = logging.get_logger(__name__)
     """,
 )
 class PPOCRV5ServerDetConfig(PreTrainedConfig):
-    r"""
-    
-
-    """
 
     sub_configs = {"backbone_config": AutoConfig}
     model_type = "pp_ocrv5_server_det"

@@ -37,13 +37,13 @@ if is_cv2_available():
     import cv2
 
 
-@auto_docstring
-class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
-    """
+@auto_docstring(
+    custom_intro=r"""
     Image processor for PPOCRV5 Server Det model, handling preprocessing (resizing, normalization)
     and post-processing (converting model outputs to text boxes).
     """
-
+)
+class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
     resample = 2
     image_mean = [0.406, 0.456, 0.485]
     image_std = [0.225, 0.224, 0.229]
@@ -74,6 +74,8 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
+        requires_backends(self, ["torch"])
+
         target_sizes = []
 
         # Group images by their original spatial shape to enable batched resizing (optimization for efficiency)
@@ -84,7 +86,6 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         # [Key Change] Core addition: Mapping from original image shape to target resize shape
         # This dict ensures consistent target shape handling across all subsequent operations (resize/processing)
         target_shape_per_shape = {}
-        requires_backends(self, ["torch"])
         for shape, stacked_images in grouped_images.items():
             if do_resize:
                 resize_size, target_shape = self.get_image_size(
@@ -383,10 +384,10 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
                 - "scores": `torch.Tensor` of shape `(N,)`
                 - "labels": `torch.Tensor` of shape `(N,)` (class id 0 for text)
         """
+        requires_backends(self, ["torch", "cv2"])
         if target_sizes is None:
             raise ValueError("target_sizes must be provided for post_process_object_detection")
 
-        requires_backends(self, ["torch", "cv2"])
         device = predictions.logits.device
         results = []
         for prediction, size in zip(predictions.logits, target_sizes):

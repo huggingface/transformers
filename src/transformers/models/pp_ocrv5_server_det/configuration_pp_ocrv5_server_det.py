@@ -26,41 +26,24 @@ from ..auto import AutoConfig
 
 @auto_docstring(
     checkpoint="PaddlePaddle/PP-OCRv5-server-det",
+    custom_args=r"""
+    interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
+        The interpolation mode used for upsampling or downsampling feature maps in the neck network.
+    neck_out_channels (`int`, *optional*, defaults to 256):
+        The number of output channels from the neck network, responsible for feature fusion and refinement.
+    reduce_factor (`int`, *optional*, defaults to 2):
+        The channel reduction factor used in the neck blocks to balance performance and complexity.
+    intraclass_block_number (`int`, *optional*, defaults to 4):
+        The number of Intra-Class Block modules used for enhancing feature representation.
+    intraclass_block_config (`dict`, *optional*, defaults to `None`):
+        Configuration for the Intra-Class Block modules, if any, used for enhancing feature representation.
+    scale_factor (`int`, *optional*, defaults to 2):
+        The scaling factor used for spatial resolution adjustments in the feature maps.
+    kernel_list (`list[int]`, *optional*, defaults to `[3, 2, 2]`):
+        The list of kernel sizes for convolutional layers in the head network for multi-scale feature extraction.
+    """,
 )
 class PPOCRV5ServerDetConfig(PreTrainedConfig):
-    r"""
-    Args:
-        interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
-            The interpolation mode used for upsampling or downsampling feature maps in the neck network.
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
-            The configuration of the backbone model.
-        neck_out_channels (`int`, *optional*, defaults to 256):
-            The number of output channels from the neck network, responsible for feature fusion and refinement.
-        reduce_factor (`int`, *optional*, defaults to 2):
-            The channel reduction factor used in the neck blocks to balance performance and complexity.
-        intraclass_block_number (`int`, *optional*, defaults to 4):
-            The number of Intra-Class Block modules used for enhancing feature representation.
-        intraclass_block_config (`dict`, *optional*, defaults to `None`):
-            Configuration for the Intra-Class Block modules, if any, used for enhancing feature representation.
-        scale_factor (`int`, *optional*, defaults to 2):
-            The scaling factor used for spatial resolution adjustments in the feature maps.
-        hidden_act (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function used in the hidden layers. Supported functions include `"relu"`, `"hswish"`, etc.
-        kernel_list (`list[int]`, *optional*, defaults to `[3, 2, 2]`):
-            The list of kernel sizes for convolutional layers in the head network for multi-scale feature extraction.
-
-    Examples:
-    ```python
-    >>> from transformers import PPOCRV5ServerDetConfig, PPOCRV5ServerDetForTextDetection
-    >>> # Initializing a PPOCRV5 Server Det configuration
-    >>> configuration = PPOCRV5ServerDetConfig()
-    >>> # Initializing a model (with random weights) from the configuration
-    >>> model = PPOCRV5ServerDetForTextDetection(configuration)
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
-    """
-
     sub_configs = {"backbone_config": AutoConfig}
     model_type = "pp_ocrv5_server_det"
 
@@ -110,11 +93,6 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         # For object detection pipeline compatibility: single class "text"
         self.id2label = {0: "text"}
         self.num_labels = 1
-
-        # if "id2label" not in kwargs:
-        #     kwargs["id2label"] = {0: "text"}
-        # if "num_labels" not in kwargs:
-        #     kwargs["num_labels"] = 1
 
         super().__init__(**kwargs)
 
