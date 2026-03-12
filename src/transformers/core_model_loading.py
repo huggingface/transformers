@@ -569,7 +569,7 @@ class WeightTransform:
                     target_pattern, source_pattern
                 )
             else:
-                self.target_patterns[i], captured_group, _ = process_pattern_for_reverse_mapping(target_pattern)
+                self.target_patterns[i], captured_group, _ = process_target_pattern(target_pattern)
             if captured_group is not None:
                 target_capturing_groups.append(captured_group)
 
