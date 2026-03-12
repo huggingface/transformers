@@ -66,7 +66,7 @@ print(processor.batch_decode(outputs))
 
 ### Training
 
-Here is a minimal example for preparing data and running a single training step with LASR/MedASR using PyTorch and 🤗 Transformers. This snippet demonstrates how to prepare batches with audio and text, feed them to the corresponding model, and compute the loss for training.
+The example below prepares a batch of audio and text, passes it through the LASR/MedASR model, and computes the training loss.
 
 ```python
 from transformers import AutoModelForCTC, AutoProcessor
