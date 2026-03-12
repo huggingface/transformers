@@ -380,6 +380,13 @@ class VaultGemmaPreTrainedModel(PreTrainedModel):
             init.zeros_(module.weight)
         elif isinstance(module, VaultGemmaTextScaledWordEmbedding):
             init.constant_(module.embed_scale, module.scalar_embed_scale)
+        if isinstance(module, VaultGemmaRotaryEmbedding):
+            rope_init_fn = module.compute_default_rope_parameters
+            if module.rope_type != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type]
+            inv_freq, _ = rope_init_fn(module.config)
+            init.copy_(module.inv_freq, inv_freq)
+            init.copy_(module.original_inv_freq, inv_freq)
 
 
 @auto_docstring

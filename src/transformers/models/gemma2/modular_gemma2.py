@@ -17,6 +17,7 @@ from collections.abc import Callable
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
@@ -335,7 +336,16 @@ class Gemma2DecoderLayer(GradientCheckpointingLayer):
 
 
 class Gemma2PreTrainedModel(GemmaPreTrainedModel):
-    pass
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Gemma2RotaryEmbedding):
+            rope_init_fn = module.compute_default_rope_parameters
+            if module.rope_type != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type]
+            inv_freq, _ = rope_init_fn(module.config)
+            init.copy_(module.inv_freq, inv_freq)
+            init.copy_(module.original_inv_freq, inv_freq)
 
 
 class Gemma2Model(GemmaModel):

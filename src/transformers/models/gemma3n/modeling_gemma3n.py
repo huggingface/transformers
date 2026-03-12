@@ -1396,6 +1396,8 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Gemma3nTextModel):
             init.constant_(module.per_layer_projection_scale, self.hidden_size**-0.5)
             init.constant_(module.per_layer_input_scale, 1 / math.sqrt(2.0))
+        elif isinstance(module, Gemma3nRMSNorm) and not module.with_scale:
+            init.constant_(module.weight, 1.0)
         elif isinstance(module, Gemma3nRotaryEmbedding):
             for layer_type in module.layer_types:
                 rope_init_fn = module.compute_default_rope_parameters
