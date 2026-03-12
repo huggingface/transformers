@@ -60,7 +60,7 @@ from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="Qwen2-VL-7B-Instruct")
+@auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
 class Qwen2_5_VLVisionConfig(PreTrainedConfig):
     r"""
     tokens_per_second (`int`, *optional*, defaults to 41):

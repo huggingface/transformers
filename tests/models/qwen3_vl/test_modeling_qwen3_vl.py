@@ -108,8 +108,11 @@ class Qwen3VLVisionText2TextModelTester(VLMModelTester):
         return input_ids
 
     def get_additional_inputs(self, config, input_ids, pixel_values):
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.image_token_id] = 1
         return {
             "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
+            "mm_token_type_ids": mm_token_type_ids,
         }
 
     def get_config(self):
@@ -164,6 +167,7 @@ class Qwen3VLModelTest(VLMModelTest, unittest.TestCase):
             input_ids = curr_input_dict["input_ids"][:1]
             pixel_values = curr_input_dict["pixel_values"][:one_img_length]
             image_grid_thw = curr_input_dict["image_grid_thw"][:1]
+            mm_token_type_ids = curr_input_dict["mm_token_type_ids"][:1]
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
@@ -172,16 +176,21 @@ class Qwen3VLModelTest(VLMModelTest, unittest.TestCase):
                     input_ids=input_ids,
                     pixel_values=pixel_values,
                     image_grid_thw=image_grid_thw,
+                    mm_token_type_ids=torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0),
                 )
 
             model.base_model.rope_deltas = None
             # two images and two image tokens don't raise an error
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
+            mm_token_type_ids = torch.cat(
+                [curr_input_dict["mm_token_type_ids"][:1], curr_input_dict["mm_token_type_ids"][:1]], dim=0
+            )
             _ = model(
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
             )
 
     def test_image_forward(self):
@@ -223,12 +232,16 @@ class Qwen3VLModelTest(VLMModelTest, unittest.TestCase):
                 input_ids[b, image_start + 1] = self.model_tester.image_token_id
                 input_ids[b, image_start + 2] = self.model_tester.vision_end_token_id
 
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.model_tester.image_token_id] = 1
+
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             outputs = model(
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
             )
             self.assertIsNotNone(outputs)
 
