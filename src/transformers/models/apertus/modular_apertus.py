@@ -217,7 +217,7 @@ class ApertusDecoderLayer(LlamaDecoderLayer):
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.attention_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(

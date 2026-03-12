@@ -234,22 +234,6 @@ class GlmOcrTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class GlmOcrVisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, dim: int, theta: float = 10000.0) -> None:
-        super().__init__()
-        self.dim = dim
-        self.theta = theta
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
-        return freqs
-
-
 class GlmOcrTextMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -318,6 +302,22 @@ class GlmOcrTextDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+class GlmOcrVisionRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, dim: int, theta: float = 10000.0) -> None:
+        super().__init__()
+        self.dim = dim
+        self.theta = theta
+        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+    def forward(self, seqlen: int) -> torch.Tensor:
+        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        freqs = torch.outer(seq, self.inv_freq)
+        return freqs
+
+
 @auto_docstring
 class GlmOcrPreTrainedModel(PreTrainedModel):
     config: GlmOcrConfig
@@ -331,10 +331,6 @@ class GlmOcrPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": GlmOcrTextDecoderLayer,
-        "attentions": GlmOcrTextAttention,
-    }
     _keys_to_ignore_on_load_unexpected = [r"model\.language_model\.layers\.16.*"]
 
     def _init_weights(self, module):
@@ -485,6 +481,7 @@ class GlmOcrVisionBlock(GradientCheckpointingLayer):
         self.attn = GlmOcrVisionAttention(config)
         self.mlp = GlmOcrVisionMlp(config, bias=config.attention_bias)
 
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -493,6 +490,12 @@ class GlmOcrVisionBlock(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
+        r"""
+        cu_seqlens (`torch.Tensor`):
+            Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
+        rotary_pos_emb (`torch.Tensor`, *optional*):
+            Precomputed rotary positional embeddings applied to the vision attention query/key states.
+        """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,
@@ -736,6 +739,10 @@ class GlmOcrTextRotaryEmbedding(nn.Module):
 class GlmOcrTextModel(GlmOcrPreTrainedModel):
     config: GlmOcrTextConfig
     input_modalities = ("text",)
+    _can_record_outputs = {
+        "hidden_states": GlmOcrTextDecoderLayer,
+        "attentions": GlmOcrTextAttention,
+    }
 
     def __init__(self, config: GlmOcrTextConfig):
         super().__init__(config)
@@ -1075,7 +1082,7 @@ class GlmOcrModel(GlmOcrPreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
         vision_outputs.pooler_output = image_embeds

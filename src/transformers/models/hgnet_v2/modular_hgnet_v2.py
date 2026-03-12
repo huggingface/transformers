@@ -18,7 +18,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ... import initialization as init
-from ...backbone_utils import BackboneConfigMixin, BackboneMixin
+from ...backbone_utils import BackboneConfigMixin, BackboneMixin, filter_output_hidden_states
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import (
     BackboneOutput,
@@ -29,6 +29,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
 )
+from ...utils.generic import can_return_tuple
 from ..rt_detr.modeling_rt_detr_resnet import RTDetrResNetConvLayer
 
 
@@ -443,6 +444,8 @@ class HGNetV2Backbone(BackboneMixin, HGNetV2PreTrainedModel):
         # initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
