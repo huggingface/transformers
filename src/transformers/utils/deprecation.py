@@ -33,6 +33,41 @@ class Action(ExplicitEnum):
     RAISE = "raise"
 
 
+def deprecated_feature_extractor(audio_processor_class, old_class_name, version="4.55"):
+    """Create a deprecated FeatureExtractor alias for an AudioProcessor.
+
+    Uses dynamic class creation to reduce boilerplate across ~20 models.
+    """
+
+    def __init__(self, *args, **kwargs):
+        warnings.warn(
+            f"`{old_class_name}` is deprecated and will be removed in v{version}. "
+            f"Use `{audio_processor_class.__name__}` instead.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        super(type(self), self).__init__(*args, **kwargs)
+
+    def __init_subclass__(cls, **kwargs):
+        warnings.warn(
+            f"`{old_class_name}` is deprecated and will be removed in v{version}. "
+            f"Use `{audio_processor_class.__name__}` instead.",
+            FutureWarning,
+        )
+        super(type(cls), cls).__init_subclass__(**kwargs)
+
+    return type(
+        old_class_name,
+        (audio_processor_class,),
+        {
+            "__init__": __init__,
+            "__init_subclass__": __init_subclass__,
+            "__module__": audio_processor_class.__module__,
+            "__doc__": f"Deprecated. Use {audio_processor_class.__name__} instead.",
+        },
+    )
+
+
 def deprecate_kwarg(
     old_name: str,
     version: str,
