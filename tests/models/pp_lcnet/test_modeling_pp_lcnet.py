@@ -279,7 +279,7 @@ class PPLCNetModelIntegrationTest(unittest.TestCase):
         model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
         self.model = PPLCNetForImageClassification.from_pretrained(model_path).to(torch_device)
         self.image_processor = PPLCNetImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
-        url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png"
+        url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg"
         self.image = Image.open(requests.get(url, stream=True).raw)
 
     def test_inference_image_classification_head(self):
@@ -289,12 +289,12 @@ class PPLCNetModelIntegrationTest(unittest.TestCase):
             outputs = self.model(**inputs)
 
         expected_shape_logits = torch.Size((1, 4))
-        expected_logits = torch.tensor([[0.0511, 0.0259, 0.8973, 0.0257]]).to(torch_device)
+        expected_logits = torch.tensor([[-0.3655, -1.0573,  2.4883, -1.0640]]).to(torch_device)
 
-        self.assertEqual(outputs.logits.shape, expected_shape_logits)
-        torch.testing.assert_close(outputs.logits, expected_logits, rtol=2e-4, atol=2e-4)
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape_logits)
+        torch.testing.assert_close(outputs.last_hidden_state, expected_logits, rtol=2e-4, atol=2e-4)
 
         expected_labels = torch.tensor([2]).to(torch_device)
-        predicted_label = outputs.logits.argmax(-1).item()
+        predicted_label = outputs.last_hidden_state.argmax(-1).item()
 
         self.assertEqual(predicted_label, expected_labels)
