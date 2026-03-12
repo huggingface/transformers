@@ -24,11 +24,20 @@ from parameterized import parameterized
 
 from transformers import GenerationConfig
 from transformers.cli.serve import Modality, Serve
-from transformers.testing_utils import require_openai, slow
-from transformers.utils.import_utils import is_openai_available
+from transformers.testing_utils import require_openai, require_torch_gpu, slow
+from transformers.utils.import_utils import (
+    is_fastapi_available,
+    is_openai_available,
+    is_pydantic_available,
+    is_uvicorn_available,
+)
 
 
-if is_openai_available():
+serve_dependencies_available = (
+    is_pydantic_available() and is_fastapi_available() and is_uvicorn_available() and is_openai_available()
+)
+
+if serve_dependencies_available:
     from openai import APIConnectionError, OpenAI
     from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall, ChoiceDeltaToolCallFunction
     from openai.types.responses import (
@@ -621,6 +630,7 @@ def _open_stream_and_cancel(base_url: str, request_id: str):
 
 @slow  # server startup time is slow on our push CI
 @require_openai
+@require_torch_gpu
 class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, unittest.TestCase):
     """Tests the `continuous_batching` version of the Completions API."""
 
