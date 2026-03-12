@@ -65,6 +65,10 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
         return {"_t": "dtype", "n": str(obj).removeprefix("torch.")}
     if isinstance(obj, torch.layout):
         return {"_t": "layout", "n": str(obj).removeprefix("torch.")}
+    if isinstance(obj, (torch.SymInt, torch.SymFloat, torch.SymBool)):
+        idx = len(tensors)
+        tensors.append(obj)
+        return {"_t": "sym", "i": idx}
 
     # --- Python types ---
     if isinstance(obj, type):
@@ -116,6 +120,8 @@ def _unflatten_from_context(ctx: Any, tensors: list) -> Any:
         return torch.device(ctx["s"])
     if t == "size":
         return torch.Size(ctx["v"])
+    if t == "sym":
+        return tensors[ctx["i"]]
 
     # --- Python types ---
     if t == "type":
@@ -390,11 +396,6 @@ def prepare_for_export(
     model: "PreTrainedModel",
     inputs: dict[str, torch.Tensor | Cache],
 ) -> tuple["PreTrainedModel", dict[str, torch.Tensor | Cache], dict[str, Any] | None]:
-    inputs = {k: v for k, v in inputs.items() if v is not None}
-    for input_name in ("labels", "future_values"):
-        if input_name in inputs:
-            logger.info(f"Found an input '{input_name}' which is not supported for export. Popping it from inputs.")
-            inputs.pop(input_name)
     model, inputs = prepare_model_for_export(model, inputs)
     inputs, outputs = inject_cache_into_inputs(model, inputs)
     return model, inputs, outputs
@@ -427,7 +428,7 @@ def get_auto_dynamic_shapes(inputs: dict[str, Any]) -> dict[str, Any]:
     for name, input in inputs.items():
         if isinstance(input, torch.Tensor):
             dynamic_shapes[name] = _auto_dynamic_shape(input)
-        elif isinstance(input, (int, float, bool, str)):
+        elif input is None or isinstance(input, (int, float, bool, str)):
             dynamic_shapes[name] = None
         elif isinstance(input, dict):
             dynamic_shapes[name] = get_auto_dynamic_shapes(input)

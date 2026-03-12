@@ -45,10 +45,6 @@ from transformers import (
 )
 from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.core_model_loading import WeightRenaming, process_target_pattern
-from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
-from transformers.exporters.exporter_executorch import ExecutorchExporter
-from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
-from transformers.exporters.utils import get_leaf_tensors, prepare_for_export
 from transformers.integrations import HfDeepSpeedConfig
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
@@ -119,7 +115,6 @@ from transformers.utils import (
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
-from transformers.utils.export_config import ExecutorchConfig
 from transformers.utils.output_capturing import CompileableContextVar
 
 from .generation.test_utils import GenerationTesterMixin
@@ -4083,6 +4078,8 @@ class ModelTesterMixin:
             atol (`float`, *optional*, defaults to 1e-4): absolute tolerance for output comparison
             rtol (`float`, *optional*, defaults to 1e-4): relative tolerance for output comparison
         """
+        from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
+        from transformers.exporters.utils import get_leaf_tensors, prepare_for_export
 
         if not self.test_torch_exportable:
             self.skipTest(reason="Model architecture is not TorchDynamo exportable/traceable")
@@ -4110,8 +4107,13 @@ class ModelTesterMixin:
                     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
                 else:
                     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-                set_config_for_less_flaky_test(config)
                 inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                inputs_dict = {k: v for k, v in inputs_dict.items() if v is not None}
+                for input_name in ("labels", "future_values"):
+                    if input_name in inputs_dict:
+                        inputs_dict.pop(input_name)
+
+                set_config_for_less_flaky_test(config)
                 model = model_class(config).eval().to(torch_device)
                 set_model_for_less_flaky_test(model)
 
@@ -4128,10 +4130,7 @@ class ModelTesterMixin:
                     eager_outputs = get_leaf_tensors(eager_outputs)
                     self.assertTrue(eager_outputs, "Eager model's outputs are empty.")
 
-                try:
-                    exported_program = exporter.export(model, inputs_dict)
-                except NotImplementedError:
-                    continue
+                exported_program = exporter.export(model, inputs_dict)
 
                 with torch.no_grad():
                     set_seed(1234)
@@ -4163,6 +4162,12 @@ class ModelTesterMixin:
             atol (`float`, *optional*, defaults to 1e-2): absolute tolerance for output comparison
             rtol (`float`, *optional*, defaults to 1e-2): relative tolerance for output comparison
         """
+        from transformers.exporters.exporter_onnx import (
+            ONNX_EXTREMELY_INACCURATE_MODEL_TYPES,
+            OnnxConfig,
+            OnnxExporter,
+        )
+        from transformers.exporters.utils import get_leaf_tensors, prepare_for_export
 
         if not self.test_torch_exportable:
             self.skipTest(reason="Model architecture is not TorchDynamo exportable/traceable")
@@ -4190,8 +4195,13 @@ class ModelTesterMixin:
                     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
                 else:
                     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-                set_config_for_less_flaky_test(config)
                 inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                inputs_dict = {k: v for k, v in inputs_dict.items() if v is not None}
+                for input_name in ("labels", "future_values"):
+                    if input_name in inputs_dict:
+                        inputs_dict.pop(input_name)
+
+                set_config_for_less_flaky_test(config)
                 model = model_class(config).eval().to(torch_device)
                 set_model_for_less_flaky_test(model)
 
@@ -4208,10 +4218,7 @@ class ModelTesterMixin:
                     eager_outputs = get_leaf_tensors(eager_outputs)
                     self.assertTrue(eager_outputs, "Eager outputs is empty.")
 
-                try:
-                    onnx_program = exporter.export(model, inputs_dict)
-                except NotImplementedError:
-                    continue
+                onnx_program = exporter.export(model, inputs_dict)
 
                 # Filter out non-tensor inputs for ONNX Runtime, which does not support them.
                 onnx_inputs = {k: v for k, v in inputs_dict.items() if not isinstance(v, (bool, int, float, str))}
@@ -4222,8 +4229,8 @@ class ModelTesterMixin:
                 onnx_outputs = dict(zip(onnx_names, onnx_outputs))
                 self.assertTrue(onnx_outputs, "ONNX outputs is empty.")
 
-                if eager_outputs.get("") is not None:
-                    eager_outputs["output"] = eager_outputs.pop("")
+                if model.config.model_type in ONNX_EXTREMELY_INACCURATE_MODEL_TYPES:
+                    continue  # skip accuracy check for models known to be extremely inaccurate when exported to ONNX
 
                 try:
                     # Check if outputs are close
@@ -4244,6 +4251,7 @@ class ModelTesterMixin:
         """
         Test if model can be exported with ExecuTorchExporter.
         """
+        from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 
         if not self.test_torch_exportable:
             self.skipTest(reason="Model architecture is not TorchDynamo exportable/traceable")
@@ -4269,8 +4277,13 @@ class ModelTesterMixin:
                     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
                 else:
                     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-                set_config_for_less_flaky_test(config)
                 inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                inputs_dict = {k: v for k, v in inputs_dict.items() if v is not None}
+                for input_name in ("labels", "future_values"):
+                    if input_name in inputs_dict:
+                        inputs_dict.pop(input_name)
+
+                set_config_for_less_flaky_test(config)
                 model = model_class(config).eval().to(torch_device)
                 set_model_for_less_flaky_test(model)
                 exporter.export(model, inputs_dict)
