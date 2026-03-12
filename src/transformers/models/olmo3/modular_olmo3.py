@@ -20,7 +20,6 @@ import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -29,7 +28,6 @@ from ...utils import auto_docstring
 from ...utils.generic import TransformersKwargs
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..olmo2.configuration_olmo2 import Olmo2Config
-
 from ..olmo2.modeling_olmo2 import (
     Olmo2Attention,
     Olmo2DecoderLayer,

@@ -19,7 +19,7 @@ import json
 import math
 import os
 from collections.abc import Sequence
-from dataclasses import dataclass, is_dataclass
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar, Union
 
 from huggingface_hub import create_repo

@@ -35,7 +35,6 @@ from ...utils.output_capturing import OutputRecorder
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..sam2.modeling_sam2 import eager_attention_forward, window_partition
 from ..sam2_video.configuration_sam2_video import (
-    Sam2VideoConfig,
     Sam2VideoMaskDecoderConfig,
     Sam2VideoPromptEncoderConfig,
 )
