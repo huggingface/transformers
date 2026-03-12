@@ -84,6 +84,7 @@ class JinaEmbeddingsV3Embeddings(nn.Module):
 
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
+                # NOTE: We assume either pos ids to have bsz == 1 (broadcastable) or bsz == effective bsz (input_shape[0])
                 buffered_token_type_ids = self.token_type_ids.expand(input_shape[0], -1)
                 buffered_token_type_ids = torch.gather(buffered_token_type_ids, dim=1, index=position_ids)
                 token_type_ids = buffered_token_type_ids
@@ -237,10 +238,10 @@ class JinaEmbeddingsV3Attention(nn.Module):
         self.attention_dropout = config.attention_probs_dropout_prob
         self.is_causal = False
 
-        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
-        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
-        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size)
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
 
     def forward(
         self,
@@ -296,15 +297,13 @@ class JinaEmbeddingsV3MLP(nn.Module):
 class JinaEmbeddingsV3Layer(GradientCheckpointingLayer):
     def __init__(self, config: JinaEmbeddingsV3Config):
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.self_attn = JinaEmbeddingsV3Attention(config=config)
-
-        self.mlp = JinaEmbeddingsV3MLP(config)
-
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
         self.post_attention_dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.post_mlp_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_mlp_dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.mlp = JinaEmbeddingsV3MLP(config)
+        self.self_attn = JinaEmbeddingsV3Attention(config=config)
+        self.post_mlp_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,

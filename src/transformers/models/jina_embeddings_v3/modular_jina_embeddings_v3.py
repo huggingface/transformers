@@ -33,7 +33,8 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPMLP
-from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRotaryEmbedding, apply_rotary_pos_emb
+from ..gpt_neox.modeling_gpt_neox import GPTNeoXLayer
+from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding, apply_rotary_pos_emb
 from ..xlm_roberta.configuration_xlm_roberta import XLMRobertaConfig
 from ..xlm_roberta.modeling_xlm_roberta import (
     XLMRobertaEmbeddings,
@@ -200,6 +201,7 @@ class JinaEmbeddingsV3Embeddings(XLMRobertaEmbeddings):
 
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
+                # NOTE: We assume either pos ids to have bsz == 1 (broadcastable) or bsz == effective bsz (input_shape[0])
                 buffered_token_type_ids = self.token_type_ids.expand(input_shape[0], -1)
                 buffered_token_type_ids = torch.gather(buffered_token_type_ids, dim=1, index=position_ids)
                 token_type_ids = buffered_token_type_ids
@@ -226,10 +228,10 @@ class JinaEmbeddingsV3Attention(LlamaAttention):
         self.is_causal = False
         self.attention_dropout = config.attention_probs_dropout_prob
 
-        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
-        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
-        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size)
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
 
         del self.layer_idx
         del self.num_key_value_groups
@@ -274,18 +276,18 @@ class JinaEmbeddingsV3MLP(CLIPMLP):
     pass
 
 
-class JinaEmbeddingsV3Layer(LlamaDecoderLayer):
+class JinaEmbeddingsV3Layer(GPTNeoXLayer):
     def __init__(self, config: JinaEmbeddingsV3Config):
         super().__init__(config)
         self.self_attn = JinaEmbeddingsV3Attention(config=config)
 
-        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_dropout = nn.Dropout(config.hidden_dropout_prob)
         self.post_mlp_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_mlp_dropout = nn.Dropout(config.hidden_dropout_prob)
 
+        del self.use_parallel_residual
         del self.input_layernorm
-        del self.post_attention_layernorm
+        del self.attention
 
     def forward(
         self,

@@ -59,7 +59,7 @@ import torch
 from transformers import AutoModel, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("jinaai/jina-embeddings-v3")
-model = AutoModel.from_pretrained("jinaai/jina-embeddings-v3", dtype=torch.float16, revision="refs/pr/137")
+model = AutoModel.from_pretrained("jinaai/jina-embeddings-v3", device_map="auto", revision="refs/pr/137")
 
 prompt = "Jina Embeddings V3 is great for semantic search."
 inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
