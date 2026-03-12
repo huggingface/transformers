@@ -550,7 +550,7 @@ class Lfm2MoeShortConv(nn.Module):
             past_seen_tokens = past_seen_tokens - seqlen
 
         conv_weights = self.conv.weight.view(self.conv.weight.size(0), self.conv.weight.size(2))
-        if past_key_values is not None and past_seen_tokens > 0:
+        if past_seen_tokens > 0:
             conv_out = causal_conv1d_update(
                 Bx.squeeze(-1),
                 past_key_values.conv_cache[self.layer_idx],
@@ -591,7 +591,7 @@ class Lfm2MoeShortConv(nn.Module):
         if "full_attention" in self.config.layer_types[: self.layer_idx]:
             past_seen_tokens = past_seen_tokens - seqlen
 
-        if past_key_values is not None and past_seen_tokens > 0:
+        if past_seen_tokens > 0:
             conv_state = past_key_values.conv_cache[self.layer_idx]
             cache_position = torch.arange(seqlen, device=conv_state.device) + past_seen_tokens
             cache_position = cache_position.clamp(0, self.L_cache - 1)
