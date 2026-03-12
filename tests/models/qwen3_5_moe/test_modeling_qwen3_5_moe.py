@@ -23,7 +23,7 @@ from safetensors.torch import load_file
 
 from transformers import is_torch_available
 from transformers.conversion_mapping import get_model_conversion_mapping
-from transformers.core_model_loading import WeightRenaming, process_pattern_for_reverse_mapping
+from transformers.core_model_loading import WeightRenaming, process_target_pattern
 from transformers.testing_utils import (
     require_torch,
     torch_device,
@@ -197,7 +197,7 @@ class Qwen3_5MoeTextModelTest(CausalLMModelTest, unittest.TestCase):
                         if isinstance(conversion, WeightRenaming):
                             # We need to revert the target pattern to make it compatible with regex search
                             target_pattern_reversed = conversion.target_patterns[0]
-                            captured_group = process_pattern_for_reverse_mapping(
+                            captured_group = process_target_pattern(
                                 source_pattern, target_pattern_reversed
                             )[1]
                             if captured_group:
