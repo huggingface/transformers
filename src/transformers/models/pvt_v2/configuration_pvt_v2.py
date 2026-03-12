@@ -19,70 +19,32 @@ from collections.abc import Callable
 
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="OpenGVLab/pvt_v2_b0")
 class PvtV2Config(BackboneConfigMixin, PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PvtV2Model`]. It is used to instantiate a Pvt V2
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Pvt V2 B0
-    [OpenGVLab/pvt_v2_b0](https://huggingface.co/OpenGVLab/pvt_v2_b0) architecture.
+    sr_ratios (`list[int]`, *optional*, defaults to `[8, 4, 2, 1]`):
+        Spatial reduction ratios in each encoder block.
+    patch_sizes (`list[int]`, *optional*, defaults to `[7, 3, 3, 3]`):
+        Patch size for overlapping patch embedding before each encoder block.
+    strides (`list[int]`, *optional*, defaults to `[4, 2, 2, 2]`):
+        Stride for overlapping patch embedding before each encoder block.
+    num_attention_heads (`list[int]`, *optional*, defaults to `[1, 2, 5, 8]`):
+        Number of attention heads for each attention layer in each block of the Transformer encoder.
+    mlp_ratios (`list[int]`, *optional*, defaults to `[8, 8, 4, 4]`):
+        Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
+        encoder blocks.
+    linear_attention (`bool`, *optional*, defaults to `False`):
+        Use linear attention complexity. If set to True, `sr_ratio` is ignored and average pooling is used for
+        dimensionality reduction in the attention layers rather than strided convolution.
+    num_encoder_blocks (`[int]`, *optional*, defaults to 4):
+        The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        image_size (`Union[int, tuple[int, int]]`, *optional*, defaults to 224):
-            The input image size. Pass int value for square image, or tuple of (height, width).
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        num_encoder_blocks (`[int]`, *optional*, defaults to 4):
-            The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
-        depths (`list[int]`, *optional*, defaults to `[2, 2, 2, 2]`):
-            The number of layers in each encoder block.
-        sr_ratios (`list[int]`, *optional*, defaults to `[8, 4, 2, 1]`):
-            Spatial reduction ratios in each encoder block.
-        hidden_sizes (`list[int]`, *optional*, defaults to `[32, 64, 160, 256]`):
-            Dimension of each of the encoder blocks.
-        patch_sizes (`list[int]`, *optional*, defaults to `[7, 3, 3, 3]`):
-            Patch size for overlapping patch embedding before each encoder block.
-        strides (`list[int]`, *optional*, defaults to `[4, 2, 2, 2]`):
-            Stride for overlapping patch embedding before each encoder block.
-        num_attention_heads (`list[int]`, *optional*, defaults to `[1, 2, 5, 8]`):
-            Number of attention heads for each attention layer in each block of the Transformer encoder.
-        mlp_ratios (`list[int]`, *optional*, defaults to `[8, 8, 4, 4]`):
-            Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
-            encoder blocks.
-        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        drop_path_rate (`float`, *optional*, defaults to 0.0):
-            The dropout probability for stochastic depth, used in the blocks of the Transformer encoder.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether or not a learnable bias should be added to the queries, keys and values.
-        linear_attention (`bool`, *optional*, defaults to `False`):
-            Use linear attention complexity. If set to True, `sr_ratio` is ignored and average pooling is used for
-            dimensionality reduction in the attention layers rather than strided convolution.
-        out_features (`list[str]`, *optional*):
-            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
-            corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
-        out_indices (`list[int]`, *optional*):
-            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
-            If unset and `out_features` is unset, will default to the last stage.
     Example:
 
     ```python

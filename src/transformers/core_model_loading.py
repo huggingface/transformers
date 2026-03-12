@@ -33,8 +33,9 @@ import torch
 
 from .integrations.accelerate import get_device, offload_weight
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
-from .utils import is_env_variable_true, logging
+from .utils import is_env_variable_true
 from .utils.loading_report import LoadStateDictInfo
+from .utils.logging import get_logger, tqdm
 
 
 _torch_distributed_available = torch.distributed.is_available()
@@ -45,7 +46,7 @@ if TYPE_CHECKING:
     from .quantizers import HfQuantizer
 
 
-logger = logging.get_logger(__name__)
+logger = get_logger(__name__)
 
 
 def build_glob_alternation(
@@ -645,7 +646,7 @@ class WeightTransform:
         - saving: the tensors are already torch.Tensor instances (the existing model weights)
         """
         collected_tensors = {}
-        for key in set(self.collected_tensors.keys()):
+        for key in list(self.collected_tensors.keys()):
             # Remove from internal attribute
             tensors = self.collected_tensors.pop(key)
             # Async loading
@@ -897,6 +898,11 @@ def set_param_for_module(
     module_path, _, param_name = target_name.rpartition(".")
     module_obj = model.get_submodule(module_path) if module_path else model
 
+    if param_name == torch.nn.modules.module._EXTRA_STATE_KEY_SUFFIX:
+        module_obj.set_extra_state(param_value)
+        loading_info.missing_keys.discard(target_name)
+        return
+
     ref = getattr(module_obj, param_name)
     if ref is None:
         loading_info.unexpected_keys.add(target_name)
@@ -920,6 +926,8 @@ def set_param_for_module(
             # super important otherwise _init_weight will re-init the param
             param_value._is_hf_initialized = True
             setattr(module_obj, param_name, param_value)
+            if distributed_operation is not None:
+                distributed_operation.update_module_attributes(module_obj)
 
 
 def offload_and_maybe_resave_param(
@@ -1127,6 +1135,9 @@ def convert_and_load_state_dict_in_model(
         renamed_key, source_pattern = rename_source_key(
             original_key, renamings, converters, prefix, meta_model_state_dict
         )
+        if renamed_key not in meta_model_state_dict and original_key in meta_model_state_dict:
+            # Key should probably not have been renamed but we might need the `prefix` to be added.`
+            renamed_key, source_pattern = rename_source_key(original_key, [], [], prefix, meta_model_state_dict)
 
         # 2. finally, collect the tensor into the proper converter
         if renamed_key in meta_model_state_dict:
@@ -1168,7 +1179,7 @@ def convert_and_load_state_dict_in_model(
 
             # 4. Handle TP sharding or device_map placement
             future_or_tensor = None
-            if device_mesh:
+            if device_mesh and tp_plan:
                 if matched_tp_pattern := tp_plan_alt.search(renamed_key):
                     matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
                     if getattr(mapping, "distributed_operation", None) is None:
@@ -1203,43 +1214,38 @@ def convert_and_load_state_dict_in_model(
             loading_info.unexpected_keys.add(renamed_key)
 
     try:
-        total_entries = len(param_name_to_load)
-        with logging.tqdm(total=total_entries, desc="Loading weights") as pbar:
-            for first_param_name, mapping in param_name_to_load.items():
-                pbar.update(1)
-                pbar.set_postfix({"Materializing param": first_param_name})
-                pbar.refresh()
-                try:
-                    realized_value = mapping.convert(
-                        first_param_name,
-                        model=model,
-                        config=model.config,
-                        hf_quantizer=hf_quantizer,
-                        loading_info=loading_info,
-                    )
-                    for target_name, param in realized_value.items():
-                        param = param[0] if isinstance(param, list) else param
-                        param_device = get_device(device_map, target_name)
-                        # Offloading support
-                        if param_device == "disk" and (target_name not in model_buffers or offload_buffers):
-                            disk_offload_index = offload_and_maybe_resave_param(
-                                target_name, param, loading_info, disk_offload_folder, disk_offload_index, mapping
-                            )
-                        else:
-                            set_param_for_module(
-                                model,
-                                target_name,
-                                param,
-                                loading_info,
-                                mapping.distributed_operation,
-                                hf_quantizer,
-                            )
+        for first_param_name, mapping in tqdm(param_name_to_load.items(), desc="Loading weights"):
+            try:
+                realized_value = mapping.convert(
+                    first_param_name,
+                    model=model,
+                    config=model.config,
+                    hf_quantizer=hf_quantizer,
+                    loading_info=loading_info,
+                )
+                for target_name, param in realized_value.items():
+                    param = param[0] if isinstance(param, list) else param
+                    param_device = get_device(device_map, target_name)
+                    # Offloading support
+                    if param_device == "disk" and (target_name not in model_buffers or offload_buffers):
+                        disk_offload_index = offload_and_maybe_resave_param(
+                            target_name, param, loading_info, disk_offload_folder, disk_offload_index, mapping
+                        )
+                    else:
+                        set_param_for_module(
+                            model,
+                            target_name,
+                            param,
+                            loading_info,
+                            mapping.distributed_operation,
+                            hf_quantizer,
+                        )
 
-                    # Cleanup all the tensors that were gathered before next iteration
-                    del realized_value
+                # Cleanup all the tensors that were gathered before next iteration
+                del realized_value
 
-                except SkipParameters:
-                    continue
+            except SkipParameters:
+                continue
 
     # Close the pool, independently of whether the code was interrupted or finished successfully
     finally:

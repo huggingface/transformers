@@ -19,6 +19,7 @@ from .base import HfQuantizer
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import QuarkConfig
 
 from ..utils import is_quark_available, logging
 
@@ -44,6 +45,7 @@ class QuarkHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = True  # On-the-fly quantization with quark is not supported for now.
+    quantization_config: "QuarkConfig"
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)

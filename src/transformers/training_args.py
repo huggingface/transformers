@@ -44,6 +44,7 @@ from .utils import (
     is_torch_mlu_available,
     is_torch_mps_available,
     is_torch_musa_available,
+    is_torch_neuron_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_tf32_available,
@@ -1812,6 +1813,7 @@ class TrainingArguments:
                 "torch.distributed process group is initialized, but parallel_mode != ParallelMode.DISTRIBUTED. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
             )
+
         if is_torch_xla_available():
             device = self.distributed_state.device
             self._n_gpu = 0
@@ -1837,6 +1839,9 @@ class TrainingArguments:
             elif is_torch_hpu_available():
                 device = torch.device("hpu:0")
                 torch.hpu.set_device(device)
+            elif is_torch_neuron_available():
+                device = torch.device("neuron:0")
+                torch.neuron.set_device(device)
             else:
                 # Default to cuda:0 (respects CUDA_VISIBLE_DEVICES); nn.DataParallel handles n_gpu > 1
                 device = torch.device(
@@ -2735,9 +2740,10 @@ class TrainingArguments:
             )
 
             fsdp_plugin_args = {}
+            fsdp_sharding = None
             for fsdp_option in self.fsdp:
                 if fsdp_option.upper() in FSDP_SHARDING_STRATEGY:
-                    fsdp_plugin_args["sharding_strategy"] = fsdp_option
+                    fsdp_sharding = fsdp_option
                 elif fsdp_option == FSDPOption.OFFLOAD:
                     fsdp_plugin_args["cpu_offload"] = True
                 elif fsdp_option == FSDPOption.AUTO_WRAP:
@@ -2753,16 +2759,20 @@ class TrainingArguments:
             fsdp_plugin_args["fsdp_version"] = fsdp_version
             prefetch_policy = self.fsdp_config.get("backward_prefetch", "NO_PREFETCH")
             if fsdp_version == 2:
+                # full_shard → True (reshard after forward), shard_grad_op → False
+                default_reshard = fsdp_sharding != "shard_grad_op" if fsdp_sharding else True
                 fsdp_plugin_args["reshard_after_forward"] = str_to_bool(
-                    str(self.fsdp_config.get("reshard_after_forward", "false")).lower()
+                    str(self.fsdp_config.get("reshard_after_forward", default_reshard)).lower()
                 )
             else:
                 fsdp_plugin_args["forward_prefetch"] = str_to_bool(
                     str(self.fsdp_config.get("forward_prefetch", "false")).lower()
                 )
                 fsdp_plugin_args["backward_prefetch"] = prefetch_policy.upper()
+                # Pass sharding strategy as reshard_after_forward (accelerate converts it to ShardingStrategy)
+                default_reshard = fsdp_sharding.upper() if fsdp_sharding else "FULL_SHARD"
                 fsdp_plugin_args["reshard_after_forward"] = str(
-                    self.fsdp_config.get("reshard_after_forward", "FULL_SHARD")
+                    self.fsdp_config.get("reshard_after_forward", default_reshard)
                 ).lower()
                 fsdp_plugin_args["use_orig_params"] = str_to_bool(
                     str(self.fsdp_config.get("use_orig_params", "true")).lower()
