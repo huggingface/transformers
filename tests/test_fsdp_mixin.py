@@ -242,40 +242,42 @@ def _create_init_state_dict(config, dtype):
     return state_dict
 
 
-def _save_checkpoint(model, optimizer, tmpdir):
-    """Save model, optimizer, and RNG states to a distributed checkpoint."""
-    model_sd, optim_sd = get_state_dict(model, optimizer)
+def _save_training_state(model, optimizer, training_state_dir):
+    """Save optimizer + RNG states as distcp (for training resume only)."""
+    _, optim_sd = get_state_dict(model, optimizer)
     dcp.save(
         {
-            "model": model_sd,
             "optim": optim_sd,
             "cpu_rng_state": torch.get_rng_state(),
             "cuda_rng_state": torch.cuda.get_rng_state(),
         },
-        checkpoint_id=tmpdir,
+        checkpoint_id=training_state_dir,
     )
 
 
-def _load_checkpoint(model, optimizer, tmpdir):
-    """Load model, optimizer, and RNG states from a distributed checkpoint."""
+def _load_training_state(model, optimizer, training_state_dir):
+    """Load optimizer + RNG states from distcp (model weights loaded separately via from_pretrained)."""
     model_sd, optim_sd = get_state_dict(model, optimizer)
-    loaded_state = {
-        "model": model_sd,
+    loaded_training_state = {
         "optim": optim_sd,
         "cpu_rng_state": torch.empty_like(torch.get_rng_state()),
         "cuda_rng_state": torch.empty_like(torch.cuda.get_rng_state()),
     }
     # MoE models can have sparse optimizer state (experts not selected yet), so
     # allow partial optimizer key restoration instead of failing hard on missing keys.
-    dcp.load(loaded_state, checkpoint_id=tmpdir, planner=DefaultLoadPlanner(allow_partial_load=True))
+    dcp.load(
+        loaded_training_state,
+        checkpoint_id=training_state_dir,
+        planner=DefaultLoadPlanner(allow_partial_load=True),
+    )
     set_state_dict(
         model,
         optimizer,
-        model_state_dict=loaded_state["model"],
-        optim_state_dict=loaded_state["optim"],
+        model_state_dict=model_sd,
+        optim_state_dict=loaded_training_state["optim"],
     )
-    torch.set_rng_state(loaded_state["cpu_rng_state"])
-    torch.cuda.set_rng_state(loaded_state["cuda_rng_state"])
+    torch.set_rng_state(loaded_training_state["cpu_rng_state"])
+    torch.cuda.set_rng_state(loaded_training_state["cuda_rng_state"])
 
 
 def train_ddp(rank, config, batches, lr, device, dtype, init_state_dict):
@@ -314,7 +316,16 @@ def train_ddp(rank, config, batches, lr, device, dtype, init_state_dict):
 
 
 def train_fsdp2(
-    rank, config, batches, lr, device_map, device_mesh, dtype, init_state_dict, checkpoint_step, fsdp_plan
+    rank,
+    config,
+    batches,
+    lr,
+    device_map,
+    device_mesh,
+    dtype,
+    init_state_dict,
+    checkpoint_step,
+    fsdp_plan,
 ):
     # -- Phase 1: Pre-checkpoint run -- train only the first `checkpoint_step` steps, then save
     _set_determinism(SEED)
@@ -338,19 +349,27 @@ def train_fsdp2(
         pre_ckpt_grad_norms.append(grad_norm)
 
     # -- Phase 2: Save checkpoint, then load into a fresh model
+    #   tmpdir/
+    #     model/           <- HF safetensors via save_pretrained (DCP + consolidation)
+    #     training_state/  <- distcp (optimizer + RNG)
     tmpdir, tmpdir_obj = _create_shared_tmpdir(rank)
     try:
-        _save_checkpoint(pre_ckpt_model, pre_ckpt_optimizer, tmpdir)
+        model_dir = os.path.join(tmpdir, "model")
+        training_state_dir = os.path.join(tmpdir, "training_state")
+
+        pre_ckpt_model.save_pretrained(model_dir, is_main_process=(rank == 0))
+        _save_training_state(pre_ckpt_model, pre_ckpt_optimizer, training_state_dir)
         dist.barrier()
 
         # Intentionally scramble RNG to prove checkpoint restore works
         _set_determinism(SEED + 1234)
-        resumed_model = AutoModelForCausalLM.from_config(config).to(device_map).to(dtype)
-        resumed_model = apply_fsdp2(resumed_model, device_mesh, fsdp_plan=fsdp_plan)
+        resumed_model = AutoModelForCausalLM.from_pretrained(
+            model_dir, torch_dtype=dtype, fsdp_plan=fsdp_plan, fsdp_device_mesh=device_mesh
+        )
         resumed_model.train()
         resumed_optimizer = torch.optim.Adam(resumed_model.parameters(), lr=lr)
 
-        _load_checkpoint(resumed_model, resumed_optimizer, tmpdir)
+        _load_training_state(resumed_model, resumed_optimizer, training_state_dir)
         dist.barrier()
     finally:
         if rank == 0:
@@ -381,7 +400,7 @@ def train_fsdp2(
 # Distributed test implementations (top-level for pickling by mp.spawn)
 # =============================================================================
 def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
-    """Train FSDP2 model, save via DCP, load into fresh model, compare state dicts."""
+    """Train FSDP2 model, save via save_pretrained, load via from_pretrained, compare state dicts."""
     init_test_logger()
 
     device = torch.device(f"cuda:{rank}")
@@ -408,15 +427,12 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
 
     tmpdir, tmpdir_obj = _create_shared_tmpdir(rank)
     try:
-        _save_checkpoint(model, optimizer, tmpdir)
+        model.save_pretrained(tmpdir, is_main_process=(rank == 0))
         dist.barrier()
 
-        _set_determinism(SEED + 1234)
-        new_model = AutoModelForCausalLM.from_config(config).to(device_map)
-        new_model = apply_fsdp2(new_model, device_mesh, fsdp_plan=auto_plan)
-        new_optimizer = torch.optim.Adam(new_model.parameters(), lr=LR)
-
-        _load_checkpoint(new_model, new_optimizer, tmpdir)
+        new_model = AutoModelForCausalLM.from_pretrained(
+            tmpdir, fsdp_plan=auto_plan, fsdp_device_mesh=device_mesh
+        )
         dist.barrier()
     finally:
         if rank == 0:

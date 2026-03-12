@@ -496,6 +496,40 @@ def apply_fsdp2(
 
     return model
 
+#TODO(3outeille): probably remove this function. Will be handled when someone tackle PEFT + FSDP.
+def save_fsdp_model(model, save_directory):
+    """Save FSDP2 model weights as HF safetensors via DCP distributed save + consolidation.
+
+    Each rank saves its DTensor shard in parallel, then rank 0 consolidates
+    into standard HF-compatible safetensors files.
+    """
+    import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
+    from torch.distributed.checkpoint.state_dict import get_model_state_dict
+    from torch.distributed.tensor import DTensor
+
+    model_sd = get_model_state_dict(model)
+
+    # Clone tensors sharing storage (tied weights) — safetensors refuses aliased tensors
+    seen_data_ptrs = {}
+    for key in list(model_sd.keys()):
+        tensor = model_sd[key]
+        t = tensor._local_tensor if isinstance(tensor, DTensor) else tensor
+        ptr = t.data_ptr()
+        if ptr in seen_data_ptrs:
+            model_sd[key] = tensor.clone()
+        else:
+            seen_data_ptrs[ptr] = key
+
+    dcp.save(
+        model_sd,
+        storage_writer=HuggingFaceStorageWriter(
+            path=save_directory,
+            save_distributed=True,
+            enable_consolidation=True,
+        ),
+    )
+
 
 def distribute_fsdp_model(model, fsdp_plan, device_mesh):
     """

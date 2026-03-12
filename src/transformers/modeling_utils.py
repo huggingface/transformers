@@ -3333,6 +3333,27 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 current_peft_config = self.peft_config[active_adapter]
                 current_peft_config.save_pretrained(save_directory)
 
+        # FSDP2 models: use DCP distributed save + consolidation for safetensors.
+        # All ranks must call this collectively. Config/generation_config are
+        # already saved above (guarded by is_main_process).
+        if getattr(self, "_is_fsdp_managed_module", False):
+            from .integrations.fsdp import save_fsdp_model
+
+            save_fsdp_model(model_to_save, save_directory)
+
+            if push_to_hub:
+                model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
+                model_card.save(os.path.join(save_directory, "README.md"))
+                self._upload_modified_files(
+                    save_directory,
+                    repo_id,
+                    files_timestamps,
+                    commit_message=commit_message,
+                    token=token,
+                    create_pr=create_pr,
+                )
+            return
+
         # Get the model state_dict
         if state_dict is None:
             state_dict = model_to_save.state_dict()
