@@ -622,6 +622,7 @@ class MixedInt8ModelClassesTest(BaseMixedInt8Test):
 
 
 @apply_skip_if_not_implemented
+@require_torch_multi_accelerator
 class MixedInt8TestPipeline(BaseMixedInt8Test):
     def setUp(self):
         super().setUp()
@@ -643,11 +644,41 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
         we used pipeline for inference speed benchmarking we want to make sure that this feature does not break anything
         on pipeline.
         """
+        device_map = {
+            "transformer.word_embeddings": 0,
+            "transformer.word_embeddings_layernorm": 0,
+            "lm_head": 0,
+            "transformer.h.0": 0,
+            "transformer.h.1": 0,
+            "transformer.h.2": 0,
+            "transformer.h.3": 0,
+            "transformer.h.4": 0,
+            "transformer.h.5": 0,
+            "transformer.h.6": 0,
+            "transformer.h.7": 0,
+            "transformer.h.8": 0,
+            "transformer.h.9": 0,
+            "transformer.h.10": 1,
+            "transformer.h.11": 1,
+            "transformer.h.12": 1,
+            "transformer.h.13": 1,
+            "transformer.h.14": 1,
+            "transformer.h.15": 1,
+            "transformer.h.16": 1,
+            "transformer.h.17": 0,
+            "transformer.h.18": 0,
+            "transformer.h.19": 0,
+            "transformer.h.20": 0,
+            "transformer.h.21": 0,
+            "transformer.h.22": 0,
+            "transformer.h.23": 1,
+            "transformer.ln_f": 0,
+        }
         # self._clear_cuda_cache()
         self.pipe = pipeline(
             "text-generation",
             model=self.model_name,
-            model_kwargs={"device_map": "auto", "quantization_config": BitsAndBytesConfig(load_in_8bit=True)},
+            model_kwargs={"device_map": device_map, "quantization_config": BitsAndBytesConfig(load_in_8bit=True)},
             max_new_tokens=self.MAX_NEW_TOKENS,
         )
 
