@@ -17,7 +17,6 @@ from ...utils.output_capturing import capture_outputs
 from ..codegen.modeling_codegen import create_sinusoidal_positions
 from ..qwen3_next.modeling_qwen3_next import l2norm
 from ..siglip.configuration_siglip import SiglipConfig, SiglipTextConfig
-from ..siglip.modeling_siglip import SiglipTextEmbeddings
 from ..t5.tokenization_t5 import T5Tokenizer
 from ..vivit.configuration_vivit import VivitConfig
 from ..vivit.modeling_vivit import (
@@ -833,16 +832,14 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
 
 class VideoPrismTextEmbeddings(nn.Module):
     def __init__(self, config: VideoPrismTextConfig):
-        super().__init__(config)
+        super().__init__()
         self.config = config
         embed_dim = config.hidden_size
         self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
         self.register_buffer(
             "position_embedding", create_sinusoidal_positions(config.max_position_embeddings, config.hidden_size)
         )
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1))
-        )
+        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
     def forward(
         self,
@@ -851,7 +848,7 @@ class VideoPrismTextEmbeddings(nn.Module):
         inputs_embeds: torch.FloatTensor | None = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
-        max_position_embedding = self.position_embedding.weight.shape[0]
+        max_position_embedding = self.position_embedding.shape[0]
 
         if seq_length > max_position_embedding:
             raise ValueError(
@@ -864,12 +861,13 @@ class VideoPrismTextEmbeddings(nn.Module):
 
         if inputs_embeds is None:
             inputs_embeds = self.token_embedding(input_ids)
-        
+
         inputs_embeds *= self.config.hidden_size**0.5
-        position_embeddings = self.position_embedding(position_ids)
+        position_embeddings = self.position_embedding[position_ids]
         embeddings = inputs_embeds + position_embeddings
 
         return embeddings
+
 
 @auto_docstring(
     custom_intro="""
@@ -891,10 +889,10 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.embeddings
+        return self.embeddings.token_embedding
 
     def set_input_embeddings(self, value: nn.Module):
-        self.embeddings = value
+        self.embeddings.token_embedding = value
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
@@ -910,7 +908,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        hidden_states = self.embeddings(input_ids, position_ids, inputs_embeds)
+        hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids, inputs_embeds=inputs_embeds)
         batch_size, seq_len, dim = hidden_states.shape
         cls_emb = self.cls_emb * (self.config.hidden_size**0.5)
         cls_emb = cls_emb.expand(hidden_states.shape[0], -1, -1)

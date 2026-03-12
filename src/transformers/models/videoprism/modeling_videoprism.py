@@ -797,10 +797,10 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.embeddings
+        return self.embeddings.token_embedding
 
     def set_input_embeddings(self, value: nn.Module):
-        self.embeddings = value
+        self.embeddings.token_embedding = value
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
@@ -816,7 +816,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        hidden_states = self.embeddings(input_ids, position_ids, inputs_embeds)
+        hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids, inputs_embeds=inputs_embeds)
         batch_size, seq_len, dim = hidden_states.shape
         cls_emb = self.cls_emb * (self.config.hidden_size**0.5)
         cls_emb = cls_emb.expand(hidden_states.shape[0], -1, -1)

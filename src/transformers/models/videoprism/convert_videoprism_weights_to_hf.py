@@ -15,8 +15,9 @@ from transformers import (
     VideoPrismTextConfig,
     VideoPrismVisionConfig,
 )
-from transformers.models.videoprism.modeling_videoprism import VideoPrismClipModel, VideoPrismVisionModel
 from transformers.models.codegen.modeling_codegen import create_sinusoidal_positions
+from transformers.models.videoprism.modeling_videoprism import VideoPrismClipModel, VideoPrismVisionModel
+
 
 torch.set_printoptions(precision=10)
 
@@ -327,8 +328,8 @@ def convert_params(flax_state_dict, model_name):
         num_pos, dim = 64, text_config["hidden_size"]  # Hardcoded num_pos
         positional_embedding = create_sinusoidal_positions(num_pos, dim)
         new_state_dict["text_model.embeddings.position_embedding"] = positional_embedding
-        
-        #position_ids
+
+        # position_ids
         new_state_dict["text_model.embeddings.position_ids"] = torch.arange(num_pos).expand((1, -1))
 
     return new_state_dict
