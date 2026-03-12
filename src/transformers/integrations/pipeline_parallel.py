@@ -13,9 +13,9 @@
 # limitations under the License.
 from __future__ import annotations
 
+import functools
 import math
-from contextlib import contextmanager
-from typing import Iterable, Sequence
+from typing import Sequence
 
 from ..utils import logging
 from ..utils.import_utils import is_torch_available
@@ -90,26 +90,6 @@ class PipelineParallelSkipped(nn.Module):
             return kwargs["hidden_states"]
         return args[0] if len(args) > 0 else None
 
-
-@contextmanager
-def _silent_non_primary(local_rank: int):
-    """Silence stdout/stderr on non-primary ranks to reduce clutter."""
-
-    if local_rank == 0:
-        yield
-    else:
-        import os
-        import sys
-
-        old_stdout, old_stderr = sys.stdout, sys.stderr
-        sys.stdout = open(os.devnull, "w")
-        sys.stderr = open(os.devnull, "w")
-        try:
-            yield
-        finally:
-            sys.stdout.close()
-            sys.stderr.close()
-            sys.stdout, sys.stderr = old_stdout, old_stderr
 
 
 def initialize_pipeline_parallelism(pp_plan: dict[str, tuple[list[str], list[str]]] | None, pp_size: int | None = None, device_mesh=None, device_map=None):
@@ -327,6 +307,30 @@ def _pipeline_coordinates(device_mesh):
     return coord[pp_dim], device_mesh.size(pp_dim) if device_mesh is not None else dist.get_world_size(), tp_rank
 
 
+def _recv_pre_hook(mod, args, kwargs, *, pp_rank, pp_group, n_inputs, use_cuda_stream):
+    """Receive activations from the previous pipeline stage."""
+    if pp_rank == 0:
+        return args, kwargs
+    device = args[0].device if args and hasattr(args[0], "device") else next(mod.parameters()).device
+    local_rank = dist.get_rank(pp_group) if pp_group is not None else dist.get_rank()
+    src = dist.get_global_rank(pp_group, local_rank - 1) if pp_group is not None else local_rank - 1
+    tensors = [_PipelineRecvFn.apply(1, src, device, pp_group, use_cuda_stream) for _ in range(n_inputs)]
+    return tuple(tensors), {}
+
+
+def _send_post_hook(mod, args, kwargs, output, *, pp_rank, pp_size, pp_group, n_outputs, use_cuda_stream):
+    """Send activations to the next pipeline stage."""
+    if pp_rank >= pp_size - 1:
+        return output
+    outputs = output if isinstance(output, (tuple, list)) else (output,)
+    local_rank = dist.get_rank(pp_group) if pp_group is not None else dist.get_rank()
+    dst = dist.get_global_rank(pp_group, local_rank + 1) if pp_group is not None else local_rank + 1
+    to_send = [outputs[min(i, len(outputs) - 1)] for i in range(n_outputs)]
+    for t in to_send:
+        _PipelineSendFn.apply(t, dst, pp_group, use_cuda_stream)
+    return output
+
+
 def add_pipeline_parallel_hooks(
     model: nn.Module,
     pp_plan: dict[str, tuple[list[str], list[str]]],
@@ -359,101 +363,35 @@ def add_pipeline_parallel_hooks(
     partitions = partition_units(units, pp_size)
     local_unit_names = set(partitions[pp_rank]) if pp_rank < len(partitions) else set()
 
-    # Replace non-local modules with skipped placeholders to avoid computation
-    for name, module, _, _ in units:
+    local_indices = [i for i, (name, _, _, _) in enumerate(units) if name in local_unit_names]
+    if not local_indices:
+        return model
+    first_local, last_local = local_indices[0], local_indices[-1]
+
+    for i, (name, module, input_names, output_names) in enumerate(units):
         if name not in local_unit_names:
             parent_path, child_name = name.rsplit(".", 1) if "." in name else ("", name)
-            parent = model.get_submodule(parent_path) if parent_path != "" else model
+            parent = model.get_submodule(parent_path) if parent_path else model
             setattr(parent, child_name, PipelineParallelSkipped())
-
-    # Identify first/last local modules to add comm hooks
-    local_units_ordered = [u for u in units if u[0] in local_unit_names]
-    if len(local_units_ordered) == 0:
-        return model
-    first_name, first_mod, first_inputs, _ = local_units_ordered[0]
-    last_name, last_mod, _, last_outputs = local_units_ordered[-1]
-
-    runtime_key = "_hf_pp_runtime"
-
-    def _init_runtime(module, args, kwargs):
-        # args/kwargs are from model forward; seed activation dict with kwargs
-        runtime = {"activations": {}, "device": args[0].device if len(args) > 0 and hasattr(args[0], "device") else None}
-        runtime["activations"].update(kwargs)
-        setattr(model, runtime_key, runtime)
-        return None
-
-    def _cleanup_runtime(module, args, kwargs, output):
-        if hasattr(model, runtime_key):
-            delattr(model, runtime_key)
-        return output
-
-    model.register_forward_pre_hook(_init_runtime, with_kwargs=True)
-    model.register_forward_hook(_cleanup_runtime, with_kwargs=True)
-
-    def _recv_pre_hook(mod, args, kwargs):
-        runtime = getattr(model, runtime_key)
-        local_pp_rank, global_pp_rank, _ = _group_ranks(pp_group)
-        if pp_rank > 0:
-            src_local = local_pp_rank - 1
-            src_global = dist.get_global_rank(pp_group, src_local) if pp_group is not None else global_pp_rank - 1
-            with _silent_non_primary(pp_rank):
-                tensors = [
-                    _PipelineRecvFn.apply(
-                        1,
-                        src_global,
-                        runtime.get("device"),
-                        pp_group,
-                        use_cuda_stream,
-                    )
-                    for _ in first_inputs
-                ]
-                for name, tensor in zip(first_inputs, tensors):
-                    runtime["activations"][name] = tensor
-            return tuple(tensors), {}
-        else:
-            return args, kwargs
-        # Build kwargs for this module from runtime activations
-        new_kwargs = {name: runtime["activations"].get(name) for name in first_inputs if name in runtime["activations"]}
-        return (), new_kwargs
-
-    def _send_post_hook(mod, args, kwargs, output):
-        runtime = getattr(model, runtime_key)
-        outputs = output if isinstance(output, (tuple, list)) else (output,)
-        to_send = []
-        for name in last_outputs:
-            # Map sequentially to module outputs
-            idx = last_outputs.index(name)
-            if idx < len(outputs):
-                tensor = outputs[idx]
-            else:
-                tensor = outputs[0]
-            runtime["activations"][name] = tensor
-            to_send.append(tensor)
-
-        if pp_rank < pp_size - 1:
-            local_pp_rank, global_pp_rank, _ = _group_ranks(pp_group)
-            dst_local = local_pp_rank + 1
-            dst_global = dist.get_global_rank(pp_group, dst_local) if pp_group is not None else global_pp_rank + 1
-            to_send = [_PipelineSendFn.apply(tensor, dst_global, pp_group, use_cuda_stream) for tensor in to_send]
-        return output
-
-    first_mod.register_forward_pre_hook(_recv_pre_hook, with_kwargs=True)
-    last_mod.register_forward_hook(_send_post_hook, with_kwargs=True)
-
-    # For all local modules, store outputs into activation dict for downstream
-    def _store_outputs(mod, args, kwargs, output, output_names):
-        runtime = getattr(model, runtime_key)
-        outputs = output if isinstance(output, (tuple, list)) else (output,)
-        for idx, name in enumerate(output_names):
-            if idx < len(outputs):
-                runtime["activations"][name] = outputs[idx]
-                # For first module when not pipeline root, ensure gradients propagate
-                if pp_rank > 0 and outputs[idx].requires_grad and name in first_inputs:
-                    outputs[idx].register_hook(lambda grad, name=name: grad)
-        return output
-
-    for name, module, _, out_names in local_units_ordered:
-        module.register_forward_hook(lambda m, a, kw, o, out_names=out_names: _store_outputs(m, a, kw, o, out_names), with_kwargs=True)
+            continue
+        if i == first_local:
+            module.register_forward_pre_hook(
+                functools.partial(
+                    _recv_pre_hook,
+                    pp_rank=pp_rank, pp_group=pp_group,
+                    n_inputs=len(input_names), use_cuda_stream=use_cuda_stream,
+                ),
+                with_kwargs=True,
+            )
+        if i == last_local:
+            module.register_forward_hook(
+                functools.partial(
+                    _send_post_hook,
+                    pp_rank=pp_rank, pp_size=pp_size, pp_group=pp_group,
+                    n_outputs=len(output_names), use_cuda_stream=use_cuda_stream,
+                ),
+                with_kwargs=True,
+            )
 
     return model
 
