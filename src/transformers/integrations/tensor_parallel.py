@@ -82,13 +82,6 @@ def initialize_tensor_parallelism(
             index = current_device.current_device()
             tp_device = torch.device(device_type, index)
             device_map = tp_device
-            # Silence output for non-primary ranks
-            if index > 0 and os.environ.get("HF_TP_SILENCE_NON_PRIMARY_RANK_OUTPUT", "1") == "1":
-                import sys
-
-                sys.stdout = open(os.devnull, "w")
-                sys.stderr = open(os.devnull, "w")
-
         else:
             tp_device = torch.device(device_type)
             device_map = device_type or {}
