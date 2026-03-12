@@ -22,6 +22,7 @@ import unittest
 from collections import namedtuple
 from functools import lru_cache
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from huggingface_hub import is_offline_mode
@@ -477,10 +478,10 @@ class IsaacModelTester:
             text_config=self.text_config,
             vision_config=self.vision_config,
         )
-        # Rely on vanilla SDPA so the tests do not need flash attention.
-        config._attn_implementation = "sdpa"
-        config.text_config._attn_implementation = "sdpa"
-        config.vision_attn_implementation = "sdpa"
+        # Rely on eager attention so output_attentions tests remain compatible without flash attention.
+        config._attn_implementation = "eager"
+        config.text_config._attn_implementation = "eager"
+        config.vision_attn_implementation = "eager"
         return config
 
     def prepare_config_and_inputs(self):
@@ -498,10 +499,21 @@ class IsaacModelTester:
         config, input_ids, attention_mask, labels = self.prepare_config_and_inputs()
         position_ids = torch.arange(self.seq_length, device=torch_device).view(1, -1)
         position_ids = position_ids.expand(self.batch_size, -1).unsqueeze(2).expand(-1, -1, 3)
+        patch_size = self.vision_config["patch_size"]
+        patch_dim = self.vision_config["num_channels"] * patch_size * patch_size
+        num_image_patches = 4
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "position_ids": position_ids,
+            "pixel_values": torch.randn(
+                (self.batch_size, 1, num_image_patches, patch_dim), device=torch_device, dtype=torch.float32
+            ),
+            "image_patch_attention_mask": torch.ones(
+                (self.batch_size, 1, num_image_patches), device=torch_device, dtype=torch.long
+            ),
+            "image_token_grids": torch.tensor([[[2, 2]]] * self.batch_size, device=torch_device, dtype=torch.long),
+            "image_attention_mask": torch.ones((self.batch_size, 1), device=torch_device, dtype=torch.long),
         }
         if labels is not None:
             inputs_dict["labels"] = labels
@@ -571,6 +583,28 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             result.last_hidden_state.shape,
             (self.model_tester.batch_size, self.model_tester.seq_length, config.hidden_size),
         )
+
+    def test_text_only_forward_ignores_metadata_without_vision_patches(self):
+        config, input_ids, attention_mask, _ = self.model_tester.prepare_config_and_inputs()
+        model = IsaacModel(config)
+        model.to(torch_device)
+        model.eval()
+
+        vision_token_grids = torch.zeros((self.model_tester.batch_size, 0, 2), device=torch_device, dtype=torch.long)
+
+        with torch.no_grad():
+            reference = model(input_ids=input_ids, attention_mask=attention_mask)
+
+        with patch.object(model, "embed_multimodal_inputs", wraps=model.embed_multimodal_inputs) as mock_embed:
+            with torch.no_grad():
+                result = model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    vision_token_grids=vision_token_grids,
+                )
+
+        mock_embed.assert_not_called()
+        torch.testing.assert_close(result.last_hidden_state, reference.last_hidden_state)
 
     def test_prepare_multimodal_rope_position_ids(self):
         position_ids = torch.tensor([[[7, 0, 0], [1, 2, 3], [4, 0, 0]]], device=torch_device, dtype=torch.long)
