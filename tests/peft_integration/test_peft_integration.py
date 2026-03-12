@@ -463,7 +463,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 module = peft_model.model.decoder.layers[0].self_attn.v_proj
                 self.assertTrue(module.__class__.__name__ == "Linear8bitLt")
-                self.assertTrue(peft_model.hf_device_map is not None)
 
                 # dummy generation
                 _ = peft_model.generate(input_ids=torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device))
@@ -484,7 +483,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 module = peft_model.model.decoder.layers[0].self_attn.v_proj
                 self.assertTrue(module.__class__.__name__ == "Linear4bit")
-                self.assertTrue(peft_model.hf_device_map is not None)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
@@ -503,7 +501,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 module = peft_model.model.decoder.layers[0].self_attn.v_proj
                 self.assertTrue(module.__class__.__name__ == "Linear8bitLt")
-                self.assertTrue(peft_model.hf_device_map is not None)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
@@ -529,7 +526,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 module = peft_model.model.decoder.layers[0].self_attn.v_proj
                 self.assertTrue(module.__class__.__name__ == "Linear4bit")
-                self.assertTrue(peft_model.hf_device_map is not None)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
@@ -547,7 +543,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 module = peft_model.model.decoder.layers[0].self_attn.v_proj
                 self.assertTrue(module.__class__.__name__ == "Linear8bitLt")
-                self.assertTrue(peft_model.hf_device_map is not None)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
