@@ -1291,7 +1291,9 @@ class MusicgenIntegrationTests(unittest.TestCase):
 class MusicgenStereoIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
-        return MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-stereo-small").to(torch_device)
+        return MusicgenForConditionalGeneration.from_pretrained(
+            "facebook/musicgen-stereo-small", dtype=torch.float32
+        ).to(torch_device)
 
     @cached_property
     def processor(self):
