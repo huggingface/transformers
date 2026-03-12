@@ -1346,17 +1346,7 @@ class IsaacModel(Qwen3PreTrainedModel):
             if input_ids is None:
                 raise ValueError("`input_ids` or `inputs_embeds` must be provided.")
 
-            has_vision_inputs = any(
-                value is not None
-                for value in (
-                    vision_patches,
-                    vision_patch_attention_mask,
-                    vision_token_grids,
-                    vision_token_offsets,
-                    vision_token_lengths,
-                    vision_image_attention_mask,
-                )
-            )
+            has_vision_inputs = vision_patches is not None
             if modality_tensor is not None or has_vision_inputs:
                 if modality_tensor is None:
                     modality_tensor = torch.full_like(input_ids, ModalityType.text.value)
