@@ -160,6 +160,7 @@ class OmDetTurboConfig(PreTrainedConfig):
             **kwargs,
         )
 
+        # BC: hub configs with backbone_kwargs pass img_size/always_partition as direct attrs
         if getattr(backbone_config, "model_type", None) == "timm_backbone" and not getattr(
             backbone_config, "timm_model_kwargs", None
         ):

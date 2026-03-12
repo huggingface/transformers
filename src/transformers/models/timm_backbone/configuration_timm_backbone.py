@@ -31,8 +31,6 @@ class TimmBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
         Whether to output only the features or also the logits.
     freeze_batch_norm_2d (`bool`, *optional*, defaults to `False`):
         Converts all `BatchNorm2d` and `SyncBatchNorm` layers of provided module into `FrozenBatchNorm2d`.
-    timm_model_kwargs (`dict`, *optional*):
-        Additional keyword arguments to pass to `timm.create_model` (e.g. `{"img_size": 640}`).
 
     Example:
     ```python
@@ -59,7 +57,6 @@ class TimmBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
         out_indices=None,
         freeze_batch_norm_2d=False,
         output_stride=None,
-        timm_model_kwargs=None,
         **kwargs,
     ):
         self.backbone = backbone
@@ -68,7 +65,6 @@ class TimmBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
         self.out_indices = out_indices if out_indices is not None else [-1]
         self.output_stride = output_stride
         self.freeze_batch_norm_2d = freeze_batch_norm_2d
-        self.timm_model_kwargs = timm_model_kwargs if timm_model_kwargs is not None else {}
 
         super().__init__(**kwargs)
 
