@@ -1,4 +1,5 @@
 ## Useful commands
+
 - `make style`: runs formatters and linters, necessary to pass code style checks
 - `make fix-repo`: auto-fixes copies, modular conversions, doc TOCs, docstrings in addition to the `make style` fixes
 - `make check-repo` — CI-style consistency checks
