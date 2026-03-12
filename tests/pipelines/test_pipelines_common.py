@@ -30,7 +30,6 @@ from transformers import (
     AutoTokenizer,
     DistilBertForSequenceClassification,
     MaskGenerationPipeline,
-    T5ForConditionalGeneration,
     TextClassificationPipeline,
     TextGenerationPipeline,
     pipeline,
@@ -46,6 +45,7 @@ from transformers.testing_utils import (
     is_pipeline_test,
     is_staging_test,
     nested_simplify,
+    require_peft,
     require_torch,
     require_torch_accelerator,
     require_torch_multi_accelerator,
@@ -214,30 +214,50 @@ class CommonPipelineTest(unittest.TestCase):
 
             self.assertIsInstance(pipe, TextGenerationPipeline)  # Assert successful load
 
+    @require_peft
     @require_torch
-    def test_pipeline_with_task_parameters_no_side_effects(self):
+    def test_pipeline_from_local_with_embedded_adapter(self):
         """
-        Regression test: certain pipeline flags, like `task`, modified the model configuration, causing unexpected
-        side-effects
+        Test for issue #43746: Only overwrite the pretrained_model_name_or_path if needed with adapter.
+
+        This test ensures that when a pipeline loads from a local directory that contains a base model
+        with an embedded adapter (i.e., it has a config.json file), the path should NOT be overwritten
+        with the base_model_name_or_path from the adapter config. The fix is applied in
+        src/transformers/pipelines/__init__.py in the pipeline function.
         """
-        # This checkpoint has task-specific parameters that will modify the behavior of the pipeline
-        model = T5ForConditionalGeneration.from_pretrained("t5-small")
-        self.assertTrue(model.config.num_beams == 1)
+        peft_test_model = "peft-internal-testing/tiny-OPTForCausalLM-lora"
+        transformers_test_model = "hf-internal-testing/tiny-random-OPTForCausalLM"
 
-        # The task-specific parameters used to cause side-effects on `model.config` -- not anymore
-        pipe = pipeline(model=model, tokenizer=AutoTokenizer.from_pretrained("t5-small"), task="translation_en_to_de")
-        self.assertTrue(model.config.num_beams == 1)
-        self.assertTrue(model.generation_config.num_beams == 1)
+        # Create a temporary directory with a complete adapter model structure
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_dir = Path(tmp_dir)
 
-        # Under the hood: we now store a generation config in the pipeline. This generation config stores the
-        # task-specific parameters.
-        self.assertTrue(pipe.generation_config.num_beams == 4)
+            # Save the model and adapter locally
+            from transformers import AutoConfig, AutoModel
 
-        # We can confirm that the task-specific parameters have an effect. (In this case, the default is `num_beams=1`,
-        # which would crash when `num_return_sequences=4` is passed.)
-        pipe("Hugging Face doesn't sell hugs.", num_return_sequences=4)
-        with self.assertRaises(ValueError):
-            pipe("Hugging Face doesn't sell hugs.", num_return_sequences=4, num_beams=1)
+            config = AutoConfig.from_pretrained(transformers_test_model)
+            model = AutoModel.from_pretrained(transformers_test_model)
+            adapter_model = AutoModel.from_pretrained(peft_test_model)
+            config.save_pretrained(tmp_dir)
+            model.save_pretrained(tmp_dir)
+            adapter_model.save_pretrained(tmp_dir)
+
+            # Overwrite the base_model_name_or_path to an invalid value that
+            # would cause the pipeline load to fail later
+            import json
+
+            from transformers.utils import ADAPTER_CONFIG_NAME
+
+            adapter_config_path = tmp_dir / ADAPTER_CONFIG_NAME
+            with open(adapter_config_path, "r") as handle:
+                adapter_config = json.load(handle)
+            adapter_config["base_model_name_or_path"] = "some/model/that/does/not/exist"
+            with open(adapter_config_path, "w") as handle:
+                json.dump(adapter_config, handle)
+
+            # Load from the saved path and make sure it actually loads despite
+            # the invalid adapter config path
+            pipeline("text-generation", tmp_dir)
 
 
 @is_pipeline_test
@@ -640,24 +660,11 @@ class PipelineUtilsTest(unittest.TestCase):
         auto_model_cls = relevant_auto_classes[0]
 
         # retrieve correct model ids
-        if task == "translation":
-            # special case for translation pipeline which has multiple languages
-            model_ids = []
-            revisions = []
-            tasks = []
-            for translation_pair in task_dict["default"]:
-                model_id, revision = task_dict["default"][translation_pair]["model"]
+        model_id, revision = task_dict["default"]["model"]
 
-                model_ids.append(model_id)
-                revisions.append(revision)
-                tasks.append(task + f"_{'_to_'.join(translation_pair)}")
-        else:
-            # normal case - non-translation pipeline
-            model_id, revision = task_dict["default"]["model"]
-
-            model_ids = [model_id]
-            revisions = [revision]
-            tasks = [task]
+        model_ids = [model_id]
+        revisions = [revision]
+        tasks = [task]
 
         # check for equality
         for model_id, revision, task in zip(model_ids, revisions, tasks):

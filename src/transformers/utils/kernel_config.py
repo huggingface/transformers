@@ -48,7 +48,7 @@ def infer_device(model):
     dev_type = param.device.type
     if dev_type == "cuda":
         # Refine based on actual platform
-        if torch.version.hip is not None:
+        if getattr(torch, "version").hip is not None:
             return "rocm"
 
     return dev_type
@@ -57,8 +57,8 @@ def infer_device(model):
 def add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping):
     from kernels import LayerRepository
 
-    if device not in ["cuda", "rocm", "xpu", "npu"]:
-        raise ValueError(f"Only cuda, rocm, xpu and npu devices supported, got: {device}")
+    if device not in ["cuda", "rocm", "xpu", "npu", "neuron"]:
+        raise ValueError(f"Only cuda, rocm, xpu, npu and neuron devices supported, got: {device}")
     repo_layer_name = repo_name.split(":")[1]
     repo_id = repo_name.split(":")[0]
     compatible_mapping[layer_name] = {
@@ -76,8 +76,8 @@ def add_to_mapping_local(layer_name, device, repo_name, mode, compatible_mapping
 
     from kernels import LocalLayerRepository
 
-    if device not in ["cuda", "rocm", "xpu", "npu"]:
-        raise ValueError(f"Only cuda, rocm, xpu and npu devices supported, got: {device}")
+    if device not in ["cuda", "rocm", "xpu", "npu", "neuron"]:
+        raise ValueError(f"Only cuda, rocm, xpu, npu and neuron devices supported, got: {device}")
     repo_layer_name = repo_name.split(":")[1]
     repo_path = repo_name.split(":")[0]
     repo_package_name = repo_path.split("/")[-1]
@@ -97,8 +97,8 @@ class KernelConfig(PushToHubMixin):
     Kernel configuration class. This class is used to configure the kernel mapping for a model.
     """
 
-    def __init__(self, kernel_mapping={}, use_local_kernel=False):
-        self.kernel_mapping = kernel_mapping
+    def __init__(self, kernel_mapping=None, use_local_kernel=False):
+        self.kernel_mapping = kernel_mapping if kernel_mapping is not None else {}
         self.registered_layer_names = {}
         self.use_local_kernel = use_local_kernel
 
@@ -182,7 +182,7 @@ class KernelConfig(PushToHubMixin):
         for layer_name, kernel in self.kernel_mapping.items():
             if layer_name not in self.registered_layer_names.values():
                 raise ValueError(
-                    f"Layer {layer_name} is not registered in the model, please register it first using register_kernel_forward_from_hub"
+                    f"Layer {layer_name} is not registered in the model, please register it first using use_kernel_forward_from_hub"
                 )
 
             if isinstance(kernel, str):
@@ -193,8 +193,8 @@ class KernelConfig(PushToHubMixin):
 
             elif isinstance(kernel, dict):
                 for device, repo_name in kernel.items():
-                    if device not in ["cuda", "rocm", "xpu", "npu"]:
-                        raise ValueError(f"Only cuda, rocm, xpu and npu devices supported, got: {device}")
+                    if device not in ["cuda", "rocm", "xpu", "npu", "neuron"]:
+                        raise ValueError(f"Only cuda, rocm, xpu, npu and neuron devices supported, got: {device}")
 
                     if not isinstance(repo_name, str) or "/" not in repo_name or ":" not in repo_name:
                         raise ValueError(

@@ -20,6 +20,7 @@
 
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -37,6 +38,23 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_dinov3_vit import DINOv3ViTConfig
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Output type of [`DINOv3ViTBackbone`], extending [`BackboneOutput`] with optional CLS tokens from
+    each selected feature stage (used when `config.return_class_token=True`).
+    """
+)
+class DINOv3ViTBackboneOutput(BackboneOutput):
+    r"""
+    cls_tokens (`tuple(torch.FloatTensor)`, *optional*):
+        CLS token from each selected feature stage, each of shape `(batch_size, hidden_size)`.
+        Only present when `config.return_class_token=True`.
+    """
+
+    cls_tokens: tuple[torch.FloatTensor] | None = None
 
 
 class DINOv3ViTEmbeddings(nn.Module):
@@ -408,6 +426,7 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         # Attention with residual connection
         residual = hidden_states
@@ -416,6 +435,7 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
             hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
+            **kwargs,
         )
         hidden_states = self.layer_scale1(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual
@@ -504,11 +524,8 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         hidden_states = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         position_embeddings = self.rope_embeddings(pixel_values)
 
-        for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(
-                hidden_states,
-                position_embeddings=position_embeddings,
-            )
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states, position_embeddings=position_embeddings, **kwargs)
 
         sequence_output = self.norm(hidden_states)
         pooled_output = sequence_output[:, 0, :]
@@ -541,7 +558,7 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
         pixel_values: torch.Tensor,
         output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BackboneOutput:
+    ) -> DINOv3ViTBackboneOutput:
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_states = self.embeddings(pixel_values)
         position_embeddings = self.rope_embeddings(pixel_values)
@@ -549,7 +566,7 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
         stage_hidden_states: list[torch.Tensor] = [hidden_states]
 
         for layer_module in self.layer:
-            hidden_states = layer_module(hidden_states, position_embeddings=position_embeddings)
+            hidden_states = layer_module(hidden_states, position_embeddings=position_embeddings, **kwargs)
             stage_hidden_states.append(hidden_states)
 
         batch_size, _, image_height, image_width = pixel_values.shape
@@ -558,8 +575,9 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
         num_patches_width = image_width // patch_size
 
         num_prefix = 1 + getattr(self.config, "num_register_tokens", 0)
+        return_class_token = getattr(self.config, "return_class_token", False)
 
-        feature_maps = []
+        feature_maps, cls_tokens = [], []
         sequence_output = None
         last_stage_idx = len(self.stage_names) - 1
         for idx, (stage_name, hidden_state) in enumerate(zip(self.stage_names, stage_hidden_states)):
@@ -570,6 +588,8 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
                 hidden_state = self.norm(hidden_state)
 
             if stage_name in self.out_features:
+                if return_class_token:
+                    cls_tokens.append(hidden_state[:, 0, :])
                 patch_tokens = hidden_state[:, num_prefix:, :]
                 if self.config.reshape_hidden_states:
                     fmap = (
@@ -582,7 +602,10 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
 
                 feature_maps.append(fmap)
 
-        output = BackboneOutput(feature_maps=tuple(feature_maps))
+        output = DINOv3ViTBackboneOutput(
+            feature_maps=tuple(feature_maps),
+            cls_tokens=tuple(cls_tokens) if return_class_token else None,
+        )
         output.last_hidden_state = sequence_output
 
         return output

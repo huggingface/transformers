@@ -17,28 +17,24 @@ from typing import Any
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(
+    custom_intro="This config is used to instantiate attention layers.",
+    checkpoint="transformers-community/dbrx-instruct",
+)
 class DbrxAttentionConfig(PreTrainedConfig):
-    """Configuration class for Dbrx Attention.
-
-    [`DbrxAttention`] class. It is used to instantiate attention layers
-    according to the specified arguments, defining the layers architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        attn_pdrop (`float`, *optional*, defaults to 0.0):
-            The dropout probability for the attention layers.
-        clip_qkv (`float`, *optional*):
-            If set, clip the queries, keys, and values in the attention layer to this value.
-        kv_n_heads (`int`, *optional*, defaults to 1):
-            For grouped_query_attention only, allow user to specify number of kv heads.
+    r"""
+    attn_pdrop (`float`, *optional*, defaults to 0.0):
+        The dropout probability for the attention layers.
+    clip_qkv (`float`, *optional*):
+        If set, clip the queries, keys, and values in the attention layer to this value.
+    kv_n_heads (`int`, *optional*, defaults to 1):
+        For grouped_query_attention only, allow user to specify number of kv heads.
     """
 
     base_config_key = "attn_config"
@@ -56,25 +52,27 @@ class DbrxAttentionConfig(PreTrainedConfig):
         self.kv_n_heads = kv_n_heads
 
 
+@auto_docstring(
+    custom_intro="This config is used to instantiate feedforward layers.",
+    checkpoint="transformers-community/dbrx-instruct",
+)
 class DbrxFFNConfig(PreTrainedConfig):
-    """Configuration class for Dbrx FFN.
-
-    [`DbrxFFN`] class. It is used to instantiate feedforward layers according to
-    the specified arguments, defining the layers architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        ffn_act_fn (`dict`, *optional*, defaults to `None`): A dict specifying activation function for the FFN.
-            The dict should have a key 'name' with the value being the name of the activation function along with
-            any additional keyword arguments. If `None`, then set to `{"name": "silu"}`.
-        ffn_hidden_size (`int`, *optional*, defaults to 3584): The hidden size of the feedforward network.
-        moe_num_experts (`int`, *optional*, defaults to 4): The number of experts in the mixture of experts layer.
-        moe_top_k (`int`, *optional*, defaults to 1): The number of experts to use in the mixture of experts layer.
-        moe_jitter_eps (`float`, *optional*, defaults to `None`): If not `None`, the jitter epsilon for the mixture of experts layer.
-        moe_loss_weight (`float`, *optional*, defaults to 0.01): The loss weight for the mixture of experts layer.
-        moe_normalize_expert_weights (`float`, *optional*, defaults to 1.0): The normalization factor for the expert weights.
+    r"""
+    ffn_act_fn (`dict`, *optional*, defaults to `None`): A dict specifying activation function for the FFN.
+        The dict should have a key 'name' with the value being the name of the activation function along with
+        any additional keyword arguments. If `None`, then set to `{"name": "silu"}`.
+    ffn_hidden_size (`int`, *optional*, defaults to 3584):
+        The hidden size of the feedforward network.
+    moe_num_experts (`int`, *optional*, defaults to 4):
+        The number of experts in the mixture of experts layer.
+    moe_top_k (`int`, *optional*, defaults to 1):
+        The number of experts to use in the mixture of experts layer.
+    moe_jitter_eps (`float`, *optional*, defaults to `None`):
+        If not `None`, the jitter epsilon for the mixture of experts layer.
+    moe_loss_weight (`float`, *optional*, defaults to 0.01):
+        The loss weight for the mixture of experts layer.
+    moe_normalize_expert_weights (`float`, *optional*, defaults to 1.0):
+        The normalization factor for the expert weights.
     """
 
     base_config_key = "ffn_config"
@@ -118,46 +116,15 @@ class DbrxFFNConfig(PreTrainedConfig):
             raise ValueError(f"Found unknown {kwargs=}")
 
 
+@auto_docstring(checkpoint="transformers-community/dbrx-instruct")
 class DbrxConfig(PreTrainedConfig):
     r"""
-
-    This is the configuration class to store the configuration of a [`DbrxModel`]. It is used to instantiate a Dbrx model according to the
-    specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a different configuration to that of the [transformers-community/dbrx-instruct](https://huggingface.co/transformers-community/dbrx-instruct) architecture.
-    Note: this link points to a re-upload; the original repository is closed.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        d_model (`int`, *optional*, defaults to 2048):
-            Dimensionality of the embeddings and hidden states.
-        n_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        n_layers (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer encoder.
-        max_seq_len (`int`, *optional*, defaults to 2048):
-            The maximum sequence length of the model.
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the Dbrx model. Defines the maximum number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`DbrxModel`].
-        resid_pdrop (`float`, *optional*, defaults to 0.0):
-            The dropout probability applied to the attention output before combining with residual.
-        emb_pdrop (`float`, *optional*, defaults to 0.0):
-            The dropout probability for the embedding layer.
-        attn_config (`dict`, *optional*):
-            A dictionary used to configure the model's attention module.
-        ffn_config (`dict`, *optional*):
-            A dictionary used to configure the model's FFN module.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabling this will also
-            allow the model to output the auxiliary loss. See [here]() for more details.
-
+    max_seq_len (`int`, *optional*, defaults to 2048):
+        The maximum sequence length of the model.
+    attn_config (`dict`, *optional*):
+        A dictionary used to configure the model's attention module.
+    ffn_config (`dict`, *optional*):
+        A dictionary used to configure the model's FFN module.
 
     Example:
     ```python

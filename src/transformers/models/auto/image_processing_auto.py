@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...image_processing_utils import ImageProcessingMixin
-from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...utils import (
     CONFIG_NAME,
     IMAGE_PROCESSOR_NAME,
@@ -76,6 +75,7 @@ else:
             ("bridgetower", ("BridgeTowerImageProcessor", "BridgeTowerImageProcessorFast")),
             ("chameleon", ("ChameleonImageProcessor", "ChameleonImageProcessorFast")),
             ("chinese_clip", ("ChineseCLIPImageProcessor", "ChineseCLIPImageProcessorFast")),
+            ("chmv2", (None, "CHMv2ImageProcessorFast")),
             ("clip", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("clipseg", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("cohere2_vision", (None, "Cohere2VisionImageProcessorFast")),
@@ -104,7 +104,7 @@ else:
             ("emu3", ("Emu3ImageProcessor", None)),
             ("eomt", ("EomtImageProcessor", "EomtImageProcessorFast")),
             ("eomt_dinov3", ("EomtImageProcessor", "EomtImageProcessorFast")),
-            ("ernie4_5_vl_moe", ("Ernie4_5_VL_MoeImageProcessor", "Ernie4_5_VL_MoeImageProcessorFast")),
+            ("ernie4_5_vl_moe", ("Ernie4_5_VLMoeImageProcessor", "Ernie4_5_VLMoeImageProcessorFast")),
             ("flava", ("FlavaImageProcessor", "FlavaImageProcessorFast")),
             ("florence2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("focalnet", ("BitImageProcessor", "BitImageProcessorFast")),
@@ -170,6 +170,7 @@ else:
             ("pixio", ("BitImageProcessor", "BitImageProcessorFast")),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("poolformer", ("PoolFormerImageProcessor", "PoolFormerImageProcessorFast")),
+            ("pp_doclayout_v2", (None, "PPDocLayoutV2ImageProcessorFast")),
             ("pp_doclayout_v3", (None, "PPDocLayoutV3ImageProcessorFast")),
             ("prompt_depth_anything", ("PromptDepthAnythingImageProcessor", "PromptDepthAnythingImageProcessorFast")),
             ("pvt", ("PvtImageProcessor", "PvtImageProcessorFast")),
@@ -244,6 +245,8 @@ IMAGE_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, IMAGE_PROCESSOR
 
 def get_image_processor_class_from_name(class_name: str):
     if class_name == "BaseImageProcessorFast":
+        from ...image_processing_utils_fast import BaseImageProcessorFast
+
         return BaseImageProcessorFast
 
     for module_name, extractors in IMAGE_PROCESSOR_MAPPING_NAMES.items():
@@ -654,6 +657,8 @@ class AutoImageProcessor:
         """
         if slow_image_processor_class is None and fast_image_processor_class is None:
             raise ValueError("You need to specify either slow_image_processor_class or fast_image_processor_class")
+        from ...image_processing_utils_fast import BaseImageProcessorFast
+
         if slow_image_processor_class is not None and issubclass(slow_image_processor_class, BaseImageProcessorFast):
             raise ValueError("You passed a fast image processor in as the `slow_image_processor_class`.")
         if fast_image_processor_class is not None and not issubclass(

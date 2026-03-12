@@ -156,7 +156,16 @@ jobs:
           pytest_marker: ${{ inputs.pytest_marker }}
           model: ${{ matrix.folders }}
         run: |
-          script -q -c "PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS=yes _PATCHED_TESTING_METHODS_OUTPUT_DIR=/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports python3 -m pytest -rsfE -v -m '${pytest_marker}' --make-reports=${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports tests/${model}" test_outputs.txt
+          # Map short names to actual test paths for trainer/distributed tests
+          test_path="tests/${model}"
+          if [ "$model" = "fsdp" ]; then
+            test_path="tests/trainer/distributed/test_trainer_distributed_fsdp.py"
+          elif [ "$model" = "ddp" ]; then
+            test_path="tests/trainer/distributed/test_trainer_distributed_ddp.py"
+          elif [ "$model" = "trainer" ] && [ "$report_name_prefix" = "run_trainer_and_fsdp_gpu" ]; then
+            test_path="tests/trainer --ignore=tests/trainer/distributed"
+          fi
+          script -q -c "PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS=yes _PATCHED_TESTING_METHODS_OUTPUT_DIR=/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports python3 -m pytest -rsfE -v -m '${pytest_marker}' --make-reports=${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports ${test_path}" test_outputs.txt
           ls -la
           # Extract the exit code from the output file
           EXIT_CODE=$(tail -1 test_outputs.txt | grep -o 'COMMAND_EXIT_CODE="[0-9]*"' | cut -d'"' -f2)
