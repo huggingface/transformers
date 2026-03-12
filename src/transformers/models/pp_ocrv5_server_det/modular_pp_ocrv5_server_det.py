@@ -233,48 +233,52 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         Returns:
             np.ndarray: Expanded contour of shape (M, 2).
         """
-        contour_box = np.array(contour_box).reshape(-1, 2)
+        # --- 1. Parameter calculation ---
+        polygon = contour_box.reshape(-1, 2).astype(np.float32)
+        perimeter = cv2.arcLength(polygon, True)
+        area = cv2.contourArea(polygon)
+        offset_distance = area * unclip_ratio / perimeter
 
-        contour_area = cv2.contourArea(contour_box)
-        contour_perimeter = cv2.arcLength(contour_box, True)
+        # --- 2. Determine polygon orientation and edge normals ---
+        x, y = polygon[:, 0], polygon[:, 1]
+        is_ccw = (x @ np.roll(y, -1) - y @ np.roll(x, -1)) > 0.0
 
-        if contour_perimeter == 0:
-            return contour_box
+        edges = np.roll(polygon, -1, axis=0) - polygon
+        edge_lengths = np.linalg.norm(edges, axis=1, keepdims=True)
+        edge_directions = edges / np.maximum(edge_lengths, 1e-6)
 
-        expansion_distance = contour_area * unclip_ratio / contour_perimeter
+        if is_ccw:
+            normals = np.stack([edge_directions[:, 1], -edge_directions[:, 0]], axis=1)
+        else:
+            normals = np.stack([-edge_directions[:, 1], edge_directions[:, 0]], axis=1)
 
-        closed_contour = np.concatenate([contour_box, contour_box[0:1]], axis=0)
-        expanded_points = []
+        # --- 3. Calculate new vertices from intersecting shifted edge lines ---
+        shifted_points = polygon + offset_distance * normals
 
-        for point_idx in range(len(contour_box)):
-            current_point = closed_contour[point_idx]
-            prev_point = closed_contour[point_idx - 1]
-            next_point = closed_contour[point_idx + 1]
+        prev_shifted_points = np.roll(shifted_points, 1, axis=0)
+        prev_edge_directions = np.roll(edge_directions, 1, axis=0)
 
-            def get_normal_vector(point_a, point_b):
-                direction = point_b - point_a
-                direction_norm = np.linalg.norm(direction)
-                if direction_norm == 0:
-                    return np.array([0, 0])
-                return np.array([direction[1], -direction[0]]) / direction_norm
+        cross_product = (
+            prev_edge_directions[:, 0] * edge_directions[:, 1] - prev_edge_directions[:, 1] * edge_directions[:, 0]
+        )
 
-            normal_prev_current = get_normal_vector(prev_point, current_point)
-            normal_current_next = get_normal_vector(current_point, next_point)
+        is_parallel_mask = np.abs(cross_product) < 1e-6
+        cross_product_safe = np.where(is_parallel_mask, 1.0, cross_product)
 
-            combined_normal = normal_prev_current + normal_current_next
-            cos_angle = np.dot(normal_prev_current, normal_current_next)
+        vec_to_current = shifted_points - prev_shifted_points
+        intersection_param = (
+            vec_to_current[:, 0] * edge_directions[:, 1] - vec_to_current[:, 1] * edge_directions[:, 0]
+        ) / cross_product_safe
 
-            denominator = 1 + cos_angle
-            if denominator < 1e-6:
-                scale_factor = expansion_distance
-            else:
-                scale_factor = expansion_distance * np.sqrt(2 / denominator)
+        new_vertices = prev_shifted_points + prev_edge_directions * intersection_param[:, None]
 
-            combined_norm = np.linalg.norm(combined_normal) + 1e-6
-            new_point = current_point + combined_normal * (scale_factor / combined_norm)
-            expanded_points.append(new_point)
+        # --- 4. Handle near-parallel adjacent edges with a fallback ---
+        if np.any(is_parallel_mask):
+            prev_normals = np.roll(normals, 1, axis=0)
+            fallback_points = polygon + 0.5 * offset_distance * (prev_normals + normals)
+            new_vertices[is_parallel_mask] = fallback_points[is_parallel_mask]
 
-        return np.array(expanded_points, dtype=np.float32)
+        return np.array([new_vertices.astype(np.float32)])
 
     def _get_mini_boxes(self, contour):
         """

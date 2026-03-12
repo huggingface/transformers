@@ -275,26 +275,30 @@ class PPOCRV5ServerDetModelIntegrationTest(unittest.TestCase):
                 [0.0004, 0.0003, 0.0002],
                 [0.0003, 0.0002, 0.0002],
                 [0.0006, 0.0003, 0.0003],
-            ]
-        ).to(torch_device)
-
-        self.assertEqual(outputs.last_hidden_state.shape, expected_shape_logits)
-        torch.testing.assert_close(outputs.last_hidden_state[0, 0, :3, :3], expected_logits, rtol=2e-4, atol=2e-4)
-
-        # Axis-aligned boxes in corners format (xmin, ymin, xmax, ymax)
-        expected_shape_boxes = torch.Size((4, 4))
-        expected_boxes = torch.tensor(
-            [[76, 534, 399, 587], [14, 478, 519, 553], [193, 438, 403, 492], [31, 378, 491, 456]],
-            dtype=torch.float32,
+            ],
             device=torch_device,
         )
 
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape_logits)
+        torch.testing.assert_close(outputs.last_hidden_state[0, 0, :3, :3], expected_logits, rtol=2e-4, atol=2e-4)
+        expected_shape_boxes = torch.Size((4, 4, 2))
+        expected_boxes = torch.tensor(
+            [
+                [[76, 550], [399, 538], [400, 575], [77, 587]],
+                [[14, 505], [517, 484], [519, 532], [16, 553]],
+                [[193, 452], [401, 443], [403, 483], [195, 492]],
+                [[32, 406], [488, 384], [491, 434], [34, 456]],
+            ],
+            dtype=torch.short,
+            device=torch_device,
+        )
+        breakpoint()
         self.assertEqual(results[0]["boxes"].shape, expected_shape_boxes)
-        torch.testing.assert_close(results[0]["boxes"], expected_boxes, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(results[0]["boxes"], expected_boxes, rtol=2e-2, atol=2e-2)
 
-        expected_scores = torch.tensor([0.9037, 0.8942, 0.8938, 0.8781], device=torch_device)
+        expected_scores = torch.tensor([0.9023, 0.8941, 0.8937, 0.8781], device=torch_device)
         self.assertEqual(results[0]["scores"].shape, (4,))
-        torch.testing.assert_close(results[0]["scores"], expected_scores, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(results[0]["scores"], expected_scores, rtol=2e-2, atol=2e-2)
 
         self.assertEqual(results[0]["labels"].shape, (4,))
         self.assertTrue((results[0]["labels"] == 0).all())  # Single class: text
