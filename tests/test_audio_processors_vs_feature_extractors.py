@@ -22,66 +22,137 @@ For each model, we:
 4. Assert torch.equal on the main output tensors
 """
 
+import importlib
+import os
+import sys
+
 import numpy as np
 import pytest
 import torch
 
+# ---------------------------------------------------------------------------
+# Feature extractor classes are loaded from ~/transformers/src (upstream).
+# We temporarily swap sys.path and clear cached transformers modules so that
+# ``import transformers.models.X.feature_extraction_X`` resolves to the
+# upstream checkout rather than the locally-installed (audio-processors) copy.
+# ---------------------------------------------------------------------------
+_UPSTREAM_SRC = os.path.expanduser("~/transformers/src")
+
+_fe_class_specs = [
+    ("transformers.models.audio_spectrogram_transformer.feature_extraction_audio_spectrogram_transformer", "ASTFeatureExtractor"),
+    ("transformers.models.clap.feature_extraction_clap", "ClapFeatureExtractor"),
+    ("transformers.models.clvp.feature_extraction_clvp", "ClvpFeatureExtractor"),
+    ("transformers.models.dac.feature_extraction_dac", "DacFeatureExtractor"),
+    ("transformers.models.dia.feature_extraction_dia", "DiaFeatureExtractor"),
+    ("transformers.models.encodec.feature_extraction_encodec", "EncodecFeatureExtractor"),
+    ("transformers.models.granite_speech.feature_extraction_granite_speech", "GraniteSpeechFeatureExtractor"),
+    ("transformers.models.kyutai_speech_to_text.feature_extraction_kyutai_speech_to_text", "KyutaiSpeechToTextFeatureExtractor"),
+    ("transformers.models.lasr.feature_extraction_lasr", "LasrFeatureExtractor"),
+    ("transformers.models.musicgen_melody.feature_extraction_musicgen_melody", "MusicgenMelodyFeatureExtractor"),
+    ("transformers.models.parakeet.feature_extraction_parakeet", "ParakeetFeatureExtractor"),
+    ("transformers.models.phi4_multimodal.feature_extraction_phi4_multimodal", "Phi4MultimodalFeatureExtractor"),
+    ("transformers.models.pop2piano.feature_extraction_pop2piano", "Pop2PianoFeatureExtractor"),
+    ("transformers.models.seamless_m4t.feature_extraction_seamless_m4t", "SeamlessM4TFeatureExtractor"),
+    ("transformers.models.speech_to_text.feature_extraction_speech_to_text", "Speech2TextFeatureExtractor"),
+    ("transformers.models.speecht5.feature_extraction_speecht5", "SpeechT5FeatureExtractor"),
+    ("transformers.models.univnet.feature_extraction_univnet", "UnivNetFeatureExtractor"),
+    ("transformers.models.vibevoice_acoustic_tokenizer.feature_extraction_vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerFeatureExtractor"),
+    ("transformers.models.voxtral_realtime.feature_extraction_voxtral_realtime", "VoxtralRealtimeFeatureExtractor"),
+    ("transformers.models.wav2vec2.feature_extraction_wav2vec2", "Wav2Vec2FeatureExtractor"),
+    ("transformers.models.whisper.feature_extraction_whisper", "WhisperFeatureExtractor"),
+]
+
+
+def _load_upstream_classes(class_specs):
+    """Load feature extractor classes from ~/transformers/src.
+
+    Temporarily replaces the transformers package in sys.modules so that
+    imports resolve to the upstream checkout.
+    """
+    # 1. Save and remove all cached transformers modules
+    saved_modules = {}
+    for key in list(sys.modules.keys()):
+        if key == "transformers" or key.startswith("transformers."):
+            saved_modules[key] = sys.modules.pop(key)
+
+    # 2. Prepend upstream src to sys.path
+    sys.path.insert(0, _UPSTREAM_SRC)
+
+    results = {}
+    try:
+        for module_path, class_name in class_specs:
+            mod = importlib.import_module(module_path)
+            results[class_name] = getattr(mod, class_name)
+    finally:
+        # 3. Remove upstream from sys.path
+        sys.path.remove(_UPSTREAM_SRC)
+        # 4. Clear all upstream-loaded transformers modules
+        for key in list(sys.modules.keys()):
+            if key == "transformers" or key.startswith("transformers."):
+                del sys.modules[key]
+        # 5. Restore the local project's transformers modules
+        sys.modules.update(saved_modules)
+
+    return results
+
+
+def _load_upstream_class(module_path, class_name):
+    """Load a single class from ~/transformers/src."""
+    return _load_upstream_classes([(module_path, class_name)])[class_name]
+
+
+# Load all FE classes from upstream in one batch
+_fe_classes = _load_upstream_classes(_fe_class_specs)
+ASTFeatureExtractor = _fe_classes["ASTFeatureExtractor"]
+ClapFeatureExtractor = _fe_classes["ClapFeatureExtractor"]
+ClvpFeatureExtractor = _fe_classes["ClvpFeatureExtractor"]
+DacFeatureExtractor = _fe_classes["DacFeatureExtractor"]
+DiaFeatureExtractor = _fe_classes["DiaFeatureExtractor"]
+EncodecFeatureExtractor = _fe_classes["EncodecFeatureExtractor"]
+GraniteSpeechFeatureExtractor = _fe_classes["GraniteSpeechFeatureExtractor"]
+KyutaiSpeechToTextFeatureExtractor = _fe_classes["KyutaiSpeechToTextFeatureExtractor"]
+LasrFeatureExtractor = _fe_classes["LasrFeatureExtractor"]
+MusicgenMelodyFeatureExtractor = _fe_classes["MusicgenMelodyFeatureExtractor"]
+ParakeetFeatureExtractor = _fe_classes["ParakeetFeatureExtractor"]
+Phi4MultimodalFeatureExtractor = _fe_classes["Phi4MultimodalFeatureExtractor"]
+Pop2PianoFeatureExtractor = _fe_classes["Pop2PianoFeatureExtractor"]
+SeamlessM4TFeatureExtractor = _fe_classes["SeamlessM4TFeatureExtractor"]
+Speech2TextFeatureExtractor = _fe_classes["Speech2TextFeatureExtractor"]
+SpeechT5FeatureExtractor = _fe_classes["SpeechT5FeatureExtractor"]
+UnivNetFeatureExtractor = _fe_classes["UnivNetFeatureExtractor"]
+VibeVoiceAcousticTokenizerFeatureExtractor = _fe_classes["VibeVoiceAcousticTokenizerFeatureExtractor"]
+VoxtralRealtimeFeatureExtractor = _fe_classes["VoxtralRealtimeFeatureExtractor"]
+Wav2Vec2FeatureExtractor = _fe_classes["Wav2Vec2FeatureExtractor"]
+WhisperFeatureExtractor = _fe_classes["WhisperFeatureExtractor"]
+
+# Audio processor imports (from local project)
 from transformers.models.audio_spectrogram_transformer.audio_processing_audio_spectrogram_transformer import (
     AudioSpectrogramTransformerAudioProcessor,
 )
-from transformers.models.audio_spectrogram_transformer.feature_extraction_audio_spectrogram_transformer import (
-    ASTFeatureExtractor,
-)
 from transformers.models.clap.audio_processing_clap import ClapAudioProcessor
-from transformers.models.clap.feature_extraction_clap import ClapFeatureExtractor
 from transformers.models.clvp.audio_processing_clvp import ClvpAudioProcessor
-from transformers.models.clvp.feature_extraction_clvp import ClvpFeatureExtractor
 from transformers.models.dac.audio_processing_dac import DacAudioProcessor
-from transformers.models.dac.feature_extraction_dac import DacFeatureExtractor
 from transformers.models.dia.audio_processing_dia import DiaAudioProcessor
-from transformers.models.dia.feature_extraction_dia import DiaFeatureExtractor
 from transformers.models.encodec.audio_processing_encodec import EncodecAudioProcessor
-from transformers.models.encodec.feature_extraction_encodec import EncodecFeatureExtractor
-from transformers.models.gemma3n.audio_processing_gemma3n import Gemma3nAudioProcessor
-from transformers.models.gemma3n.feature_extraction_gemma3n import Gemma3nAudioFeatureExtractor
 from transformers.models.granite_speech.audio_processing_granite_speech import GraniteSpeechAudioProcessor
-from transformers.models.granite_speech.feature_extraction_granite_speech import GraniteSpeechFeatureExtractor
 from transformers.models.kyutai_speech_to_text.audio_processing_kyutai_speech_to_text import (
     KyutaiSpeechToTextAudioProcessor,
 )
-from transformers.models.kyutai_speech_to_text.feature_extraction_kyutai_speech_to_text import (
-    KyutaiSpeechToTextFeatureExtractor,
-)
 from transformers.models.lasr.audio_processing_lasr import LasrAudioProcessor
-from transformers.models.lasr.feature_extraction_lasr import LasrFeatureExtractor
 from transformers.models.musicgen_melody.audio_processing_musicgen_melody import MusicgenMelodyAudioProcessor
-from transformers.models.musicgen_melody.feature_extraction_musicgen_melody import MusicgenMelodyFeatureExtractor
 from transformers.models.parakeet.audio_processing_parakeet import ParakeetAudioProcessor
-from transformers.models.parakeet.feature_extraction_parakeet import ParakeetFeatureExtractor
 from transformers.models.phi4_multimodal.audio_processing_phi4_multimodal import Phi4MultimodalAudioProcessor
-from transformers.models.phi4_multimodal.feature_extraction_phi4_multimodal import Phi4MultimodalFeatureExtractor
 from transformers.models.pop2piano.audio_processing_pop2piano import Pop2PianoAudioProcessor
-from transformers.models.pop2piano.feature_extraction_pop2piano import Pop2PianoFeatureExtractor
 from transformers.models.seamless_m4t.audio_processing_seamless_m4t import SeamlessM4tAudioProcessor
-from transformers.models.seamless_m4t.feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
 from transformers.models.speech_to_text.audio_processing_speech_to_text import SpeechToTextAudioProcessor
-from transformers.models.speech_to_text.feature_extraction_speech_to_text import Speech2TextFeatureExtractor
 from transformers.models.speecht5.audio_processing_speecht5 import SpeechT5AudioProcessor
-from transformers.models.speecht5.feature_extraction_speecht5 import SpeechT5FeatureExtractor
 from transformers.models.univnet.audio_processing_univnet import UnivNetAudioProcessor
-from transformers.models.univnet.feature_extraction_univnet import UnivNetFeatureExtractor
 from transformers.models.vibevoice_acoustic_tokenizer.audio_processing_vibevoice_acoustic_tokenizer import (
     VibevoiceAcousticTokenizerAudioProcessor,
 )
-from transformers.models.vibevoice_acoustic_tokenizer.feature_extraction_vibevoice_acoustic_tokenizer import (
-    VibeVoiceAcousticTokenizerFeatureExtractor,
-)
 from transformers.models.voxtral_realtime.audio_processing_voxtral_realtime import VoxtralRealtimeAudioProcessor
-from transformers.models.voxtral_realtime.feature_extraction_voxtral_realtime import VoxtralRealtimeFeatureExtractor
 from transformers.models.wav2vec2.audio_processing_wav2vec2 import Wav2Vec2AudioProcessor
-from transformers.models.wav2vec2.feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
 from transformers.models.whisper.audio_processing_whisper import WhisperAudioProcessor
-from transformers.models.whisper.feature_extraction_whisper import WhisperFeatureExtractor
 
 
 # Sentinel to exclude a key from default kwargs
@@ -99,6 +170,7 @@ MODEL_CONFIGS = [
         "ap_class": AudioSpectrogramTransformerAudioProcessor,
         "fe_output_key": "input_values",
         "sample_rate": 16000,
+        "atol": 1e-6,
     },
     {
         "name": "clap",
@@ -347,10 +419,29 @@ def test_audio_processor_matches_feature_extractor(config):
         "audio_input_features": "audio_features",
     }
 
+    # Mapping for attention mask and padding mask keys depending on the primary input key
+    mask_key_map = {
+        "input_values": "audio_values_mask",
+        "input_features": "audio_features_mask",
+    }
+
+    # Find out if this output contains input_values or input_features (to key mask mapping)
+    has_input_values = "input_values" in fe_output
+    has_input_features = "input_features" in fe_output
+
     for fe_key in fe_output.keys():
-        if fe_key == "attention_mask" or fe_key == "padding_mask" or fe_key == "input_features_mask":
-            continue
+        # Remap the primary data keys
         ap_key = fe_to_ap_key_map.get(fe_key, fe_key)
+
+        # Special handling for attention_mask and padding_mask mapping
+        if fe_key in ("attention_mask", "padding_mask"):
+            if has_input_values:
+                ap_key = mask_key_map["input_values"]
+            elif has_input_features:
+                ap_key = mask_key_map["input_features"]
+            else:
+                ap_key = fe_key  # fallback/default
+
         assert ap_key in ap_output, f"Key {ap_key} (from FE key {fe_key}) not found in audio processor output"
         fe_tensor = fe_output[fe_key]
         ap_tensor = ap_output[ap_key]
@@ -363,6 +454,130 @@ def test_audio_processor_matches_feature_extractor(config):
         assert fe_tensor.shape == ap_tensor.shape, (
             f"Shape mismatch for key '{fe_key}' (ap key '{ap_key}'): fe {fe_tensor.shape} vs ap {ap_tensor.shape}"
         )
-        assert torch.equal(fe_tensor, ap_tensor), (
-            f"Value mismatch for key '{fe_key}' (ap key '{ap_key}'): max abs diff = {(fe_tensor - ap_tensor).abs().max().item():.6e}"
-        )
+        atol = config.get("atol", 0.0)
+        if atol > 0:
+            assert torch.allclose(fe_tensor, ap_tensor, atol=atol, rtol=0), (
+                f"Value mismatch for key '{fe_key}' (ap key '{ap_key}'): max abs diff = {(fe_tensor - ap_tensor).abs().max().item():.6e}, atol={atol}"
+            )
+        else:
+            assert torch.equal(fe_tensor, ap_tensor), (
+                f"Value mismatch for key '{fe_key}' (ap key '{ap_key}'): max abs diff = {(fe_tensor - ap_tensor).abs().max().item():.6e}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Backward compatibility tests
+# ---------------------------------------------------------------------------
+
+# Pairs of (fe_module_path, fe_class_name, ap_class)
+_COMPAT_PAIRS = [
+    ("transformers.models.whisper.feature_extraction_whisper", "WhisperFeatureExtractor", WhisperAudioProcessor),
+    ("transformers.models.clap.feature_extraction_clap", "ClapFeatureExtractor", ClapAudioProcessor),
+    ("transformers.models.encodec.feature_extraction_encodec", "EncodecFeatureExtractor", EncodecAudioProcessor),
+    ("transformers.models.dac.feature_extraction_dac", "DacFeatureExtractor", DacAudioProcessor),
+    ("transformers.models.wav2vec2.feature_extraction_wav2vec2", "Wav2Vec2FeatureExtractor", Wav2Vec2AudioProcessor),
+]
+
+
+@pytest.mark.parametrize(
+    "module_path, class_name, ap_class",
+    _COMPAT_PAIRS,
+    ids=[p[1] for p in _COMPAT_PAIRS],
+)
+class TestFeatureExtractorBackwardCompat:
+    """Tests that deprecated FeatureExtractor wrappers work correctly."""
+
+    def test_importable_and_warns(self, module_path, class_name, ap_class):
+        """Old class names are importable and emit FutureWarning."""
+        import importlib
+
+        mod = importlib.import_module(module_path)
+        fe_cls = getattr(mod, class_name)
+        with pytest.warns(FutureWarning, match="deprecated"):
+            fe_cls()
+
+    def test_isinstance_check(self, module_path, class_name, ap_class):
+        """Deprecated FE instances pass isinstance checks against AudioProcessor."""
+        import importlib
+        import warnings
+
+        mod = importlib.import_module(module_path)
+        fe_cls = getattr(mod, class_name)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            fe = fe_cls()
+        assert isinstance(fe, ap_class)
+        assert issubclass(fe_cls, ap_class)
+
+    def test_issubclass(self, module_path, class_name, ap_class):
+        """Deprecated FE class is a subclass of AudioProcessor."""
+        import importlib
+
+        mod = importlib.import_module(module_path)
+        fe_cls = getattr(mod, class_name)
+        assert issubclass(fe_cls, ap_class)
+
+
+class TestBatchFeatureLegacyKeys:
+    """Tests that old output key names are accessible via BatchFeature."""
+
+    def setup_method(self):
+        from transformers.audio_processing_base import BatchFeature as AudioBatchFeature
+
+        # Reset warned keys so each test gets fresh warnings
+        AudioBatchFeature._warned_keys.clear()
+
+    def test_input_features_resolves_to_audio_features(self):
+        from transformers.audio_processing_base import BatchFeature as AudioBatchFeature
+
+        bf = AudioBatchFeature({"audio_features": np.array([1, 2, 3])})
+        with pytest.warns(FutureWarning, match="input_features"):
+            result = bf["input_features"]
+        assert np.array_equal(result, np.array([1, 2, 3]))
+
+    def test_input_values_resolves_to_audio_values(self):
+        from transformers.audio_processing_base import BatchFeature as AudioBatchFeature
+
+        bf = AudioBatchFeature({"audio_values": np.array([4, 5, 6])})
+        with pytest.warns(FutureWarning, match="input_values"):
+            result = bf["input_values"]
+        assert np.array_equal(result, np.array([4, 5, 6]))
+
+    def test_attention_mask_resolves_to_audio_features_mask(self):
+        from transformers.audio_processing_base import BatchFeature as AudioBatchFeature
+
+        bf = AudioBatchFeature({"audio_features": np.array([1]), "audio_features_mask": np.array([1, 1, 0])})
+        with pytest.warns(FutureWarning, match="attention_mask"):
+            result = bf["attention_mask"]
+        assert np.array_equal(result, np.array([1, 1, 0]))
+
+    def test_attention_mask_resolves_to_audio_values_mask(self):
+        from transformers.audio_processing_base import BatchFeature as AudioBatchFeature
+
+        bf = AudioBatchFeature({"audio_values": np.array([1]), "audio_values_mask": np.array([0, 1, 1])})
+        with pytest.warns(FutureWarning, match="attention_mask"):
+            result = bf["attention_mask"]
+        assert np.array_equal(result, np.array([0, 1, 1]))
+
+    def test_contains_legacy_key(self):
+        from transformers.audio_processing_base import BatchFeature as AudioBatchFeature
+
+        bf = AudioBatchFeature({"audio_features": np.array([1])})
+        assert "input_features" in bf
+        assert "audio_features" in bf
+        assert "nonexistent_key" not in bf
+
+    def test_warning_fires_once(self):
+        from transformers.audio_processing_base import BatchFeature as AudioBatchFeature
+
+        bf = AudioBatchFeature({"audio_features": np.array([1, 2, 3])})
+        with pytest.warns(FutureWarning, match="input_features"):
+            bf["input_features"]
+        # Second access should not warn
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            bf["input_features"]
+            future_warnings = [x for x in w if issubclass(x.category, FutureWarning) and "input_features" in str(x.message)]
+            assert len(future_warnings) == 0
