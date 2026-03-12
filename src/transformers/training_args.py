@@ -1658,7 +1658,7 @@ class TrainingArguments:
         if self.load_best_model_at_end and self.save_strategy != SaveStrategy.BEST:
             if self.eval_strategy != self.save_strategy:
                 raise ValueError(
-                    "--load_best_model_at_end requires the save and eval strategy to match, but found\n- Evaluation "
+                    '--load_best_model_at_end requires the save and eval strategy to match (unless when `--save_strategy="best"`), but found\n- Evaluation '
                     f"strategy: {self.eval_strategy}\n- Save strategy: {self.save_strategy}"
                 )
             if self.eval_strategy == IntervalStrategy.STEPS and self.save_steps % self.eval_steps != 0:
