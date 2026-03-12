@@ -22,7 +22,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="TODO")
+@auto_docstring(checkpoint="google/medasr")
 class LasrEncoderConfig(PreTrainedConfig):
     r"""
     convolution_bias (`bool`, *optional*, defaults to `False`):
@@ -126,7 +126,7 @@ class LasrEncoderConfig(PreTrainedConfig):
         )
 
 
-@auto_docstring(checkpoint="TODO")
+@auto_docstring(checkpoint="google/medasr")
 class LasrCTCConfig(PreTrainedConfig):
     r"""
         ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
