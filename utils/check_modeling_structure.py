@@ -13,7 +13,41 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Utility that ensures that modeling (and modular) files respect some important conventions we have in Transformers.
+Lint modeling and modular files under ``src/transformers/models`` for structural conventions.
+
+How rule registration works
+---------------------------
+- Rule metadata lives in ``utils/check_modeling_structure_rules.toml``.
+- Executable TRF rules are auto-discovered from functions named ``trfXXX_*``.
+- The ``trfXXX`` prefix becomes the rule id (for example ``trf003_check_...`` -> ``TRF003``).
+- Every discovered rule must have a matching entry in the TOML file, and every TOML rule must have a matching
+  ``trfXXX_*`` function. Import-time validation fails if either side is missing.
+- Rule functions receive ``rule_id`` explicitly and should use it for suppression checks and violation messages.
+- Suppressions use ``# trf-ignore: TRFXXX`` on the same line or the line immediately above the flagged construct.
+
+How to add a new TRF rule
+-------------------------
+1. Add a ``[rules.TRFXXX]`` entry to ``utils/check_modeling_structure_rules.toml``.
+2. Fill in ``description``, ``default_enabled``, ``explanation.what_it_does``, ``explanation.why_bad``,
+   ``explanation.bad_example``, and ``explanation.good_example``. Optional model-level exceptions go in
+   ``allowlist_models``.
+3. Implement a new function named ``trfXXX_<descriptive_name>`` with signature
+   ``(tree, file_path, source_lines, violations, rule_id) -> list[Violation]``.
+4. Use ``rule_id`` instead of hardcoding ``"TRFXXX"`` inside the check.
+5. Add or update focused tests in ``tests/repo_utils/test_check_modeling_structure.py``.
+
+CLI usage
+---------
+- ``python utils/check_modeling_structure.py``: check all modeling and modular files.
+- ``python utils/check_modeling_structure.py --changed-only --base-ref origin/main``: only check files changed
+  against a git base ref.
+- ``python utils/check_modeling_structure.py --list-rules``: print all available TRF rules and their default state.
+- ``python utils/check_modeling_structure.py --rule TRF001``: show the detailed documentation for one rule from the
+  TOML file.
+- ``python utils/check_modeling_structure.py --enable-rules TRF003``: enable additional rules on top of the defaults.
+- ``python utils/check_modeling_structure.py --enable-all-trf-rules``: enable every TRF rule, including ones disabled
+  by default.
+- ``python utils/check_modeling_structure.py --github-annotations``: emit GitHub Actions error annotations.
 """
 
 import argparse
@@ -37,15 +71,6 @@ except ModuleNotFoundError:
 
 MODELS_ROOT = Path("src/transformers/models")
 MODELING_PATTERNS = ("modeling_*.py", "modular_*.py")
-TRF001 = "TRF001"
-TRF002 = "TRF002"
-TRF003 = "TRF003"
-TRF004 = "TRF004"
-TRF005 = "TRF005"
-TRF006 = "TRF006"
-TRF007 = "TRF007"
-TRF008 = "TRF008"
-TRF009 = "TRF009"
 RULE_SPECS_PATH = Path(__file__).with_name("check_modeling_structure_rules.toml")
 
 
@@ -110,6 +135,13 @@ def _validate_rule_ids(rule_ids: set[str]) -> set[str]:
     if unknown:
         raise ValueError(f"Unknown rule id(s): {', '.join(unknown)}. Valid rules: {', '.join(sorted(TRF_RULES))}")
     return rule_ids
+
+
+def _rule_id_from_check_name(name: str) -> str | None:
+    prefix, _, _ = name.partition("_")
+    if len(prefix) != 6 or not prefix.startswith("trf") or not prefix[3:].isdigit():
+        return None
+    return prefix.upper()
 
 
 def iter_modeling_files(paths: set[Path] | None = None):
@@ -305,7 +337,7 @@ def _class_methods(class_node: ast.ClassDef) -> dict[str, ast.FunctionDef]:
 
 
 def trf001_check_config_class_consistency(
-    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]
+    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation], rule_id: str
 ) -> list[Violation]:
     class_to_bases = _collect_class_bases(tree)
     for node in tree.body:
@@ -315,7 +347,7 @@ def trf001_check_config_class_consistency(
             continue
         if not _inherits_pretrained_model(node.name, class_to_bases):
             continue
-        if _has_rule_suppression(source_lines, TRF001, node.lineno):
+        if _has_rule_suppression(source_lines, rule_id, node.lineno):
             continue
 
         assignments = _get_class_assignments(node)
@@ -332,8 +364,8 @@ def trf001_check_config_class_consistency(
                 Violation(
                     file_path=file_path,
                     line_number=getattr(config_value, "lineno", node.lineno),
-                    rule_id=TRF001,
-                    message=(f"{TRF001}: {node.name}.config_class is {config_name}, expected {expected}."),
+                    rule_id=rule_id,
+                    message=(f"{rule_id}: {node.name}.config_class is {config_name}, expected {expected}."),
                 )
             )
 
@@ -341,7 +373,7 @@ def trf001_check_config_class_consistency(
 
 
 def trf002_check_base_model_prefix(
-    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]
+    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation], rule_id: str
 ) -> list[Violation]:
     class_to_bases = _collect_class_bases(tree)
     for node in tree.body:
@@ -349,7 +381,7 @@ def trf002_check_base_model_prefix(
             continue
         if not _inherits_pretrained_model(node.name, class_to_bases):
             continue
-        if _has_rule_suppression(source_lines, TRF002, node.lineno):
+        if _has_rule_suppression(source_lines, rule_id, node.lineno):
             continue
 
         assignments = _get_class_assignments(node)
@@ -361,8 +393,8 @@ def trf002_check_base_model_prefix(
                 Violation(
                     file_path=file_path,
                     line_number=getattr(prefix_value, "lineno", node.lineno),
-                    rule_id=TRF002,
-                    message=f"{TRF002}: {node.name}.base_model_prefix should be a string literal.",
+                    rule_id=rule_id,
+                    message=f"{rule_id}: {node.name}.base_model_prefix should be a string literal.",
                 )
             )
             continue
@@ -371,8 +403,8 @@ def trf002_check_base_model_prefix(
                 Violation(
                     file_path=file_path,
                     line_number=getattr(prefix_value, "lineno", node.lineno),
-                    rule_id=TRF002,
-                    message=f"{TRF002}: {node.name}.base_model_prefix should be a non-empty canonical token.",
+                    rule_id=rule_id,
+                    message=f"{rule_id}: {node.name}.base_model_prefix should be a non-empty canonical token.",
                 )
             )
 
@@ -416,16 +448,15 @@ def _has_return_dict_branching(function_node: ast.FunctionDef) -> bool:
 
 
 def trf003_check_return_dict_usage(
-    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]
+    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation], rule_id: str
 ) -> list[Violation]:
-    """TRF003: Detect old return_dict branching pattern; enforce capture_output/can_return_tuple."""
     class_to_bases = _collect_class_bases(tree)
     for node in tree.body:
         if not isinstance(node, ast.ClassDef):
             continue
         if not _inherits_pretrained_model(node.name, class_to_bases):
             continue
-        if _has_rule_suppression(source_lines, TRF003, node.lineno):
+        if _has_rule_suppression(source_lines, rule_id, node.lineno):
             continue
 
         forward_method = _class_methods(node).get("forward")
@@ -440,9 +471,9 @@ def trf003_check_return_dict_usage(
             Violation(
                 file_path=file_path,
                 line_number=forward_method.lineno,
-                rule_id=TRF003,
+                rule_id=rule_id,
                 message=(
-                    f"{TRF003}: {node.name}.forward uses old return_dict branching pattern. "
+                    f"{rule_id}: {node.name}.forward uses old return_dict branching pattern. "
                     "Use @can_return_tuple or @capture_output decorator instead."
                 ),
             )
@@ -452,13 +483,12 @@ def trf003_check_return_dict_usage(
 
 
 def trf004_check_tie_weights_ban(
-    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]
+    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation], rule_id: str
 ) -> list[Violation]:
-    """TRF004: Hard ban on tie_weights overrides. Use _tied_weights_keys instead."""
     for node in tree.body:
         if not isinstance(node, ast.ClassDef):
             continue
-        if _has_rule_suppression(source_lines, TRF004, node.lineno):
+        if _has_rule_suppression(source_lines, rule_id, node.lineno):
             continue
 
         tie_weights = _class_methods(node).get("tie_weights")
@@ -469,9 +499,9 @@ def trf004_check_tie_weights_ban(
             Violation(
                 file_path=file_path,
                 line_number=tie_weights.lineno,
-                rule_id=TRF004,
+                rule_id=rule_id,
                 message=(
-                    f"{TRF004}: {node.name} overrides tie_weights. "
+                    f"{rule_id}: {node.name} overrides tie_weights. "
                     "Use _tied_weights_keys class attribute to declare tied weights instead."
                 ),
             )
@@ -481,12 +511,12 @@ def trf004_check_tie_weights_ban(
 
 
 def trf005_check_no_split_modules_shape(
-    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]
+    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation], rule_id: str
 ) -> list[Violation]:
     for node in tree.body:
         if not isinstance(node, ast.ClassDef):
             continue
-        if _has_rule_suppression(source_lines, TRF005, node.lineno):
+        if _has_rule_suppression(source_lines, rule_id, node.lineno):
             continue
 
         assignments = _get_class_assignments(node)
@@ -501,8 +531,8 @@ def trf005_check_no_split_modules_shape(
                 Violation(
                     file_path=file_path,
                     line_number=getattr(value, "lineno", node.lineno),
-                    rule_id=TRF005,
-                    message=f"{TRF005}: {node.name}._no_split_modules should be a list or tuple of strings.",
+                    rule_id=rule_id,
+                    message=f"{rule_id}: {node.name}._no_split_modules should be a list or tuple of strings.",
                 )
             )
             continue
@@ -515,8 +545,8 @@ def trf005_check_no_split_modules_shape(
                 Violation(
                     file_path=file_path,
                     line_number=getattr(value, "lineno", node.lineno),
-                    rule_id=TRF005,
-                    message=f"{TRF005}: {node.name}._no_split_modules should contain non-empty strings only.",
+                    rule_id=rule_id,
+                    message=f"{rule_id}: {node.name}._no_split_modules should contain non-empty strings only.",
                 )
             )
 
@@ -524,12 +554,12 @@ def trf005_check_no_split_modules_shape(
 
 
 def trf006_check_cache_argument_usage(
-    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]
+    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation], rule_id: str
 ) -> list[Violation]:
     for node in tree.body:
         if not isinstance(node, ast.ClassDef):
             continue
-        if _has_rule_suppression(source_lines, TRF006, node.lineno):
+        if _has_rule_suppression(source_lines, rule_id, node.lineno):
             continue
 
         forward_method = _class_methods(node).get("forward")
@@ -551,9 +581,9 @@ def trf006_check_cache_argument_usage(
             Violation(
                 file_path=file_path,
                 line_number=forward_method.lineno,
-                rule_id=TRF006,
+                rule_id=rule_id,
                 message=(
-                    f"{TRF006}: {node.name}.forward exposes past_key_values/use_cache but does not reference them."
+                    f"{rule_id}: {node.name}.forward exposes past_key_values/use_cache but does not reference them."
                 ),
             )
         )
@@ -562,7 +592,7 @@ def trf006_check_cache_argument_usage(
 
 
 def trf009_check_single_file_policy_imports(
-    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]
+    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation], rule_id: str
 ) -> list[Violation]:
     if not file_path.name.startswith("modeling_"):
         return violations
@@ -577,7 +607,7 @@ def trf009_check_single_file_policy_imports(
         if isinstance(node, ast.ImportFrom):
             if node.module is None:
                 continue
-            if _has_rule_suppression(source_lines, TRF009, node.lineno):
+            if _has_rule_suppression(source_lines, rule_id, node.lineno):
                 continue
 
             imported_model = None
@@ -596,9 +626,9 @@ def trf009_check_single_file_policy_imports(
                 Violation(
                     file_path=file_path,
                     line_number=node.lineno,
-                    rule_id=TRF009,
+                    rule_id=rule_id,
                     message=(
-                        f"{TRF009}: {file_path.name} imports implementation code from "
+                        f"{rule_id}: {file_path.name} imports implementation code from "
                         f"`{imported_model}`. Keep model logic local to a single modeling file."
                     ),
                 )
@@ -606,7 +636,7 @@ def trf009_check_single_file_policy_imports(
             continue
 
         if isinstance(node, ast.Import):
-            if _has_rule_suppression(source_lines, TRF009, node.lineno):
+            if _has_rule_suppression(source_lines, rule_id, node.lineno):
                 continue
 
             for alias in node.names:
@@ -620,9 +650,9 @@ def trf009_check_single_file_policy_imports(
                     Violation(
                         file_path=file_path,
                         line_number=node.lineno,
-                        rule_id=TRF009,
+                        rule_id=rule_id,
                         message=(
-                            f"{TRF009}: {file_path.name} imports implementation code from "
+                            f"{rule_id}: {file_path.name} imports implementation code from "
                             f"`{imported_model}`. Keep model logic local to a single modeling file."
                         ),
                     )
@@ -632,7 +662,7 @@ def trf009_check_single_file_policy_imports(
 
 
 def trf007_check_post_init_order(
-    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]
+    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation], rule_id: str
 ) -> list[Violation]:
     class_to_bases = _collect_class_bases(tree)
     for node in tree.body:
@@ -640,7 +670,7 @@ def trf007_check_post_init_order(
             continue
         if not _inherits_pretrained_model(node.name, class_to_bases):
             continue
-        if _has_rule_suppression(source_lines, TRF007, node.lineno):
+        if _has_rule_suppression(source_lines, rule_id, node.lineno):
             continue
 
         init_method = _class_methods(node).get("__init__")
@@ -671,8 +701,8 @@ def trf007_check_post_init_order(
             Violation(
                 file_path=file_path,
                 line_number=init_method.lineno,
-                rule_id=TRF007,
-                message=f"{TRF007}: {node.name} assigns self.* after self.post_init() in __init__.",
+                rule_id=rule_id,
+                message=f"{rule_id}: {node.name} assigns self.* after self.post_init() in __init__.",
             )
         )
 
@@ -680,7 +710,7 @@ def trf007_check_post_init_order(
 
 
 def trf008_check_doc_decorator_usage(
-    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]
+    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation], rule_id: str
 ) -> list[Violation]:
     class_to_bases = _collect_class_bases(tree)
     for node in tree.body:
@@ -688,7 +718,7 @@ def trf008_check_doc_decorator_usage(
             continue
         if not _inherits_pretrained_model(node.name, class_to_bases):
             continue
-        if _has_rule_suppression(source_lines, TRF008, node.lineno):
+        if _has_rule_suppression(source_lines, rule_id, node.lineno):
             continue
 
         for decorator in node.decorator_list:
@@ -709,8 +739,8 @@ def trf008_check_doc_decorator_usage(
                 Violation(
                     file_path=file_path,
                     line_number=getattr(decorator, "lineno", node.lineno),
-                    rule_id=TRF008,
-                    message=f"{TRF008}: {node.name} uses add_start_docstrings without non-empty docstring arguments.",
+                    rule_id=rule_id,
+                    message=f"{rule_id}: {node.name} uses add_start_docstrings without non-empty docstring arguments.",
                 )
             )
             break
@@ -748,18 +778,28 @@ def get_changed_modeling_files(base_ref: str) -> set[Path]:
 # Auto-discover check functions by convention: any function named `trfXXX_*` is
 # registered as the checker for rule TRFXXX. To add a new rule, just define a
 # function following this naming convention with the standard signature:
-#   (tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]) -> list[Violation]
-def _build_rule_checks() -> dict[str, Callable[[ast.Module, Path, list[str], list[Violation]], list[Violation]]]:
-    checks: dict[str, Callable[[ast.Module, Path, list[str], list[Violation]], list[Violation]]] = {}
+#   (tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation], rule_id: str)
+#   -> list[Violation]
+def _build_rule_checks() -> dict[str, Callable[[ast.Module, Path, list[str], list[Violation], str], list[Violation]]]:
+    checks: dict[str, Callable[[ast.Module, Path, list[str], list[Violation], str], list[Violation]]] = {}
     for name, obj in globals().items():
-        if callable(obj) and name.startswith("trf") and "_" in name:
-            rule_id = name.split("_", 1)[0].upper()
-            if rule_id in TRF_RULE_SPECS:
-                checks[rule_id] = obj
+        if not callable(obj):
+            continue
+        rule_id = _rule_id_from_check_name(name)
+        if rule_id is None:
+            continue
+        if rule_id not in TRF_RULE_SPECS:
+            raise ValueError(f"Missing rule spec for discovered check function {name} ({rule_id}).")
+        checks[rule_id] = obj
+
+    missing_checks = sorted(set(TRF_RULE_SPECS) - set(checks))
+    if missing_checks:
+        raise ValueError(f"Missing check function(s) for rule id(s): {', '.join(missing_checks)}")
     return dict(sorted(checks.items()))
 
 
 TRF_RULE_CHECKS = _build_rule_checks()
+globals().update({rule_id: rule_id for rule_id in TRF_RULE_CHECKS})
 
 
 def analyze_file(file_path: Path, text: str, enabled_rules: set[str] | None = None) -> list[Violation]:
@@ -776,7 +816,7 @@ def analyze_file(file_path: Path, text: str, enabled_rules: set[str] | None = No
 
     for rule_id, check_fn in TRF_RULE_CHECKS.items():
         if rule_id in enabled_rules:
-            violations = check_fn(tree, file_path, source_lines, violations)
+            violations = check_fn(tree, file_path, source_lines, violations, rule_id)
 
     return [
         violation
