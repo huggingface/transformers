@@ -35,10 +35,16 @@ from .configuration_pp_ocrv5_mobile_det import PPOCRV5MobileDetConfig
 
 @auto_docstring
 class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
+    """
+    Base class for all PPOCRV5 Server Det pre-trained models. Handles model initialization,
+    configuration, and loading of pre-trained weights, following the Transformers library conventions.
+    """
+
     config: PPOCRV5MobileDetConfig
-    base_model_prefix = "model"
+    base_model_prefix = "pp_ocrv5_mobile_det"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
+    _can_compile_fullgraph = True
 
 
 class PPOCRV5MobileDetSqueezeExcitationModule(nn.Module):
@@ -234,7 +240,8 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    PP-OCRv5_mobile_det for text detection tasks.
+    PPOCRV5 Server Det model for object (text) detection tasks. Wraps the core PPOCRV5MobileDetModel
+    and returns outputs compatible with the Transformers object detection API.
     """
 )
 class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
@@ -244,20 +251,21 @@ class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
         super().__init__(config)
         self.model = PPOCRV5MobileDetModel(config)
         self.head = PPOCRV5MobileDetHead(config)
-
         self.post_init()
 
     @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
         outputs = self.model(pixel_values, **kwargs)
-        hidden_states = self.head(outputs.last_hidden_state)
+        logits = self.head(outputs.last_hidden_state)
 
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=outputs.hidden_states)
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=logits,
+            hidden_states=outputs.hidden_states,
+        )
 
 
 __all__ = ["PPOCRV5MobileDetForObjectDetection", "PPOCRV5MobileDetModel", "PPOCRV5MobileDetPreTrainedModel"]

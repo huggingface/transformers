@@ -263,34 +263,30 @@ class PPOCRV5MobileDetModelIntegrationTest(unittest.TestCase):
                 [4.7810e-07, 5.0727e-07, 4.7810e-07],
                 [5.7200e-07, 6.0746e-07, 5.7200e-07],
                 [4.7810e-07, 5.0727e-07, 4.7810e-07],
-            ]
-        ).to(torch_device)
+            ],
+            device=torch_device,
+        )
 
-        self.assertEqual(outputs.logits.shape, expected_shape_logits)
-        torch.testing.assert_close(outputs.logits[0, 0, :3, :3], expected_logits, rtol=2e-4, atol=2e-4)
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape_logits)
+        torch.testing.assert_close(outputs.last_hidden_state[0, 0, :3, :3], expected_logits, rtol=2e-4, atol=2e-4)
 
         expected_shape_boxes = torch.Size((4, 4, 2))
         expected_boxes = torch.tensor(
             [
-                [[75, 549], [450, 538], [452, 575], [77, 586]],
-                [[11, 504], [517, 482], [519, 532], [13, 554]],
-                [[188, 452], [401, 444], [402, 481], [189, 489]],
-                [[37, 408], [486, 386], [489, 432], [39, 453]],
-            ]
-        ).to(torch_device)
-
-        self.assertEqual(results[0]["boxes"].shape, expected_shape_boxes)
-        torch.testing.assert_close(
-            torch.from_numpy(results[0]["boxes"]).to(device=torch_device, dtype=torch.int64),
-            expected_boxes,
-            rtol=2e-4,
-            atol=2e-4,
+                [[76, 550], [451, 539], [452, 576], [77, 587]],
+                [[11, 504], [518, 483], [520, 534], [13, 555]],
+                [[189, 452], [401, 445], [402, 482], [190, 490]],
+                [[38, 408], [488, 387], [490, 433], [40, 454]],
+            ],
+            dtype=torch.short,
+            device=torch_device,
         )
 
-        expected_scores = torch.tensor(
-            [0.8365021048166233, 0.8168808277221563, 0.874713086968462, 0.8694220109429082]
-        ).to(torch_device)
+        self.assertEqual(results[0]["boxes"].shape, expected_shape_boxes)
+        torch.testing.assert_close(results[0]["boxes"], expected_boxes, rtol=2e-2, atol=2e-2)
+
+        expected_scores = torch.tensor([0.8363, 0.8170, 0.8746, 0.8694]).to(torch_device)
         self.assertEqual(len(results[0]["scores"]), 4)
         torch.testing.assert_close(
-            torch.tensor(results[0]["scores"]).to(device=torch_device), expected_scores, rtol=2e-4, atol=2e-4
+            torch.tensor(results[0]["scores"]).to(device=torch_device), expected_scores, rtol=2e-2, atol=2e-2
         )

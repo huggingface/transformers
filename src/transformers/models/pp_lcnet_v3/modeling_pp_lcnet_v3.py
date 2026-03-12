@@ -23,13 +23,13 @@ import torch.nn as nn
 from torch import Tensor
 
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import merge_with_config_defaults
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_pp_lcnet_v3 import PPLCNetV3Config
 
@@ -325,6 +325,7 @@ class PPLCNetV3Backbone(BackboneMixin, PPLCNetV3PreTrainedModel):
 
         self.post_init()
 
+    @filter_output_hidden_states
     @can_return_tuple
     @auto_docstring
     def forward(

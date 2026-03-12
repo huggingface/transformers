@@ -24,7 +24,7 @@ import torch.nn as nn
 from torch import Tensor
 
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
@@ -255,6 +255,7 @@ class PPLCNetBackbone(BackboneMixin, PPLCNetPreTrainedModel):
 
         self.post_init()
 
+    @filter_output_hidden_states
     @can_return_tuple
     @auto_docstring
     def forward(

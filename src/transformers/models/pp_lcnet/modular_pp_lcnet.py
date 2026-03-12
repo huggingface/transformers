@@ -20,7 +20,7 @@ import torch.nn as nn
 import torchvision.transforms.v2.functional as tvF
 
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneConfigMixin, BackboneMixin
+from ...backbone_utils import BackboneConfigMixin, BackboneMixin, filter_output_hidden_states
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
@@ -427,6 +427,7 @@ class PPLCNetBackbone(BackboneMixin, PPLCNetPreTrainedModel):
 
         self.post_init()
 
+    @filter_output_hidden_states
     @can_return_tuple
     @auto_docstring
     def forward(
