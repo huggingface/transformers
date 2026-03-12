@@ -2,7 +2,6 @@
 # Install transformers, Uncomment line below to recreate the problem.
 # !pip install transformers torch datasets -q
 
-
 import torch
 import numpy as np
 from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
