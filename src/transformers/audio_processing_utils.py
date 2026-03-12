@@ -21,42 +21,48 @@ from huggingface_hub.dataclasses import validate_typed_dict
 from .audio_processing_base import AudioProcessingMixin
 from .audio_utils import AudioInput, SpectrogramConfig, make_list_of_audio
 from .feature_extraction_utils import BatchFeature
+from .tokenization_utils_base import PaddingStrategy, TruncationStrategy
 from .processing_utils import AudioKwargs
 from .utils import PaddingStrategy, TensorType, logging
+
+from typing import TypedDict
 
 
 logger = logging.get_logger(__name__)
 
 
-class AudioProcessingKwargs(AudioKwargs, total=False):
-    """Extended keyword arguments for the audio processing pipeline."""
-
-    do_pad_values: bool | None
+class AudioKwargs(TypedDict, total=False):
+    sampling_rate: int | None
     spectrogram_config: dict | SpectrogramConfig | None
     do_extract_spectrogram: bool | None
-    do_pad_features: bool | None
     do_resample: bool | None
-    generator: np.random.Generator | None
+    return_tensors: str | TensorType | None
+    padding: bool | str | PaddingStrategy | None
+    max_length: int | None
+    truncation: bool | str | TruncationStrategy | None
+    pad_to_multiple_of: int | None
 
 
 class BaseAudioProcessor(AudioProcessingMixin):
     model_input_names = ["audio"]
-    valid_kwargs = AudioProcessingKwargs
+    valid_kwargs = AudioKwargs
     unused_kwargs = None
-    feature_size = 1
+
+    # global defaults
+    sample_rate: int = None
+    force_mono: bool = None
+
+    # padding defaults
     padding = True
     padding_side = "right"
     padding_value = 0.0
     max_length = None
     truncation = None
-    return_attention_mask = True
+    pad_to_multiple_of = None
 
-    sample_rate: int = None
-    force_mono: bool = None
-
+    return_attention_mask = True  # TODO: we should either get a more appropriate name, either always return input mask
     spectrogram_config = None
     do_extract_spectrogram = None
-    pad_to_multiple_of = None
 
     def __init__(
         self,
@@ -94,10 +100,10 @@ class BaseAudioProcessor(AudioProcessingMixin):
             if not hasattr(self, "mel_filters"):
                 self.mel_filters = self._mel_filter_bank(self.spectrogram_config)
 
-    def __call__(self, audio: AudioInput, *args, **kwargs: Unpack[AudioProcessingKwargs]) -> BatchFeature:
+    def __call__(self, audio: AudioInput, *args, **kwargs: Unpack[AudioKwargs]) -> BatchFeature:
         return self.preprocess(audio, *args, **kwargs)
 
-    def preprocess(self, audio: AudioInput, *args, **kwargs: Unpack[AudioProcessingKwargs]) -> BatchFeature:
+    def preprocess(self, audio: AudioInput, *args, **kwargs: Unpack[AudioKwargs]) -> BatchFeature:
         """
         Preprocess an audio or a batch of audio.
         """
@@ -121,13 +127,54 @@ class BaseAudioProcessor(AudioProcessingMixin):
         audio: AudioInput,
         *args,
         sample_rate: int | None = None,
-        **kwargs: Unpack[AudioProcessingKwargs],
+        **kwargs: Unpack[AudioKwargs],
     ) -> BatchFeature:
         audio = self._prepare_audio_like_inputs(audio=audio, sample_rate=sample_rate)
         return self._preprocess(audio, *args, **kwargs)
 
-    def _preprocess(self, *args, **kwargs):
+    def _to_batch(self, audio):
+        """Stack a list of audio arrays/tensors into a batch. Implemented by backend subclasses."""
         raise NotImplementedError
+
+    def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
+        """Build an attention mask from audio_ranges. Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _preprocess(
+        self,
+        audio,
+        padding,
+        max_length,
+        truncation,
+        pad_to_multiple_of,
+        return_tensors,
+        spectrogram_config=None,
+        do_extract_spectrogram=None,
+        do_batch_spectrogram=True,
+        **kwargs,
+    ) -> BatchFeature:
+        # pad and truncate
+        audio, audio_ranges = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
+        padded_length = audio[0].shape[-1]
+
+        if do_extract_spectrogram:
+            audio = self._to_batch(audio) if do_batch_spectrogram else audio
+            feature = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config)
+            output = {"audio_features": feature}
+
+            if self.return_attention_mask:
+                output["audio_features_mask"] = self._get_mask(
+                    audio_ranges, padded_length, do_extract_spectrogram=True, spectrogram_config=spectrogram_config
+                )
+        else:
+            output = {"audio_values": audio}
+
+            if self.return_attention_mask:
+                output["audio_values_mask"] = self._get_mask(
+                    audio_ranges, padded_length, do_extract_spectrogram=False, spectrogram_config=None
+                )
+
+        return BatchFeature(data=output, tensor_type=return_tensors)
 
     def _prepare_audio_like_inputs(self, audio: AudioInput, *args, sample_rate: int | None = None, **kwargs) -> list:
         """
@@ -192,7 +239,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         max_length: int | None = None,
         truncation: bool = False,
         pad_to_multiple_of: int | None = None,
-    ):
+    ) -> tuple[list, list[tuple[int, int]]]:
         padding_strategy = self._get_padding_strategies(padding=padding, max_length=max_length)
 
         if truncation:
@@ -211,10 +258,20 @@ class BaseAudioProcessor(AudioProcessingMixin):
         if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
             max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
 
+        actual_lengths = [audio_el.shape[-1] for audio_el in audio]
+
         if padding_strategy != PaddingStrategy.DO_NOT_PAD:
             audio = [self._pad_single(audio_el, max_length=max_length) for audio_el in audio]
 
-        return audio
+        audio_ranges = []
+        for i, length in enumerate(actual_lengths):
+            padded_length = audio[i].shape[-1]
+            if self.padding_side == "left":
+                audio_ranges.append((padded_length - length, padded_length))
+            else:
+                audio_ranges.append((0, length))
+
+        return audio, audio_ranges
 
     def _truncate_single(self, audio_el, max_length: int):
         """Truncate a single audio element to max_length along the time axis."""
@@ -296,6 +353,23 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
     def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):
         raise NotImplementedError
+
+    def _get_features_lengths(self, audio_lengths, spectrogram_config, include_center_frame=False):
+        """
+        Convert raw audio sample lengths to the number of feature frames after spectrogram extraction.
+
+        By default returns `audio_lengths // hop_length`, which gives the number of valid (non-padding)
+        feature frames for centered STFT. When `include_center_frame=True` and the STFT uses centering,
+        adds 1 to account for the extra frame produced by centered STFT.
+
+        Override this method in subclasses that use non-standard STFT configurations (e.g., unfold-based
+        or non-centered STFT).
+        """
+        hop_length = spectrogram_config.stft_config.hop_length
+        lengths = audio_lengths // hop_length
+        if include_center_frame and spectrogram_config.stft_config.center:
+            lengths = lengths + 1
+        return lengths
 
     def _get_padding_strategies(self, padding=False, max_length=None):
         """Find the correct padding strategy."""
