@@ -78,6 +78,7 @@ class StftConfig:
     onesided: bool | None = None
     pad: int = 0
     periodic: bool = True
+    left_align_fft: bool = False
 
     def to_dict(self) -> dict:
         return {f.name: getattr(self, f.name) for f in fields(self) if getattr(self, f.name) is not None}
@@ -104,6 +105,7 @@ class MelScaleConfig:
     triangularize_in_mel_space: bool = False
     frequency_bin_mode: str = "rfft"
     computation_dtype: str | None = None
+    bands_to_zero: int = 0
 
     def to_dict(self) -> dict:
         return {f.name: getattr(self, f.name) for f in fields(self) if getattr(self, f.name) is not None}
@@ -127,6 +129,7 @@ class SpectrogramConfig:
     remove_dc_offset: bool = False
     mel_floor: float = 1e-10
     waveform_scale: float | None = None
+    computation_dtype: str | None = None
 
     def __getitem__(self, key):
         if hasattr(self, key):

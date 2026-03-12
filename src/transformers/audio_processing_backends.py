@@ -262,14 +262,11 @@ class TorchAudioBackend(BaseAudioProcessor):
         """Compute the (power) spectrogram via STFT using the torch backend."""
 
         stft_cfg = spectrogram_config.stft_config
-
-        # if spectrogram_config.preemphasis is not None:
-        #     audio_ranges = kwargs.get("audio_ranges", None)
-        #     if audio_ranges is not None:
-        #         device = waveform.device
-        #         timemask = torch.arange(waveform.shape[1], device=device).unsqueeze(0)
-        #         timemask = timemask < audio_ranges.unsqueeze(1)
-        #         waveform = waveform.masked_fill(~timemask, 0.0)
+        computation_dtype = (
+            getattr(torch, spectrogram_config.computation_dtype)
+            if spectrogram_config.computation_dtype
+            else None
+        )
 
         magnitudes = _torch_spec._extract_spectrogram(
             audio,
@@ -287,6 +284,8 @@ class TorchAudioBackend(BaseAudioProcessor):
             periodic=stft_cfg.periodic,
             preemphasis=spectrogram_config.preemphasis,
             remove_dc_offset=spectrogram_config.remove_dc_offset,
+            computation_dtype=computation_dtype,
+            left_align_fft=stft_cfg.left_align_fft,
         )
 
         return magnitudes
@@ -360,7 +359,7 @@ class TorchAudioBackend(BaseAudioProcessor):
         stft_cfg = spectrogram_config.stft_config
         mel_cfg = spectrogram_config.mel_scale_config
         computation_dtype = getattr(torch, mel_cfg.computation_dtype) if mel_cfg.computation_dtype else None
-        return _torch_spec.mel_filter_bank_torch(
+        mel_filters = _torch_spec.mel_filter_bank_torch(
             num_frequency_bins=1 + stft_cfg.n_fft // 2,
             num_mel_filters=mel_cfg.n_mels,
             min_frequency=mel_cfg.f_min,
@@ -371,7 +370,14 @@ class TorchAudioBackend(BaseAudioProcessor):
             triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
             frequency_bin_mode=mel_cfg.frequency_bin_mode,
             computation_dtype=computation_dtype,
+            bands_to_zero=mel_cfg.bands_to_zero,
         )
+        # When computation_dtype is set only on the mel config (not on the
+        # spectrogram config), the filters were computed in high precision for
+        # accuracy but the spectrogram will be in the default dtype — cast back.
+        if computation_dtype is not None and not spectrogram_config.computation_dtype:
+            mel_filters = mel_filters.to(torch.get_default_dtype())
+        return mel_filters
 
     def _to_batch(self, audio):
         return torch.stack(audio)
