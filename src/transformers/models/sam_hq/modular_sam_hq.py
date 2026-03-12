@@ -40,17 +40,17 @@ from ..sam.modeling_sam import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
 class SamHQPromptEncoderConfig(SamPromptEncoderConfig):
     pass
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
 class SamHQVisionConfig(SamVisionConfig):
     pass
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
 class SamHQMaskDecoderConfig(SamMaskDecoderConfig):
     r"""
     vit_dim (`int`, *optional*, defaults to 768):
@@ -76,7 +76,7 @@ class SamHQMaskDecoderConfig(SamMaskDecoderConfig):
         self.vit_dim = vit_dim
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
 class SamHQConfig(SamConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `SamHQPromptEncoderConfig`], *optional*):

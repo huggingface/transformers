@@ -21,7 +21,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="ibm-fms/FalconH1-9.8b-2.2T-hf")
+@auto_docstring(checkpoint="tiiuae/Falcon-H1-1.5B-Deep-Instruct")
 class FalconH1Config(PreTrainedConfig):
     r"""
     num_logits_to_keep (`int` or `None`, *optional*, defaults to 1):
