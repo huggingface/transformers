@@ -102,6 +102,7 @@ class MelScaleConfig:
     mel_scale: str = "htk"
     norm: str | None = None
     triangularize_in_mel_space: bool = False
+    frequency_bin_mode: str = "rfft"
 
     def to_dict(self) -> dict:
         return {f.name: getattr(self, f.name) for f in fields(self) if getattr(self, f.name) is not None}
