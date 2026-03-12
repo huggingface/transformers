@@ -71,18 +71,18 @@ class CompileableContextVar:
     def get(self):
         # Always check the current dynamo state dynamically! See the note below
         #
-        # NOTE: Local attributes/flags may be interpreted once during tracing
-        #       and effectively treated as constant across compiled frames. If we
-        #       cached such a flag, eager frames could incorrectly fall back to the
-        #       shared global value, breaking visibility between eager wrappers and
-        #       compiled hooks
+        # NOTE: We can move between compiled and eager regions (e.g. after
+        #       graph breaks). A cached flag would force the choice on a past
+        #       state, so later eager accesses could incorrectly use the shared global
+        #       value (`global_var`) instead of the real local value (`context_var`)
         if is_torchdynamo_compiling():
             return self.global_var
         return self.context_var.get()
 
     def set(self, value):
+        # Always set `global_var` to ensure consistent states between eager and compiled regions
+        # See the note above --> sometimes switches between compile/eager can happen
         self.global_var = value
-        # Same, check the current state dynamically rather than relying on cached attributes
         if is_torchdynamo_compiling():
             return None
         return self.context_var.set(value)
