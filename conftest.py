@@ -27,9 +27,11 @@ import pytest
 from transformers.testing_utils import (
     HfDoctestModule,
     HfDocTestParser,
+    enable_network_debug_report_from_env,
     is_torch_available,
     patch_testing_methods_to_collect_info,
     patch_torch_compile_force_graph,
+    write_network_debug_report_terminal_summary,
 )
 from transformers.utils import enable_tf32
 
@@ -98,6 +100,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "tensor_parallel_ci: mark test for tensor parallel CI validation")
 
     os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "true"
+    enable_network_debug_report_from_env()
 
 
 def pytest_collection_modifyitems(items):
@@ -118,6 +121,7 @@ def pytest_terminal_summary(terminalreporter):
     make_reports = terminalreporter.config.getoption("--make-reports")
     if make_reports:
         pytest_terminal_summary_main(terminalreporter, id=make_reports)
+    write_network_debug_report_terminal_summary(terminalreporter)
 
 
 def pytest_sessionfinish(session, exitstatus):
