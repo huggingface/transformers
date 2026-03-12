@@ -363,18 +363,14 @@ def add_pipeline_parallel_hooks(
     partitions = partition_units(units, pp_size)
     local_unit_names = set(partitions[pp_rank]) if pp_rank < len(partitions) else set()
 
-    local_indices = [i for i, (name, _, _, _) in enumerate(units) if name in local_unit_names]
-    if not local_indices:
-        return model
-    first_local, last_local = local_indices[0], local_indices[-1]
-
-    for i, (name, module, input_names, output_names) in enumerate(units):
+    local_idx = 0
+    for name, module, input_names, output_names in units:
         if name not in local_unit_names:
             parent_path, child_name = name.rsplit(".", 1) if "." in name else ("", name)
             parent = model.get_submodule(parent_path) if parent_path else model
             setattr(parent, child_name, PipelineParallelSkipped())
             continue
-        if i == first_local:
+        if local_idx == 0:
             module.register_forward_pre_hook(
                 functools.partial(
                     _recv_pre_hook,
@@ -383,7 +379,7 @@ def add_pipeline_parallel_hooks(
                 ),
                 with_kwargs=True,
             )
-        if i == last_local:
+        if local_idx == len(local_unit_names) - 1:
             module.register_forward_hook(
                 functools.partial(
                     _send_post_hook,
