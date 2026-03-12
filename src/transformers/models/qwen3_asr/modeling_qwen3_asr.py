@@ -18,19 +18,19 @@ from transformers.cache_utils import Cache, DynamicCache
 from transformers.generation import GenerationMixin
 from transformers.masking_utils import create_causal_mask
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
+from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast
-from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from transformers.modeling_utils import PreTrainedModel
 from transformers.processing_utils import Unpack
 from transformers.utils import auto_docstring, can_return_tuple
-from transformers.utils.deprecation import deprecate_kwarg
-from transformers.utils.generic import TransformersKwargs, check_model_inputs
+from transformers.utils.generic import check_model_inputs
 
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...utils.generic import is_flash_attention_requested, maybe_autocast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...utils.generic import TransformersKwargs, is_flash_attention_requested, maybe_autocast
 from .configuration_qwen3_asr import (
     Qwen3ASRAudioEncoderConfig,
     Qwen3ASRConfig,
@@ -58,39 +58,6 @@ class Qwen3ASRTextRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-@use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -131,11 +98,44 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+@use_kernel_func_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
 @use_kernelized_func(apply_rotary_pos_emb)
 class Qwen3ASRTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Qwen3ASRConfig, layer_idx: int):
+    def __init__(self, config, layer_idx):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -157,12 +157,14 @@ class Qwen3ASRTextAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.q_norm = Qwen3ASRTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
-        self.k_norm = Qwen3ASRTextRMSNorm(
+        self.q_norm = Qwen3ASRThinkerTextRMSNorm(
+            self.head_dim, eps=config.rms_norm_eps
+        )  # unlike olmo, only on the head dim!
+        self.k_norm = Qwen3ASRThinkerTextRMSNorm(
             self.head_dim, eps=config.rms_norm_eps
         )  # thus post q_norm does not need reshape
+        self.sliding_window = None
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -187,9 +189,9 @@ class Qwen3ASRTextAttention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -199,6 +201,7 @@ class Qwen3ASRTextAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            sliding_window=self.sliding_window,  # diff with Llama
             **kwargs,
         )
 
@@ -224,15 +227,13 @@ class Qwen3ASRTextMLP(nn.Module):
 
 
 class Qwen3ASRThinkerTextDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Qwen3ASRConfig, layer_idx: int):
+    def __init__(self, config: Qwen3ASRTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-
-        self.self_attn = Qwen3ASRThinkerTextAttention(config=config, layer_idx=layer_idx)
-
-        self.mlp = Qwen3ASRThinkerTextMLP(config)
-        self.input_layernorm = Qwen3ASRThinkerTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Qwen3ASRThinkerTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = Qwen3ASRTextAttention(config=config, layer_idx=layer_idx)
+        self.mlp = Qwen3ASRTextMLP(config)
+        self.input_layernorm = Qwen3ASRTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Qwen3ASRTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -274,7 +275,7 @@ class Qwen3ASRPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Qwen3ASRThinkerTextDecoderLayer"]
+    _no_split_modules = ["Qwen3ASRAudioEncoderLayer", "Qwen3ASRThinkerTextDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -285,6 +286,7 @@ class Qwen3ASRPreTrainedModel(PreTrainedModel):
     }
 
 
+# TODO def rename and probably change because generated depends on MoeCausalLMOutputWithPast
 @dataclass
 class Qwen3ASRThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     r"""
@@ -298,115 +300,6 @@ class Qwen3ASRThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
 
 class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3ASRPreTrainedModel):
     input_modalities = ("audio", "text")
-
-    def _prepare_4d_causal_attention_mask_with_cache_position(
-        self,
-        attention_mask: torch.Tensor,
-        sequence_length: int,
-        target_length: int,
-        dtype: torch.dtype,
-        cache_position: torch.Tensor,
-        batch_size: int,
-        config=None,
-        past_key_values=None,
-        device: torch.device = None,
-        min_dtype: float | None = None,
-    ):
-        """
-        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
-
-        Args:
-            attention_mask (`torch.Tensor`):
-                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape `(batch_size, 1, query_length, key_value_length)`.
-            sequence_length (`int`):
-                The sequence length being processed.
-            target_length (`int`):
-                The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
-            dtype (`torch.dtype`):
-                The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to place the 4D attention mask on.
-            min_dtype (`float`):
-                The minimum value representable with the dtype `dtype`.
-            cache_position (`torch.Tensor`):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            batch_size (`torch.Tensor`):
-                Batch size.
-        """
-        ###
-        device = device or attention_mask.device
-        min_dtype = min_dtype if min_dtype is not None else torch.finfo(dtype).min
-        ###
-        if attention_mask is not None and attention_mask.dim() == 4:
-            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-            causal_mask = attention_mask
-        else:
-            causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
-            )
-            if sequence_length != 1:
-                causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
-            if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
-                padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
-
-        return causal_mask
-
-    def get_llm_pos_ids_for_vision(
-        self,
-        start_idx: int,
-        vision_idx: int,
-        spatial_merge_size: int,
-        t_index: list[torch.Tensor],
-        grid_hs: list[torch.Tensor],
-        grid_ws: list[torch.Tensor],
-    ):
-        raise ValueError("Not needed.")
-
-    def get_chunked_index(
-        self, token_indices: torch.Tensor, tokens_per_chunk: int, remove_index: int
-    ) -> list[tuple[int, int]]:
-        """
-        Splits token index list into chunks based on token value ranges.
-
-        Given a list of token indices, returns a list of (start, end) index tuples representing
-        slices of the list where the token values fall within successive ranges of `t_ntoken_per_chunk`.
-
-        For example, if `t_ntoken_per_chunk` is 1000, the function will create chunks such that:
-        - the first chunk contains token values < 1000,
-        - the second chunk contains values >= 1000 and < 2000, and so on.
-
-        Parameters:
-            token_indices (`torch.Tensor` of shape `(seq_len, )`): A monotonically increasing list of
-                                token index values.
-            t_ntoken_per_chunk (`int`): Number of tokens per chunk (used as the chunk size threshold).
-            remove_index (`int`) An index id to subtract from `token_indices` before chunking
-
-        Returns:
-            `list[tuple[int, int]]`: A list of tuples, each representing the start (inclusive)
-                                and end (exclusive) indices of a chunk in `token_indices`.
-        """
-
-        def _iter():
-            i, start_idx = 0, 0  # skip bos token
-            current_chunk = 1
-            while i < len(token_indices):  # skip eos token
-                if token_indices[i] - remove_index >= current_chunk * tokens_per_chunk:
-                    yield (start_idx, i)
-                    start_idx = i
-                    current_chunk += 1
-                i += 1
-            yield (start_idx, len(token_indices))
-
-        return list(_iter())
 
     def get_rope_index(
         self,
@@ -443,6 +336,27 @@ class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3ASRPreTrainedModel):
         mrope_position_deltas = max_position_ids + 1 - torch.sum(attention_mask, dim=-1, keepdim=True)
 
         return position_ids, mrope_position_deltas
+
+
+class SinusoidsPositionEmbedding(nn.Module):
+    def __init__(self, length, channels, max_timescale=10000):
+        super().__init__()
+        self.length = length
+        self.channels = channels
+        self.max_timescale = max_timescale
+        if channels % 2 != 0:
+            raise ValueError("SinusoidsPositionEmbedding needs even channels input")
+        log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
+        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2).float())
+        scaled_time = torch.arange(length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
+        self.register_buffer(
+            "positional_embedding",
+            torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1),
+            persistent=False,
+        )
+
+    def forward(self, seqlen: int):
+        return self.positional_embedding[:seqlen, :]
 
 
 class Qwen3ASRAudioAttention(nn.Module):
@@ -569,27 +483,6 @@ class Qwen3ASRAudioEncoderLayer(GradientCheckpointingLayer):
         outputs = (hidden_states,)
 
         return outputs
-
-
-class SinusoidsPositionEmbedding(nn.Module):
-    def __init__(self, length, channels, max_timescale=10000):
-        super().__init__()
-        self.length = length
-        self.channels = channels
-        self.max_timescale = max_timescale
-        if channels % 2 != 0:
-            raise ValueError("SinusoidsPositionEmbedding needs even channels input")
-        log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
-        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2).float())
-        scaled_time = torch.arange(length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
-        self.register_buffer(
-            "positional_embedding",
-            torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1),
-            persistent=False,
-        )
-
-    def forward(self, seqlen: int):
-        return self.positional_embedding[:seqlen, :]
 
 
 def _get_feat_extract_output_lengths(input_lengths):
@@ -794,19 +687,21 @@ class Qwen3ASRAudioEncoder(Qwen3ASRPreTrainedModel):
         """
         Computes the output length of the convolutional layers and the output length of the audio encoder
         """
-        raise ValueError("Not needed.")
+        input_lengths = (input_lengths - 1) // 2 + 1
+        output_lengths = (input_lengths - 2) // 2 + 1
+        return input_lengths, output_lengths
 
 
 class Qwen3ASRThinkerTextRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: Qwen3ASRConfig, device=None):
+    def __init__(self, config: Qwen3ASRTextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_type = config.rope_scaling.get("rope_type", "linear")
+        self.rope_type = config.rope_parameters["rope_type"]
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
@@ -814,7 +709,7 @@ class Qwen3ASRThinkerTextRotaryEmbedding(nn.Module):
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
-        self.mrope_section = config.rope_scaling.get("mrope_section", [24, 20, 20])
+        self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -1010,7 +905,7 @@ class Qwen3ASRThinkerTextModel(Qwen3ASRPreTrainedModel):
         "attentions": Qwen3ASRTextAttention,
     }
 
-    def __init__(self, config: Qwen3ASRConfig):
+    def __init__(self, config: Qwen3ASRTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -1109,22 +1004,6 @@ class Qwen3ASRThinkerTextModel(Qwen3ASRPreTrainedModel):
             past_key_values=past_key_values,
         )
 
-    def _deepstack_process(
-        self, hidden_states: torch.Tensor, visual_pos_masks: torch.Tensor, visual_embeds: torch.Tensor
-    ):
-        raise ValueError("Not needed.")
-
-
-@dataclass
-@auto_docstring
-class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
-    r"""
-    deepstack_features (`List[torch.FloatTensor]`, *optional*):
-        List of hidden-states (feature maps) from deepstack layers.
-    """
-
-    deepstack_features: list[torch.FloatTensor] | None = None
-
 
 @auto_docstring(
     custom_intro="""
@@ -1135,10 +1014,7 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
     config: Qwen3ASRThinkerConfig
     base_model_prefix = "thinker"
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _no_split_modules = [
-        "Qwen3ASRAudioEncoderLayer",
-        "Qwen3ASRThinkerTextDecoderLayer",
-    ]
+    _no_split_modules = ["Qwen3ASRAudioEncoder", "Qwen3ASRThinkerTextDecoderLayer"]
     _can_record_outputs = {
         "hidden_states": Qwen3ASRThinkerTextDecoderLayer,
         "attentions": Qwen3ASRTextAttention,
@@ -1151,12 +1027,6 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
         self.model = Qwen3ASRThinkerTextModel._from_config(config.text_config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.rope_deltas = None
-        if "forced_aligner" in config.model_type:
-            self.lm_head = nn.Linear(config.text_config.hidden_size, config.classify_num, bias=False)
-        ###
-        if getattr(config.text_config, "tie_word_embeddings", False):
-            self.lm_head.weight = self.model.get_input_embeddings().weight
-        ###
         self.pad_token_id = (
             self.config.text_config.pad_token_id if self.config.text_config.pad_token_id is not None else -1
         )
@@ -1167,38 +1037,6 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
 
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
-
-    @can_return_tuple
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.FloatTensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        """
-        raise ValueError("Not needed.")
-
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
-        raise ValueError("Not needed.")
 
     @can_return_tuple
     @auto_docstring
@@ -1443,7 +1281,7 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
 
 @auto_docstring
 class Qwen3ASRThinkerTextPreTrainedModel(PreTrainedModel):
-    config = Qwen3ASRConfig
+    config = Qwen3ASRTextConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen3ASRThinkerTextDecoderLayer"]
@@ -1451,13 +1289,13 @@ class Qwen3ASRThinkerTextPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Qwen3ASRThinkerTextDecoderLayer,
         "attentions": Qwen3ASRTextAttention,
     }
-    config_class = Qwen3ASRConfig
+    config_class = Qwen3ASRTextConfig
 
 
 class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin):
@@ -1467,12 +1305,8 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
     def __init__(self, config: Qwen3ASRConfig):
         super().__init__(config)
         self.config = config
-
         self.thinker = Qwen3ASRThinkerForConditionalGeneration._from_config(config.thinker_config)
         self.post_init()
-
-    def get_support_languages(self):
-        return self.config.support_languages
 
     @torch.no_grad()
     def generate(
@@ -1549,8 +1383,6 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
             cache_position=cache_position,
             **kwargs,
         )
-
-    ###
 
 
 __all__ = [

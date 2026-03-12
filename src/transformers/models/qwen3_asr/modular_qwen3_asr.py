@@ -1,60 +1,153 @@
 import re
-from collections.abc import Callable
 from dataclasses import dataclass
 
-import numpy as np
 import torch
 from torch import nn
 
 from transformers.audio_utils import AudioInput
 from transformers.cache_utils import Cache, DynamicCache
-from transformers.configuration_utils import PretrainedConfig
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.generation import GenerationMixin
 from transformers.masking_utils import create_causal_mask
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
+from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
     MoeCausalLMOutputWithPast,
 )
-from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from transformers.modeling_utils import PreTrainedModel
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.tokenization_utils_base import TextInput
 from transformers.utils import auto_docstring, can_return_tuple
-from transformers.utils.deprecation import deprecate_kwarg
-from transformers.utils.generic import TransformersKwargs, check_model_inputs
+from transformers.utils.generic import check_model_inputs
 
-from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
-from ..qwen3.modeling_qwen3 import Qwen3DecoderLayer
-from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeAttention
-from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeAudioEncoderConfig
+from ...configuration_utils import PreTrainedConfig
+from ..qwen3_omni_moe.configuration_qwen3_omni_moe import (
+    Qwen3OmniMoeAudioEncoderConfig,
+    Qwen3OmniMoeTextConfig,
+)
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
-    Qwen3OmniMoeAudioAttention,
     Qwen3OmniMoeAudioEncoder,
-    Qwen3OmniMoeAudioEncoderLayer,
     Qwen3OmniMoePreTrainedModelForConditionalGeneration,
     Qwen3OmniMoeThinkerForConditionalGeneration,
     Qwen3OmniMoeThinkerTextAttention,
+    Qwen3OmniMoeThinkerTextDecoderLayer,
     Qwen3OmniMoeThinkerTextMLP,
     Qwen3OmniMoeThinkerTextModel,
     Qwen3OmniMoeThinkerTextRMSNorm,
     Qwen3OmniMoeThinkerTextRotaryEmbedding,
     _get_feat_extract_output_lengths,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
 )
-from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLTextConfig
 
 
 class Qwen3ASRAudioEncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
-    pass
+    r"""
+    This is the configuration class to store the configuration of a [`Qwen3ASRAudioEncoder`]. It is used to instantiate a
+    Qwen3-ASR audio encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the audio encoder of the Qwen2-Audio
+    architecture.
+
+    e.g. [Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B)
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        num_mel_bins (`int`, *optional*, defaults to 128):
+            Number of mel features used per input features. Should correspond to the value used in the
+            `Qwen3ASRProcessor` class.
+        encoder_layers (`int`, *optional*, defaults to 24):
+            Number of encoder layers.
+        encoder_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        encoder_ffn_dim (`int`, *optional*, defaults to 4096):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in encoder.
+        d_model (`int`, *optional*, defaults to 1024):
+            Dimensionality of the layers.
+        dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        activation_function (`str`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        activation_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for activations inside the fully connected layer.
+        scale_embedding (`bool`, *optional*, defaults to `False`):
+            Scale embeddings by diving by sqrt(d_model).
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        max_source_positions (`int`, *optional*, defaults to 1500):
+            The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
+        n_window (`int`, *optional*, defaults to 50):
+            The chunk for conv and flash attn in AudioEncoder.
+        output_dim (`int`, *optional*, defaults to 2048):
+            The output dimension of AudioEncoder.
 
 
-class Qwen3ASRTextConfig(Qwen3VLTextConfig):
+    Example:
+
+    ```python
+    >>> from transformers import Qwen3ASRAudioEncoderConfig, Qwen3ASRAudioEncoder
+
+    >>> # Initializing a Qwen3ASRAudioEncoderConfig
+    >>> configuration = Qwen3ASRAudioEncoderConfig()
+
+    >>> # Initializing a Qwen3ASRAudioEncoder (with random weights)
+    >>> model = Qwen3ASRAudioEncoder(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    def __init__(
+        self,
+        num_mel_bins=128,
+        encoder_layers=24,
+        encoder_attention_heads=16,
+        encoder_ffn_dim=4096,
+        d_model=1024,
+        dropout=0.0,
+        attention_dropout=0.0,
+        activation_function="gelu",
+        activation_dropout=0.0,
+        scale_embedding=False,
+        initializer_range=0.02,
+        max_source_positions=1500,
+        n_window=50,
+        output_dim=2048,
+        n_window_infer=800,
+        conv_chunksize=500,
+        downsample_hidden_size=480,
+        **kwargs,
+    ):
+        super().__init__(
+            num_mel_bins=num_mel_bins,
+            encoder_layers=encoder_layers,
+            encoder_attention_heads=encoder_attention_heads,
+            encoder_ffn_dim=encoder_ffn_dim,
+            d_model=d_model,
+            dropout=dropout,
+            attention_dropout=attention_dropout,
+            activation_function=activation_function,
+            activation_dropout=activation_dropout,
+            scale_embedding=scale_embedding,
+            initializer_range=initializer_range,
+            max_source_positions=max_source_positions,
+            n_window=n_window,
+            output_dim=output_dim,
+            n_window_infer=n_window_infer,
+            conv_chunksize=conv_chunksize,
+            downsample_hidden_size=downsample_hidden_size,
+            **kwargs,
+        )
+
+
+class Qwen3ASRTextConfig(Qwen3OmniMoeTextConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3ASRTextModel`]. It is used to instantiate a
-    Qwen3-ASR model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of
+    Qwen3-ASR text model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of
     Qwen3-ASR-1.7B [Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -62,26 +155,22 @@ class Qwen3ASRTextConfig(Qwen3VLTextConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 151936):
-            Vocabulary size of the model.
-        hidden_size (`int`, *optional*, defaults to 4096):
+            Vocabulary size of the Qwen3ASR model.
+        hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 22016):
+        intermediate_size (`int`, *optional*, defaults to 6144):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 32):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
-
+        num_hidden_layers (`int`, *optional*, defaults to 28):
+            Number of hidden layers.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads.
+        num_key_value_heads (`int`, *optional*, defaults to 8):
+            Number of key_value heads.
+        head_dim (`int`, *optional*, defaults to 128):
+            The dimension of the head.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 128000):
+        max_position_embeddings (`int`, *optional*, defaults to 65536):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -90,14 +179,14 @@ class Qwen3ASRTextConfig(Qwen3VLTextConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         pad_token_id (`int`, *optional*):
@@ -110,46 +199,39 @@ class Qwen3ASRTextConfig(Qwen3VLTextConfig):
     ```python
     >>> from transformers import Qwen3ASRTextModel, Qwen3ASRTextConfig
 
-    >>> # Initializing a configuration
+    >>> # Initializing a Qwen3ASR style configuration
     >>> configuration = Qwen3ASRTextConfig()
 
-    >>> # Initializing a model with random weights
+    >>> # Initializing a model from the configuration
     >>> model = Qwen3ASRTextModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    base_config_key = "text_config"
-    #default_theta = None
 
     def __init__(
         self,
         vocab_size=151936,
-        hidden_size=4096,
-        intermediate_size=22016,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=32,
+        hidden_size=2048,
+        intermediate_size=6144,
+        num_hidden_layers=28,
+        num_attention_heads=16,
+        num_key_value_heads=8,
         head_dim=128,
         hidden_act="silu",
-        max_position_embeddings=128000,
+        max_position_embeddings=65536,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,
-        tie_word_embeddings=False,   # need to pass this into PreTrainedConfig.__init__
-        rope_theta=5000000.0,
-        rope_scaling=None,
+        tie_word_embeddings=True,
+        rope_parameters=None,
         attention_bias=False,
         attention_dropout=0.0,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         **kwargs,
     ):
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
@@ -157,23 +239,33 @@ class Qwen3ASRTextConfig(Qwen3VLTextConfig):
             num_hidden_layers=num_hidden_layers,
             num_attention_heads=num_attention_heads,
             num_key_value_heads=num_key_value_heads,
-            head_dim=head_dim,
             hidden_act=hidden_act,
             max_position_embeddings=max_position_embeddings,
             initializer_range=initializer_range,
             rms_norm_eps=rms_norm_eps,
             use_cache=use_cache,
-            #rope_parameters=RopeParameters(({"rope_theta": self.rope_theta}))
+            rope_parameters=rope_parameters,
             attention_bias=attention_bias,
             attention_dropout=attention_dropout,
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
             **kwargs,
         )
+        del self.decoder_sparse_step
+        del self.moe_intermediate_size
+        del self.num_experts_per_tok
+        del self.num_experts
+        del self.norm_topk_prob
+        del self.output_router_logits
+        del self.router_aux_loss_coef
+        del self.mlp_only_layers
+        del self.sliding_window
+        self.head_dim = head_dim
+        self.tie_word_embeddings = tie_word_embeddings
 
-        del self.rope_parameters
-        del self.pad_token_id
 
-
-class Qwen3ASRThinkerConfig(PretrainedConfig):
+class Qwen3ASRThinkerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3ASRThinker`]. It is used to instantiate a
     Qwen3-ASR-Thinker model according to the specified arguments, defining the model architecture. Instantiating a
@@ -192,10 +284,6 @@ class Qwen3ASRThinkerConfig(PretrainedConfig):
             The config dictionary of the text backbone.
         audio_token_id (`int`, *optional*, defaults to 151646):
             The audio token id to encode the audio prompt.
-        audio_start_token_id (`int`, *optional*, defaults to 151647):
-            The audio start token id to encode the audio prompt.
-        user_token_id (`int`, *optional*, defaults to 872):
-            The user token id to encode the user token.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
@@ -213,9 +301,9 @@ class Qwen3ASRThinkerConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "qwen3_asr_thinker"
 
-    attribute_map = {}
+
+    model_type = "qwen3_asr_thinker"
     sub_configs = {
         "audio_config": Qwen3ASRAudioEncoderConfig,
         "text_config": Qwen3ASRTextConfig,
@@ -225,15 +313,11 @@ class Qwen3ASRThinkerConfig(PretrainedConfig):
         self,
         audio_config=None,
         text_config=None,
-        audio_token_id=151646,
-        audio_start_token_id=151647,
-        user_token_id=872,
+        audio_token_id=151676,
         initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.user_token_id = user_token_id
-        self.audio_start_token_id = audio_start_token_id
         self.initializer_range = initializer_range
 
         if isinstance(audio_config, dict):
@@ -250,7 +334,7 @@ class Qwen3ASRThinkerConfig(PretrainedConfig):
         self.audio_token_id = audio_token_id
 
 
-class Qwen3ASRConfig(PretrainedConfig):
+class Qwen3ASRConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`Qwen3ASRForConditionalGeneration`]. It is used to instantiate a Qwen3ASR
     model according to the specified sub-models configurations, defining the model architecture.
@@ -283,6 +367,7 @@ class Qwen3ASRConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "qwen3_asr"
     sub_configs = {
         "thinker_config": Qwen3ASRThinkerConfig,
@@ -291,7 +376,6 @@ class Qwen3ASRConfig(PretrainedConfig):
     def __init__(
         self,
         thinker_config=None,
-        support_languages=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -299,21 +383,7 @@ class Qwen3ASRConfig(PretrainedConfig):
             thinker_config = {}
 
         self.thinker_config = Qwen3ASRThinkerConfig(**thinker_config)
-        self.support_languages = support_languages
 
-    def get_text_config(self, decoder=False) -> "PretrainedConfig":
-        """
-        Returns the config that is meant to be used with text IO. On most models, it is the original config instance
-        itself. On specific composite models, it is under a set of valid names.
-
-        Args:
-            decoder (`Optional[bool]`, *optional*, defaults to `False`):
-                If set to `True`, then only search for decoder config names.
-        """
-        # Overridden for deeply nested config like Qwen2.5-Omni. We don't have any omni model
-        # except for Qwen yet. This has to be generalized if more deeply nested configs are
-        # added. NOTE: currently method used only by vLLM
-        return self.thinker_config.get_text_config()
 
 class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
@@ -328,7 +398,7 @@ class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
         },
     }
 
-class Qwen3ASRProcessor(AudioFlamingo3Processor):
+class Qwen3ASRProcessor(ProcessorMixin):
     r"""
     Constructs a Qwen3ASR processor.
     [`Qwen3ASRProcessor`] offers all the functionalities of [`WhisperFeatureExtractor`], and [`Qwen2TokenizerFast`]. See the
@@ -342,27 +412,21 @@ class Qwen3ASRProcessor(AudioFlamingo3Processor):
         chat_template (`Optional[str]`, *optional*):
             The Jinja template to use for formatting the conversation. If not provided, the default chat template is used.
     """
-    attributes = ["tokenizer", "feature_extractor"]
-    feature_extractor_class = "WhisperFeatureExtractor"
-    tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
     def __init__(self, feature_extractor=None, tokenizer=None, chat_template=None):
-        super().__init__(feature_extractor, tokenizer, chat_template)
-        del self.audio_token
-        del self.audio_token_id
-        del self.default_transcription_prompt
-        del self.max_audio_len
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
         self.audio_token = self.tokenizer.audio_token
+        self.audio_token_id = self.tokenizer.convert_tokens_to_ids(self.audio_token)
         self.audio_bos_token = self.tokenizer.audio_bos_token
+        self.audio_bos_token_id = self.tokenizer.convert_tokens_to_ids(self.audio_bos_token)
         self.audio_eos_token = self.tokenizer.audio_eos_token
-
-    def _get_audio_token_length(self, audio_lengths: "torch.Tensor") -> "torch.Tensor":
-        raise ValueError("Not needed.")
+        self.audio_eos_token_id = self.tokenizer.convert_tokens_to_ids(self.audio_eos_token)
 
     def __call__(
         self,
         text: TextInput = None,
         audio: AudioInput = None,
+        output_labels: bool | None = False,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -379,6 +443,8 @@ class Qwen3ASRProcessor(AudioFlamingo3Processor):
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             audio (`np.ndarray`, `List[np.ndarray]`):
                 The audio or batch of audio to be prepared. Each audio can be a NumPy array.
+            output_labels (bool, *optional*, default=False):
+                Whether to return labels for training.
         """
         if text is None:
             raise ValueError("You need to specify either a `text` input to process.")
@@ -413,61 +479,21 @@ class Qwen3ASRProcessor(AudioFlamingo3Processor):
         )
 
         texts_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        data = {**texts_inputs, **audio_inputs}
+
+        if output_labels:
+            labels = data["input_ids"].clone()
+            labels[labels == self.audio_token_id] = -100
+            labels[labels == self.tokenizer.pad_token_id] = -100
+            labels[labels == self.audio_bos_token_id] = -100
+            labels[labels == self.audio_eos_token_id] = -100
+            data["labels"] = labels
 
         return BatchFeature(
-            data={**texts_inputs, **audio_inputs},
+            data=data,
             tensor_type=kwargs.get("return_tensors"),
         )
 
-    def apply_transcription_request(
-        self,
-        audio: str | list[str] | AudioInput,
-        prompt: str | list[str] | None = None,
-        **kwargs: Unpack[Qwen3ASRProcessorKwargs],
-    ) -> BatchFeature:
-        raise ValueError("Not needed.")
-
-    def batch_decode(self, *args, strip_prefix=False, **kwargs):
-        raise ValueError("Not needed.")
-
-    def _strip_assistant_prefix_and_quotes(self, text: str) -> str:
-        raise ValueError("Not needed.")
-
-    def get_chunked_index(self, token_indices: np.ndarray, tokens_per_chunk: int) -> list[tuple[int, int]]:
-        """
-        Splits token index list into chunks based on token value ranges.
-
-        Given a list of token indices, returns a list of (start, end) index tuples representing
-        slices of the list where the token values fall within successive ranges of `t_ntoken_per_chunk`.
-
-        For example, if `t_ntoken_per_chunk` is 1000, the function will create chunks such that:
-        - the first chunk contains token values < 1000,
-        - the second chunk contains values >= 1000 and < 2000, and so on.
-
-        Parameters:
-            token_indices (`np.ndarray`): A monotonically increasing list of token index values.
-            t_ntoken_per_chunk (`int`): Number of tokens per chunk (used as the chunk size threshold).
-
-        Returns:
-            `list[tuple[int, int]]`: A list of tuples, each representing the start (inclusive)
-                                and end (exclusive) indices of a chunk in `token_indices`.
-        """
-
-        def _iter():
-            i, start_idx = 0, 0  # skip bos token
-            current_chunk = 1
-            while i < len(token_indices):  # skip eos token
-                if token_indices[i] >= current_chunk * tokens_per_chunk:
-                    yield (start_idx, i)
-                    start_idx = i
-                    current_chunk += 1
-                i += 1
-            yield (start_idx, len(token_indices))
-
-        return list(_iter())
-
-    def apply_chat_template(self, conversations, chat_template=None, **kwargs):
-        return ProcessorMixin.apply_chat_template(conversations, chat_template, **kwargs)
 
     def replace_multimodal_special_tokens(
         self,
@@ -501,64 +527,23 @@ class Qwen3ASRTextRMSNorm(Qwen3OmniMoeThinkerTextRMSNorm):
     pass
 
 
-class Qwen3ASRTextAttention(Qwen3MoeAttention):
-    def __init__(self, config: Qwen3ASRConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        del self.sliding_window
-
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
+class Qwen3ASRTextAttention(Qwen3OmniMoeThinkerTextAttention):
+    pass
 
 
 class Qwen3ASRTextMLP(Qwen3OmniMoeThinkerTextMLP):
     pass
 
 
-class Qwen3ASRThinkerTextDecoderLayer(Qwen3DecoderLayer):
-    def __init__(self, config: Qwen3ASRConfig, layer_idx: int):
-        super().__init__(config=config, layer_idx=layer_idx)
-        del self.attention_type
+class Qwen3ASRThinkerTextDecoderLayer(Qwen3OmniMoeThinkerTextDecoderLayer):
+    def __init__(self, config: Qwen3ASRTextConfig, layer_idx: int):
+        GradientCheckpointingLayer.__init__()
+        self.hidden_size = config.hidden_size
+        self.self_attn = Qwen3ASRTextAttention(config=config, layer_idx=layer_idx)
+        self.mlp = Qwen3ASRTextMLP(config)
+        self.input_layernorm = Qwen3ASRTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Qwen3ASRTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
 
 @auto_docstring
 class Qwen3ASRPreTrainedModel(PreTrainedModel):
@@ -566,7 +551,7 @@ class Qwen3ASRPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Qwen3ASRThinkerTextDecoderLayer"]
+    _no_split_modules = ["Qwen3ASRAudioEncoderLayer", "Qwen3ASRThinkerTextDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -577,6 +562,7 @@ class Qwen3ASRPreTrainedModel(PreTrainedModel):
     }
 
 
+# TODO def rename and probably change because generated depends on MoeCausalLMOutputWithPast
 @dataclass
 class Qwen3ASRThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     r"""
@@ -591,77 +577,15 @@ class Qwen3ASRThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
 class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3OmniMoePreTrainedModelForConditionalGeneration):
     input_modalities = ("audio", "text")
 
-    def _prepare_4d_causal_attention_mask_with_cache_position(
-        self,
-        attention_mask: torch.Tensor,
-        sequence_length: int,
-        target_length: int,
-        dtype: torch.dtype,
-        cache_position: torch.Tensor,
-        batch_size: int,
-        config=None,
-        past_key_values=None,
-        device: torch.device = None,
-        min_dtype: float | None = None,
-    ):
-        """
-        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
+    def get_llm_pos_ids_for_vision(self, *args, **kwargs):
+        raise NotImplementedError("Not needed")
 
-        Args:
-            attention_mask (`torch.Tensor`):
-                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape `(batch_size, 1, query_length, key_value_length)`.
-            sequence_length (`int`):
-                The sequence length being processed.
-            target_length (`int`):
-                The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
-            dtype (`torch.dtype`):
-                The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to place the 4D attention mask on.
-            min_dtype (`float`):
-                The minimum value representable with the dtype `dtype`.
-            cache_position (`torch.Tensor`):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            batch_size (`torch.Tensor`):
-                Batch size.
-        """
-        ###
-        device = device or attention_mask.device
-        min_dtype = min_dtype if min_dtype is not None else torch.finfo(dtype).min
-        ###
-        if attention_mask is not None and attention_mask.dim() == 4:
-            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-            causal_mask = attention_mask
-        else:
-            causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
-            )
-            if sequence_length != 1:
-                causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
-            if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
-                padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
+    def get_chunked_index(self, *args, **kwargs):
+        raise NotImplementedError("Not needed")
 
-        return causal_mask
+    def _prepare_4d_causal_attention_mask_with_cache_position(self, *args, **kwargs):
+        raise NotImplementedError("Not needed")
 
-    def get_llm_pos_ids_for_vision(
-        self,
-        start_idx: int,
-        vision_idx: int,
-        spatial_merge_size: int,
-        t_index: list[torch.Tensor],
-        grid_hs: list[torch.Tensor],
-        grid_ws: list[torch.Tensor],
-    ):
-        raise ValueError("Not needed.")
 
     def get_rope_index(
         self,
@@ -700,36 +624,16 @@ class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3OmniMoePreTrainedMode
         return position_ids, mrope_position_deltas
 
 
-class Qwen3ASRAudioAttention(Qwen3OmniMoeAudioAttention):
-    pass
-
-
-class Qwen3ASRAudioEncoderLayer(Qwen3OmniMoeAudioEncoderLayer):
-    pass
-
-
-
-
-
-
-
-
-
-
 class Qwen3ASRAudioEncoder(Qwen3OmniMoeAudioEncoder):
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
-        raise ValueError("Not needed.")
-
-
-
-
+    pass
 
 
 class Qwen3ASRThinkerTextRotaryEmbedding(Qwen3OmniMoeThinkerTextRotaryEmbedding):
-    def __init__(self, config: Qwen3ASRConfig, device=None):
+    def __init__(self, config: Qwen3ASRTextConfig, device=None):
         super().__init__()
-        self.rope_type = config.rope_scaling.get("rope_type", "linear")
-        self.mrope_section = config.rope_scaling.get("mrope_section", [24, 20, 20])
+        self.rope_type = config.rope_parameters["rope_type"]
+        self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
+
 
 class Qwen3ASRThinkerTextMLP(Qwen3OmniMoeThinkerTextMLP):
     pass
@@ -750,7 +654,7 @@ class Qwen3ASRThinkerTextModel(Qwen3OmniMoeThinkerTextModel):
         "attentions": Qwen3ASRTextAttention,
     }
 
-    def __init__(self, config: Qwen3ASRConfig):
+    def __init__(self, config: Qwen3ASRTextConfig):
         super().__init__(config)
 
     @check_model_inputs()
@@ -828,10 +732,8 @@ class Qwen3ASRThinkerTextModel(Qwen3OmniMoeThinkerTextModel):
             past_key_values=past_key_values,
         )
 
-    def _deepstack_process(
-        self, hidden_states: torch.Tensor, visual_pos_masks: torch.Tensor, visual_embeds: torch.Tensor
-    ):
-        raise ValueError("Not needed.")
+    def _deepstack_process(self, *args, **kwargs):
+        raise NotImplementedError("Not needed")
 
 
 @auto_docstring(
@@ -840,6 +742,7 @@ class Qwen3ASRThinkerTextModel(Qwen3OmniMoeThinkerTextModel):
     """
 )
 class Qwen3ASRThinkerForConditionalGeneration(Qwen3OmniMoeThinkerForConditionalGeneration):
+    _no_split_modules = ["Qwen3ASRAudioEncoder", "Qwen3ASRThinkerTextDecoderLayer"]
     _can_record_outputs = {
         "hidden_states": Qwen3ASRThinkerTextDecoderLayer,
         "attentions": Qwen3ASRTextAttention,
@@ -847,12 +750,7 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3OmniMoeThinkerForConditionalG
 
     def __init__(self, config):
         super().__init__(config)
-        if "forced_aligner" in config.model_type:
-            self.lm_head = nn.Linear(config.text_config.hidden_size, config.classify_num, bias=False)
-        ###
-        if getattr(config.text_config, "tie_word_embeddings", False):
-            self.lm_head.weight = self.model.get_input_embeddings().weight
-        ###
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.pad_token_id = (
             self.config.text_config.pad_token_id if self.config.text_config.pad_token_id is not None else -1
         )
@@ -899,21 +797,11 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3OmniMoeThinkerForConditionalG
 
         return audio_features
 
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.FloatTensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        raise ValueError("Not needed.")
+    def get_video_features(self, *args, **kwargs):
+        raise NotImplementedError("Not needed")
 
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        raise ValueError("Not needed.")
+    def get_image_features(self, *args, **kwargs):
+        raise NotImplementedError("Not needed")
 
     def get_placeholder_mask(
         self,
@@ -1120,7 +1008,7 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3OmniMoeThinkerForConditionalG
 
 @auto_docstring
 class Qwen3ASRThinkerTextPreTrainedModel(PreTrainedModel):
-    config = Qwen3ASRConfig
+    config = Qwen3ASRTextConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen3ASRThinkerTextDecoderLayer"]
@@ -1128,13 +1016,13 @@ class Qwen3ASRThinkerTextPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Qwen3ASRThinkerTextDecoderLayer,
         "attentions": Qwen3ASRTextAttention,
     }
-    config_class = Qwen3ASRConfig
+    config_class = Qwen3ASRTextConfig
 
 
 class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin):
@@ -1144,12 +1032,8 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
     def __init__(self, config: Qwen3ASRConfig):
         super().__init__(config)
         self.config = config
-
         self.thinker = Qwen3ASRThinkerForConditionalGeneration._from_config(config.thinker_config)
         self.post_init()
-
-    def get_support_languages(self):
-        return self.config.support_languages
 
     @torch.no_grad()
     def generate(
@@ -1227,11 +1111,10 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
             **kwargs,
         )
 
-    ###
-
 
 __all__ = [
     "Qwen3ASRAudioEncoderConfig",
+    "Qwen3ASRTextConfig",
     "Qwen3ASRThinkerConfig",
     "Qwen3ASRConfig",
     "Qwen3ASRProcessor",
