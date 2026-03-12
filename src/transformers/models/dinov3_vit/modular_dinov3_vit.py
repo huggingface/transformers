@@ -522,7 +522,7 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
             feature_maps=tuple(feature_maps),
             cls_tokens=tuple(cls_tokens) if return_class_token else None,
             hidden_states=output.hidden_states,
-            attentions=output.attentions
+            attentions=output.attentions,
         )
         output.last_hidden_state = sequence_output
 
