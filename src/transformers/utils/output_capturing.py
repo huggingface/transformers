@@ -63,10 +63,9 @@ class CompileableContextVar:
     that the access to the underlying variable is not thread-safe when compilation is triggered.
     """
 
-    def __init__(self, name, default):
-        self.context_var = ContextVar(name, default=default)  # real thread-safe, local var
-        self.global_var = default  # mirror for compile, global var
-        self.default = default
+    def __init__(self, name):
+        self.context_var = ContextVar(name, default=None)  # real thread-safe, local var
+        self.global_var = None  # mirror for compile, global var
 
     def get(self):
         # Always check the current dynamo state dynamically! See the note below
@@ -88,13 +87,13 @@ class CompileableContextVar:
         return self.context_var.set(value)
 
     def reset(self, token):
-        self.global_var = self.default
+        self.global_var = None
         if token is not None:
             self.context_var.reset(token)
 
 
 # Thread/context-safe global variable
-_active_collector = CompileableContextVar("output_collector", default=None)
+_active_collector = CompileableContextVar("output_collector")
 
 
 def install_output_capuring_hook(module: nn.Module, key: str, index: int) -> None:
