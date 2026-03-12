@@ -1043,7 +1043,7 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
     def get_audio_features(
         self,
         input_features: torch.FloatTensor,
-        feature_attention_mask: torch.LongTensor | None = None,
+        input_features_mask: torch.LongTensor | None = None,
         audio_feature_lengths: torch.LongTensor | None = None,
     ) -> tuple | BaseModelOutputWithPooling:
         """
@@ -1052,16 +1052,16 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
         Args:
             input_features (`torch.FloatTensor`):
                 The tensors corresponding to the input audios.
-            feature_attention_mask (`torch.LongTensor`, *optional*):
+            input_features_mask (`torch.LongTensor`, *optional*):
                 Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
             audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
                 The length of feature shape of each audio in LLM.
         """
-        if feature_attention_mask is not None:
-            audio_feature_lengths = torch.sum(feature_attention_mask, dim=1)
+        if input_features_mask is not None:
+            audio_feature_lengths = torch.sum(input_features_mask, dim=1)
         else:
             audio_feature_lengths = None
-        feature_lens = audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
+        feature_lens = audio_feature_lengths if audio_feature_lengths is not None else input_features_mask.sum(-1)
 
         # audio encoder do not support batch inference to keep precision
         audio_features = []
@@ -1105,7 +1105,7 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
         input_ids=None,
         input_features=None,
         attention_mask=None,
-        feature_attention_mask=None,
+        input_features_mask=None,
         audio_feature_lengths=None,
         position_ids=None,
         past_key_values=None,
@@ -1117,7 +1117,7 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
         **kwargs,
     ) -> tuple | Qwen3ASRThinkerCausalLMOutputWithPast:
         r"""
-        feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
             Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -1139,15 +1139,15 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
         if input_features is not None:
             audio_features = self.get_audio_features(
                 input_features,
-                feature_attention_mask=feature_attention_mask,
+                input_features_mask=input_features_mask,
                 audio_feature_lengths=audio_feature_lengths,
             )
             audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
             audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
 
-        if feature_attention_mask is not None:
-            audio_feature_lengths = torch.sum(feature_attention_mask, dim=1)
+        if input_features_mask is not None:
+            audio_feature_lengths = torch.sum(input_features_mask, dim=1)
         else:
             audio_feature_lengths = None
 
@@ -1255,7 +1255,7 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
         position_ids=None,
         use_cache=True,
         input_features=None,
-        feature_attention_mask=None,
+        input_features_mask=None,
         **kwargs,
     ):
         model_inputs = super().prepare_inputs_for_generation(
@@ -1267,7 +1267,7 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
             position_ids=position_ids,
             use_cache=use_cache,
             input_features=input_features,
-            feature_attention_mask=feature_attention_mask,
+            input_features_mask=input_features_mask,
             **kwargs,
         )
 
@@ -1324,7 +1324,7 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
 
         for key, value in kwargs.items():
             # Process special input values
-            if key == "feature_attention_mask":
+            if key == "input_features_mask":
                 thinker_kwargs[key] = value
             elif key in ("input_features", "attention_mask"):
                 thinker_kwargs[key] = value
@@ -1357,7 +1357,7 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
         input_ids=None,
         input_features=None,
         attention_mask=None,
-        feature_attention_mask=None,
+        input_features_mask=None,
         audio_feature_lengths=None,
         position_ids=None,
         past_key_values=None,
@@ -1372,7 +1372,7 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
             input_ids=input_ids,
             input_features=input_features,
             attention_mask=attention_mask,
-            feature_attention_mask=feature_attention_mask,
+            input_features_mask=input_features_mask,
             audio_feature_lengths=audio_feature_lengths,
             position_ids=position_ids,
             past_key_values=past_key_values,

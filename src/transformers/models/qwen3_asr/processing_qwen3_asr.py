@@ -6,7 +6,7 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import re
 
-from transformers.audio_utils import AudioInput
+from transformers.audio_utils import AudioInput, make_list_of_audio
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin
 from transformers.tokenization_utils_base import TextInput
@@ -21,7 +21,11 @@ class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
         "audio_kwargs": {
             "sampling_rate": 16000,
             "padding": True,
+            "truncation": False,
             "return_attention_mask": True,
+        },
+        "common_kwargs": {
+            "return_tensors": "pt",
         },
     }
 
@@ -61,10 +65,11 @@ class Qwen3ASRProcessor(ProcessorMixin):
         self.audio_eos_token = self.tokenizer.audio_eos_token
         self.audio_eos_token_id = self.tokenizer.convert_tokens_to_ids(self.audio_eos_token)
 
+    # TODO (ebezzam) could use modular from VibeVoice ASR, if we define a method `_get_feat_extract_output_lengths` for it
     def __call__(
         self,
-        text: TextInput = None,
-        audio: AudioInput = None,
+        audio: AudioInput,
+        text: TextInput | list[TextInput],
         output_labels: bool | None = False,
         **kwargs,
     ) -> BatchFeature:
@@ -76,49 +81,46 @@ class Qwen3ASRProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
+            audio (`np.ndarray`, `List[np.ndarray]`):
+                The audio or batch of audio to be prepared.
             text (`str`, `List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            audio (`np.ndarray`, `List[np.ndarray]`):
-                The audio or batch of audio to be prepared. Each audio can be a NumPy array.
             output_labels (bool, *optional*, default=False):
                 Whether to return labels for training.
         """
-        if text is None:
-            raise ValueError("You need to specify either a `text` input to process.")
-
-        output_kwargs = self._merge_kwargs(
+        call_kwargs = self._merge_kwargs(
             Qwen3ASRProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
-        if audio is not None:
-            output_kwargs["audio_kwargs"]["padding"] = True
-            output_kwargs["audio_kwargs"]["truncation"] = False
-            audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
-            audio_inputs["feature_attention_mask"] = audio_inputs.pop(
-                "attention_mask"
-            )  # rename feature_attention_mask to prevent conflicts later on
-            audio_inputs["input_features"] = audio_inputs.pop(
-                "input_features"
-            )  # rename input_features to prevent conflicts later on
-            audio_lengths = iter(_get_feat_extract_output_lengths(audio_inputs["feature_attention_mask"].sum(-1)))
-        else:
-            audio_inputs = {}
-            audio_lengths = iter([])
+        text_kwargs = call_kwargs["text_kwargs"]
+        audio_kwargs = call_kwargs["audio_kwargs"]
+        return_tensors = text_kwargs.get("return_tensors")
+        if return_tensors != "pt":
+            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
+        audio = make_list_of_audio(audio)
         if not isinstance(text, list):
             text = [text]
+        if len(text) != len(audio):
+            raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
 
-        text = self.replace_multimodal_special_tokens(
-            text,
-            audio_lengths,
-        )
+        # Prepare audio
+        data = self.feature_extractor(audio, **audio_kwargs)
+        data["input_features_mask"] = data.pop("attention_mask")
 
-        texts_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        data = {**texts_inputs, **audio_inputs}
+        # Replace audio tokens in text
+        audio_lengths = _get_feat_extract_output_lengths(data["input_features_mask"].sum(-1)).cpu().numpy()
+        audio_token_pattern = re.compile(re.escape(self.audio_token))
+        for i, num_tokens in enumerate(audio_lengths):
+            text[i] = audio_token_pattern.sub(self.audio_token * int(num_tokens), text[i])
+
+        # Prepare text
+        texts_inputs = self.tokenizer(text, **text_kwargs)
+        data.update(texts_inputs)
 
         if output_labels:
             labels = data["input_ids"].clone()
@@ -128,37 +130,13 @@ class Qwen3ASRProcessor(ProcessorMixin):
             labels[labels == self.audio_eos_token_id] = -100
             data["labels"] = labels
 
-        return BatchFeature(
-            data=data,
-            tensor_type=kwargs.get("return_tensors"),
-        )
-
-    def replace_multimodal_special_tokens(
-        self,
-        text,
-        audio_lengths,
-    ):
-        processed_text = []
-        for sample in text:
-            positions = []
-            special_tokens = [re.escape(tok) for tok in [self.audio_token]]
-            pattern = "|".join(special_tokens)
-            positions = sorted([(match.start(), match.group()) for match in re.finditer(pattern, sample)])
-            positions.sort(key=lambda x: x[0])
-
-            for _, special_token in positions:
-                if special_token == self.audio_token:
-                    sample = sample.replace(self.audio_token, "<|audio_placeholder|>" * next(audio_lengths), 1)
-
-            sample = sample.replace("<|audio_placeholder|>", self.audio_token)
-            processed_text.append(sample)
-        return processed_text
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["feature_attention_mask"]))
+        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["input_features_mask"]))
 
 
 __all__ = ["Qwen3ASRProcessor"]
