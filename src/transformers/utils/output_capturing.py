@@ -64,32 +64,35 @@ class CompileableContextVar:
     """
 
     def __init__(self, name, default):
-        self.context_var = ContextVar(name, default=default)  # real thread-safe, local var
-        self.global_var = default  # mirror for compile, global var
-        self.default = default
+        self.context_var = ContextVar(name, default=default)
+        self.global_var = default
+        self.compiling = False
 
     def get(self):
-        # Always check the current dynamo state dynamically! See the note below
-        #
-        # NOTE: Local attributes/flags may be interpreted once during tracing
-        #       and effectively treated as constant across compiled frames. If we
-        #       cached such a flag, eager frames could incorrectly fall back to the
-        #       shared global value, breaking visibility between eager wrappers and
-        #       compiled hooks
-        if is_torchdynamo_compiling():
+        # Set was called before and compilation was already detected
+        if self.compiling:
             return self.global_var
-        return self.context_var.get()
+        else:
+            # Set was maybe never called, so still check it here
+            if is_torchdynamo_compiling():
+                self.is_compiling = True
+                return self.global_var
+            else:
+                return self.context_var.get()
 
     def set(self, value):
-        self.global_var = value
-        # Same, check the current state dynamically rather than relying on cached attributes
         if is_torchdynamo_compiling():
+            self.global_var = value
+            self.compiling = True
             return None
-        return self.context_var.set(value)
+        else:
+            return self.context_var.set(value)
 
     def reset(self, token):
-        self.global_var = self.default
-        if token is not None:
+        if self.compiling or token is None:
+            self.global_var = None
+            self.compiling = False
+        else:
             self.context_var.reset(token)
 
 
