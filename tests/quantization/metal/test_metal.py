@@ -630,7 +630,9 @@ class MetalSlowIntegrationTest(unittest.TestCase):
     def test_quantized_model(self):
         with _patch_no_mps():
             config = MetalConfig(bits=4, group_size=64)
-            model = AutoModelForCausalLM.from_pretrained(self.model_id, quantization_config=config, device_map=torch_device)
+            model = AutoModelForCausalLM.from_pretrained(
+                self.model_id, quantization_config=config, device_map=torch_device
+            )
             tokenizer = AutoTokenizer.from_pretrained(self.model_id)
             self.assertIsNotNone(model)
             input = "Hello, how are you?"
