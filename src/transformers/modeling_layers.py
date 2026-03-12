@@ -102,7 +102,7 @@ class GenericForSequenceClassification:
         self.num_labels = config.num_labels
         # Similar to `self.model = AutoModel.from_config(config)` but allows to change the base model name if needed in the child class
         setattr(self, self.base_model_prefix, AutoModel.from_config(config))
-        self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
+        self.score = nn.Linear(config.get_text_config().hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -137,13 +137,13 @@ class GenericForSequenceClassification:
         else:
             batch_size = inputs_embeds.shape[0]
 
-        if self.config.pad_token_id is None and batch_size != 1:
+        if self.config.get_text_config().pad_token_id is None and batch_size != 1:
             raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-        if self.config.pad_token_id is None:
+        if self.config.get_text_config().pad_token_id is None:
             last_non_pad_token = -1
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
-            non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
+            non_pad_mask = (input_ids != self.config.get_text_config().pad_token_id).to(logits.device, torch.int32)
             token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
@@ -157,7 +157,9 @@ class GenericForSequenceClassification:
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
+            loss = self.loss_function(
+                logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config.get_text_config()
+            )
 
         return SequenceClassifierOutputWithPast(
             loss=loss,
