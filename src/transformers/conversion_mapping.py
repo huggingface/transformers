@@ -192,6 +192,10 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "hcxvision": [
+            WeightRenaming("mm_projector", "multi_modal_projector.proj"),
+            WeightRenaming("language_model.model", "language_model"),
+        ],
         "ernie4_5_vl_moe": [
             # vision
             WeightRenaming("vision_model", "vision_tower"),
