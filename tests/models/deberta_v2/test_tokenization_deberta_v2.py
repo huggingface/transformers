@@ -117,3 +117,39 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens = tokenizer.convert_ids_to_tokens(tokenizer.encode(sequence, add_special_tokens=False))
 
         self.assertListEqual(tokens, tokens_target)
+
+    def test_bos_token_with_add_bos_token_true(self):
+        """Test that add_bos_token=True during initialization adds BOS token."""
+        try:
+            tokenizer = self.get_tokenizer(add_bos_token=True)
+        except TypeError:
+            # Some tokenizers might not support add_bos_token parameter
+            self.skipTest("Tokenizer does not support add_bos_token parameter")
+
+        test_string = "hello"
+
+        # Verify bos_token was set
+        self.assertEqual(tokenizer.bos_token, "[CLS]")
+
+        # Verify BOS token is added when add_special_tokens=True
+        output = tokenizer(test_string, add_special_tokens=True)
+        self.assertIsNotNone(output["input_ids"])
+        self.assertEqual(output["input_ids"][0], tokenizer.bos_token_id)
+
+    def test_eos_token_with_add_eos_token_true(self):
+        """Test that add_eos_token=True during initialization adds EOS token."""
+        try:
+            tokenizer = self.get_tokenizer(add_eos_token=True)
+        except TypeError:
+            # Some tokenizers might not support add_eos_token parameter
+            self.skipTest("Tokenizer does not support add_eos_token parameter")
+
+        test_string = "hello"
+
+        # Verify eos_token was set
+        self.assertEqual(tokenizer.eos_token, "[SEP]")
+
+        # Verify EOS token is added when add_special_tokens=True
+        output = tokenizer(test_string, add_special_tokens=True)
+        self.assertIsNotNone(output["input_ids"])
+        self.assertEqual(output["input_ids"][-1], tokenizer.eos_token_id)

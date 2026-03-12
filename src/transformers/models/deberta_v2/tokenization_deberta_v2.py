@@ -153,5 +153,12 @@ class DebertaV2Tokenizer(TokenizersBackend):
             **kwargs,
         )
 
+        # Fix: Set default values for add_bos_token and add_eos_token
+        # This ensures BOS/EOS tokens are added by default, matching v4.x behavior
+        # Fixes issue #44568
+        self._add_bos_token = True
+        self._add_eos_token = True
+        self.update_post_processor()
+
 
 __all__ = ["DebertaV2Tokenizer"]
