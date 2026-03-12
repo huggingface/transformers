@@ -838,6 +838,8 @@
         title: BEiT
       - local: model_doc/bit
         title: BiT
+      - local: model_doc/chmv2
+        title: CHMv2
       - local: model_doc/conditional_detr
         title: Conditional DETR
       - local: model_doc/convnext

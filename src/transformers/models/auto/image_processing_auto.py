@@ -75,6 +75,7 @@ else:
             ("bridgetower", ("BridgeTowerImageProcessor", "BridgeTowerImageProcessorFast")),
             ("chameleon", ("ChameleonImageProcessor", "ChameleonImageProcessorFast")),
             ("chinese_clip", ("ChineseCLIPImageProcessor", "ChineseCLIPImageProcessorFast")),
+            ("chmv2", (None, "CHMv2ImageProcessorFast")),
             ("clip", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("clipseg", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("cohere2_vision", (None, "Cohere2VisionImageProcessorFast")),

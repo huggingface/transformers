@@ -899,8 +899,10 @@ class ChameleonModel(ChameleonPreTrainedModel):
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
         """
+        batch_size = pixel_values.shape[0]
         vqmodel_outputs: ChameleonVQVAEModelOutput = self.vqmodel.encode(pixel_values, return_dict=True, **kwargs)
-        vqmodel_outputs.pooler_output = self.get_input_embeddings()(vqmodel_outputs.image_tokens)
+        bpe_tokens = self.vocabulary_mapping.convert_img2bpe(vqmodel_outputs.image_tokens).view(batch_size, -1)
+        vqmodel_outputs.pooler_output = self.get_input_embeddings()(bpe_tokens)
         return vqmodel_outputs
 
     def get_placeholder_mask(
