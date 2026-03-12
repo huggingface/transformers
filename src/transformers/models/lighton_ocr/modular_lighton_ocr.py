@@ -282,7 +282,6 @@ class LightOnOcrModelOutputWithPast(Mistral3ModelOutputWithPast):
 
 class LightOnOcrModel(Mistral3Model):
     base_model_prefix = ""
-    _checkpoint_conversion_mapping = {}
 
     def __init__(self, config: LightOnOcrConfig):
         PreTrainedModel.__init__(self, config)
@@ -369,8 +368,6 @@ class LightOnOcrModel(Mistral3Model):
 
 
 class LightOnOcrForConditionalGeneration(Mistral3ForConditionalGeneration):
-    _checkpoint_conversion_mapping = {}
-
     @auto_docstring
     def get_image_features(
         self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]

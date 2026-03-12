@@ -246,8 +246,6 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
 
 
 class Ovis2Model(LlavaModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Ovis2Config):
         super().__init__(config)
         self.vision_tower = Ovis2VisionModel(config.vision_config)
@@ -372,8 +370,6 @@ class Ovis2Model(LlavaModel):
 
 @auto_docstring
 class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Ovis2Config):
         super().__init__(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)

@@ -349,6 +349,19 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 tol = torch.finfo(torch.bfloat16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
 
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        # Conversion happens only for the `ConditionalGeneration` model, not the base model
+        self.all_model_classes = (Qwen2VLForConditionalGeneration,) if is_torch_available() else ()
+        super().test_reverse_loading_mapping(check_keys_were_modified)
+        self.all_model_classes = (
+            (
+                Qwen2VLModel,
+                Qwen2VLForConditionalGeneration,
+            )
+            if is_torch_available()
+            else ()
+        )
+
     @unittest.skip(reason="Feedforward chunking is not yet supported")
     def test_feed_forward_chunking(self):
         pass

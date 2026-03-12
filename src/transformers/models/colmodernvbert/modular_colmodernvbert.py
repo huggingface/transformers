@@ -387,8 +387,6 @@ class ColModernVBertForRetrievalOutput(ModelOutput):
     """
 )
 class ColModernVBertForRetrieval(ColPaliForRetrieval):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: ColModernVBertConfig):
         super().__init__(config)
         self.vlm = AutoModel.from_config(config.vlm_config)

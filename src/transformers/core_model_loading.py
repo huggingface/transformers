@@ -488,7 +488,7 @@ class Force16BytesAlignment(ConversionOps):
         return Force16BytesAlignment()
 
 
-def process_target_pattern(pattern: str) -> tuple[str, str | None]:
+def process_pattern_for_reverse_mapping(target_pattern: str, source_pattern: str = "") -> tuple[str, str | None]:
     """
     Process a target pattern for reverse mapping (when targets become sources).
 
@@ -498,26 +498,35 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     - Detects capturing groups and replaces them with `\\1` backreference
 
     Args:
-        pattern: The target pattern to process for reverse mapping.
+        target_pattern: The target pattern to process for reverse mapping.
+        source_pattern: The source pattern to process for reverse mapping.
 
     Returns:
         A tuple of (processed_pattern, captured_group) where captured_group is
         the original capturing group found (e.g., "(encoder|decoder)") or None.
     """
     # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
-    pattern = pattern.removeprefix("^")
+    if target_pattern.startswith("^"):
+        source_pattern = f"^{source_pattern}"
+        target_pattern = target_pattern.removeprefix("^")
+
     # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
-    pattern = pattern.removesuffix("$")
+    if target_pattern.endswith("$"):
+        source_pattern = f"{source_pattern}$"
+        target_pattern = target_pattern.removesuffix("$")
+
     # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
     # Qwen2.5, Sam3, Ernie4.5 VL MoE!
-    pattern = re.sub(r"\(\?.+\)", "", pattern)
+    target_pattern = re.sub(r"\(\?.+?\)?\)", "", target_pattern)
+    # Remove the backslash for literal dots
+    target_pattern = target_pattern.replace(r"\.", ".")
     # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
-    capturing_group_match = re.search(r"\(.+?\)", pattern)
+    capturing_group_match = re.search(r"\(.+?\)", target_pattern)
     captured_group = None
     if capturing_group_match:
         captured_group = capturing_group_match.group(0)
-        pattern = pattern.replace(captured_group, r"\1", 1)
-    return pattern, captured_group
+        target_pattern = target_pattern.replace(captured_group, r"\1", 1)
+    return target_pattern, captured_group, source_pattern
 
 
 @dataclass(slots=True)
@@ -551,8 +560,16 @@ class WeightTransform:
         # Process target_patterns: detect capturing groups and replace with \1
         # Store the original capturing group patterns for reverse mapping
         target_capturing_groups: list[str] = []
-        for i, pattern in enumerate(self.target_patterns):
-            self.target_patterns[i], captured_group = process_target_pattern(pattern)
+
+        is_weight_renaming = self.__class__.__name__ == "WeightRenaming"
+        for i, target_pattern in enumerate(self.target_patterns):
+            if is_weight_renaming:
+                source_pattern = self.source_patterns[i]
+                self.target_patterns[i], captured_group, self.source_patterns[i] = process_pattern_for_reverse_mapping(
+                    target_pattern, source_pattern
+                )
+            else:
+                self.target_patterns[i], captured_group, _ = process_pattern_for_reverse_mapping(target_pattern)
             if captured_group is not None:
                 target_capturing_groups.append(captured_group)
 

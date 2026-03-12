@@ -44,7 +44,7 @@ from transformers import (
     set_seed,
 )
 from transformers.conversion_mapping import get_model_conversion_mapping
-from transformers.core_model_loading import WeightRenaming, process_target_pattern
+from transformers.core_model_loading import WeightRenaming, process_pattern_for_reverse_mapping
 from transformers.integrations import HfDeepSpeedConfig
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
@@ -4695,11 +4695,20 @@ class ModelTesterMixin:
                 # Check that for each conversion entry, we at least map to one key
                 for conversion in conversions:
                     for source_pattern in conversion.source_patterns:
+                        # Some patterns are written for gen-model only and won't be applied on base model
+                        if "lm_head" in source_pattern and model_class not in [
+                            *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
+                            *get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES),
+                        ]:
+                            continue
+
                         # Sometimes the mappings specify keys that are tied, so absent from the saved state dict
                         if isinstance(conversion, WeightRenaming):
                             # We need to revert the target pattern to make it compatible with regex search
                             target_pattern_reversed = conversion.target_patterns[0]
-                            captured_group = process_target_pattern(source_pattern)[1]
+                            captured_group = process_pattern_for_reverse_mapping(
+                                source_pattern, target_pattern_reversed
+                            )[1]
                             if captured_group:
                                 target_pattern_reversed = target_pattern_reversed.replace(r"\1", captured_group)
                             if any(re.search(target_pattern_reversed, k) for k in model.all_tied_weights_keys.keys()):
