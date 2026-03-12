@@ -14,7 +14,6 @@
 
 import unittest
 
-import numpy as np
 from transformers.file_utils import is_torch_available
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torchvision_available
@@ -77,7 +76,6 @@ class PPOCRV5ServerDetImageProcessingTester:
             "keep_aspect_ratio": False,
             "do_pad": False,
         }
-    
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
@@ -105,20 +103,24 @@ class PPOCRV5ServerDetImageProcessingTest(ImageProcessingTestMixin, unittest.Tes
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()
 
-    @unittest.skip(reason="PPOCRV5ServerDet can’t stack the images into a batch because the image processor resizes them adaptively, leading to inconsistent output sizes.")
+    @unittest.skip(
+        reason="PPOCRV5ServerDet can’t stack the images into a batch because the image processor resizes them adaptively, leading to inconsistent output sizes."
+    )
     def test_call_pytorch():
         pass
 
-    @unittest.skip(reason="PPOCRV5ServerDet can’t stack the images into a batch because the image processor resizes them adaptively, leading to inconsistent output sizes.")
+    @unittest.skip(
+        reason="PPOCRV5ServerDet can’t stack the images into a batch because the image processor resizes them adaptively, leading to inconsistent output sizes."
+    )
     def test_call_numpy():
         pass
 
-    @unittest.skip(reason="PPOCRV5ServerDet can’t stack the images into a batch because the image processor resizes them adaptively, leading to inconsistent output sizes.")
+    @unittest.skip(
+        reason="PPOCRV5ServerDet can’t stack the images into a batch because the image processor resizes them adaptively, leading to inconsistent output sizes."
+    )
     def test_call_pil():
         pass
 
     @unittest.skip(reason="PPOCRV5ServerDetImageProcessorFast does not support 4 channel images yet")
     def test_call_numpy_4_channels():
         pass
-
-
