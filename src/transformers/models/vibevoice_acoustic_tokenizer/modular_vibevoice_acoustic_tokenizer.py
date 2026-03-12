@@ -25,7 +25,11 @@ from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ..auto.modeling_auto import AutoModel
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..voxtral_realtime.modeling_voxtral_realtime import VoxtralRealtimeConv1dPaddingCache
-from .configuration_vibevoice_acoustic_tokenizer import VibeVoiceAcousticTokenizerConfig
+from .configuration_vibevoice_acoustic_tokenizer import (
+    VibeVoiceAcousticTokenizerConfig,
+    VibeVoiceAcousticTokenizerDecoderConfig,
+    VibeVoiceAcousticTokenizerEncoderConfig,
+)
 
 
 @dataclass
@@ -289,6 +293,8 @@ class VibeVoiceAcousticTokenizerPreTrainedModel(PreTrainedModel):
 
 
 class VibeVoiceAcousticTokenizerEncoderModel(VibeVoiceAcousticTokenizerPreTrainedModel):
+    config: VibeVoiceAcousticTokenizerEncoderConfig
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -380,6 +386,8 @@ class VibeVoiceAcousticTokenizerDecoderLayer(nn.Module):
 
 
 class VibeVoiceAcousticTokenizerDecoderModel(VibeVoiceAcousticTokenizerPreTrainedModel):
+    config: VibeVoiceAcousticTokenizerDecoderConfig
+
     def __init__(self, config):
         super().__init__(config)
 

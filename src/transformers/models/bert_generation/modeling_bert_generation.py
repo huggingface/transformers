@@ -321,7 +321,7 @@ class BertGenerationLayer(GradientCheckpointingLayer):
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         self_attention_output, _ = self.attention(
             hidden_states,
             attention_mask,

@@ -102,11 +102,10 @@ class VoxtralEncoder(Qwen2AudioEncoder):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         for idx, encoder_layer in enumerate(self.layers):
-            layer_outputs = encoder_layer(
+            hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
             )
-            hidden_states = layer_outputs[0]
 
         hidden_states = self.layer_norm(hidden_states)
 
