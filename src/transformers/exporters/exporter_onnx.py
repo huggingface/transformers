@@ -246,6 +246,20 @@ def _patch_bucketize(original):
     return patch
 
 
+def _patch_full(original):
+    """Force dtype=torch.long when fill_value is int and no dtype specified (ONNX defaults to float32)."""
+
+    def patch(*args, dtype=None, **kwargs):
+        if dtype is None:
+            # find fill_value: positional arg or kwarg
+            fill_value = kwargs.get("fill_value", args[1] if len(args) > 1 else None)
+            if isinstance(fill_value, int):
+                dtype = torch.long
+        return original(*args, dtype=dtype, **kwargs)
+
+    return patch
+
+
 def _patch_masked_scatter(original):
     """Cumsum-gather-where strategy for masked_scatter (avoids ScatterND ORT failures)."""
 
@@ -274,6 +288,7 @@ _TORCH_PATCH_TABLE = [
     (torch.Tensor, "cummin", lambda orig: _patch_cummax_or_cummin(orig, mode="min")),
     (torch, "bucketize", _patch_bucketize),
     (torch.Tensor, "masked_scatter", _patch_masked_scatter),
+    (torch, "full", _patch_full),
 ]
 
 
@@ -361,6 +376,36 @@ def _fix_assertion(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
     return True
 
 
+def _fix_fill_diagonal_inplace(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
+    """Replace in-place fill_diagonal_ with out-of-place equivalent."""
+    if node.target is not torch.ops.aten.fill_diagonal_.default:
+        return False
+    with gm.graph.inserting_before(node):
+        tensor_arg = node.args[0]
+        fill_value = node.args[1]
+        # Build diagonal mask and use where
+        rows = gm.graph.call_function(torch.ops.aten.sym_size.int, args=(tensor_arg, 0))
+        cols = gm.graph.call_function(torch.ops.aten.sym_size.int, args=(tensor_arg, 1))
+        eye = gm.graph.call_function(torch.ops.aten.eye.default, args=(rows, cols))
+        eye_bool = gm.graph.call_function(torch.ops.aten.to.dtype, args=(eye, torch.bool))
+        fill_tensor = gm.graph.call_function(torch.ops.aten.full_like.default, args=(tensor_arg, fill_value))
+        new = gm.graph.call_function(torch.ops.aten.where.self, args=(eye_bool, fill_tensor, tensor_arg))
+    node.replace_all_uses_with(new)
+    gm.graph.erase_node(node)
+    return True
+
+
+def _fix_triu_inplace(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
+    """Replace in-place triu_ with out-of-place triu."""
+    if node.target is not torch.ops.aten.triu_.default:
+        return False
+    with gm.graph.inserting_before(node):
+        new = gm.graph.call_function(torch.ops.aten.triu.default, args=node.args, kwargs=node.kwargs)
+    node.replace_all_uses_with(new)
+    gm.graph.erase_node(node)
+    return True
+
+
 def _fix_sort_stable(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
     """Replace aten.sort.stable with aten.sort.default (which has ONNX translation)."""
     if node.target is not torch.ops.aten.sort.stable:
@@ -379,8 +424,10 @@ _FX_NODE_FIXES = [
     _fix_alias,
     _fix_assertion,
     _fix_detach_inplace,
+    _fix_fill_diagonal_inplace,
     _fix_index_put_inplace,
     _fix_sort_stable,
+    _fix_triu_inplace,
 ]
 
 

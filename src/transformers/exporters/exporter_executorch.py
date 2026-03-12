@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
@@ -41,15 +42,7 @@ class ExecutorchExporter(DynamoExporter):
     required_packages = ["torch", "executorch"]
 
     def export(self, model: "PreTrainedModel", sample_inputs: dict[str, Any]) -> "ExecutorchProgramManager":
-        """
-        Exports a model for ExecuTorch using the full export and lowering workflow.
-        Args:
-            model (`PreTrainedModel`): The model to export.
-            sample_inputs (`Dict[str, Any]`): The sample inputs to use for the export.
-        Returns:
-            The exported model in ExecuTorch format.
-        """
-
+        """Export a model for ExecuTorch."""
         if self.export_config.backend == "xnnpack":
             from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
 
@@ -71,7 +64,7 @@ class ExecutorchExporter(DynamoExporter):
         else:
             raise ValueError(f"Unsupported backend {self.export_config.backend} for ExecuTorch export")
 
-        with patch_for_executorch_export(model):
+        with patch_torch_ops(model):
             exported_program: ExportedProgram = super().export(model, sample_inputs)
             edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
                 exported_program, partitioner=partitioner
@@ -81,30 +74,15 @@ class ExecutorchExporter(DynamoExporter):
         return executorch_programs_manager
 
 
-@contextmanager
-def patch_for_executorch_export(model: "PreTrainedModel"):
-    # ExecuTorch export patcher context
-    # This context manager monkey-patches PyTorch ops that are unsupported or buggy in ExecuTorch backends.
-    # The following ops are patched with fallback implementations:
-    #   - torch.split / torch.Tensor.split: replaced with narrow-based fallback
-    #   - torch.chunk / torch.Tensor.chunk: replaced with narrow-based fallback
-    #   - torch.topk / torch.Tensor.topk: replaced with argsort-based fallback
-    #   - torch.detach / torch.Tensor.detach: replaced with no-op fallback
-    #   - torch.nn.functional.avg_pool2d: decomposed as depthwise conv2d with uniform weights (kernel clamped to input size)
-    #   - torch.nn.functional.scaled_dot_product_attention: manual matmul+softmax fallback when D_q != D_v
-    # These patches are only active during export and are reverted afterwards.
-    original_torch_split = torch.split
-    original_tensor_split = torch.Tensor.split
-    original_torch_chunk = torch.chunk
-    original_tensor_chunk = torch.Tensor.chunk
-    original_torch_topk = torch.topk
-    original_tensor_topk = torch.Tensor.topk
-    original_torch_detach = torch.detach
-    original_tensor_detach = torch.Tensor.detach
-    original_avg_pool2d = torch.nn.functional.avg_pool2d
-    original_scaled_dot_product_attention = torch.nn.functional.scaled_dot_product_attention
+# ── Torch patches ──────────────────────────────────────────────────────────────
+# Same factory pattern as exporter_onnx.py: each _patch_* receives the original
+# and returns the replacement. _TORCH_PATCH_TABLE lists (obj, attr, factory).
 
-    def _split(input, split_size_or_sections, dim=0):
+
+def _patch_split(original):
+    """Narrow-based split (split_copy not supported by CUDA backend)."""
+
+    def patch(input, split_size_or_sections, dim=0):
         if isinstance(split_size_or_sections, int):
             splits = []
             total = input.size(dim)
@@ -119,31 +97,50 @@ def patch_for_executorch_export(model: "PreTrainedModel"):
                 start += size
             return tuple(splits)
 
-    def _chunk(input, chunks, dim=0):
+    return patch
+
+
+def _patch_chunk(original):
+    """Narrow-based chunk (delegates to split patch)."""
+
+    def patch(input, chunks, dim=0):
         total = input.size(dim)
         chunk_size = (total + chunks - 1) // chunks
-        return _split(input, chunk_size, dim)
+        # Call through torch.split which is already patched
+        return torch.split(input, chunk_size, dim)
 
-    def _topk(input, k, dim=None, largest=True, sorted=True):
+    return patch
+
+
+def _patch_topk(original):
+    """Argsort-based topk fallback."""
+
+    def patch(input, k, dim=None, largest=True, sorted=True):
         if dim is None:
             dim = -1
-        values = input
-        if largest:
-            indices = torch.argsort(values, dim=dim, descending=True)
-        else:
-            indices = torch.argsort(values, dim=dim, descending=False)
+        indices = torch.argsort(input, dim=dim, descending=largest)
         topk_indices = indices.narrow(dim, 0, k)
-        topk_values = torch.gather(values, dim, topk_indices)
+        topk_values = torch.gather(input, dim, topk_indices)
         return topk_values, topk_indices
 
-    def _detach(input):
+    return patch
+
+
+def _patch_detach(_original):
+    """No-op detach."""
+
+    def patch(input):
         return input
 
-    def _avg_pool2d(
+    return patch
+
+
+def _patch_avg_pool2d(original):
+    """Decompose avg_pool2d as depthwise conv2d (no CUDA ExecuTorch kernel)."""
+
+    def patch(
         input, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True, divisor_override=None
     ):
-        # aten::avg_pool2d has no CUDA ExecuTorch kernel. Decompose as a depthwise conv2d
-        # with uniform weights (1 / kernel_area), which IS supported by the CUDA backend.
         if isinstance(kernel_size, int):
             kernel_size = (kernel_size, kernel_size)
         if stride is None:
@@ -155,22 +152,20 @@ def patch_for_executorch_export(model: "PreTrainedModel"):
         kh, kw = kernel_size
         h, w = input.shape[-2:]
         channels = input.shape[1]
-        # Clamp kernel to padded input size (handles large-kernel global-pooling patterns where
-        # kernel_size == feature_map_size, e.g. nn.AvgPool2d(hidden_dim, ceil_mode=True)).
         actual_kh = min(kh, h + padding[0] * 2)
         actual_kw = min(kw, w + padding[1] * 2)
         divisor = divisor_override if divisor_override is not None else actual_kh * actual_kw
         weight = input.new_ones(channels, 1, actual_kh, actual_kw) / divisor
         return torch.nn.functional.conv2d(input, weight, bias=None, stride=stride, padding=padding, groups=channels)
 
-    def _scaled_dot_product_attention(
-        query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, **kwargs
-    ):
-        # ExecuTorch CUDA SDPA requires D_q == D_k == D_v. For asymmetric head dims
-        # (e.g. DiffLlama where D_v = 2*D_q), implement attention manually using matmul + softmax.
-        if query.shape[-1] != value.shape[-1]:
-            import math
+    return patch
 
+
+def _patch_scaled_dot_product_attention(original):
+    """Manual matmul+softmax fallback for asymmetric head dims (D_q != D_v)."""
+
+    def patch(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, **kwargs):
+        if query.shape[-1] != value.shape[-1]:
             scale_factor = scale if scale is not None else math.sqrt(query.shape[-1]) ** -1
             attn_weight = torch.matmul(query, key.transpose(-2, -1)) * scale_factor
             if is_causal:
@@ -181,31 +176,39 @@ def patch_for_executorch_export(model: "PreTrainedModel"):
                 attn_weight = attn_weight + attn_mask
             attn_weight = torch.nn.functional.softmax(attn_weight, dim=-1)
             return torch.matmul(attn_weight, value)
-        return original_scaled_dot_product_attention(
+        return original(
             query, key, value, attn_mask=attn_mask, dropout_p=dropout_p, is_causal=is_causal, scale=scale, **kwargs
         )
 
-    torch.split = _split
-    torch.Tensor.split = _split
-    torch.chunk = _chunk
-    torch.Tensor.chunk = _chunk
-    torch.topk = _topk
-    torch.Tensor.topk = _topk
-    torch.detach = _detach
-    torch.Tensor.detach = _detach
-    torch.nn.functional.avg_pool2d = _avg_pool2d
-    torch.nn.functional.scaled_dot_product_attention = _scaled_dot_product_attention
+    return patch
+
+
+# (object, attribute, factory) triples installed by patch_torch_ops.
+_TORCH_PATCH_TABLE = [
+    (torch, "split", _patch_split),
+    (torch.Tensor, "split", _patch_split),
+    (torch, "chunk", _patch_chunk),
+    (torch.Tensor, "chunk", _patch_chunk),
+    (torch, "topk", _patch_topk),
+    (torch.Tensor, "topk", _patch_topk),
+    (torch, "detach", _patch_detach),
+    (torch.Tensor, "detach", _patch_detach),
+    (torch.nn.functional, "avg_pool2d", _patch_avg_pool2d),
+    (torch.nn.functional, "scaled_dot_product_attention", _patch_scaled_dot_product_attention),
+]
+
+
+@contextmanager
+def patch_torch_ops(model: "PreTrainedModel"):
+    """Context manager: install torch patches for ExecuTorch export."""
+    originals = []
+    for obj, attr, factory in _TORCH_PATCH_TABLE:
+        original = getattr(obj, attr)
+        originals.append((obj, attr, original))
+        setattr(obj, attr, factory(original))
 
     try:
         yield
     finally:
-        torch.split = original_torch_split
-        torch.Tensor.split = original_tensor_split
-        torch.chunk = original_torch_chunk
-        torch.Tensor.chunk = original_tensor_chunk
-        torch.topk = original_torch_topk
-        torch.Tensor.topk = original_tensor_topk
-        torch.detach = original_torch_detach
-        torch.Tensor.detach = original_tensor_detach
-        torch.nn.functional.avg_pool2d = original_avg_pool2d
-        torch.nn.functional.scaled_dot_product_attention = original_scaled_dot_product_attention
+        for obj, attr, original in originals:
+            setattr(obj, attr, original)
