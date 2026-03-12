@@ -132,6 +132,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "IdeficsPerceiverConfig": True,
     "GptOssConfig": True,
     "LwDetrConfig": True,
+    "RfDetrConfig": True,
     "NemotronHConfig": True,
 }
 

@@ -401,6 +401,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "MusicgenMelodyModel",
     "MusicgenModel",
     "MusicgenForConditionalGeneration",
+    "RfDetrForInstanceSegmentation",
     "SpeechT5ForSpeechToSpeech",
     "SpeechT5ForTextToSpeech",
     "SpeechT5HifiGan",
