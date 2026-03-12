@@ -33,7 +33,7 @@ class Action(ExplicitEnum):
     RAISE = "raise"
 
 
-def deprecated_feature_extractor(audio_processor_class, old_class_name, version="4.55"):
+def deprecated_feature_extractor(audio_processor_class, old_class_name, version="5.5"):
     """Create a deprecated FeatureExtractor alias for an AudioProcessor.
 
     Uses dynamic class creation to reduce boilerplate across ~20 models.
