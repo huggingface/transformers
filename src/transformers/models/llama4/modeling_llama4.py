@@ -489,7 +489,7 @@ class Llama4PreTrainedModel(PreTrainedModel):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, Llama4VisionRotaryEmbedding):
-            module.freqs_ci.copy_(module._compute_freqs_ci(module.config))
+            init.copy_(module.freqs_ci, module._compute_freqs_ci(module.config))
         elif isinstance(module, Llama4VisionModel):
             init.normal_(module.class_embedding, std=module.scale)
             init.normal_(module.positional_embedding_vlm, std=module.scale)
