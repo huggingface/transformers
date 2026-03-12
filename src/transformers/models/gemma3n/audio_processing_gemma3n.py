@@ -12,32 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
-
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
-from ...feature_extraction_utils import BatchFeature
-
-
-def _create_fb_matrix(n_freqs, f_min, f_max, n_mels, sample_rate, fft_length, norm=None):
-    """HTK-style mel filterbank matrix matching Gemma3n FE implementation."""
-    all_freqs = np.arange(n_freqs, dtype=np.float32) * (sample_rate / fft_length)
-    m_min = 2595.0 * math.log10(1.0 + (f_min / 700.0))
-    m_max = 2595.0 * math.log10(1.0 + (f_max / 700.0))
-    m_pts = np.linspace(m_min, m_max, n_mels + 2)
-    f_pts = 700.0 * (10 ** (m_pts / 2595.0) - 1.0)
-    f_diff = f_pts[1:] - f_pts[:-1]
-    slopes = np.expand_dims(f_pts, 0) - np.expand_dims(all_freqs, 1)
-    zero = np.zeros(1, dtype=np.float32)
-    down_slopes = (-1.0 * slopes[:, :-2]) / f_diff[:-1]
-    up_slopes = slopes[:, 2:] / f_diff[1:]
-    fb = np.maximum(zero, np.minimum(down_slopes, up_slopes))
-    if norm == "slaney":
-        enorm = 2.0 / (f_pts[2 : n_mels + 2] - f_pts[:n_mels])
-        fb *= np.expand_dims(enorm, 0)
-    return fb
 
 
 def _unfold(array, dimension, size, step):
@@ -100,32 +78,6 @@ class Gemma3nAudioProcessor(NumpyAudioBackend):
         else:
             self.per_bin_stddev = None
 
-    def _mel_filter_bank(self, spectrogram_config):
-        """Custom HTK-style mel filterbank matching the original Gemma3n FE."""
-        sc = spectrogram_config
-        msc = sc.mel_scale_config
-        return _create_fb_matrix(
-            n_freqs=sc.stft_config.n_fft // 2 + 1,
-            f_min=msc.f_min,
-            f_max=msc.f_max,
-            n_mels=msc.n_mels,
-            sample_rate=self.sample_rate,
-            fft_length=sc.stft_config.n_fft,
-        )
-
-    def extract_spectrogram(self, audio, *, spectrogram_config=None, **kwargs):
-        if spectrogram_config is None:
-            spectrogram_config = self.spectrogram_config
-
-        # Process all waveforms at once (bypass base class per-element iteration)
-        if not isinstance(audio, list):
-            audio = [audio]
-
-        features = self._extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
-        features = self._apply_mel_scale(features, spectrogram_config=spectrogram_config, **kwargs)
-        # Skip _normalize_magnitude: _apply_mel_scale already applies log + per-bin normalization
-        return features
-
     def _extract_spectrogram(self, audio, *, spectrogram_config, **kwargs):
         stft_cfg = spectrogram_config.stft_config
         preemphasis = spectrogram_config.preemphasis
@@ -147,22 +99,29 @@ class Gemma3nAudioProcessor(NumpyAudioBackend):
         frames = frames * self.window  # Broadcasting window
 
         stft = np.fft.rfft(frames, n=stft_cfg.n_fft, axis=-1)
-        magnitude_spec = np.abs(stft)
+        return np.abs(stft)
 
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
-        """Apply mel filterbank, log compression, and per-bin normalization."""
-        result = []
-        for mag_spec in features:
-            mel_spec = np.matmul(mag_spec, self.mel_filters)
-            log_mel_spec = np.log(np.maximum(mel_spec, spectrogram_config.mel_floor))
+        """Apply mel filterbank. Features are in (batch, time, freq) format."""
+        mel_spec = np.matmul(features, self.mel_filters)
+        return np.maximum(spectrogram_config.mel_floor, mel_spec)
 
-            if self.per_bin_mean is not None:
-                log_mel_spec = log_mel_spec - self.per_bin_mean
-            if self.per_bin_stddev is not None:
-                log_mel_spec = log_mel_spec / self.per_bin_stddev
+    def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
+        """Apply log compression and per-bin normalization."""
+        result = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
 
-            result.append(log_mel_spec.astype(np.float32))
-        return result
+        if self.per_bin_mean is not None:
+            result = result - self.per_bin_mean
+        if self.per_bin_stddev is not None:
+            result = result / self.per_bin_stddev
+
+        return result.astype(np.float32)
+
+    def _get_features_lengths(self, audio_lengths, spectrogram_config, include_center_frame=False):
+        """Frame count for unfold-based STFT (no centering)."""
+        hop_length = spectrogram_config.stft_config.hop_length
+        frame_size = spectrogram_config.stft_config.win_length + 1
+        return (audio_lengths - frame_size) // hop_length + 1
 
 
 __all__ = ["Gemma3nAudioProcessor"]
