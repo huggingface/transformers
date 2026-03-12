@@ -1788,9 +1788,13 @@ class ConfigArgs:
 class ModelArgs:
     labels = {
         "description": """
-    Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+    Labels for computing the language modeling loss. Indices should either be in `[0, ...,
     config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
     (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+    For causal language models, the labels are **shifted internally** so that `labels[..., 1:]` are used to
+    predict `logits[..., :-1, :]`. This means you should pass unshifted labels matching `input_ids` (i.e.
+    `labels = input_ids`). Do **not** shift the labels yourself before passing them.
     """,
         "shape": "of shape `(batch_size, sequence_length)`",
     }
