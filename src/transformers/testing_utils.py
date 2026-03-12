@@ -216,6 +216,14 @@ _COMMON_MODEL_NAMES_MAP = {
     "token_classification_class": "ForTokenClassification",
 }
 
+# Used in VLMModelTester (and related classes/methods) to infer the common model classes from the base model class
+_VLM_COMMON_MODEL_NAMES_MAP = {
+    "config_class": "Config",
+    "text_config_class": "TextConfig",
+    "vision_config_class": "VisionConfig",
+    "conditional_generation_class": "ForConditionalGeneration",
+}
+
 
 if is_torch_available():
     import torch
@@ -2399,14 +2407,16 @@ def pytest_xdist_worker_id():
 
 def get_torch_dist_unique_port():
     """
-    Returns a port number that can be fed to `torch.distributed.launch`'s `--master_port` argument.
+    Returns a free port number that can be fed to `torch.distributed.launch`'s `--master_port` argument.
 
-    Under `pytest-xdist` it adds a delta number based on a worker id so that concurrent tests don't try to use the same
-    port at once.
+    Binds to port 0 to let the OS assign an available port, avoiding collisions from hardcoded ports
+    and TCP TIME_WAIT issues between sequential subprocess launches.
     """
-    port = 29500
-    uniq_delta = pytest_xdist_worker_id()
-    return port + uniq_delta
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
 
 
 def nested_simplify(obj, decimals=3):

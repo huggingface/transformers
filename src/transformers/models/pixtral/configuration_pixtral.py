@@ -20,7 +20,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="pixtral-hf/pixtral-9b")
+@auto_docstring(checkpoint="mistral-labs/pixtral-12b")
 class PixtralVisionConfig(PreTrainedConfig):
     r"""
     Example:
