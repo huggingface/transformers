@@ -51,7 +51,7 @@ image = Image.open(
 detector = pipeline(
     task="object-detection", 
     model="PaddlePaddle/PP-OCRV5_server_det_safetensors",
-    device=0
+    device_map="auto",
 )
 results = detector(image)
 
@@ -109,7 +109,7 @@ image = Image.open(
 detector = pipeline(
     task="object-detection", 
     model="PaddlePaddle/PP-OCRV5_server_det_safetensors",
-    device=0
+    device_map="auto",
 )
 results = detector([image, image])
 

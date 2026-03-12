@@ -57,54 +57,28 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(
-    custom_intro="""
-    This is the configuration class to store the configuration of a [`PPOCRV5ServerDet`]. It is used to instantiate a
-    PPOCRV5 Server text detection model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the PPOCRV5 Server Det
-    [PaddlePaddle/PP-OCRv5-server-det](https://huggingface.co/PaddlePaddle/PP-OCRv5-server-det) architecture.
-    """,
     checkpoint="PaddlePaddle/PP-OCRv5-server-det",
+    custom_args=r"""
+    interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
+        The interpolation mode used for upsampling or downsampling feature maps in the neck network.
+    neck_out_channels (`int`, *optional*, defaults to 256):
+        The number of output channels from the neck network, responsible for feature fusion and refinement.
+    reduce_factor (`int`, *optional*, defaults to 2):
+        The channel reduction factor used in the neck blocks to balance performance and complexity.
+    intraclass_block_number (`int`, *optional*, defaults to 4):
+        The number of Intra-Class Block modules used for enhancing feature representation.
+    intraclass_block_config (`dict`, *optional*, defaults to `None`):
+        Configuration for the Intra-Class Block modules, if any, used for enhancing feature representation.
+    scale_factor (`int`, *optional*, defaults to 2):
+        The scaling factor used for spatial resolution adjustments in the feature maps.
+    kernel_list (`list[int]`, *optional*, defaults to `[3, 2, 2]`):
+        The list of kernel sizes for convolutional layers in the head network for multi-scale feature extraction.
+    """,
 )
 class PPOCRV5ServerDetConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PPOCRV5ServerDet`]. It is used to instantiate a
-    PPOCRV5 Server text detection model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the PPOCRV5 Server Det
-    [PaddlePaddle/PP-OCRv5-server-det](https://huggingface.co/PaddlePaddle/PP-OCRv5-server-det) architecture.
+    
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
-            The interpolation mode used for upsampling or downsampling feature maps in the neck network.
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
-            The configuration of the backbone model.
-        neck_out_channels (`int`, *optional*, defaults to 256):
-            The number of output channels from the neck network, responsible for feature fusion and refinement.
-        reduce_factor (`int`, *optional*, defaults to 2):
-            The channel reduction factor used in the neck blocks to balance performance and complexity.
-        intraclass_block_number (`int`, *optional*, defaults to 4):
-            The number of Intra-Class Block modules used for enhancing feature representation.
-        intraclass_block_config (`dict`, *optional*, defaults to `None`):
-            Configuration for the Intra-Class Block modules, if any, used for enhancing feature representation.
-        scale_factor (`int`, *optional*, defaults to 2):
-            The scaling factor used for spatial resolution adjustments in the feature maps.
-        hidden_act (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function used in the hidden layers. Supported functions include `"relu"`, `"hswish"`, etc.
-        kernel_list (`list[int]`, *optional*, defaults to `[3, 2, 2]`):
-            The list of kernel sizes for convolutional layers in the head network for multi-scale feature extraction.
-
-    Examples:
-    ```python
-    >>> from transformers import PPOCRV5ServerDetConfig, PPOCRV5ServerDetForTextDetection
-    >>> # Initializing a PPOCRV5 Server Det configuration
-    >>> configuration = PPOCRV5ServerDetConfig()
-    >>> # Initializing a model (with random weights) from the configuration
-    >>> model = PPOCRV5ServerDetForTextDetection(configuration)
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
     """
 
     sub_configs = {"backbone_config": AutoConfig}
@@ -120,7 +94,7 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         intraclass_block_config: dict | None = None,
         scale_factor: int = 2,
         hidden_act: str = "relu",
-        kernel_list: list[int] = [3, 2, 2],
+        kernel_list: list | None = None,
         **kwargs,
     ):
         self.interpolate_mode = interpolate_mode
@@ -154,10 +128,8 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         self.kernel_list = kernel_list
 
         # For object detection pipeline compatibility: single class "text"
-        if "id2label" not in kwargs:
-            kwargs["id2label"] = {0: "text"}
-        if "num_labels" not in kwargs:
-            kwargs["num_labels"] = 1
+        self.id2label = {0: "text"}
+        self.num_labels = 1
 
         super().__init__(**kwargs)
 
@@ -178,14 +150,12 @@ class PPOCRV5ServerDetImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring(
-    custom_intro="""
-    """
-)
-class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
-    """
+    custom_intro=r"""
     Image processor for PPOCRV5 Server Det model, handling preprocessing (resizing, normalization)
     and post-processing (converting model outputs to text boxes).
     """
+)
+class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
 
     resample = 2
     image_mean = [0.406, 0.456, 0.485]
@@ -217,6 +187,8 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
+        requires_backends(self, ["torch"])
+
         target_sizes = []
 
         # Group images by their original spatial shape to enable batched resizing (optimization for efficiency)
@@ -437,7 +409,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
 
     def get_image_size(
         self,
-        image: torch.Tensor,
+        image: "torch.Tensor",
         limit_side_len: int,
         limit_type: str,
         max_side_limit: int,
@@ -472,7 +444,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         elif limit_type == "resize_long":
             ratio = float(limit_side_len) / max(height, width)
         else:
-            raise Exception(f"PPOCRV5ServerDetImageProcessorFast does not support limit type: {limit_type}")
+            raise ValueError(f"PPOCRV5ServerDetImageProcessorFast does not support limit type: {limit_type}")
 
         resize_height = int(height * ratio)
         resize_width = int(width * ratio)
@@ -501,7 +473,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         self,
         predictions,
         threshold: float = 0.3,
-        target_sizes: list[tuple[int, int]] | torch.Tensor | None = None,
+        target_sizes: list[tuple[int, int]] | TensorType | None = None,
         box_threshold: float = 0.6,
         max_candidates: int = 1000,
         min_size: int = 3,
@@ -525,10 +497,10 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
                 - "scores": `torch.Tensor` of shape `(N,)`
                 - "labels": `torch.Tensor` of shape `(N,)` (class id 0 for text)
         """
+        requires_backends(self, ["torch", "cv2"])
         if target_sizes is None:
             raise ValueError("target_sizes must be provided for post_process_object_detection")
 
-        requires_backends(self, ["torch", "cv2"])
         device = predictions.logits.device
         results = []
         for prediction, size in zip(predictions.logits, target_sizes):
@@ -587,36 +559,36 @@ class PPOCRV5ServerDetIntraclassBlock(nn.Module):
         self.conv_reduce_channel = nn.Conv2d(in_channels, reduced_channels, *intraclass_block_config["reduce_channel"])
 
         self.vertical_long_to_small_conv_longratio = nn.Conv2d(
-            reduced_channels, reduced_channels, *intraclass_block_config["v_layer_7x1"]
+            reduced_channels, reduced_channels, *intraclass_block_config["vertical_long_to_small_conv_longratio"]
         )
         self.vertical_long_to_small_conv_midratio = nn.Conv2d(
-            reduced_channels, reduced_channels, *intraclass_block_config["v_layer_5x1"]
+            reduced_channels, reduced_channels, *intraclass_block_config["vertical_long_to_small_conv_midratio"]
         )
         self.vertical_long_to_small_conv_shortratio = nn.Conv2d(
-            reduced_channels, reduced_channels, *intraclass_block_config["v_layer_3x1"]
+            reduced_channels, reduced_channels, *intraclass_block_config["vertical_long_to_small_conv_shortratio"]
         )
 
-        self.horizontal_small_to_long_conv_longratior = nn.Conv2d(
-            reduced_channels, reduced_channels, *intraclass_block_config["q_layer_1x7"]
+        self.horizontal_small_to_long_conv_longratio = nn.Conv2d(
+            reduced_channels, reduced_channels, *intraclass_block_config["horizontal_small_to_long_conv_longratio"]
         )
         self.horizontal_small_to_long_conv_midratio = nn.Conv2d(
-            reduced_channels, reduced_channels, *intraclass_block_config["q_layer_1x5"]
+            reduced_channels, reduced_channels, *intraclass_block_config["horizontal_small_to_long_conv_midratio"]
         )
         self.horizontal_small_to_long_conv_shortratio = nn.Conv2d(
-            reduced_channels, reduced_channels, *intraclass_block_config["q_layer_1x3"]
+            reduced_channels, reduced_channels, *intraclass_block_config["horizontal_small_to_long_conv_shortratio"]
         )
 
-        self.symmetric_conv_long_longratior = nn.Conv2d(
-            reduced_channels, reduced_channels, *intraclass_block_config["c_layer_7x7"]
+        self.symmetric_conv_long_longratio = nn.Conv2d(
+            reduced_channels, reduced_channels, *intraclass_block_config["symmetric_conv_long_longratio"]
         )
         self.symmetric_conv_long_midratio = nn.Conv2d(
-            reduced_channels, reduced_channels, *intraclass_block_config["c_layer_5x5"]
+            reduced_channels, reduced_channels, *intraclass_block_config["symmetric_conv_long_midratio"]
         )
         self.symmetric_conv_long_shortratio = nn.Conv2d(
-            reduced_channels, reduced_channels, *intraclass_block_config["c_layer_3x3"]
+            reduced_channels, reduced_channels, *intraclass_block_config["symmetric_conv_long_shortratio"]
         )
 
-        self.layer = PPOCRV5ServerDetConvBNLayer(
+        self.layer = PPOCRV5ServerDetConvBatchnormLayer(
             in_channels=reduced_channels,
             out_channels=in_channels,
             kernel_size=intraclass_block_config["return_channel"][0],
@@ -630,9 +602,9 @@ class PPOCRV5ServerDetIntraclassBlock(nn.Module):
         hidden_states = self.conv_reduce_channel(hidden_states)
 
         hidden_states = (
-            self.symmetric_conv_long_longratior(hidden_states)
+            self.symmetric_conv_long_longratio(hidden_states)
             + self.vertical_long_to_small_conv_longratio(hidden_states)
-            + self.horizontal_small_to_long_conv_longratior(hidden_states)
+            + self.horizontal_small_to_long_conv_longratio(hidden_states)
         )
         hidden_states = (
             self.symmetric_conv_long_midratio(hidden_states)
@@ -756,7 +728,7 @@ class PPOCRV5ServerDetNeck(nn.Module):
         return torch.cat(upsampled[::-1], dim=1)
 
 
-class PPOCRV5ServerDetConvBNLayer(nn.Module):
+class PPOCRV5ServerDetConvBatchnormLayer(nn.Module):
     """
     A basic wrapper for Convolution-BatchNorm-Activation, typically used for head components.
 
@@ -813,7 +785,7 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
         return hidden_states
 
 
-class PPOCRV5ServerDetHead(nn.Module):
+class PPOCRV5ServerDetSegmentationHead(nn.Module):
     """
     Standard segmentation head for generating probability maps. It uses transposed
     convolution to upsample the feature map back to the original image size.
@@ -832,13 +804,13 @@ class PPOCRV5ServerDetHead(nn.Module):
     ):
         super().__init__()
 
-        self.layer1 = PPOCRV5ServerDetConvBNLayer(
+        self.conv_down = PPOCRV5ServerDetConvBatchnormLayer(
             in_channels=in_channels,
             out_channels=in_channels // 4,
             kernel_size=kernel_list[0],
             padding=int(kernel_list[0] // 2),
         )
-        self.layer2 = PPOCRV5ServerDetConvBNLayer(
+        self.conv_up = PPOCRV5ServerDetConvBatchnormLayer(
             in_channels=in_channels // 4,
             out_channels=in_channels // 4,
             kernel_size=kernel_list[1],
@@ -846,7 +818,7 @@ class PPOCRV5ServerDetHead(nn.Module):
             convolution_transpose=True,
         )
 
-        self.convolution3 = nn.ConvTranspose2d(
+        self.conv_final = nn.ConvTranspose2d(
             in_channels=in_channels // 4,
             out_channels=1,
             kernel_size=kernel_list[2],
@@ -854,10 +826,10 @@ class PPOCRV5ServerDetHead(nn.Module):
         )
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        hidden_states = self.layer1(hidden_states)
-        hidden_states = self.layer2(hidden_states)
+        hidden_states = self.conv_down(hidden_states)
+        hidden_states = self.conv_up(hidden_states)
         feature = hidden_states
-        hidden_states = self.convolution3(hidden_states)
+        hidden_states = self.conv_final(hidden_states)
         hidden_states = torch.sigmoid(hidden_states)
         return hidden_states, feature
 
@@ -875,7 +847,7 @@ class PPOCRV5ServerDetLocalModule(nn.Module):
 
     def __init__(self, in_channels: int, out_channels: int, hidden_act: str):
         super().__init__()
-        self.convolution_backbone = PPOCRV5ServerDetConvBNLayer(
+        self.convolution_backbone = PPOCRV5ServerDetConvBatchnormLayer(
             in_channels=in_channels + 1,
             out_channels=out_channels,
             kernel_size=3,
@@ -899,7 +871,7 @@ class PPOCRV5ServerDetLocalModule(nn.Module):
         return hidden_states
 
 
-class PPOCRV5ServerDetPFHeadLocal(nn.Module):
+class PPOCRV5ServerDetHead(nn.Module):
     """
     PPOCRV5ServerDetPFHeadLocal implements the Progressive Fusion Head with Local refinement,
     the core detection head of PP-OCRv5.
@@ -907,7 +879,7 @@ class PPOCRV5ServerDetPFHeadLocal(nn.Module):
 
     def __init__(self, config: PPOCRV5ServerDetConfig):
         super().__init__()
-        self.binarize_head = PPOCRV5ServerDetHead(in_channels=config.neck_out_channels, kernel_list=config.kernel_list)
+        self.binarize_head = PPOCRV5ServerDetSegmentationHead(in_channels=config.neck_out_channels, kernel_list=config.kernel_list)
         self.upsample_convolution = nn.Upsample(scale_factor=config.scale_factor, mode=config.interpolate_mode)
 
         self.local_refinement_module = PPOCRV5ServerDetLocalModule(
@@ -967,11 +939,7 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    Output class for PPOCRV5ServerDetForObjectDetection.
-    """
-)
+@auto_docstring
 @dataclass
 class PPOCRV5ServerDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
     r"""
@@ -1000,7 +968,7 @@ class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
     def __init__(self, config: PPOCRV5ServerDetConfig):
         super().__init__(config)
         self.model = PPOCRV5ServerDetModel(config)
-        self.head = PPOCRV5ServerDetPFHeadLocal(config)
+        self.head = PPOCRV5ServerDetHead(config)
         self.post_init()
 
     @can_return_tuple

@@ -37,10 +37,7 @@ if is_cv2_available():
     import cv2
 
 
-@auto_docstring(
-    custom_intro="""
-    """
-)
+@auto_docstring
 class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
     """
     Image processor for PPOCRV5 Server Det model, handling preprocessing (resizing, normalization)
@@ -87,6 +84,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         # [Key Change] Core addition: Mapping from original image shape to target resize shape
         # This dict ensures consistent target shape handling across all subsequent operations (resize/processing)
         target_shape_per_shape = {}
+        requires_backends(self, ["torch"])
         for shape, stacked_images in grouped_images.items():
             if do_resize:
                 resize_size, target_shape = self.get_image_size(
@@ -297,7 +295,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
 
     def get_image_size(
         self,
-        image: torch.Tensor,
+        image: "torch.Tensor",
         limit_side_len: int,
         limit_type: str,
         max_side_limit: int,
@@ -332,7 +330,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         elif limit_type == "resize_long":
             ratio = float(limit_side_len) / max(height, width)
         else:
-            raise Exception(f"PPOCRV5ServerDetImageProcessorFast does not support limit type: {limit_type}")
+            raise ValueError(f"PPOCRV5ServerDetImageProcessorFast does not support limit type: {limit_type}")
 
         resize_height = int(height * ratio)
         resize_width = int(width * ratio)
@@ -361,7 +359,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         self,
         predictions,
         threshold: float = 0.3,
-        target_sizes: list[tuple[int, int]] | torch.Tensor | None = None,
+        target_sizes: list[tuple[int, int]] | TensorType | None = None,
         box_threshold: float = 0.6,
         max_candidates: int = 1000,
         min_size: int = 3,

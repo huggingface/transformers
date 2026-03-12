@@ -95,15 +95,15 @@ class PPOCRV5ServerDetModelTester:
         intraclass_block_config = {
             "reduce_channel": [1, 1, 0],
             "return_channel": [1, 1, 0],
-            "v_layer_7x1": [[7, 1], [1, 1], [3, 0]],
-            "v_layer_5x1": [[5, 1], [1, 1], [2, 0]],
-            "v_layer_3x1": [[3, 1], [1, 1], [1, 0]],
-            "q_layer_1x7": [[1, 7], [1, 1], [0, 3]],
-            "q_layer_1x5": [[1, 5], [1, 1], [0, 2]],
-            "q_layer_1x3": [[1, 3], [1, 1], [0, 1]],
-            "c_layer_7x7": [[7, 7], [1, 1], [3, 3]],
-            "c_layer_5x5": [[5, 5], [1, 1], [2, 2]],
-            "c_layer_3x3": [[3, 3], [1, 1], [1, 1]],
+            "vertical_long_to_small_conv_longratio": [[7, 1], [1, 1], [3, 0]],
+            "vertical_long_to_small_conv_midratio": [[5, 1], [1, 1], [2, 0]],
+            "vertical_long_to_small_conv_shortratio": [[3, 1], [1, 1], [1, 0]],
+            "horizontal_small_to_long_conv_longratio": [[1, 7], [1, 1], [0, 3]],
+            "horizontal_small_to_long_conv_midratio": [[1, 5], [1, 1], [0, 2]],
+            "horizontal_small_to_long_conv_shortratio": [[1, 3], [1, 1], [0, 1]],
+            "symmetric_conv_long_longratio": [[7, 7], [1, 1], [3, 3]],
+            "symmetric_conv_long_midratio": [[5, 5], [1, 1], [2, 2]],
+            "symmetric_conv_long_shortratio": [[3, 3], [1, 1], [1, 1]],
         }
 
         config = PPOCRV5ServerDetConfig(

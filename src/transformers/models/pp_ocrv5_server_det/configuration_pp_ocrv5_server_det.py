@@ -25,24 +25,10 @@ from ..auto import AutoConfig
 
 
 @auto_docstring(
-    custom_intro="""
-    This is the configuration class to store the configuration of a [`PPOCRV5ServerDet`]. It is used to instantiate a
-    PPOCRV5 Server text detection model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the PPOCRV5 Server Det
-    [PaddlePaddle/PP-OCRv5-server-det](https://huggingface.co/PaddlePaddle/PP-OCRv5-server-det) architecture.
-    """,
     checkpoint="PaddlePaddle/PP-OCRv5-server-det",
 )
 class PPOCRV5ServerDetConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PPOCRV5ServerDet`]. It is used to instantiate a
-    PPOCRV5 Server text detection model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the PPOCRV5 Server Det
-    [PaddlePaddle/PP-OCRv5-server-det](https://huggingface.co/PaddlePaddle/PP-OCRv5-server-det) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
     Args:
         interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
             The interpolation mode used for upsampling or downsampling feature maps in the neck network.
@@ -88,7 +74,7 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         intraclass_block_config: dict | None = None,
         scale_factor: int = 2,
         hidden_act: str = "relu",
-        kernel_list: list[int] = [3, 2, 2],
+        kernel_list: list | None = None,
         **kwargs,
     ):
         self.interpolate_mode = interpolate_mode
@@ -122,10 +108,13 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         self.kernel_list = kernel_list
 
         # For object detection pipeline compatibility: single class "text"
-        if "id2label" not in kwargs:
-            kwargs["id2label"] = {0: "text"}
-        if "num_labels" not in kwargs:
-            kwargs["num_labels"] = 1
+        self.id2label = {0: "text"}
+        self.num_labels = 1
+
+        # if "id2label" not in kwargs:
+        #     kwargs["id2label"] = {0: "text"}
+        # if "num_labels" not in kwargs:
+        #     kwargs["num_labels"] = 1
 
         super().__init__(**kwargs)
 
