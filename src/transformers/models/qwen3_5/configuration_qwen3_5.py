@@ -236,5 +236,27 @@ class Qwen3_5Config(PreTrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
+        # Keep the top-level `num_labels` in sync with the text sub-config so
+        # that sequence classification heads see a consistent label space when
+        # the config is constructed directly with `num_labels=...`.
+        if getattr(self, "text_config", None) is not None:
+            if getattr(self.text_config, "num_labels", None) != getattr(self, "num_labels", None):
+                self.text_config.num_labels = self.num_labels
+
+    def __setattr__(self, key, value):
+        super().__setattr__(key, value)
+        if key == "num_labels" and getattr(self, "text_config", None) is not None:
+            self.text_config.num_labels = value
+
+    def update(self, config_dict):
+        """
+        Extend the base update logic so that an updated top-level `num_labels`
+        is also reflected in the text sub-config used for classification when
+        the config is modified via `config.update(...)` (used by AutoConfig).
+        """
+        super().update(config_dict)
+        if "num_labels" in config_dict and getattr(self, "text_config", None) is not None:
+            self.text_config.num_labels = self.num_labels
+
 
 __all__ = ["Qwen3_5Config", "Qwen3_5TextConfig"]

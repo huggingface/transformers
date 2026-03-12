@@ -211,6 +211,26 @@ class Qwen3_5Config(Qwen3VLConfig):
             **kwargs,
         )
 
+        # Ensure that the top-level `num_labels` stays in sync with the text
+        # sub-config used by sequence classification heads.
+        if getattr(self, "text_config", None) is not None:
+            if getattr(self.text_config, "num_labels", None) != getattr(self, "num_labels", None):
+                self.text_config.num_labels = self.num_labels
+
+    def __setattr__(self, key, value):
+        super().__setattr__(key, value)
+        if key == "num_labels" and getattr(self, "text_config", None) is not None:
+            self.text_config.num_labels = value
+
+    def update(self, config_dict):
+        """
+        Extend the base update logic so that an updated top-level `num_labels`
+        is also reflected in the text sub-config used for classification.
+        """
+        super().update(config_dict)
+        if "num_labels" in config_dict and getattr(self, "text_config", None) is not None:
+            self.text_config.num_labels = self.num_labels
+
 
 class Qwen3_5DynamicCache(Qwen3NextDynamicCache):
     pass
