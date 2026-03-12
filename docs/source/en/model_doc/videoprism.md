@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2024-02-20 and added to Hugging Face Transformers on 2026-03-11.*
+*This model was released on 2024-02-20 and added to Hugging Face Transformers on 2026-03-12.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -31,7 +31,7 @@ VideoPrism is a general-purpose video encoder that tackles diverse video underst
 
 You can find all original VideoPrism checkpoints under the [VideoPrism](https://huggingface.co/collections/google/videoprism) collection.
 
-Tips:
+Notes:
 
 - VideoPrism uses a factorized spatio-temporal encoder architecture, processing videos through separate spatial and temporal transformers.
 - The model supports video-text contrastive learning through `VideoPrismClipModel`, which combines a video encoder and a text encoder. `VideoPrismConfig` must be used with this model.
@@ -71,35 +71,11 @@ encoder_outputs = outputs.last_hidden_state
 
 ```
 
-You may also use the original video processing function provided in the VideoPrism repository examples. However, this will be slower than using the torchcodec based VideoPrismVideoProcessor for large batches of videos.
+<Tip warning={true}>
 
-```python
-import numpy as np
+The video processor loaded via AutoProcessor is LlavaOnevisionVideoProcessor which is recomended for sampling frames exactly as in the original repository. However, please note that the [original processor](https://github.com/google-deepmind/videoprism/blob/main/videoprism/colabs/videoprism_video_encoder_demo.ipynb) uses Lanczos interpolation for resizing the frames, but that is not supported in pytorch yet and therefore LlavaOnevisionVideoProcessor uses Bicubic interpolation. 
 
-def read_and_preprocess_video(
-    filename: str, target_num_frames: int, target_frame_size: tuple[int, int]
-):
-    """Reads and preprocesses a video."""
-
-    frames = mediapy.read_video(filename)
-
-    # Sample to target number of frames.
-    frame_indices = np.linspace(0, len(frames), num=target_num_frames, endpoint=False, dtype=np.int32)
-    frames = np.array([frames[i] for i in frame_indices])
-
-    # Resize to target size.
-    original_height, original_width = frames.shape[-3:-1]
-    target_height, target_width = target_frame_size
-    assert original_height * target_width == original_width * target_height, (
-        "Currently does not support aspect ratio mismatch."
-    )
-    frames = mediapy.resize_video(frames, shape=target_frame_size)
-
-    # Normalize pixel values to [0.0, 1.0].
-    frames = mediapy.to_float01(frames)
-
-    return frames
-```
+</Tip>
 
 ## VideoPrismVisionConfig
 
@@ -112,10 +88,6 @@ def read_and_preprocess_video(
 ## VideoPrismConfig
 
 [[autodoc]] VideoPrismConfig
-
-## VideoPrismVideoProcessor
-
-[[autodoc]] VideoPrismVideoProcessor
 
 ## VideoPrismTokenizer
 

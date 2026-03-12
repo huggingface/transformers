@@ -470,7 +470,6 @@ def convert_videoprism_checkpoint(
             assert torch.allclose(video_logits, EXPECTED_OUTPUTS[model_name]["vision"], atol=1e-5), (
                 "The converted model video logits do not match the expected logits."
             )
-            print(text_logits)
             assert torch.allclose(text_logits, EXPECTED_OUTPUTS[model_name]["text"], atol=1e-4), (
                 "The converted model text logits do not match the expected logits."
             )
@@ -493,7 +492,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model_name",
-        default="lvt_base",
+        default="backbone_large",
         type=str,
         choices=ORIGINAL_CHECKPOINTS.keys(),
         help="Name of the model you'd like to convert.",
@@ -506,7 +505,7 @@ def main():
     )
     parser.add_argument(
         "--convert",
-        default=False,
+        default=True,
         type=bool,
         help="Whether to convert the original Flax checkpoint to Hugging Face format.",
     )
