@@ -41,7 +41,7 @@ from ..mistral3.modeling_mistral3 import (
 from ..pixtral.image_processing_pixtral import get_resize_output_image_size
 
 
-@auto_docstring(checkpoint="lightonocr-hf/lightonocr-9b")
+@auto_docstring(checkpoint="lightonai/LightOnOCR-1B-1025")
 class LightOnOcrConfig(PretrainedConfig):
     r"""
     Example:
@@ -322,7 +322,6 @@ class LightOnOcrModel(Mistral3Model):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | LightOnOcrModelOutputWithPast:
@@ -357,7 +356,6 @@ class LightOnOcrModel(Mistral3Model):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 

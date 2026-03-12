@@ -229,7 +229,6 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **lm_kwargs,
     ) -> tuple | VipLlavaModelOutputWithPast:
         r"""
@@ -271,7 +270,6 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=True,
-            cache_position=cache_position,
             **lm_kwargs,
         )
 
@@ -348,7 +346,6 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **lm_kwargs,
     ) -> tuple | VipLlavaCausalLMOutputWithPast:
@@ -409,7 +406,6 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=True,
-            cache_position=cache_position,
             **lm_kwargs,
         )
 
@@ -438,7 +434,6 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         inputs_embeds=None,
         pixel_values=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -450,7 +445,6 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,

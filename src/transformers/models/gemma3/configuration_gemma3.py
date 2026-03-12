@@ -29,7 +29,7 @@ from ..siglip import SiglipVisionConfig
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="google/gemma3_text-7b")
+@auto_docstring(checkpoint="google/gemma-3-4b-it")
 class Gemma3TextConfig(PreTrainedConfig):
     r"""
     final_logit_softcapping (`float`, *optional*):
@@ -174,7 +174,7 @@ class Gemma3TextConfig(PreTrainedConfig):
         return kwargs
 
 
-@auto_docstring(checkpoint="google/gemma3_text-7b")
+@auto_docstring(checkpoint="google/gemma-3-4b-it")
 class Gemma3Config(PreTrainedConfig):
     r"""
     mm_tokens_per_image (`int`, *optional*, defaults to 256):
