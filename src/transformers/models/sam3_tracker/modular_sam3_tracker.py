@@ -63,9 +63,6 @@ class Sam3TrackerPromptEncoderConfig(Sam2PromptEncoderConfig):
     patch_size: int | list[int] | tuple[int, int] = 14
 
 
-@auto_docstring(checkpoint="facebook/sam3")
-@strict(accept_kwargs=True)
-@dataclass
 class Sam3TrackerProcessor(Sam2Processor):
     pass
 

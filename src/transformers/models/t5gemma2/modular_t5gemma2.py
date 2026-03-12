@@ -142,13 +142,9 @@ class T5Gemma2DecoderConfig(Gemma3TextConfig, PreTrainedConfig):
         PreTrainedConfig.__post_init__(**kwargs)
 
 
-<<<<<<< HEAD
-@auto_docstring(checkpoint="google/t5gemma2_text-7b")
+@auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
 @strict(accept_kwargs=True)
 @dataclass
-=======
-@auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
->>>>>>> upstream/main
 class T5Gemma2Config(PreTrainedConfig):
     r"""
     encoder (`Union[T5Gemma2EncoderConfig, dict]`, optional, *optional*):

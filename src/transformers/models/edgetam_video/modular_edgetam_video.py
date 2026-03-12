@@ -35,6 +35,7 @@ from ...utils.output_capturing import OutputRecorder
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..sam2.modeling_sam2 import eager_attention_forward, window_partition
 from ..sam2_video.configuration_sam2_video import (
+    Sam2VideoConfig,
     Sam2VideoMaskDecoderConfig,
     Sam2VideoPromptEncoderConfig,
 )
@@ -75,7 +76,7 @@ class EdgeTamVideoMaskDecoderConfig(Sam2VideoMaskDecoderConfig):
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 @strict(accept_kwargs=True)
 @dataclass
-class EdgeTamVideoConfig(Sam2VideoConfig):
+class EdgeTamVideoConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `EdgeTamVideoPromptEncoderConfig`], *optional*):
         Dictionary of configuration options used to initialize [`EdgeTamVideoPromptEncoderConfig`].

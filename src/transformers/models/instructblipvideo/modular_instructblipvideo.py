@@ -15,14 +15,13 @@
 
 from dataclasses import dataclass
 
+import torch
 from huggingface_hub.dataclasses import strict
 
-import torch
-
 from transformers.models.instructblip.configuration_instructblip import (
-    InstructBlipConfig,
     InstructBlipQFormerConfig,
     InstructBlipVisionConfig,
+    InstructBlipConfig,
 )
 from transformers.models.instructblip.modeling_instructblip import (
     BaseModelOutputWithVisionQformerOutputs,
@@ -35,11 +34,11 @@ from transformers.models.instructblip.modeling_instructblip import (
     TransformersKwargs,
 )
 
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple
-
 
 
 @auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
@@ -91,7 +90,7 @@ class InstructBlipVideoQFormerConfig(InstructBlipQFormerConfig):
 @auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
 @strict(accept_kwargs=True)
 @dataclass
-class InstructBlipVideoConfig(PreTrainedConfig):
+class InstructBlipVideoConfig(InstructBlipConfig):
     r"""
     qformer_config (`dict`, *optional*):
         Dictionary of configuration options used to initialize [`InstructBlipVideoQFormerConfig`].
