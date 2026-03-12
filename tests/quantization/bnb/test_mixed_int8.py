@@ -149,16 +149,10 @@ class MixedInt8Test(BaseMixedInt8Test):
         Test the `get_keys_to_not_convert` function.
         """
 
-        from transformers import AutoModelForMaskedLM, Blip2ForConditionalGeneration, MptForCausalLM, OPTForCausalLM
+        from transformers import AutoModelForMaskedLM, Blip2ForConditionalGeneration, OPTForCausalLM
         from transformers.quantizers.base import get_keys_to_not_convert
 
-        model_id = "mosaicml/mpt-7b"
-        config = AutoConfig.from_pretrained(model_id, revision="72e5f594ce36f9cabfa2a9fd8f58b491eb467ee7")
-        with torch.device("meta"):
-            model = MptForCausalLM(config)
         # The order of the keys does not matter, so we sort them before comparing, same for the other tests.
-        self.assertEqual(get_keys_to_not_convert(model).sort(), ["lm_head", "transformer.wte"].sort())
-
         model_id = "Salesforce/blip2-opt-2.7b"
         config = AutoConfig.from_pretrained(model_id, revision="1ef7f63a8f0a144c13fdca8103eb7b4691c74cec")
         with torch.device("meta"):

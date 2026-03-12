@@ -152,6 +152,14 @@ class FPQuantMXFP4PseudoquantTest(FPQuantBaseTest):
     def getQuantizationConfig(cls):
         return FPQuantConfig(forward_dtype="mxfp4", pseudoquantization=True)
 
+    @unittest.skip("Pseudoquant Triton kernels do not support multi-GPU")
+    def test_quantized_model_multi_accelerator(self):
+        pass
+
+    @unittest.skip("Pseudoquant Triton kernels do not support multi-GPU")
+    def test_save_pretrained_multi_accelerator(self):
+        pass
+
 
 @unittest.skipUnless(
     torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 9,
@@ -161,6 +169,14 @@ class FPQuantNVFP4PseudoquantTest(FPQuantBaseTest):
     @classmethod
     def getQuantizationConfig(cls):
         return FPQuantConfig(forward_dtype="nvfp4", pseudoquantization=True)
+
+    @unittest.skip("Pseudoquant Triton kernels do not support multi-GPU")
+    def test_quantized_model_multi_accelerator(self):
+        pass
+
+    @unittest.skip("Pseudoquant Triton kernels do not support multi-GPU")
+    def test_save_pretrained_multi_accelerator(self):
+        pass
 
 
 @require_qutlass
