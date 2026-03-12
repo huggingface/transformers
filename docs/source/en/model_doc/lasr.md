@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-LASR is the architecture used by MedASR, a speech-to-text model released by Google Health AI based on the [Conformer architecture](https://huggingface.co/papers/2005.08100) pre-trained for medical dictation. MedASR is intended as a starting point for developers, and is well-suited for dictation tasks involving medical terminologies, such as radiology dictation. While MedASR has been extensively pre-trained on a corpus of medical audio data, it may occasionally exhibit performance variability when encountering terms outside of its pre-training data, such as non-standard medication names or consistent handling of temporal data (dates, times, or durations).
+LASR is the architecture behind MedASR, a speech-to-text model from Google Health AI pre-trained for medical dictation. It's based on the [Conformer architecture](https://huggingface.co/papers/2005.08100) and designed as a starting point for developers building dictation tools with medical terminology, like radiology dictation. MedASR performs well on medical audio but can struggle with terms outside its training data, such as non-standard medication names or temporal references (dates, times, or durations).
 
 ## Usage
 
