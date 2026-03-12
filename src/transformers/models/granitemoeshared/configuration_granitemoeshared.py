@@ -80,7 +80,7 @@ class GraniteMoeSharedConfig(PreTrainedConfig):
     num_local_experts: int | None = 8
     num_experts_per_tok: int | None = 2
     output_router_logits: bool | None = False
-    router_aux_loss_coef: float | None = 0.01
+    router_aux_loss_coef: float | None = 0.001
     shared_intermediate_size: int = 0
 
     def __post_init__(self, **kwargs):

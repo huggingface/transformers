@@ -77,7 +77,7 @@ class FSMTConfig(PreTrainedConfig):
     activation_function: str = "relu"
     d_model: int = 1024
     max_length: int = 200
-    max_position_embeddings: int = 104
+    max_position_embeddings: int = 1024
     encoder_ffn_dim: int = 4096
     encoder_layers: int = 12
     encoder_attention_heads: int = 16

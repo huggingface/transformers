@@ -73,7 +73,7 @@ class CvtConfig(PreTrainedConfig):
     patch_sizes: list[int] | tuple[int, ...] = (7, 3, 3)
     patch_stride: list[int] | tuple[int, ...] = (4, 2, 2)
     patch_padding: list[int] | tuple[int, ...] = (2, 1, 1)
-    embed_dim: list[int] | tuple[int, ...] = (4, 192, 384)
+    embed_dim: list[int] | tuple[int, ...] = (64, 192, 384)
     num_heads: list[int] | tuple[int, ...] = (1, 3, 6)
     depth: list[int] | tuple[int, ...] = (1, 2, 10)
     mlp_ratio: list[float] | tuple[float, ...] = (4.0, 4.0, 4.0)

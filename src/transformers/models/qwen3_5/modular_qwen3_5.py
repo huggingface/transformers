@@ -107,6 +107,7 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
     hidden_size: int = 4096
     intermediate_size: int = 12288
     num_hidden_layers: int = 32
+    num_key_value_heads: int = 4
 
     decoder_sparse_step = AttributeError()
     norm_topk_prob = AttributeError()

@@ -71,7 +71,7 @@ class Jais2Config(PreTrainedConfig):
     num_key_value_heads: int | None = None
     hidden_act: str = "relu2"
     max_position_embeddings: int = 8192
-    initializer_range: float = interval(min=0.0, max=1.0)(default=0.2)
+    initializer_range: float = interval(min=0.0, max=1.0)(default=0.02)
     use_cache: bool = True
     pad_token_id: int | None = None
     bos_token_id: int | None = 0

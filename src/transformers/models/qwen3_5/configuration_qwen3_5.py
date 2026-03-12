@@ -82,7 +82,7 @@ class Qwen3_5TextConfig(PreTrainedConfig):
     intermediate_size: int = 12288
     num_hidden_layers: int = 32
     num_attention_heads: int = 16
-    num_key_value_heads: int = 2
+    num_key_value_heads: int = 4
     hidden_act: str = "silu"
     max_position_embeddings: int = 32768
     initializer_range: float = 0.02

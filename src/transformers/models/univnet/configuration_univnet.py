@@ -84,7 +84,7 @@ class UnivNetConfig(PreTrainedConfig):
     num_mel_bins: int = 100
     resblock_kernel_sizes: list[int] | tuple[int, ...] = (3, 3, 3)
     resblock_stride_sizes: list[int] | tuple[int, ...] = (8, 8, 4)
-    resblock_dilation_sizes: list | tuple = ((1, 3, 9, 27), (1, 3, 9, 27), (1, 3, 9, 2))
+    resblock_dilation_sizes: list | tuple = ((1, 3, 9, 27), (1, 3, 9, 27), (1, 3, 9, 27))
     kernel_predictor_num_blocks: int = 3
     kernel_predictor_hidden_channels: int = 64
     kernel_predictor_conv_size: int = 3

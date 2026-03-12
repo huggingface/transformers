@@ -97,6 +97,7 @@ class VideoLlama3VisionConfig(SiglipVisionConfig):
     model_type = "video_llama_3_vision"
     base_config_key = "vision_config"
     image_size = AttributeError()
+    initializer_range: float = 0.02
 
 
 @auto_docstring(checkpoint="lkhl/VideoLLaMA3-2B-Image-HF")
