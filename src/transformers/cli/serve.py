@@ -440,6 +440,9 @@ class Serve:
         self.force_model = force_model
         self.non_blocking = non_blocking
 
+        if self.continuous_batching and not self.device.startswith("cuda"):
+            raise ValueError("Continuous batching is currently only supported on CUDA devices.")
+
         # Seed
         if default_seed is not None:
             set_torch_seed(default_seed)

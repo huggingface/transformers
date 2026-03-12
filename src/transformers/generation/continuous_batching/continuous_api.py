@@ -166,7 +166,7 @@ class ContinuousBatchProcessor:
             )
         # Set up the graph pool. This allows all graphs to share the same memory pool, which is fine because they never
         # run concurrently. This greatly saves memory.
-        self.graph_pool = torch.cuda.graph_pool_handle()
+        self.graph_pool = torch.cuda.graph_pool_handle() if self.use_cuda_graph else None
 
     def __repr__(self) -> str:
         return (
