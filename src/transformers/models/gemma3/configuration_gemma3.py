@@ -94,7 +94,7 @@ class Gemma3TextConfig(PreTrainedConfig):
     tie_word_embeddings: bool = True
     rope_parameters: dict | None = None
     attention_bias: bool = False
-    attention_dropout: float | None = 0.0
+    attention_dropout: int | float | None = 0.0
     query_pre_attn_scalar: int = 256
     sliding_window: int | None = 4096
     layer_types: list[str] | None = None

@@ -116,7 +116,7 @@ class Gemma3nTextConfig(PreTrainedConfig):
     tie_word_embeddings: bool = True
     rope_parameters: dict | None = None
     attention_bias: bool = False
-    attention_dropout: float | None = 0.0
+    attention_dropout: int | float | None = 0.0
     sliding_window: int = 512
     layer_types: list[str] | None = None
     final_logit_softcapping: float = 30.0

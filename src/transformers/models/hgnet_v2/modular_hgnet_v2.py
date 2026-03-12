@@ -100,6 +100,7 @@ class HGNetV2Config(BackboneConfigMixin, PreTrainedConfig):
         self.set_output_features_output_indices(
             out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
         )
+        self.hidden_sizes = list(self.hidden_sizes)
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
