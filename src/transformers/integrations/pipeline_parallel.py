@@ -252,38 +252,39 @@ def recv_grads(count: int, src: int, device, group=None, use_cuda_stream: bool =
 
 
 class _PipelineRecvFn(Function):
+    """Receive N tensors from the previous stage; send N grads back on backward."""
+
     @staticmethod
-    def forward(ctx, count: int, src: int, device, group, use_cuda_stream: bool):
+    def forward(ctx, src: int, device, group, use_cuda_stream: bool, n: int):
         ctx.src = src
         ctx.group = group
         ctx.use_cuda_stream = use_cuda_stream
-        ctx.device = device
-        tensors = recv_tensors(count, src=src, device=device, group=group, use_cuda_stream=use_cuda_stream)
-        if count == 1:
-            return tensors[0]
-        return tuple(tensors)
+        ctx.n = n
+        return tuple(recv_tensors(n, src=src, device=device, group=group, use_cuda_stream=use_cuda_stream))
 
     @staticmethod
     def backward(ctx, *grad_outputs):
-        grads = [g for g in grad_outputs]
-        send_grads(grads, dst=ctx.src, group=ctx.group, use_cuda_stream=ctx.use_cuda_stream)
-        # None gradients for non-tensor args
+        send_grads(list(grad_outputs), dst=ctx.src, group=ctx.group, use_cuda_stream=ctx.use_cuda_stream)
         return (None, None, None, None, None)
 
 
 class _PipelineSendFn(Function):
+    """Send N tensors to the next stage; receive N grads back on backward."""
+
     @staticmethod
-    def forward(ctx, tensor: torch.Tensor, dst: int, group, use_cuda_stream: bool):
+    def forward(ctx, dst: int, group, use_cuda_stream: bool, *tensors: torch.Tensor):
         ctx.dst = dst
         ctx.group = group
         ctx.use_cuda_stream = use_cuda_stream
-        send_tensors([tensor], dst=dst, group=group, use_cuda_stream=use_cuda_stream)
-        return tensor
+        ctx.device = tensors[0].device if tensors else None
+        ctx.n = len(tensors)
+        send_tensors(tensors, dst=dst, group=group, use_cuda_stream=use_cuda_stream)
+        return tensors
 
     @staticmethod
-    def backward(ctx, grad_output: torch.Tensor):
-        grads = recv_grads(1, src=ctx.dst, device=grad_output.device, group=ctx.group, use_cuda_stream=ctx.use_cuda_stream)
-        return grads[0], None, None, None
+    def backward(ctx, *grad_outputs):
+        grads = recv_grads(ctx.n, src=ctx.dst, device=ctx.device, group=ctx.group, use_cuda_stream=ctx.use_cuda_stream)
+        return (None, None, None) + tuple(grads)
 
 
 def _pipeline_coordinates(device_mesh):
@@ -314,8 +315,8 @@ def _recv_pre_hook(mod, args, kwargs, *, pp_rank, pp_group, n_inputs, use_cuda_s
     device = args[0].device if args and hasattr(args[0], "device") else next(mod.parameters()).device
     local_rank = dist.get_rank(pp_group) if pp_group is not None else dist.get_rank()
     src = dist.get_global_rank(pp_group, local_rank - 1) if pp_group is not None else local_rank - 1
-    tensors = [_PipelineRecvFn.apply(1, src, device, pp_group, use_cuda_stream) for _ in range(n_inputs)]
-    return tuple(tensors), {}
+    tensors = _PipelineRecvFn.apply(src, device, pp_group, use_cuda_stream, n_inputs)
+    return tensors, {}
 
 
 def _send_post_hook(mod, args, kwargs, output, *, pp_rank, pp_size, pp_group, n_outputs, use_cuda_stream):
@@ -325,9 +326,8 @@ def _send_post_hook(mod, args, kwargs, output, *, pp_rank, pp_size, pp_group, n_
     outputs = output if isinstance(output, (tuple, list)) else (output,)
     local_rank = dist.get_rank(pp_group) if pp_group is not None else dist.get_rank()
     dst = dist.get_global_rank(pp_group, local_rank + 1) if pp_group is not None else local_rank + 1
-    to_send = [outputs[min(i, len(outputs) - 1)] for i in range(n_outputs)]
-    for t in to_send:
-        _PipelineSendFn.apply(t, dst, pp_group, use_cuda_stream)
+    to_send = tuple(outputs[min(i, len(outputs) - 1)] for i in range(n_outputs))
+    _PipelineSendFn.apply(dst, pp_group, use_cuda_stream, *to_send)
     return output
 
 
