@@ -71,7 +71,7 @@ ALLOWED_LAYER_TYPES = (
 
 
 @strict(accept_kwargs=True)
-@dataclass(repr=False)(repr=False)
+@dataclass(repr=False)
 class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     # no-format
     r"""
