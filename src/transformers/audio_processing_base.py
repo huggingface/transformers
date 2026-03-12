@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import os
-from typing import Any, TypeVar
+import warnings
+from typing import Any, ClassVar, TypeVar
 
 from .audio_utils import is_valid_audio, load_audio
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
@@ -23,6 +24,13 @@ from .utils import (
     copy_func,
     logging,
 )
+
+
+_LEGACY_KEY_MAP = {
+    "input_features": "audio_features",
+    "input_values": "audio_values",
+    "audio_input_features": "audio_features",
+}
 
 
 AudioProcessorType = TypeVar("AudioProcessorType", bound="AudioProcessingMixin")
@@ -44,6 +52,37 @@ class BatchFeature(BaseBatchFeature):
             You can give a tensor_type here to convert the lists of integers in PyTorch/Numpy Tensors at
             initialization.
     """
+
+    _warned_keys: ClassVar[set] = set()
+
+    def __getitem__(self, item):
+        if isinstance(item, str) and item not in self.data:
+            new_key = self._resolve_legacy_key(item)
+            if new_key is not None and new_key in self.data:
+                if item not in BatchFeature._warned_keys:
+                    warnings.warn(
+                        f"Accessing '{item}' is deprecated, use '{new_key}' instead.",
+                        FutureWarning,
+                        stacklevel=2,
+                    )
+                    BatchFeature._warned_keys.add(item)
+                return self.data[new_key]
+        return super().__getitem__(item)
+
+    def __contains__(self, item):
+        if item in self.data:
+            return True
+        new_key = self._resolve_legacy_key(item)
+        return new_key is not None and new_key in self.data
+
+    def _resolve_legacy_key(self, old_key):
+        if old_key in ("attention_mask", "padding_mask"):
+            if "audio_features_mask" in self.data:
+                return "audio_features_mask"
+            if "audio_values_mask" in self.data:
+                return "audio_values_mask"
+            return None
+        return _LEGACY_KEY_MAP.get(old_key)
 
 
 class AudioProcessingMixin(PreprocessingMixin):
