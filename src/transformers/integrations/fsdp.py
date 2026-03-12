@@ -209,11 +209,10 @@ def _get_auto_policy_kwargs(fsdp_plan: dict[str, Any]) -> dict[str, Any]:
     if fsdp_plan.get("cpu_offload"):
         policy_kwargs["offload_policy"] = CPUOffloadPolicy()
     if fsdp_plan.get("mixed_precision"):
-        # TODO(3outeille): is the output_dtype what we want?
         policy_kwargs["mp_policy"] = MixedPrecisionPolicy(
             param_dtype=torch.bfloat16,
             reduce_dtype=torch.float32,
-            output_dtype=torch.bfloat16,
+            output_dtype=None,
         )
     return policy_kwargs
 
