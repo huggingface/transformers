@@ -63,9 +63,9 @@ class CompileableContextVar:
     that the access to the underlying variable is not thread-safe when compilation is triggered.
     """
 
-    def __init__(self, name, default):
-        self.context_var = ContextVar(name, default=default)
-        self.global_var = default
+    def __init__(self, name):
+        self.context_var = ContextVar(name, default=None)
+        self.global_var = None
         self.compiling = False
 
     def get(self):
@@ -92,7 +92,7 @@ class CompileableContextVar:
 
 
 # Thread/context-safe global variable
-_active_collector = CompileableContextVar("output_collector", default=None)
+_active_collector = CompileableContextVar("output_collector")
 
 
 def install_output_capuring_hook(module: nn.Module, key: str, index: int) -> None:
