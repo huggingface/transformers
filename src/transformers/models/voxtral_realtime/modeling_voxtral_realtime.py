@@ -1118,13 +1118,16 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         self,
         *args,
         encoder_inputs_embeds: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        next_sequence_length: int | None = None,
         **kwargs,
     ):
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
         if encoder_inputs_embeds is not None:
-            start_idx = model_inputs["cache_position"][0] * self.config.downsample_factor
-            end_idx = (model_inputs["cache_position"][-1] + 1) * self.config.downsample_factor
+            past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+            start_idx = past_length * self.config.downsample_factor
+            end_idx = (past_length + next_sequence_length + 1) * self.config.downsample_factor
             model_inputs["encoder_inputs_embeds"] = encoder_inputs_embeds[:, start_idx:end_idx, :]
 
         return model_inputs

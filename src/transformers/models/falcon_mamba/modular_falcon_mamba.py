@@ -290,7 +290,7 @@ class FalconMambaMixer(MambaMixer):
 
             # 2. Convolution sequence transformation
             conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
-            if cache_params is not None and cache_params.is_initialized:
+            if cache_params is not None and cache_params.is_initialized[self.layer_idx]:
                 hidden_states = causal_conv1d_update(
                     hidden_states.squeeze(-1),
                     cache_params.conv_states[self.layer_idx],
@@ -333,7 +333,7 @@ class FalconMambaMixer(MambaMixer):
             A = -torch.exp(self.A_log.float())
             # 3.c perform the recurrence y ← SSM(A, B, C)(x)
             time_proj_bias = self.dt_proj.bias.float() if hasattr(self.dt_proj, "bias") else None
-            if cache_params is not None and cache_params.is_initialized:
+            if cache_params is not None and cache_params.is_initialized[self.layer_idx]:
                 scan_outputs = selective_state_update(
                     cache_params.ssm_states[self.layer_idx],
                     hidden_states[..., 0],
@@ -386,7 +386,7 @@ class FalconMambaMixer(MambaMixer):
             ssm_state = cache_params.ssm_states[self.layer_idx].clone()
             ssm_state = ssm_state.to(hidden_states.device)
             # check whether we are in prefill
-            if not cache_params.is_initialized:
+            if not cache_params.is_initialized[self.layer_idx]:
                 conv_state = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
 
                 cache_params.update_conv_state(self.layer_idx, conv_state)

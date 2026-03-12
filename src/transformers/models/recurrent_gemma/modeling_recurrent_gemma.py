@@ -477,7 +477,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
                     (batch_size, self.lru_width), device=input_states.device, dtype=torch.float32
                 )
 
-            if self.cumulative_cache_length == 0:  # prefill
+            if not self.is_initialized:  # prefill
                 self.conv1d_state = nn.functional.pad(x_branch, (self.conv1d_width - x_branch.shape[-1] - 1, 0))
                 x_branch = self.conv_1d(x_branch)[..., :seq_len]
             else:  # decoding
@@ -485,7 +485,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
                 x_branch = torch.sum(conv_state * self.conv_1d.weight[:, 0, :], dim=-1) + self.conv_1d.bias
                 x_branch = x_branch.unsqueeze(-1)
                 self.conv1d_state = conv_state[:, :, 1:]
-            self.cumulative_cache_length += seq_len
+            self.is_initialized = True
         else:
             self.conv1d_state = None
             self.rg_lru.recurrent_states = None
@@ -501,7 +501,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         # recurrent_states always computed in full precision
         self.rg_lru.recurrent_states = torch.zeros((batch, self.lru_width), device=device, dtype=torch.float32)
         self.conv1d_state = torch.zeros((batch, self.hidden_size, self.conv1d_width - 1), device=device, dtype=dtype)
-        self.cumulative_cache_length = torch.tensor([0], device=device, dtype=int)
+        self.is_initialized = torch.tensor(False, device=device, dtype=bool)
 
 
 TEMPORAL_BLOCK_CLASSES = {"recurrent": RecurrentGemmaRecurrentBlock, "attention": RecurrentGemmaSdpaAttention}
@@ -681,12 +681,15 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         if position_ids is None:
             position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
 
-        past_seq_length = self.layers[0].temporal_block.cumulative_cache_length
+        # Same way as we have to slice sliding vs full attn, we need to find attn block cache
+        is_attention_block = [i == "attention" for i, block in enumerate(self.config.layers_block_type)]
+        layer_idx = is_attention_block.index(True)
+        past_seq_length = self.layers[layer_idx].temporal_block.cumulative_cache_length
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_seq_length,  # FIXME
+            past_key_values=past_seq_length, # FIXME: raushan
             position_ids=position_ids,
         )
 

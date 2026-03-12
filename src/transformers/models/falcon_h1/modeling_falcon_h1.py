@@ -84,8 +84,7 @@ class FalconHybridMambaAttentionDynamicCache:
         self.intermediate_size = (
             config.mamba_d_ssm if config.mamba_d_ssm is not None else int(config.mamba_expand * config.hidden_size)
         )
-        self.cumulative_length = torch.tensor(0, device=devices[0], dtype=int)
-        self.is_state_initialized = torch.tensor(False, device=devices[0], dtype=bool)
+        self.is_initialized = torch.tensor([False] * config.num_hidden_layers, device=devices[0], dtype=bool)
 
         self.conv_states = {
             i: torch.zeros(
@@ -146,7 +145,6 @@ class FalconHybridMambaAttentionDynamicCache:
             A tuple containing the updated key and value states.
         """
         # Update the cache
-        self.cumulative_length += key_states.shape[2]
         if len(self.key_cache) <= layer_idx:
             # There may be skipped layers, fill them with empty lists
             for _ in range(len(self.key_cache), layer_idx):
@@ -199,13 +197,13 @@ class FalconHybridMambaAttentionDynamicCache:
         conv_state = self.conv_states[layer_idx]
 
         conv_state = conv_state.roll(shifts=-1, dims=-1)
-        if not self.is_state_initialized:
+        if not self.is_initialized[layer_idx]:
             conv_state[:, :, :] = new_conv_state.to(conv_state.device)
         else:
             conv_state[:, :, -1] = new_conv_state[:, :, -1].to(conv_state.device)
         self.conv_states[layer_idx].zero_()
         self.conv_states[layer_idx] += conv_state
-        self.is_state_initialized = True
+        self.is_initialized[layer_idx] = True
         return self.conv_states[layer_idx]
 
     def reset(self):
@@ -659,7 +657,7 @@ class FalconH1Mixer(nn.Module):
             and cache_params.conv_states[self.layer_idx].shape[0]
             == cache_params.ssm_states[self.layer_idx].shape[0]
             == batch_size
-            and cache_params.is_state_initialized
+            and cache_params.is_initialized[self.layer_idx]
         )
 
         # getting projected states from cache if it exists
@@ -853,7 +851,7 @@ class FalconH1Mixer(nn.Module):
             and cache_params.conv_states[self.layer_idx].shape[0]
             == cache_params.ssm_states[self.layer_idx].shape[0]
             == batch_size
-            and cache_params.is_state_initialized
+            and cache_params.is_initialized[self.layer_idx]
         )
 
         # 2. Convolution sequence transformation
@@ -1327,7 +1325,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
-        mamba_mask = self._update_mamba_mask(attention_mask, is_cached_forward=past_key_values.is_state_initialized)
+        mamba_mask = self._update_mamba_mask(attention_mask, is_cached_forward=past_key_values.is_initialized[0])
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         all_hidden_states = () if output_hidden_states else None
