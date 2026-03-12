@@ -132,7 +132,7 @@ class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
                 **{**self._default_semantic_model_config_kwargs, **self.semantic_model_config}
             )
 
-        self.target_bandwidths = self.target_bandwidths or [0.5, 1, 1.5, 2, 4]
+        self.target_bandwidths = self.target_bandwidths or [0.5, 1, 1.5, 2]
         if self.codebook_dim is None:
             self.codebook_dim = self.acoustic_model_config.hidden_size + self.semantic_model_config.hidden_size
 

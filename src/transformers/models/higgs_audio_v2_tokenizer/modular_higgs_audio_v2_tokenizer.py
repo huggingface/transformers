@@ -71,6 +71,7 @@ class HiggsAudioV2TokenizerConfig(XcodecConfig):
         "mask_time_prob": 0.0,
     }
 
+    target_bandwidths: list[float | int] | None = None
     sample_rate: int = 24000
     codebook_dim: int = 64
     semantic_sample_rate: int = 16000

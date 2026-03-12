@@ -96,7 +96,7 @@ class AutoformerConfig(PreTrainedConfig):
     loss: str = "nll"
     input_size: int = 1
     lags_sequence: list[int] | tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7)
-    scaling: str = "std"
+    scaling: bool | str = True
     num_time_features: int = 0
     num_dynamic_real_features: int = 0
     num_static_categorical_features: int = 0

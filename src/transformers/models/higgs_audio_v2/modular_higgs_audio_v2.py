@@ -71,6 +71,7 @@ class HiggsAudioV2Config(LlamaConfig):
     ```"""
 
     vocab_size: int = 128256
+    rms_norm_eps: float = 1e-5
     hidden_size: int = 3072
     intermediate_size: int = 8192
     num_hidden_layers: int = 28
