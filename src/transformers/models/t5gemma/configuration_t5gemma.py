@@ -85,7 +85,7 @@ class T5GemmaModuleConfig(PreTrainedConfig):
     tie_word_embeddings: bool = True
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
-    attention_dropout: float | None = 0.0
+    attention_dropout: int | float | None = 0.0
     query_pre_attn_scalar: int = 256
     sliding_window: int | None = 4096
     layer_types: list[str] | None = None
@@ -136,8 +136,8 @@ class T5GemmaConfig(PreTrainedConfig):
     encoder: T5GemmaModuleConfig | dict[Any, Any] | None = None
     decoder: T5GemmaModuleConfig | dict[Any, Any] | None = None
     is_encoder_decoder: bool = True
-    dropout_rate: float = 0.0
-    classifier_dropout_rate: float = 0.0
+    dropout_rate: int | float = 0.0
+    classifier_dropout_rate: int | float = 0.0
     attention_dropout: float | int = 0.0
     tie_word_embeddings: bool = True
     vocab_size: int = 256000

@@ -65,7 +65,7 @@ class SwinConfig(BackboneConfigMixin, PreTrainedConfig):
     depths: list[int] | tuple[int, ...] = (2, 2, 6, 2)
     num_heads: list[int] | tuple[int, ...] = (3, 6, 12, 24)
     window_size: int = 7
-    mlp_ratio: float = 4.0
+    mlp_ratio: float | int = 4.0
     qkv_bias: bool = True
     hidden_dropout_prob: float = 0.0
     attention_probs_dropout_prob: float = 0.0

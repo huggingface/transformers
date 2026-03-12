@@ -68,7 +68,7 @@ class VisionTextDualEncoderConfig(PreTrainedConfig):
     has_no_defaults_at_init = True
 
     projection_dim: int = 512
-    logit_scale_init_value: float = 2.6592
+    logit_scale_init_value: int | float = 2.6592
 
     def __post_init__(self, **kwargs):
         if "vision_config" not in kwargs or "text_config" not in kwargs:

@@ -101,7 +101,7 @@ class ExaoneMoeConfig(Exaone4Config):
     rope_parameters: dict | None = None
     attention_dropout: float | int = 0.0
     sliding_window: int = 4096
-    sliding_window_pattern: int = 4
+    sliding_window_pattern: str | int | None = 4
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
     first_k_dense_replace: int = 1

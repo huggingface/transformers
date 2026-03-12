@@ -172,7 +172,7 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
         if self.moe_intermediate_size is None:
             self.moe_intermediate_size = [1536, 512]
 
-        super().__post_init__(**kwargs)
+        PreTrainedConfig.__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")

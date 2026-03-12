@@ -254,7 +254,7 @@ class Sam2VideoConfig(PreTrainedConfig):
         elif self.mask_decoder_config is None:
             self.mask_decoder_config = Sam2VideoMaskDecoderConfig()
 
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 class Sam2VideoInferenceCache:

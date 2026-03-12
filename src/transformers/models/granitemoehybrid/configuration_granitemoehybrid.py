@@ -71,10 +71,10 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
     attention_dropout: float | int | None = 0.0
-    embedding_multiplier: float | None = 1.0
-    logits_scaling: float | None = 1.0
-    residual_multiplier: float | None = 1.0
-    attention_multiplier: float | None = 1.0
+    embedding_multiplier: int | float | None = 1.0
+    logits_scaling: int | float | None = 1.0
+    residual_multiplier: int | float | None = 1.0
+    attention_multiplier: int | float | None = 1.0
     num_local_experts: int | None = 8
     num_experts_per_tok: int | None = 2
     output_router_logits: bool | None = False

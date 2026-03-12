@@ -340,6 +340,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
         return self.dtype
 
+    @property
+    def use_return_dict(self):
+        logger.warning_once("`use_return_dict` is deprecated! Use `return_dict` instead!")
+        return self.return_dict
+
     @torch_dtype.setter
     def torch_dtype(self, value):
         logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
@@ -743,9 +748,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         ]
         for key, value in kwargs.items():
             if key in valid_fields:
-                config_dict[key] = value
                 if key not in ["torch_dtype", "dtype"]:
+                    config_dict[key] = value
                     to_remove.append(key)
+                elif value != "auto":
+                    config_dict[key] = value
 
         config = cls(**config_dict)
 

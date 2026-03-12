@@ -71,7 +71,7 @@ class SwitchTransformersConfig(PreTrainedConfig):
     num_heads: int = 12
     num_experts: int = 8
     router_bias: bool = False
-    router_jitter_noise: float = 0.01
+    router_jitter_noise: int | float = 0.01
     router_dtype: Literal["float32", "float16", "bfloat16"] = "float32"
     router_ignore_padding_tokens: bool = False
     relative_attention_num_buckets: int = 32

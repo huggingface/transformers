@@ -87,30 +87,33 @@ class DPTConfig(PreTrainedConfig):
     model_type = "dpt"
     sub_configs = {"backbone_config": AutoConfig}
 
+    # NOTE: some values are typed as `None` on purpose
+    # DPT creates one of: backbone or the general model only
+    # so official checkpoint saved them as `None`
     hidden_size: int = 768
-    num_hidden_layers: int = 12
-    num_attention_heads: int = 12
-    intermediate_size: int = 3072
+    num_hidden_layers: None | int = 12
+    num_attention_heads: int | None = 12
+    intermediate_size: int | None = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int | None = 0.0
+    attention_probs_dropout_prob: float | int | None = 0.0
     initializer_range: float = 0.02
-    layer_norm_eps: float = 1e-12
-    image_size: int | list[int] | tuple[int, int] = 384
-    patch_size: int | list[int] | tuple[int, int] = 16
-    num_channels: int = 3
+    layer_norm_eps: float | None = 1e-12
+    image_size: int | list[int] | tuple[int, int] | None = 384
+    patch_size: int | list[int] | tuple[int, int] | None = 16
+    num_channels: int | None = 3
     is_hybrid: bool = False
-    qkv_bias: bool = True
+    qkv_bias: bool | None = True
     backbone_out_indices: list[int] | tuple[int, ...] | None = (2, 5, 8, 11)
     readout_type: str = "project"
     reassemble_factors: list[int | float] | tuple[int | float, ...] = (4, 2, 1, 0.5)
     neck_hidden_sizes: list[int] | tuple[int, ...] = (96, 192, 384, 768)
     fusion_hidden_size: int = 256
     head_in_index: int = -1
-    use_batch_norm_in_fusion_residual: bool = False
+    use_batch_norm_in_fusion_residual: bool | None = False
     use_bias_in_fusion_residual: bool | None = None
     add_projection: bool = False
-    use_auxiliary_head: bool = True
+    use_auxiliary_head: bool | None = True
     auxiliary_loss_weight: float = 0.4
     semantic_loss_ignore_index: int = 255
     semantic_classifier_dropout: float | int = 0.1

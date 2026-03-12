@@ -386,6 +386,7 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     position_id_per_seconds: int = 25
     audio_start_token_id: int = 151669
     speaker_id: dict | None = None
+    initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
         if self.code_predictor_config is None:

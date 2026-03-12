@@ -90,7 +90,7 @@ class EncodecConfig(PreTrainedConfig):
     sampling_rate: int = 24_000
     audio_channels: int = 1
     normalize: bool = False
-    chunk_length_s: int | None = None
+    chunk_length_s: int | float | None = None
     overlap: float | None = None
     hidden_size: int = 128
     num_filters: int = 32

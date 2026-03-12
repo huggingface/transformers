@@ -92,7 +92,7 @@ class TrunkConfig(PreTrainedConfig):
     pairwise_head_width: int | None = 32
     position_bins: int | None = 32
     dropout: float | int | None = interval(max=0.4)(default=0.0)
-    layer_drop: float | None = 0.0
+    layer_drop: float | int | None = 0.0
     cpu_grad_checkpoint: bool | None = False
     max_recycles: int | None = interval(min=0)(default=4)
     chunk_size: int | None = 128

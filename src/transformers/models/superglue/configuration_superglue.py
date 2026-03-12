@@ -63,7 +63,7 @@ class SuperGlueConfig(PreTrainedConfig):
     matching_threshold: float = 0.0
     initializer_range: float = 0.02
     is_decoder: bool = False
-    attention_probs_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: int | float = 0.0
 
     def __post_init__(self, **kwargs):
         self.gnn_layers_types = self.gnn_layers_types if self.gnn_layers_types is not None else ["self", "cross"] * 9

@@ -189,7 +189,7 @@ class DFineConfig(PreTrainedConfig):
     label_noise_ratio: float = 0.5
     box_noise_scale: float = 1.0
     learn_initial_query: bool = False
-    anchor_image_size: int | None = None
+    anchor_image_size: int | list[int] | None = None
     with_box_refine: bool = True
 
     # Loss

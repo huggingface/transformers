@@ -125,7 +125,7 @@ class Exaone4Config(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     attention_dropout: float | int = 0.0
     sliding_window: int | None = 4096
-    sliding_window_pattern: int | None = 4
+    sliding_window_pattern: str | int | None = 4
     layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):

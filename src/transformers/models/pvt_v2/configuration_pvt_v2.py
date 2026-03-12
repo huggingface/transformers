@@ -63,7 +63,7 @@ class PvtV2Config(BackboneConfigMixin, PreTrainedConfig):
 
     model_type = "pvt_v2"
 
-    image_size: int | list[int] | tuple[int, int] = 224
+    image_size: int | list[int] | tuple[int, int] | dict = 224
     num_channels: int = 3
     num_encoder_blocks: int = 4
     depths: list[int] | tuple[int, ...] = (2, 2, 2, 2)

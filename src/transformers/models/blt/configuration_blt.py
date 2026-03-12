@@ -58,6 +58,7 @@ class BltLocalEncoderConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
+        self.num_key_value_heads = self.num_key_value_heads or self.num_attention_heads
         self.intermediate_size = self.intermediate_size or int(8 * self.hidden_size / 3)
         self.tie_word_embeddings = False
         super().__post_init__(**kwargs)
@@ -100,6 +101,7 @@ class BltLocalDecoderConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
+        self.num_key_value_heads = self.num_key_value_heads or self.num_attention_heads
         self.head_dim = self.hidden_size // self.num_attention_heads
         self.intermediate_size = self.intermediate_size or int(8 * self.hidden_size / 3)
         self.tie_word_embeddings = False  # Force-set to False for BC

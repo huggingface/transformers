@@ -105,8 +105,8 @@ class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
     reshape_hidden_states: bool = True
 
     def __post_init__(self, **kwargs):
-        if "segmentation_indices" in kwargs and self._out_indices is None:
-            self._out_indices = kwargs.pop("segmentation_indices")
+        if "segmentation_indices" in kwargs and kwargs.get("out_indices") is None:
+            kwargs["out_indices"] = kwargs.pop("segmentation_indices")
 
         # backbone attributes
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]

@@ -65,13 +65,13 @@ class AlbertConfig(PreTrainedConfig):
     intermediate_size: int = 16384
     inner_group_num: int = 1
     hidden_act: str = "gelu_new"
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: int | float = 0.0
+    attention_probs_dropout_prob: int | float = 0.0
     max_position_embeddings: int = 512
     type_vocab_size: int = 2
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
-    classifier_dropout_prob: float = 0.1
+    classifier_dropout_prob: int | float = 0.1
     pad_token_id: int | None = 0
     bos_token_id: int | None = 2
     eos_token_id: int | list[int] | None = 3

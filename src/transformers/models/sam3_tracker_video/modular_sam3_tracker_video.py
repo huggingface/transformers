@@ -269,7 +269,7 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
             self.mask_decoder_config = Sam3TrackerVideoMaskDecoderConfig()
 
         self.image_size = kwargs.pop("image_size", 1008)
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
     @property
     def image_size(self):

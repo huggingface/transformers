@@ -139,9 +139,7 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
 
         if self.moe_intermediate_size is None:
             self.moe_intermediate_size = [1536, 512]
-        self.moe_layer_end_index = (
-            self.num_hidden_layers - 1 if self.moe_layer_end_index == -1 else self.moe_layer_end_index
-        )
+
         super().__post_init__(**kwargs)
 
 

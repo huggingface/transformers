@@ -73,7 +73,7 @@ class VJEPA2Config(PreTrainedConfig):
     num_attention_heads: int = 16
     num_hidden_layers: int = 24
     drop_path_rate: float = 0.0
-    mlp_ratio: float = 4.0
+    mlp_ratio: int | float = 4.0
     layer_norm_eps: float = 1e-6
     qkv_bias: bool = True
     attention_probs_dropout_prob: float = 0.0
@@ -86,7 +86,7 @@ class VJEPA2Config(PreTrainedConfig):
     pred_num_hidden_layers: int = 12
     pred_num_mask_tokens: int = 10
     pred_zero_init_mask_tokens: bool = True
-    pred_mlp_ratio: float = 4.0
+    pred_mlp_ratio: int | float = 4.0
 
 
 __all__ = ["VJEPA2Config"]

@@ -131,7 +131,7 @@ class PatchTSTConfig(PreTrainedConfig):
     num_input_channels: int = 1
     context_length: int = 32
     distribution_output: str = "student_t"
-    loss: str = "mse"
+    loss: str | None = "mse"
     patch_length: int = 1
     patch_stride: int = 1
     num_hidden_layers: int = 3
@@ -161,7 +161,7 @@ class PatchTSTConfig(PreTrainedConfig):
     channel_consistent_masking: bool | None = False
     unmasked_channel_indices: list[int] | None = None
     mask_value: int = 0
-    pooling_type: str = "mean"
+    pooling_type: str | None = "mean"
     head_dropout: float | int = 0.0
     prediction_length: int = 24
     num_targets: int = 1
