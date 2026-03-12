@@ -181,32 +181,22 @@ class NumpyAudioBackend(BaseAudioProcessor):
             triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
         )
 
-    def _preprocess(
-        self,
-        audio: list[np.ndarray],
-        padding,
-        max_length,
-        truncation,
-        pad_to_multiple_of,
-        return_tensors,
-        spectrogram_config=None,
-        do_extract_spectrogram=None,
-        do_batch_spectrogram=True,
-        **kwargs,
-    ) -> BatchFeature:
-        import numpy as np
+    def _to_batch(self, audio):
+        return np.stack(audio)
 
-        # pad and truncate
-        audio = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
-
+    def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
         if do_extract_spectrogram:
-            audio = np.stack(audio) if do_batch_spectrogram else audio
-            feature = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config)
-            output = BatchFeature({"audio_features": feature}, tensor_type=return_tensors)
+            spec_cfg = spectrogram_config or self.spectrogram_config
+            audio_lengths = np.array([end - start for start, end in audio_ranges])
+            features_lengths = self._get_features_lengths(audio_lengths, spec_cfg)
+            n_features = self._get_features_lengths(padded_length, spec_cfg, include_center_frame=True)
+            mask = np.arange(n_features)[None, :] < features_lengths[:, None]
+            return mask.astype(np.int32)
         else:
-            output = BatchFeature({"audio_values": audio}, tensor_type=return_tensors)
-
-        return output
+            mask = np.zeros((len(audio_ranges), padded_length), dtype=np.int32)
+            for i, (start, end) in enumerate(audio_ranges):
+                mask[i, start:end] = 1
+            return mask
 
 
 class TorchAudioBackend(BaseAudioProcessor):
@@ -379,29 +369,18 @@ class TorchAudioBackend(BaseAudioProcessor):
             triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
         )
 
-    def _preprocess(
-        self,
-        audio: list["torch.Tensor"],
-        padding,
-        max_length,
-        truncation,
-        pad_to_multiple_of,
-        return_tensors,
-        spectrogram_config=None,
-        do_extract_spectrogram=None,
-        do_batch_spectrogram=True,
-        **kwargs,
-    ) -> BatchFeature:
-        import torch
+    def _to_batch(self, audio):
+        return torch.stack(audio)
 
-        # pad and truncate
-        audio = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
-
+    def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
         if do_extract_spectrogram:
-            audio = torch.stack(audio) if do_batch_spectrogram else audio
-            feature = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config)
-            output = BatchFeature({"audio_features": feature}, tensor_type=return_tensors)
+            spec_cfg = spectrogram_config or self.spectrogram_config
+            audio_lengths = torch.tensor([end - start for start, end in audio_ranges])
+            features_lengths = self._get_features_lengths(audio_lengths, spec_cfg)
+            n_features = self._get_features_lengths(padded_length, spec_cfg, include_center_frame=True)
+            return (torch.arange(n_features)[None, :] < features_lengths[:, None]).to(torch.int32)
         else:
-            output = BatchFeature({"audio_values": audio}, tensor_type=return_tensors)
-
-        return output
+            mask = torch.zeros((len(audio_ranges), padded_length), dtype=torch.int32)
+            for i, (start, end) in enumerate(audio_ranges):
+                mask[i, start:end] = 1
+            return mask
