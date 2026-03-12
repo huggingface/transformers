@@ -310,8 +310,8 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         image_features = image_features.view(batch_frames, -1, dim)
         return image_features
 
-    @can_return_tuple
     @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -387,8 +387,8 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
         return image_outputs
 
-    @can_return_tuple
     @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower, apply multimodal projection and pooling."
     )
@@ -438,6 +438,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
         return vision_outputs
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -456,9 +457,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         vision_aspect_ratio: str | None = None,
         batch_num_images: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | LlavaOnevisionModelOutputWithPast:
         r"""
@@ -469,20 +467,13 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         batch_num_images (`torch.LongTensor`, *optional*):
             Number of images in each sample.
         """
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        # Images are processed with Anyres
+        image_features = None
         if pixel_values is not None:
             image_features = self.get_image_features(
                 pixel_values,
@@ -499,7 +490,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
-        # Video are simply embedded and further pooled to decrease seq len
+        video_features = None
         if pixel_values_videos is not None:
             video_features = self.get_video_features(
                 pixel_values_videos,
@@ -523,9 +514,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
             **kwargs,
         )
 
@@ -534,12 +522,13 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
-            video_hidden_states=video_features if pixel_values_videos is not None else None,
+            image_hidden_states=image_features,
+            video_hidden_states=video_features,
         )
 
 
 class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGeneration):
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -559,9 +548,6 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         batch_num_images: torch.LongTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | LlavaOnevisionCausalLMOutputWithPast:
@@ -609,12 +595,6 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         >>> processor.batch_decode(output, skip_special_tokens=True)[0]
         "user\n\nWhat is shown in this image?\nassistant\ncat"
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -630,9 +610,6 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )
@@ -696,6 +673,8 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
 
         return model_inputs
 
+    @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,

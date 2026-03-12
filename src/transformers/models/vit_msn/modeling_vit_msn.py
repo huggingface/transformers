@@ -214,7 +214,11 @@ class ViTMSNSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
         new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
 
@@ -235,6 +239,7 @@ class ViTMSNSelfAttention(nn.Module):
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
+            **kwargs,
         )
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -268,8 +273,12 @@ class ViTMSNAttention(nn.Module):
         self.attention = ViTMSNSelfAttention(config)
         self.output = ViTMSNSelfOutput(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states, **kwargs)
         output = self.output(self_attn_output, hidden_states)
         return output
 
@@ -318,9 +327,13 @@ class ViTMSNLayer(GradientCheckpointingLayer):
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         hidden_states_norm = self.layernorm_before(hidden_states)
-        attention_output = self.attention(hidden_states_norm)
+        attention_output = self.attention(hidden_states_norm, **kwargs)
 
         # first residual connection
         hidden_states = attention_output + hidden_states
@@ -343,9 +356,13 @@ class ViTMSNEncoder(nn.Module):
         self.layer = nn.ModuleList([ViTMSNLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def forward(self, hidden_states: torch.Tensor) -> BaseModelOutput:
-        for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(hidden_states)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states, **kwargs)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 

@@ -283,19 +283,20 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             ]
 
             if model.__class__.__name__ == "AutoformerForPrediction":
-                expected_arg_names.append("future_observed_mask")
+                expected_arg_names.extend(["future_observed_mask"])
 
             expected_arg_names.extend(
                 [
                     "decoder_attention_mask",
                     "encoder_outputs",
                     "past_key_values",
-                    "output_hidden_states",
-                    "output_attentions",
                     "use_cache",
-                    "return_dict",
                 ]
             )
+            if model.__class__.__name__ == "AutoformerModel":
+                expected_arg_names.extend(["cache_position", "kwargs"])
+            elif model.__class__.__name__ == "AutoformerForPrediction":
+                expected_arg_names.extend(["kwargs"])
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
