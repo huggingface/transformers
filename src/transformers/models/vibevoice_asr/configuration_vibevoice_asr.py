@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring(checkpoint="microsoft/VibeVoice-ASR")
+@auto_docstring(checkpoint="microsoft/VibeVoice-ASR-HF")
 class VibeVoiceAsrConfig(PretrainedConfig):
     r"""
     acoustic_tokenizer_encoder_config (`Union[VibeVoiceAcousticTokenizerConfig, dict]`, *optional*):
