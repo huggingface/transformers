@@ -170,8 +170,9 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_model_forward(self):
+    def test_model_loss_per_sample(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.loss_reduction = "none"  # check that loss per sample is returned
         model = PI0ForConditionalGeneration(config).eval().to(device=torch_device)
         with torch.no_grad():
             outputs = model(**inputs_dict)
@@ -207,13 +208,10 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
-
-@require_torch
-class PI0ModelSmokeTest(unittest.TestCase):
     def test_full_run_smoke(self):
         torch.manual_seed(0)
-        tester = PI0ModelTester(self)
-        config, inputs_dict = tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.loss_reduction = "none"  # check with loss per sample is returned
         model = PI0ForConditionalGeneration(config).to(device=torch_device).eval()
 
         with torch.no_grad():
@@ -224,7 +222,9 @@ class PI0ModelSmokeTest(unittest.TestCase):
         sample_inputs = {k: v for k, v in inputs_dict.items() if k not in ["actions", "timestep"]}
         with torch.no_grad():
             sampled_actions = model.sample_actions(**sample_inputs, num_steps=2)
-        self.assertEqual(sampled_actions.shape, (tester.batch_size, config.chunk_size, config.max_action_dim))
+        self.assertEqual(
+            sampled_actions.shape, (self.model_tester.batch_size, config.chunk_size, config.max_action_dim)
+        )
         self.assertTrue(torch.isfinite(sampled_actions).all())
 
 

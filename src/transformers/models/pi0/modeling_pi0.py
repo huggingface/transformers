@@ -164,8 +164,10 @@ class PI0Model(PI0PreTrainedModel):
         **kwargs,
     ) -> BaseModelOutputWithPast:
         r"""
-        action_embeds (`torch.Tensor`, *optional*): args description placeholder
-        pixel_attention_mask (`torch.Tensor`, *optional*): args description placeholder
+        action_embeds (`torch.Tensor`, *optional*):
+            The embeddings of input actions and robot states.
+        pixel_attention_mask (`torch.Tensor`, *optional*):
+            The mask indicating padded positions in the input image.
         """
         if pixel_values is not None and past_key_values is None:
             if attention_mask is not None and position_ids is None:
@@ -252,11 +254,16 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         **kwargs,
     ) -> CausalLMOutputWithPast:
         r"""
-        actions (`torch.Tensor`, *optional*): args description placeholder
-        pixel_attention_mask (`torch.Tensor`, *optional*): args description placeholder
-        state  (`torch.Tensor`, *optional*): args description placeholder
-        noise  (`torch.Tensor`, *optional*): args description placeholder
-        timestep  (`torch.Tensor`, *optional*): args description placeholder
+        actions (`torch.Tensor`, *optional*):
+            Input actions that need to be predicted. Used only when training to compiute loss.
+        pixel_attention_mask (`torch.Tensor`, *optional*):
+            The mask indicating padded positions in the input image.
+        state  (`torch.Tensor`, *optional*):
+            Current robot state.
+        noise  (`torch.Tensor`, *optional*):
+            Random noise at current timestep that needs to be denoised
+        timestep  (`torch.Tensor`, *optional*):
+            Current denoising timestep.
         """
         batch_size = state.shape[0]
 
