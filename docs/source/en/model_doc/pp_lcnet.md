@@ -135,10 +135,6 @@ for label_id in predicted_labels:
 
 [[autodoc]] PPLCNetConfig
 
-## PPLCNetModel
-
-[[autodoc]] PPLCNetModel
-
 ## PPLCNetBackbone
 
 [[autodoc]] PPLCNetBackbone
@@ -146,7 +142,3 @@ for label_id in predicted_labels:
 ## PPLCNetImageProcessorFast
 
 [[autodoc]] PPLCNetImageProcessorFast
-
-## PPLCNetImageProcessor
-
-[[autodoc]] PPLCNetImageProcessor
