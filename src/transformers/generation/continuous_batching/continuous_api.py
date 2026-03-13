@@ -17,7 +17,7 @@ import queue
 import threading
 from abc import abstractmethod
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from math import ceil
 from time import perf_counter
 
@@ -166,7 +166,7 @@ class ContinuousBatchProcessor:
             )
         # Set up the graph pool. This allows all graphs to share the same memory pool, which is fine because they never
         # run concurrently. This greatly saves memory.
-        self.graph_pool = torch.cuda.graph_pool_handle()
+        self.graph_pool = torch.cuda.graph_pool_handle() if use_cuda_graph else None
 
     def __repr__(self) -> str:
         return (
@@ -379,7 +379,9 @@ class ContinuousBatchProcessor:
         if copy_source:
             # FIXME: this will avoid any race condition, but it can cause issue when using async batching with a sliding
             # window model. Fix will be fixed in a PR in the near future (tempfix, v5.3)
-            with torch.cuda.stream(self.inputs_and_outputs.compute_stream):
+            stream = self.inputs_and_outputs.compute_stream
+            stream_ctx = torch.cuda.stream(stream) if stream is not None else nullcontext()
+            with stream_ctx:
                 self.cache.copy_cache(copy_source, copy_destination)
 
     @traced
@@ -436,10 +438,11 @@ class ContinuousBatchProcessor:
         # Retrieve the model kwargs with or without padding
         batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=self._pad_inputs)
         compute_stream = self.inputs_and_outputs.compute_stream
+        stream_ctx = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
 
         # If we are not using cuda graphs, we perform the generation step and return
         if not self.use_cuda_graph:
-            with torch.cuda.stream(compute_stream):
+            with stream_ctx:
                 self._forward_process_and_sample(model, batch_data, logit_processor, do_sample)
 
         # Otherwise, we use create or replay the graph
@@ -447,14 +450,14 @@ class ContinuousBatchProcessor:
             graph = self.inputs_and_outputs.get_graph()
             # Case: the graph already exists, so we replay it
             if graph is not None:
-                with torch.cuda.stream(compute_stream):
+                with stream_ctx:
                     graph.replay()
             # Otherwise, the graph does not exist, so we create it
             else:
                 # TODO: remove this once we are sure there are no race conditions
                 # compute_stream.wait_stream(torch.cuda.current_stream())
                 # Warmup
-                with torch.cuda.stream(compute_stream):
+                with stream_ctx:
                     self._forward_process_and_sample(model, batch_data, logit_processor, do_sample)
                 # torch.cuda.current_stream().wait_stream(compute_stream)
                 # Capture
