@@ -729,6 +729,44 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         return self._test_block_sharing(model_id, num_layer_groups, input_msg, expected_generated_tokens)
 
+    @slow
+    def test_continuous_batching_with_cuda_unavailable(self) -> None:
+        """Test continuous batching generation when torch.cuda.is_available returns False."""
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+
+        # Mock torch.cuda.is_available to return False
+        with patch("torch.cuda.is_available", return_value=False):
+            tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+            tokenizer.pad_token = tokenizer.eos_token
+
+            user_messages = [
+                "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?"
+            ]
+            chats = [[{"role": "user", "content": user_message}] for user_message in user_messages]
+            tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
+            input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
+
+            # Load model on CPU
+            model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="sdpa")
+            model = model.to("cpu").eval()
+            model.generation_config.max_new_tokens = 10
+            model.generation_config.do_sample = False
+
+            continuous_batching_config = ContinuousBatchingConfig(use_cuda_graph=False, use_async_batching=False)
+
+            # This should not crash even with torch.cuda.is_available() == False
+            outputs = model.generate_batch(
+                inputs=input_ids,
+                generation_config=model.generation_config,
+                continuous_batching_config=continuous_batching_config,
+            )
+
+            # Verify we got outputs
+            self.assertEqual(len(outputs), len(input_ids))
+            for output in outputs.values():
+                self.assertIsNotNone(output.generated_tokens)
+                self.assertGreater(len(output.generated_tokens), 0)
+
     @parameterized.expand([True, False])
     @require_flash_attn  # otherwise the test can fail because attention bias has a very slight impact on SDPA and eager
     def test_num_return_sequences(self, allow_block_sharing: bool) -> None:
