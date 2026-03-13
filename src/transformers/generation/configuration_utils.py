@@ -1704,3 +1704,16 @@ class ContinuousBatchingConfig:
                 "disable asynchronous batching but it will degrade performance."
             )
         return self.use_async_batching
+
+    def resolve_sentinel_values(self) -> None:
+        """For some parameters (padding intervals and max cached graphs), the default is a sentinel value of 0: that
+        way, if the user specifies a value for those parameters, we know they want it used, ie. we turn on cuda graphs.
+        But in the case the user does not specify those values, we still need them to resolve to a non-zero value.
+        This function takes care of that."""
+        # Interval sizes are in tokens for both Q and KV
+        if self.q_padding_interval_size == 0:
+            self.q_padding_interval_size = 64
+        if self.kv_padding_interval_size == 0:
+            self.kv_padding_interval_size = 64 * 256 # 64 blocks of 256 tokens ie. 16384 tokens
+        if self.max_cached_graphs == 0:
+            self.max_cached_graphs = 32
