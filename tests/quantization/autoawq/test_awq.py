@@ -110,7 +110,8 @@ class AwqTest(unittest.TestCase):
     )
 
     EXPECTED_OUTPUT_BF16 = [
-        "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish"
+        "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish",
+        "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Exercise and Sport Science with a",
     ]
 
     EXPECTED_OUTPUT_EXLLAMA = [
