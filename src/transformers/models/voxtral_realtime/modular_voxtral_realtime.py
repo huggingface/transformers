@@ -43,6 +43,7 @@ from ...models.voxtral.modeling_voxtral import (
 )
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_voxtral_realtime import VoxtralRealtimeEncoderConfig
 
@@ -299,6 +300,7 @@ class VoxtralRealtimeEncoder(VoxtralRealtimePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(

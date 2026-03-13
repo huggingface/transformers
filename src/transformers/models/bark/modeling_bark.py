@@ -153,6 +153,7 @@ class BarkSelfAttention(nn.Module):
         past_key_values=None,
         use_cache=False,
         output_attentions=False,
+        **kwargs,
     ):
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
         query, key, value = self.att_proj(hidden_states).split(self.embed_dim, dim=2)
@@ -214,6 +215,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         past_key_values=None,
         use_cache=False,
         output_attentions=False,
+        **kwargs,
     ):
         batch_size, query_len, _ = hidden_states.size()
 
@@ -296,6 +298,7 @@ class BarkBlock(GradientCheckpointingLayer):
         attention_mask=None,
         use_cache=False,
         output_attentions=False,
+        **kwargs,
     ):
         intermediary_hidden_states = self.layernorm_1(hidden_states)
 

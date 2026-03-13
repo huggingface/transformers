@@ -248,6 +248,7 @@ class BloomAttention(nn.Module):
         layer_past: Cache | None = None,
         use_cache: bool = False,
         output_attentions: bool = False,
+        **kwargs,
     ):
         batch_size, q_length, _ = hidden_states.shape
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
@@ -360,6 +361,7 @@ class BloomBlock(GradientCheckpointingLayer):
         layer_past: Cache | None = None,
         use_cache: bool = False,
         output_attentions: bool = False,
+        **kwargs,
     ):
         # hidden_states: [batch_size, seq_length, hidden_size]
 

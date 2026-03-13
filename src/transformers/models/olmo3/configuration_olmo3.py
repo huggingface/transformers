@@ -23,7 +23,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="allenai/OLMo-3-0725-1B")
+@auto_docstring(checkpoint="allenai/Olmo-3-7B-Instruct")
 class Olmo3Config(PreTrainedConfig):
     r"""
     Example:

@@ -68,6 +68,9 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "chmv2": [WeightRenaming(r"backbone.layer.", r"backbone.model.layer.")],
+        "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
+        "dinov3_vit": [WeightRenaming(r"(?<!model\.)layer.", r"model.layer.")],
         "timesfm2_5": [
             WeightRenaming("ff0", "fc1"),
             WeightRenaming("ff1", "fc2"),
@@ -464,6 +467,7 @@ def get_model_conversion_mapping(
     For a given `model`, obtain the weight conversion mapping if any are registered either as a simple renaming
     `_checkpoint_conversion_mapping` class argument, or in the general WeightConverter mapping.
     """
+    # note: this function is used in PEFT, so changing the API requires coordination
     weight_conversions = []
 
     # Load models with explicit, user-provided key mapping

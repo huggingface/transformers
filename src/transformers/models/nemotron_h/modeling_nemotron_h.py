@@ -674,6 +674,7 @@ class NemotronHMamba2Mixer(nn.Module):
         hidden_states,
         cache_params: NemotronHHybridDynamicCache | None = None,
         attention_mask: torch.Tensor | None = None,
+        **kwargs,
     ):
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)

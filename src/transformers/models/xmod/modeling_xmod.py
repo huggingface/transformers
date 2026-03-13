@@ -231,11 +231,7 @@ class XmodSelfAttention(nn.Module):
                 current_past_key_values = past_key_values.self_attention_cache
 
             # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-            key_layer, value_layer = current_past_key_values.update(
-                key_layer,
-                value_layer,
-                self.layer_idx,
-            )
+            key_layer, value_layer = current_past_key_values.update(key_layer, value_layer, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -498,7 +494,7 @@ class XmodLayer(GradientCheckpointingLayer):
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: tuple[tuple[torch.FloatTensor]] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         self_attention_output, _ = self.attention(
             hidden_states,
             attention_mask,
@@ -717,6 +713,9 @@ class XmodModel(XmodPreTrainedModel):
             Indices of the language adapters that should be activated for each sample, respectively. Default: the index
             that corresponds to `self.config.default_language`.
         """
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
         else:
@@ -729,19 +728,8 @@ class XmodModel(XmodPreTrainedModel):
                 else DynamicCache(config=self.config)
             )
 
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if input_ids is not None:
-            device = input_ids.device
-            input_shape = input_ids.shape
-        else:
-            device = inputs_embeds.device
-            input_shape = inputs_embeds.shape[:-1]
-
-        batch_size, seq_length = input_shape
+        batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
         device = input_ids.device if input_ids is not None else inputs_embeds.device
-
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
         if lang_ids is None:

@@ -21,7 +21,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="EleutherAI/gpt-neox-japanese-2.7b")
+@auto_docstring(checkpoint="abeja/gpt-neox-japanese-2.7b")
 class GPTNeoXJapaneseConfig(PreTrainedConfig):
     r"""
     intermediate_multiple_size (`int`, *optional*, defaults to 4):

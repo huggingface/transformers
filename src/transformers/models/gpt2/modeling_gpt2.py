@@ -193,8 +193,6 @@ class GPT2Attention(nn.Module):
         if (past_key_values is not None and not is_cross_attention) or (
             past_key_values is not None and is_cross_attention and not is_updated
         ):
-            # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-
             key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
             # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
             if is_cross_attention:

@@ -971,7 +971,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        batch_size, seq_length, _ = inputs_embeds.shape
+        seq_length = inputs_embeds.shape[1]
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         seq_length_with_past = seq_length + past_key_values_length
 
@@ -981,8 +981,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
             position_ids.masked_fill_(attention_mask == 0, 1)
             position_ids = position_ids[:, -seq_length:]
         elif position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = torch.arange(seq_length, device=inputs_embeds.device) + past_key_values_length
             position_ids = position_ids.unsqueeze(0)
 
         if sum(x is None for x in [pixel_values, image_encoder_embeddings, perceiver_embeddings]) != 2:

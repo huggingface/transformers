@@ -251,11 +251,7 @@ class RoCBertSelfAttention(nn.Module):
                 current_past_key_values = past_key_values.self_attention_cache
 
             # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-            key_layer, value_layer = current_past_key_values.update(
-                key_layer,
-                value_layer,
-                self.layer_idx,
-            )
+            key_layer, value_layer = current_past_key_values.update(key_layer, value_layer, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -458,7 +454,7 @@ class RoCBertLayer(GradientCheckpointingLayer):
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         self_attention_output, _ = self.attention(
             hidden_states,
             attention_mask,
@@ -701,6 +697,9 @@ class RoCBertModel(RoCBertPreTrainedModel):
 
             [What are input IDs?](../glossary#input_pronunciation_ids)
         """
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
         else:
@@ -708,9 +707,6 @@ class RoCBertModel(RoCBertPreTrainedModel):
 
         if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 

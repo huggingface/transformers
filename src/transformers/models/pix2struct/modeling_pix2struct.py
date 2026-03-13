@@ -665,12 +665,11 @@ class Pix2StructTextAttention(nn.Module):
         return relative_buckets
 
     # Adapted from transformers.models.t5.modeling_t5.T5Attention.compute_bias
-    def compute_bias(self, query_length, key_length, device=None):
+    def compute_bias(self, query_length, key_length, device=None, past_seen_tokens=0):
         """Compute binned relative position bias"""
         if device is None:
             device = self.relative_attention_bias.weight.device
-        context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None].to(device)
-        context_position = context_position[:key_length, :]
+        context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None] + past_seen_tokens
         memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
         relative_position = memory_position - context_position  # shape (query_length, key_length)
         relative_position_bucket = self._relative_position_bucket(
@@ -691,9 +690,8 @@ class Pix2StructTextAttention(nn.Module):
         key_value_states=None,
         position_bias=None,
         past_key_values=None,
-        query_length=None,
-        use_cache=False,
         output_attentions=False,
+        **kwargs,
     ):
         """
         Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
@@ -701,7 +699,9 @@ class Pix2StructTextAttention(nn.Module):
         # Input is (batch_size, seq_length, dim)
         # Mask is (batch_size, 1, 1, key_length) (non-causal) or (batch_size, 1, seq_length, key_length) (causal decoder)
         batch_size, seq_length = hidden_states.shape[:2]
-        real_seq_length = seq_length + past_key_values.get_seq_length() if past_key_values is not None else seq_length
+        past_seen_tokens = past_key_values.get_seq_length(self.layer_idx) if past_key_values is not None else 0
+        # We clone here for StaticCache, as we get the value before updating it, but use it after and it's the same ref
+        past_seen_tokens = past_seen_tokens.clone() if isinstance(past_seen_tokens, torch.Tensor) else past_seen_tokens
 
         # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
         is_cross_attention = key_value_states is not None
@@ -732,8 +732,6 @@ class Pix2StructTextAttention(nn.Module):
             value_states = value_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
             if past_key_values is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-
                 key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention:
@@ -751,8 +749,9 @@ class Pix2StructTextAttention(nn.Module):
                 if self.gradient_checkpointing and self.training:
                     position_bias.requires_grad = True
             else:
-                position_bias = self.compute_bias(real_seq_length, key_length, device=scores.device)
-                position_bias = position_bias[:, :, -seq_length:, :]
+                position_bias = self.compute_bias(
+                    seq_length, key_length, device=scores.device, past_seen_tokens=past_seen_tokens
+                )
 
             if mask is not None:
                 causal_mask = mask[:, :, :, : key_states.shape[-2]]
@@ -796,6 +795,7 @@ class Pix2StructTextLayerSelfAttention(nn.Module):
         past_key_values=None,
         use_cache=False,
         output_attentions=False,
+        **kwargs,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.attention(
@@ -826,9 +826,8 @@ class Pix2StructTextLayerCrossAttention(nn.Module):
         attention_mask=None,
         position_bias=None,
         past_key_values=None,
-        use_cache=False,
-        query_length=None,
         output_attentions=False,
+        **kwargs,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.attention(
@@ -837,8 +836,6 @@ class Pix2StructTextLayerCrossAttention(nn.Module):
             key_value_states=key_value_states,
             position_bias=position_bias,
             past_key_values=past_key_values,
-            use_cache=use_cache,
-            query_length=query_length,
             output_attentions=output_attentions,
         )
         layer_output = hidden_states + self.dropout(attention_output[0])
@@ -875,6 +872,7 @@ class Pix2StructTextBlock(GradientCheckpointingLayer):
         use_cache=False,
         output_attentions=False,
         return_dict=True,
+        **kwargs,
     ):
         self_attention_outputs = self.self_attention(
             hidden_states,
@@ -900,7 +898,6 @@ class Pix2StructTextBlock(GradientCheckpointingLayer):
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
                 past_key_values=past_key_values,
-                use_cache=use_cache,
                 output_attentions=output_attentions,
             )
             hidden_states = cross_attention_outputs[0]

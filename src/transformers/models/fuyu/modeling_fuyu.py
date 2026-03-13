@@ -150,6 +150,7 @@ class FuyuModel(FuyuPreTrainedModel):
         )
         return special_image_mask
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -162,10 +163,7 @@ class FuyuModel(FuyuPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
         image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):
@@ -174,33 +172,21 @@ class FuyuModel(FuyuPreTrainedModel):
         image_patches_indices (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Tensor of indices of the image patches in the input_ids tensor.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        if inputs_embeds is None:
+            inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
 
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            batch_size, seq_length = input_ids.shape
-        elif inputs_embeds is not None:
-            batch_size, seq_length, _ = inputs_embeds.shape
-        else:
-            raise ValueError("You have to specify either input_is or inputs_embeds")
+        seq_len = inputs_embeds.shape[1]
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
             past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(
-                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
+                past_key_values_length, seq_len + past_key_values_length, dtype=torch.long, device=device
             )
             position_ids = position_ids.unsqueeze(0)
-
-        if inputs_embeds is None:
-            inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
 
         if image_patches is not None:
             patch_embeddings = self.get_image_features(image_patches, return_dict=True).last_hidden_state
@@ -215,10 +201,7 @@ class FuyuModel(FuyuPreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             use_cache=use_cache,
-            return_dict=return_dict,
             **kwargs,
         )
 
@@ -264,11 +247,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         labels: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         logits_to_keep: int | None = 0,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
         image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):
@@ -306,14 +286,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         A blue bus parked on the side of a road.
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.model(
             input_ids=input_ids,
             image_patches=image_patches,
@@ -322,11 +294,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             use_cache=use_cache,
-            return_dict=True,
-            # don't pass kwargs because Persimmon-backbone doesn't accept FA2 kwargs yet, TODO: raushan
+            **kwargs,
         )
 
         hidden_states = outputs[0]

@@ -136,6 +136,7 @@ class GPTNeoSelfAttention(nn.Module):
         layer_past=None,
         use_cache=False,
         output_attentions=False,
+        **kwargs,
     ):
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
@@ -179,6 +180,7 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
         layer_past=None,
         use_cache=False,
         output_attentions=False,
+        **kwargs,
     ):
         bsz, _, _ = hidden_states.size()
 
@@ -279,6 +281,7 @@ class GPTNeoAttention(nn.Module):
         attention_mask=None,
         use_cache=False,
         output_attentions=False,
+        **kwargs,
     ):
         return self.attention(
             hidden_states,
@@ -323,6 +326,7 @@ class GPTNeoBlock(GradientCheckpointingLayer):
         attention_mask=None,
         use_cache=False,
         output_attentions=False,
+        **kwargs,
     ):
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
@@ -442,8 +446,6 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        seq_length = inputs_embeds.shape[1]
-
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
@@ -460,6 +462,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         position_embeds = self.wpe(position_ids)
         hidden_states = inputs_embeds + position_embeds
 
+        seq_length = inputs_embeds.shape[1]
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, seq_length)
             token_type_embeds = self.wte(token_type_ids)

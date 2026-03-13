@@ -59,6 +59,7 @@ if TYPE_CHECKING:
     from .canine import *
     from .chameleon import *
     from .chinese_clip import *
+    from .chmv2 import *
     from .clap import *
     from .clip import *
     from .clipseg import *
@@ -318,6 +319,7 @@ if TYPE_CHECKING:
     from .pop2piano import *
     from .pp_doclayout_v2 import *
     from .pp_doclayout_v3 import *
+    from .pp_ocrv5_server_det import *
     from .prompt_depth_anything import *
     from .prophetnet import *
     from .pvt import *

@@ -435,7 +435,7 @@ class MllamaTextCrossAttention(nn.Module):
                 # if we have a new image + new tokens, we only computed key_states on that new image
                 # we still update the cross key states, past_image, new_image. And use it!
                 key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-        elif past_key_values.get_seq_length(self.layer_idx) != 0:
+        elif past_key_values is not None and past_key_values.get_seq_length() > 0:
             key_states, value_states = (
                 past_key_values.layers[self.layer_idx].keys,
                 past_key_values.layers[self.layer_idx].values,
@@ -1406,14 +1406,14 @@ class MllamaModel(MllamaPreTrainedModel):
         else:
             full_text_row_masked_out_mask = None
 
-        if cross_attention_mask is not None and past_key_values is not None:
-            past_seen_tokens = past_key_values.get_seq_length()
-            seq_length = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-            index_mask = torch.arange(
-                past_seen_tokens, past_seen_tokens + seq_length, device=cross_attention_mask.device
-            )
-            cross_attention_mask = cross_attention_mask[:, :, index_mask]
-            full_text_row_masked_out_mask = full_text_row_masked_out_mask[:, :, index_mask]
+        if cross_attention_mask is not None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            seq_len = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+            device = input_ids.device if input_ids is not None else inputs_embeds.device
+            current_pos = torch.arange(seq_len, device=device) + past_seen_tokens
+
+            cross_attention_mask = cross_attention_mask[:, :, current_pos]
+            full_text_row_masked_out_mask = full_text_row_masked_out_mask[:, :, current_pos]
 
         outputs = self.language_model(
             input_ids=input_ids,

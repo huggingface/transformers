@@ -206,11 +206,7 @@ class ErnieSelfAttention(nn.Module):
                 current_past_key_values = past_key_values.self_attention_cache
 
             # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-            key_layer, value_layer = current_past_key_values.update(
-                key_layer,
-                value_layer,
-                self.layer_idx,
-            )
+            key_layer, value_layer = current_past_key_values.update(key_layer, value_layer, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -407,7 +403,7 @@ class ErnieLayer(GradientCheckpointingLayer):
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         self_attention_output, _ = self.attention(
             hidden_states,
             attention_mask,
@@ -619,13 +615,6 @@ class ErnieModel(ErniePreTrainedModel):
             use_cache = use_cache if use_cache is not None else self.config.use_cache
         else:
             use_cache = False
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
 
         if use_cache and past_key_values is None:
             past_key_values = (
