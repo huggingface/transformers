@@ -24,12 +24,13 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...file_utils import ModelOutput
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, torch_int
+from ...utils.generic import can_return_tuple
 from .configuration_maskformer_swin import MaskFormerSwinConfig
 
 
@@ -810,6 +811,8 @@ class MaskFormerSwinBackbone(BackboneMixin, MaskFormerSwinPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
+    @filter_output_hidden_states
     def forward(
         self,
         pixel_values: Tensor,

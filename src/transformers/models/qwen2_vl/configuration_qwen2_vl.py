@@ -23,7 +23,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="Qwen2-VL-7B-Instruct")
+@auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
 class Qwen2VLVisionConfig(PreTrainedConfig):
     model_type = "qwen2_vl"
     base_config_key = "vision_config"
@@ -58,7 +58,7 @@ class Qwen2VLVisionConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
 
 
-@auto_docstring(checkpoint="Qwen2-VL-7B-Instruct")
+@auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
 class Qwen2VLTextConfig(PreTrainedConfig):
     r"""
     max_window_layers (`int`, *optional*, defaults to 80):
@@ -176,7 +176,7 @@ class Qwen2VLTextConfig(PreTrainedConfig):
         return kwargs
 
 
-@auto_docstring(checkpoint="Qwen2-VL-7B-Instruct")
+@auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
 class Qwen2VLConfig(PreTrainedConfig):
     r"""
     Example:
