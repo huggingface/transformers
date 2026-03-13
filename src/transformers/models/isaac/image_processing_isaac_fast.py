@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_isaac.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 Perceptron, Inc and The HuggingFace Team. All rights reserved.
+# Copyright 2026 Perceptron, Inc and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -199,7 +199,6 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         image_std: float | Sequence[float] | None,
         disable_grouping: bool | None = None,
         return_tensors: str | TensorType | None = None,
-        *,
         patch_size: int | None = None,
         max_num_patches: int | None = None,
         min_num_patches: int | None = None,
@@ -212,10 +211,6 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
         for shape, stacked_images in grouped_images.items():
             batch_size, channels, original_height, original_width = stacked_images.shape
-
-            if bool(self.do_convert_rgb) and channels == 1:
-                stacked_images = stacked_images.repeat(1, 3, 1, 1)
-
             target_height, target_width = get_image_size_for_max_num_patches(
                 original_height,
                 original_width,

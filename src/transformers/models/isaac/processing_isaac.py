@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_isaac.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 Perceptron, Inc and The HuggingFace Team. All rights reserved.
+# Copyright 2026 Perceptron, Inc and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,9 +22,8 @@ from typing import Any
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
-from ...utils import TensorType
+from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import is_torch_available, is_vision_available
-from .configuration_isaac import IsaacConfig
 from .modeling_isaac import ModalityType
 
 
@@ -36,50 +35,39 @@ else:
     Image = None
 
 
+@auto_docstring
 class IsaacProcessor(ProcessorMixin):
-    """Processor that pairs the Isaac image processor with the Qwen2 tokenizer.
-
-    Args:
-        image_processor: Vision preprocessor (fast) used for patch extraction.
-        tokenizer: Qwen2 tokenizer instance.
-        vision_token (str, optional): Placeholder token marking image locations. Defaults to "<image>".
-        max_sequence_length (int, optional): Maximum combined text+vision tokens kept. Defaults to 16384.
-        rescale_factor (float, optional): Image rescale factor; defaults to 1/255.
-        config (IsaacConfig | dict, optional): If provided, overrides processor defaults from the model config.
-
-    Returns:
-        BatchFeature: Top-level batched text and vision tensors.
-    """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = ("IsaacImageProcessorFast",)
-    tokenizer_class = ("Qwen2Tokenizer",)
-    pad_token_id = 151643
+    """Processor that pairs the Isaac image processor with the Qwen2 tokenizer."""
 
     def __init__(
         self,
         image_processor,
         tokenizer,
-        *,
+        chat_template: str | dict[str, str] | None = None,
         vision_token: str = "<image>",
         max_sequence_length: int = 16384,
         rescale_factor: float | None = None,
-        config: IsaacConfig | dict | None = None,
     ) -> None:
-        if isinstance(config, dict):
-            config = IsaacConfig(**config)
-
-        if config is not None:
-            vision_token = config.vision_token
-            max_sequence_length = config.max_sequence_length
-            rescale_factor = config.vision_rescale_factor
-
-        resolved_rescale_factor = float(rescale_factor) if rescale_factor is not None else float(1 / 255)
-        if config is not None:
-            config.vision_rescale_factor = resolved_rescale_factor
+        """
+        Args:
+            image_processor:
+                Image processor used to convert images into Isaac patch tensors.
+            tokenizer:
+                Tokenizer used for the text side of the multimodal prompt.
+            chat_template (`str` or `dict[str, str]`, *optional*):
+                Chat template override forwarded to [`~processing_utils.ProcessorMixin`].
+            vision_token (`str`, *optional*, defaults to `"<image>"`):
+                Placeholder token used inside text prompts to mark image positions.
+            max_sequence_length (`int`, *optional*, defaults to 16384):
+                Maximum packed multimodal sequence length produced by the processor.
+            rescale_factor (`float`, *optional*):
+                Deprecated compatibility argument accepted for backward compatibility.
+        """
+        if chat_template is None:
+            chat_template = getattr(tokenizer, "chat_template", None)
 
         self.image_processor = image_processor
-        super().__init__(image_processor, tokenizer)
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
         text_pad_token_id = getattr(self.tokenizer, "pad_token_id", None)
         image_pad_token_id = self.tokenizer.convert_tokens_to_ids("<|image_pad|>")
@@ -88,9 +76,6 @@ class IsaacProcessor(ProcessorMixin):
         self.image_pad_token_id = int(image_pad_token_id)
         self.pad_token_id = self.text_pad_token_id
 
-        self.current_processor = self.image_processor
-        self.config = config
-        self.chat_template = getattr(self.tokenizer, "chat_template", None)
         self.vision_token = vision_token
         self.max_sequence_length = max_sequence_length
 

@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_isaac.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 Perceptron, Inc and The HuggingFace Team. All rights reserved.
+# Copyright 2026 Perceptron, Inc and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,8 +33,13 @@ from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hu
 from ...masking_utils import create_bidirectional_mask, create_masks_for_generate
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+)
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.qwen3.modeling_qwen3 import Qwen3Attention, Qwen3DecoderLayer, Qwen3Model, Qwen3PreTrainedModel
 from ...processing_utils import Unpack
@@ -45,7 +50,7 @@ from ...utils.import_utils import (
     is_torchdynamo_compiling,
 )
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from .configuration_isaac import IsaacConfig, IsaacVisionConfig
+from .configuration_isaac import IsaacConfig, IsaacTextConfig, IsaacVisionConfig
 
 
 if is_torch_available():
@@ -79,10 +84,10 @@ class IsaacImageProcessorFastKwargs(ImagesKwargs, total=False):
         Pixel-shuffle reduction factor applied in the vision tower.
     """
 
-    patch_size: int | None
-    max_num_patches: int | None
-    min_num_patches: int | None
-    pixel_shuffle_scale: int | None
+    patch_size: int
+    max_num_patches: int
+    min_num_patches: int
+    pixel_shuffle_scale: int
 
 
 class IsaacVisionEmbeddings(nn.Module):
@@ -113,7 +118,6 @@ class IsaacVisionEmbeddings(nn.Module):
                 self.embed_dim,
             )
         )
-        nn.init.normal_(self.position_embedding)
 
     @staticmethod
     def resize_positional_embeddings(
@@ -177,8 +181,6 @@ class IsaacVisionEmbeddings(nn.Module):
 
         return resulted_positional_embeddings
 
-    @merge_with_config_defaults
-    @capture_outputs
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -441,19 +443,14 @@ class IsaacVisionTransformer(PreTrainedModel):
     Args:
         config (IsaacVisionConfig): Vision configuration with pixel-shuffle and patching parameters.
 
-    Inputs:
-        vision_tokens (Tuple[Tensor, Tensor, Optional[Tensor]]):
-            `(patches, token_grids, patch_attention_mask)` where:
-            - `patches`: `(num_images, max_patches, patch_dim)`
-            - `token_grids`: `(num_images, 2)` with per-image `(H_tokens, W_tokens)`
-            - `patch_attention_mask`: `(num_images, max_patches)` or `None`
-
-    Returns:
-        Tuple of `(pixel_shuffled_features, attention_mask, token_lengths)`.
     """
 
     _supports_sdpa = True
     _supports_flash_attn = True
+    _can_record_outputs = {
+        "hidden_states": IsaacVisionEncoderLayer,
+        "attentions": IsaacVisionAttention,
+    }
 
     def __init__(self, config: IsaacVisionConfig):
         super().__init__(config)
@@ -471,18 +468,30 @@ class IsaacVisionTransformer(PreTrainedModel):
         if isinstance(module, IsaacVisionEmbeddings):
             init.zeros_(module.position_embedding)
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self,
-        vision_tokens: tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, torch.Tensor | None],
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        if len(vision_tokens) == 2:
-            seq_patches, token_grids = vision_tokens
-            vision_patch_attention_mask = None
-        else:
-            seq_patches, token_grids, vision_patch_attention_mask = vision_tokens
+        vision_patches: torch.Tensor,
+        vision_token_grids: torch.Tensor,
+        vision_patch_attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        """
+        Inputs:
+            vision_patches (`torch.Tensor`):
+                Patches shaped `(num_images, max_patches, patch_dim)`.
+            vision_token_grids (`torch.Tensor`):
+                Token grids shaped `(num_images, 2)` with per-image `(H_tokens, W_tokens)`.
+            vision_patch_attention_mask (`torch.Tensor`, *optional*):
+                Patch mask shaped `(num_images, max_patches)`.
+
+        Returns:
+            `BaseModelOutputWithPooling` with pixel-shuffled embeddings in `last_hidden_state`.
+        """
         hidden_states = self.embeddings(
-            seq_patches,
-            token_grids,
+            vision_patches,
+            vision_token_grids,
             attention_mask=vision_patch_attention_mask,
         )
 
@@ -491,13 +500,20 @@ class IsaacVisionTransformer(PreTrainedModel):
             inputs_embeds=hidden_states,
             attention_mask=vision_patch_attention_mask,
         )
-        encoder_outputs = self.encoder(inputs_embeds=hidden_states, attention_mask=encoder_attention_mask)
+        encoder_outputs = self.encoder(inputs_embeds=hidden_states, attention_mask=encoder_attention_mask, **kwargs)
         hidden_states = self.post_layernorm(encoder_outputs.last_hidden_state)
 
-        return pixel_shuffle_padded(
+        hidden_states = pixel_shuffle_padded(
             x=hidden_states,
-            token_grids=token_grids,
+            token_grids=vision_token_grids,
             scale_factor=self.pixel_shuffle_scale_factor,
+        )
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=hidden_states,
+            pooler_output=None,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
 
@@ -506,13 +522,11 @@ class IsaacMultiModalProjector(nn.Module):
 
     def __init__(self, config: IsaacConfig):
         super().__init__()
-        self.vision_hidden_size = config.vision_config.hidden_size * (
-            config.vision_config.pixel_shuffle_scale_factor**2
-        )
-        self.backbone_hidden_size = config.hidden_size
-        self.linear_1 = nn.Linear(self.vision_hidden_size, 4 * self.vision_hidden_size, bias=False)
+        vision_hidden_size = config.vision_config.hidden_size * (config.vision_config.pixel_shuffle_scale_factor**2)
+        backbone_hidden_size = config.hidden_size
+        self.linear_1 = nn.Linear(vision_hidden_size, 4 * vision_hidden_size, bias=False)
         self.silu = nn.SiLU()
-        self.linear_2 = nn.Linear(4 * self.vision_hidden_size, self.backbone_hidden_size, bias=False)
+        self.linear_2 = nn.Linear(4 * vision_hidden_size, backbone_hidden_size, bias=False)
 
     def forward(self, image_features):
         hidden_states = self.linear_1(image_features)
@@ -531,11 +545,17 @@ class IsaacVisionEmbedding(nn.Module):
 
     def forward(
         self,
-        vision_tokens: tuple[torch.Tensor, torch.Tensor, torch.Tensor | None],
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        vision_patches, token_grids, vision_patch_attention_mask = vision_tokens
-        hidden_states = self.vision_tower((vision_patches, token_grids, vision_patch_attention_mask))
-        projected = self.multimodal_projector(hidden_states)
+        vision_patches: torch.Tensor,
+        vision_token_grids: torch.Tensor,
+        vision_patch_attention_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        vision_outputs = self.vision_tower(
+            vision_patches=vision_patches,
+            vision_token_grids=vision_token_grids,
+            vision_patch_attention_mask=vision_patch_attention_mask,
+            return_dict=True,
+        )
+        projected = self.multimodal_projector(vision_outputs.last_hidden_state)
         return projected
 
 
@@ -545,8 +565,8 @@ class IsaacRotaryEmbedding(nn.Module):
     def __init__(self, config: IsaacConfig, device=None):
         super().__init__()
         rope_source_cfg = config.get_text_config() if hasattr(config, "get_text_config") else config
-        rope_scaling = getattr(rope_source_cfg, "rope_scaling", None) or {}
         config_for_rope = copy.copy(rope_source_cfg)
+        rope_scaling = getattr(rope_source_cfg, "rope_scaling", None) or {}
         config_for_rope.rope_scaling = rope_scaling
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -562,13 +582,12 @@ class IsaacRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
-        rotary_half_dim = self.inv_freq.shape[0]
-        self.mrope_section = self._resolve_mrope_section(rope_scaling.get("mrope_section"), rotary_half_dim)
+        self.mrope_section = self._resolve_mrope_section(rope_scaling.get("mrope_section"), self.inv_freq.shape[0])
         self.hidden_size = getattr(rope_source_cfg, "hidden_size", None) or config.hidden_size
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: IsaacConfig | None = None,
+        config: IsaacTextConfig | None = None,
         device: Optional["torch.device"] = None,
         seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
@@ -596,48 +615,38 @@ class IsaacRotaryEmbedding(nn.Module):
         )
         return inv_freq, attention_factor
 
-    # Ignore copy
-    def forward(
-        self,
-        position_ids: torch.Tensor,
-        modality_tensor: torch.Tensor,
-        hidden_states: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        if hidden_states is None:
-            batch, seq_len, _ = position_ids.shape
-            hidden_states = torch.zeros(
-                batch,
-                seq_len,
-                self.hidden_size,
-                dtype=torch.float32,
-                device=position_ids.device,
-            )
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        # In contrast to other models, Isaac has different position ids for the grids
+        # So we expand the inv_freq to shape (3, ...)
+        if position_ids.ndim == 2:
+            position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
+        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
+        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
-        with torch.no_grad():
-            pos = position_ids.clone()
-            not_spatial = modality_tensor == 1
-            data_1d = pos[not_spatial][..., 0].unsqueeze(-1)  # Collapse non-vision modalities to 1D positions
-            pos[not_spatial] = data_1d.expand(-1, pos.shape[-1])
-            pos_axes = pos.permute(2, 0, 1).contiguous()
-
-        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, pos_axes.shape[1], -1, 1)
-        pos_axes_expanded = pos_axes[:, :, None, :].float()  # shape (3, bs, 1, positions)
-
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ pos_axes_expanded.float()).transpose(2, 3)
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
+            freqs = self.apply_interleaved_mrope(freqs, self.mrope_section)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
 
-        cos_axes, sin_axes = cos.to(hidden_states.dtype), sin.to(hidden_states.dtype)
-        cos_combined, sin_combined = self._combine_axes(cos_axes), self._combine_axes(sin_axes)
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
-        return cos_combined, sin_combined
+    def apply_interleaved_mrope(self, freqs: torch.Tensor, mrope_section: list[int]) -> torch.Tensor:
+        """Apply interleaved MRoPE to 3D rotary embeddings.
+        Reorganizes frequency layout from chunked [TTT...HHH...WWW] to
+        interleaved [THWTHWTHW...TT], preserving frequency continuity.
+        args:
+            x: (3, bs, seq_len, head_dim // 2)
+            mrope_section: (3,)
+        returns:
+            x_t: (bs, seq_len, head_dim // 2)
+        """
+        chunks = freqs.split(tuple(mrope_section), dim=-1)
+        return torch.cat([chunk[i % 3] for i, chunk in enumerate(chunks)], dim=-1)
 
     @staticmethod
     def _resolve_mrope_section(section: list[int] | None, rotary_half_dim: int) -> list[int]:
@@ -649,11 +658,6 @@ class IsaacRotaryEmbedding(nn.Module):
 
         section = [int(v) for v in section]
         return section
-
-    def _combine_axes(self, tensor: torch.Tensor) -> torch.Tensor:
-        split_sections = tuple(self.mrope_section * 2)
-        chunks = tensor.split(split_sections, dim=-1)
-        return torch.cat([chunk[i % 3] for i, chunk in enumerate(chunks)], dim=-1)
 
 
 @auto_docstring
@@ -673,7 +677,7 @@ class IsaacModel(PreTrainedModel):
         "attentions": Qwen3Attention,
         "vision_attentions": IsaacVisionAttention,
     }
-    all_tied_weights_keys: dict[str, str] = {}
+    _tied_weights_keys = {}
 
     def __init__(self, config: IsaacConfig):
         Qwen3PreTrainedModel.__init__(self, config)
@@ -694,24 +698,144 @@ class IsaacModel(PreTrainedModel):
 
     def set_input_embeddings(self, value: nn.Module) -> None:
         self.text_model.set_input_embeddings(value)
-        vocab_size = getattr(value, "num_embeddings", None)
-        if vocab_size is not None:
-            self.config.vocab_size = vocab_size
-            if hasattr(self.config, "text_config"):
-                self.config.text_config.vocab_size = vocab_size
-            self.text_model.config.vocab_size = vocab_size
 
-    @property
-    def final_norm(self) -> nn.Module:
-        return self.text_model.norm
+    @staticmethod
+    def prepare_multimodal_rope_position_ids(
+        position_ids: torch.Tensor,
+        modality_tensor: torch.Tensor,
+    ) -> torch.Tensor:
+        pos = position_ids.clone()
+        text_mask = modality_tensor == ModalityType.text.value
+        text_positions = pos[text_mask][..., :1]
+        pos[text_mask] = text_positions.expand(-1, pos.shape[-1])
+        return pos.permute(2, 0, 1).contiguous()
 
-    @property
-    def embed_tokens(self) -> nn.Module:
-        return self.text_model.embed_tokens
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.Tensor,
+        image_token_grids: torch.Tensor,
+        image_patch_attention_mask: torch.Tensor | None = None,
+        image_attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        """
+        Args:
+            pixel_values (`torch.Tensor`):
+                Padded per-image patch vectors with shape `(batch_size, max_images, max_patches, patch_dim)`.
+            image_token_grids (`torch.Tensor`):
+                Per-image token grids shaped `(batch_size, max_images, 2)` with `(height, width)` entries.
+            image_patch_attention_mask (`torch.Tensor`, *optional*):
+                Mask for valid patch rows in `pixel_values`, shaped `(batch_size, max_images, max_patches)`.
+            image_attention_mask (`torch.Tensor`, *optional*):
+                Mask indicating which image slots are populated, shaped `(batch_size, max_images)`.
+        """
+        device = self.text_model.embed_tokens.weight.device
+        pixel_values = pixel_values.to(device=device)
+        image_token_grids = image_token_grids.to(device=device, dtype=torch.long)
+        patch_attention_mask = (
+            image_patch_attention_mask.to(device=device, dtype=torch.long)
+            if image_patch_attention_mask is not None
+            else torch.ones(pixel_values.shape[:3], device=device, dtype=torch.long)
+        )
+        image_attention_mask = (
+            image_attention_mask.to(device=device, dtype=torch.bool)
+            if image_attention_mask is not None
+            else torch.ones(image_token_grids.shape[:2], device=device, dtype=torch.bool)
+        )
 
-    @embed_tokens.setter
-    def embed_tokens(self, value: nn.Module) -> None:
-        self.text_model.embed_tokens = value
+        batch_size, max_images = pixel_values.shape[:2]
+        hidden_size = self.config.hidden_size
+
+        if image_attention_mask.any():
+            vision_kwargs = {
+                key: value
+                for key in ("output_hidden_states", "output_attentions")
+                if (value := kwargs.get(key)) is not None
+            }
+            vision_outputs = self.vision_embedding.vision_tower(
+                vision_patches=pixel_values[image_attention_mask],
+                vision_token_grids=image_token_grids[image_attention_mask],
+                vision_patch_attention_mask=patch_attention_mask[image_attention_mask],
+                return_dict=True,
+                **vision_kwargs,
+            )
+            flat_projected_features = self.vision_embedding.multimodal_projector(vision_outputs.last_hidden_state)
+            max_tokens = flat_projected_features.shape[1]
+            projected_features = flat_projected_features.new_zeros((batch_size, max_images, max_tokens, hidden_size))
+            projected_features[image_attention_mask] = flat_projected_features
+            hidden_states = vision_outputs.hidden_states
+            attentions = vision_outputs.attentions
+        else:
+            projected_features = pixel_values.new_zeros((batch_size, max_images, 0, hidden_size))
+            hidden_states = None
+            attentions = None
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=projected_features,
+            pooler_output=projected_features,
+            hidden_states=hidden_states,
+            attentions=attentions,
+        )
+
+    def _get_scatter_image_features(
+        self,
+        image_features: torch.Tensor,
+        image_token_offsets: torch.Tensor | None = None,
+        image_token_lengths: torch.Tensor | None = None,
+        image_attention_mask: torch.Tensor | None = None,
+        device: torch.device | None = None,
+    ) -> torch.Tensor:
+        device = device if device is not None else self.text_model.embed_tokens.weight.device
+        image_features = image_features.to(device=device)
+        image_attention_mask = (
+            image_attention_mask.to(device=device, dtype=torch.bool)
+            if image_attention_mask is not None
+            else torch.ones(image_features.shape[:2], device=device, dtype=torch.bool)
+        )
+        offsets = (
+            image_token_offsets.to(device=device, dtype=torch.long)
+            if image_token_offsets is not None
+            else torch.zeros(image_features.shape[:2], device=device, dtype=torch.long)
+        )
+        lengths = (
+            image_token_lengths.to(device=device, dtype=torch.long)
+            if image_token_lengths is not None
+            else torch.full(image_features.shape[:2], image_features.shape[2], device=device, dtype=torch.long)
+        )
+
+        flat_image_features = image_features[image_attention_mask]
+        if flat_image_features.shape[0] == 0:
+            return image_features.new_zeros((0, image_features.shape[-1]))
+
+        flat_offsets = offsets[image_attention_mask]
+        flat_lengths = lengths[image_attention_mask]
+        token_positions = torch.arange(flat_lengths.max(), device=device, dtype=torch.long)
+        gather_positions = flat_offsets[:, None] + token_positions[None, :]
+        gather_mask = token_positions[None, :] < flat_lengths[:, None]
+        image_features = flat_image_features[
+            torch.arange(flat_image_features.shape[0], device=device, dtype=torch.long)[:, None],
+            gather_positions,
+        ][gather_mask]
+        return image_features
+
+    def get_placeholder_mask(
+        self,
+        modality_tensor: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        image_features: torch.FloatTensor,
+    ) -> torch.BoolTensor:
+        image_token_mask = (
+            modality_tensor.to(device=inputs_embeds.device, dtype=torch.long) == ModalityType.image.value
+        )
+        n_image_tokens = image_token_mask.sum()
+        image_token_mask = image_token_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        torch_compilable_check(
+            inputs_embeds[image_token_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
+        )
+        return image_token_mask
 
     def embed_multimodal_inputs(
         self,
@@ -728,50 +852,30 @@ class IsaacModel(PreTrainedModel):
         embeds = self.text_model.embed_tokens(input_ids)
         image_token_mask = modality == ModalityType.image.value
 
-        if vision_patches is None or vision_token_grids is None:
-            if torch.any(image_token_mask):
-                raise ValueError("Image placeholders require `vision_patches` and `vision_token_grids`.")
+        if not torch.any(image_token_mask):
             return embeds, modality
 
-        vision_patches = vision_patches.to(device=embeds.device)
-        token_grids = vision_token_grids.to(device=embeds.device, dtype=torch.long)
-        image_attention_mask = (
-            vision_image_attention_mask.to(device=embeds.device, dtype=torch.bool)
-            if vision_image_attention_mask is not None
-            else torch.ones(token_grids.shape[:2], device=embeds.device, dtype=torch.bool)
+        image_outputs = self.get_image_features(
+            pixel_values=vision_patches,
+            image_token_grids=vision_token_grids,
+            image_patch_attention_mask=vision_patch_attention_mask,
+            image_attention_mask=vision_image_attention_mask,
+            return_dict=True,
         )
-        patch_attention_mask = (
-            vision_patch_attention_mask.to(device=embeds.device, dtype=torch.long)
-            if vision_patch_attention_mask is not None
-            else torch.ones(vision_patches.shape[:3], device=embeds.device, dtype=torch.long)
-        )
-        offsets = (
-            vision_token_offsets.to(device=embeds.device, dtype=torch.long)
-            if vision_token_offsets is not None
-            else torch.zeros(token_grids.shape[:2], device=embeds.device, dtype=torch.long)
-        )
-        reduction_factor = int(self.config.vision_config.pixel_shuffle_scale_factor) ** 2
-        lengths = (
-            vision_token_lengths.to(device=embeds.device, dtype=torch.long)
-            if vision_token_lengths is not None
-            else token_grids.prod(-1).div(reduction_factor, rounding_mode="floor").to(dtype=torch.long)
+        image_features = self._get_scatter_image_features(
+            image_features=image_outputs.pooler_output,
+            image_token_offsets=vision_token_offsets,
+            image_token_lengths=vision_token_lengths,
+            image_attention_mask=vision_image_attention_mask,
+            device=embeds.device,
         )
 
-        flat_vision_patches = vision_patches[image_attention_mask]
-        flat_patch_attention_mask = patch_attention_mask[image_attention_mask]
-        flat_token_grids = token_grids[image_attention_mask]
-        flat_offsets = offsets[image_attention_mask]
-        flat_lengths = lengths[image_attention_mask]
-
-        vision_embeddings = self.vision_embedding((flat_vision_patches, flat_token_grids, flat_patch_attention_mask))
-        token_positions = torch.arange(flat_lengths.max(), device=embeds.device, dtype=torch.long)
-        gather_positions = flat_offsets[:, None] + token_positions[None, :]
-        gather_mask = token_positions[None, :] < flat_lengths[:, None]
-        image_features = vision_embeddings[
-            torch.arange(vision_embeddings.shape[0], device=embeds.device, dtype=torch.long)[:, None],
-            gather_positions,
-        ][gather_mask]
-        scatter_mask = image_token_mask.unsqueeze(-1).expand_as(embeds)
+        image_features = image_features.to(device=embeds.device, dtype=embeds.dtype)
+        scatter_mask = self.get_placeholder_mask(
+            modality_tensor=modality,
+            inputs_embeds=embeds,
+            image_features=image_features,
+        )
         embeds = embeds.masked_scatter(scatter_mask, image_features)
 
         return embeds, modality
@@ -782,13 +886,13 @@ class IsaacModel(PreTrainedModel):
         position_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor,
         inputs_embeds: torch.Tensor,
-        cache_position: torch.Tensor,
+        past_seen_tokens: int = 0,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Prepare multimodal RoPE positions and carry forward per-batch offsets.
 
         Unlike vanilla 1D RoPE, Isaac builds 3-axis indices for text and vision tokens.
-        If callers do not supply positions, we synthesize them from `cache_position` and
-        use `attention_mask` to strip left padding so pad tokens never consume RoPE slots.
+        If callers do not supply positions, we synthesize them from `attention_mask`
+        and use `past_seen_tokens` to decide whether to reuse cached offsets.
         The returned `rope_deltas` capture any custom offset (i.e., prefill length) and
         are reused across generation steps so newly decoded tokens keep counting forward
         after the cached prefix."""
@@ -797,22 +901,23 @@ class IsaacModel(PreTrainedModel):
         batch_size, seq_len = inputs_embeds.shape[:2]
 
         if position_ids is None:
-            cp = cache_position.to(device=device, dtype=torch.long)
-            if cp.ndim == 1:
-                cp = cp.view(1, -1).expand(batch_size or 1, -1)
+            attn = attention_mask.to(device=device, dtype=torch.long)
+            rope_position = attn.cumsum(dim=-1) - 1
+            rope_position = rope_position.masked_fill(attn == 0, 0)
+            rope_position = rope_position[:, -seq_len:]
 
-            is_new_prefill = cp[:, :1].eq(0).all(dim=1, keepdim=True)
-            if self.rope_deltas is None:
+            if self.rope_deltas is None or past_seen_tokens == 0:
                 base_delta = torch.zeros((batch_size, 1), device=device, dtype=torch.long)
             else:
                 previous_delta = torch.as_tensor(self.rope_deltas, device=device, dtype=torch.long).reshape(-1, 1)
-                previous_delta = torch.broadcast_to(previous_delta, (batch_size, 1))
-                base_delta = torch.where(is_new_prefill, torch.zeros_like(previous_delta), previous_delta)
+                if previous_delta.shape[0] != batch_size:
+                    if batch_size % previous_delta.shape[0] == 0:
+                        previous_delta = previous_delta.repeat_interleave(batch_size // previous_delta.shape[0], dim=0)
+                    else:
+                        previous_delta = previous_delta[:1].expand(batch_size, -1)
+                base_delta = previous_delta
 
-            mask_delta = attention_mask.to(device=device, dtype=torch.long).sum(1, keepdim=True) - attention_mask.size(
-                1
-            )
-            rope_position = cp + base_delta + mask_delta
+            rope_position = rope_position + base_delta
             pos_3d = rope_position.unsqueeze(-1).expand(-1, -1, 3)
             return pos_3d, base_delta
 
@@ -839,11 +944,15 @@ class IsaacModel(PreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         modality_tensor: torch.LongTensor | None = None,
         vision_patches: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         vision_patch_attention_mask: torch.Tensor | None = None,
+        image_patch_attention_mask: torch.Tensor | None = None,
         vision_token_grids: torch.LongTensor | None = None,
+        image_token_grids: torch.LongTensor | None = None,
         vision_token_offsets: torch.LongTensor | None = None,
         vision_token_lengths: torch.LongTensor | None = None,
         vision_image_attention_mask: torch.LongTensor | None = None,
+        image_attention_mask: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: list[torch.FloatTensor] | None = None,
@@ -863,36 +972,46 @@ class IsaacModel(PreTrainedModel):
                 values from `ModalityType`. Treated as text-only when omitted.
             vision_patches (`torch.FloatTensor`, *optional*):
                 Padded per-image patch vectors of shape `(batch_size, max_images, max_patches, patch_dim)`.
+            pixel_values (`torch.FloatTensor`, *optional*):
+                Alias for `vision_patches` accepted by generic image-feature and generation helpers.
             vision_patch_attention_mask (`torch.LongTensor`, *optional*):
                 Mask for valid patch entries in `vision_patches`, shaped `(batch_size, max_images, max_patches)`.
+            image_patch_attention_mask (`torch.LongTensor`, *optional*):
+                Alias for `vision_patch_attention_mask`.
             vision_token_grids (`torch.LongTensor`, *optional*):
                 Per-image patch grids `(h, w)` with shape `(batch_size, max_images, 2)`.
+            image_token_grids (`torch.LongTensor`, *optional*):
+                Alias for `vision_token_grids`.
             vision_token_offsets (`torch.LongTensor`, *optional*):
                 Start offsets inside the per-image vision embedding sequence, shape `(batch_size, max_images)`.
             vision_token_lengths (`torch.LongTensor`, *optional*):
                 Number of vision tokens to consume per image, shape `(batch_size, max_images)`.
             vision_image_attention_mask (`torch.LongTensor`, *optional*):
                 Mask indicating which image slots are populated, shape `(batch_size, max_images)`.
+            image_attention_mask (`torch.LongTensor`, *optional*):
+                Alias for `vision_image_attention_mask`.
         """
+        if vision_patches is None and pixel_values is not None:
+            vision_patches = pixel_values
+            vision_patch_attention_mask = (
+                image_patch_attention_mask if vision_patch_attention_mask is None else vision_patch_attention_mask
+            )
+            vision_token_grids = image_token_grids if vision_token_grids is None else vision_token_grids
+            vision_image_attention_mask = (
+                image_attention_mask if vision_image_attention_mask is None else vision_image_attention_mask
+            )
 
         if inputs_embeds is None:
             if input_ids is None:
                 raise ValueError("`input_ids` or `inputs_embeds` must be provided.")
 
-            has_vision_inputs = any(
-                value is not None
-                for value in (
-                    vision_patches,
-                    vision_patch_attention_mask,
-                    vision_token_grids,
-                    vision_token_offsets,
-                    vision_token_lengths,
-                    vision_image_attention_mask,
-                )
-            )
+            has_vision_inputs = vision_patches is not None
             if modality_tensor is not None or has_vision_inputs:
                 if modality_tensor is None:
                     modality_tensor = torch.full_like(input_ids, ModalityType.text.value)
+                image_token_mask = modality_tensor == ModalityType.image.value
+                if torch.any(image_token_mask) and (vision_patches is None or vision_token_grids is None):
+                    raise ValueError("Image placeholders require `vision_patches` and `vision_token_grids`.")
                 inputs_embeds, modality_tensor = self.embed_multimodal_inputs(
                     input_ids=input_ids,
                     modality_tensor=modality_tensor,
@@ -918,8 +1037,8 @@ class IsaacModel(PreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config.get_text_config())
 
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(past_seen_tokens, past_seen_tokens + seq_len, device=device)
 
         if attention_mask is None:
@@ -929,11 +1048,12 @@ class IsaacModel(PreTrainedModel):
             position_ids=position_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
+            past_seen_tokens=past_seen_tokens,
         )
         self.rope_deltas = rope_deltas
 
-        cos, sin = self.rotary_emb(position_ids, modality_tensor, hidden_states=inputs_embeds)
+        rope_position_ids = self.prepare_multimodal_rope_position_ids(position_ids, modality_tensor)
+        cos, sin = self.rotary_emb(inputs_embeds, rope_position_ids)
 
         decoder_position_ids = position_ids[..., 0] if position_ids.ndim == 3 else position_ids
 
@@ -965,7 +1085,7 @@ class IsaacModel(PreTrainedModel):
 
             hidden_states = layer_outputs[0] if isinstance(layer_outputs, tuple) else layer_outputs
 
-        hidden_states = self.final_norm(hidden_states)
+        hidden_states = self.text_model.norm(hidden_states)
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
@@ -1187,7 +1307,6 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config_class = IsaacConfig
     _can_compile_fullgraph = False
-    all_tied_weights_keys: dict[str, str] = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
 
     def __init__(self, config: IsaacConfig):
         super().__init__(config)
@@ -1200,24 +1319,26 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
 
     @auto_docstring
     @can_return_tuple
-    @merge_with_config_defaults
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         modality_tensor: torch.LongTensor | None = None,
         vision_patches: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         vision_patch_attention_mask: torch.Tensor | None = None,
+        image_patch_attention_mask: torch.Tensor | None = None,
         vision_token_grids: torch.LongTensor | None = None,
+        image_token_grids: torch.LongTensor | None = None,
         vision_token_offsets: torch.LongTensor | None = None,
         vision_token_lengths: torch.LongTensor | None = None,
         vision_image_attention_mask: torch.LongTensor | None = None,
+        image_attention_mask: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: list[torch.FloatTensor] | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
@@ -1225,17 +1346,34 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             Modality identifiers aligned with the token sequence, shaped `(batch_size, seq_len)`.
         vision_patches (`torch.FloatTensor`, *optional*):
             Padded per-image patch vectors of shape `(batch_size, max_images, max_patches, patch_dim)`.
+        pixel_values (`torch.FloatTensor`, *optional*):
+            Alias for `vision_patches` accepted by generic image-feature and generation helpers.
         vision_patch_attention_mask (`torch.LongTensor`, *optional*):
             Mask for valid patch entries in `vision_patches`, shaped `(batch_size, max_images, max_patches)`.
+        image_patch_attention_mask (`torch.LongTensor`, *optional*):
+            Alias for `vision_patch_attention_mask`.
         vision_token_grids (`torch.LongTensor`, *optional*):
             Per-image patch grids `(h, w)` with shape `(batch_size, max_images, 2)`.
+        image_token_grids (`torch.LongTensor`, *optional*):
+            Alias for `vision_token_grids`.
         vision_token_offsets (`torch.LongTensor`, *optional*):
             Start offsets inside the per-image vision embedding sequence, shape `(batch_size, max_images)`.
         vision_token_lengths (`torch.LongTensor`, *optional*):
             Number of vision tokens to consume per image, shape `(batch_size, max_images)`.
         vision_image_attention_mask (`torch.LongTensor`, *optional*):
             Mask indicating which image slots are populated, shape `(batch_size, max_images)`.
+        image_attention_mask (`torch.LongTensor`, *optional*):
+            Alias for `vision_image_attention_mask`.
         """
+        if vision_patches is None and pixel_values is not None:
+            vision_patches = pixel_values
+            vision_patch_attention_mask = (
+                image_patch_attention_mask if vision_patch_attention_mask is None else vision_patch_attention_mask
+            )
+            vision_token_grids = image_token_grids if vision_token_grids is None else vision_token_grids
+            vision_image_attention_mask = (
+                image_attention_mask if vision_image_attention_mask is None else vision_image_attention_mask
+            )
         outputs = self.model(
             input_ids=input_ids,
             modality_tensor=modality_tensor,
@@ -1250,7 +1388,6 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = outputs[0]
@@ -1275,22 +1412,37 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         modality_tensor: torch.LongTensor | None = None,
         vision_patches: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         vision_patch_attention_mask: torch.Tensor | None = None,
+        image_patch_attention_mask: torch.Tensor | None = None,
         vision_token_grids: torch.LongTensor | None = None,
+        image_token_grids: torch.LongTensor | None = None,
         vision_token_offsets: torch.LongTensor | None = None,
         vision_token_lengths: torch.LongTensor | None = None,
         vision_image_attention_mask: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
+        image_attention_mask: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
+        is_first_iteration=False,
+        use_cache=True,
         **kwargs,
     ) -> dict[str, Any]:
+        if vision_patches is None and pixel_values is not None:
+            vision_patches = pixel_values
+            vision_patch_attention_mask = (
+                image_patch_attention_mask if vision_patch_attention_mask is None else vision_patch_attention_mask
+            )
+            vision_token_grids = image_token_grids if vision_token_grids is None else vision_token_grids
+            vision_image_attention_mask = (
+                image_attention_mask if vision_image_attention_mask is None else vision_image_attention_mask
+            )
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             position_ids=None,
+            is_first_iteration=is_first_iteration,
+            use_cache=use_cache,
             **kwargs,
         )
         multimodal_inputs = {
@@ -1305,27 +1457,15 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         if not any(value is not None for value in multimodal_inputs.values()):
             return model_inputs
 
-        past_len = past_key_values.get_seq_length() if past_key_values is not None else 0
-        first_step = past_len == 0
+        first_step = is_first_iteration or not use_cache
         for key, value in multimodal_inputs.items():
             model_inputs[key] = value if first_step else None
         model_inputs["position_ids"] = position_ids if first_step else None
 
         return model_inputs
 
-    @classmethod
-    def can_generate(cls) -> bool:
-        return True
-
-    def set_input_embeddings(self, value: nn.Module) -> None:
-        self.model.set_input_embeddings(value)
-        vocab_size = getattr(value, "num_embeddings", None)
-        self.config.vocab_size = vocab_size
-        self.model.config.vocab_size = vocab_size
-        self.model.text_model.config.vocab_size = vocab_size
-        if self.lm_head.weight.shape[0] != vocab_size:
-            self.lm_head = nn.Linear(self.config.hidden_size, vocab_size, bias=False)
-        self.lm_head.weight = self.model.text_model.embed_tokens.weight
+    def get_input_embeddings(self) -> nn.Module:
+        return self.model.get_input_embeddings()
 
 
 __all__ = ["IsaacModel", "IsaacPreTrainedModel", "IsaacForConditionalGeneration"]
