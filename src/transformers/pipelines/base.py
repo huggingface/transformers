@@ -985,9 +985,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         if self.image_processor is not None:
             self.image_processor.save_pretrained(save_directory, **kwargs)
 
-        if hasattr(self, "modelcard") and self.modelcard is not None:
-            self.modelcard.save_pretrained(save_directory)
-
     def transform(self, X):
         """
         Scikit / Keras interface to transformers' pipelines. This method will forward to __call__().
