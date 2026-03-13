@@ -50,6 +50,7 @@ if is_vision_available():
 class PPOCRV5MobileDetModelTester:
     def __init__(
         self,
+        parent,
         batch_size=3,
         image_size=128,
         num_channels=3,
@@ -62,6 +63,7 @@ class PPOCRV5MobileDetModelTester:
         kernel_list=[3, 2, 2],
         interpolate_mode="nearest",
     ):
+        self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
         self.num_channels = num_channels
@@ -138,6 +140,7 @@ class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = PPOCRV5MobileDetModelTester(
+            self,
             batch_size=3,
             is_training=False,
             image_size=128,
