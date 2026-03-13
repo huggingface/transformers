@@ -930,15 +930,19 @@ class GenerationMixin(ContinuousMixin):
                 [attention_mask, attention_mask.new_ones((attention_mask.shape[0], num_new_tokens))], dim=-1
             )
 
-        # Cache position (always 1D)
+        # Cache position (always 1D). For single-token generation (the common autoregressive case),
+        # avoid torch.cat and just compute the next position directly.
         if (cache_position := model_kwargs.get("cache_position")) is not None:
-            next_cache_position = (
-                torch.arange(num_new_tokens, dtype=cache_position.dtype, device=cache_position.device)
-                + cache_position[-1]
-                + 1
-            )
-            next_cache_position = torch.cat((cache_position, next_cache_position))
-            model_kwargs["cache_position"] = next_cache_position
+            if num_new_tokens == 1:
+                model_kwargs["cache_position"] = cache_position[-1:] + 1
+            else:
+                next_cache_position = (
+                    torch.arange(num_new_tokens, dtype=cache_position.dtype, device=cache_position.device)
+                    + cache_position[-1]
+                    + 1
+                )
+                next_cache_position = torch.cat((cache_position, next_cache_position))
+                model_kwargs["cache_position"] = next_cache_position
 
         return model_kwargs
 
@@ -2752,11 +2756,29 @@ class GenerationMixin(ContinuousMixin):
             is_first_iteration=not generation_config.is_assistant,
         )
 
+        # Pre-allocate input_ids buffer to avoid torch.cat every step.
+        # We grow by doubling when needed (amortized O(1) per token).
+        max_length = stopping_criteria.max_length or (input_ids.shape[1] + generation_config.max_new_tokens)
+        if max_length is not None and max_length > input_ids.shape[1]:
+            new_input_ids = torch.full(
+                (batch_size, max_length), pad_token_id.item() if pad_token_id is not None else 0,
+                dtype=input_ids.dtype, device=input_ids.device,
+            )
+            new_input_ids[:, : input_ids.shape[1]] = input_ids
+            cur_len = input_ids.shape[1]
+            input_ids = new_input_ids
+        else:
+            cur_len = input_ids.shape[1]
+
+        # Cache whether logits need dtype/device conversion (checked once, not per token)
+        target_device = input_ids.device
+        _logits_need_conversion = None  # will be set on first iteration
+
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             if prefill_consumed:
                 next_sequence_length = 1 if model_kwargs["use_cache"] else None
                 model_inputs = self.prepare_inputs_for_generation(
-                    input_ids, next_sequence_length=next_sequence_length, **model_kwargs
+                    input_ids[:, :cur_len], next_sequence_length=next_sequence_length, **model_kwargs
                 )
                 with self._optimize_model_for_decode():
                     outputs = model_forward(**model_inputs, return_dict=True)
@@ -2769,12 +2791,24 @@ class GenerationMixin(ContinuousMixin):
             if synced_gpus and this_peer_finished:
                 continue
 
-            # Copy is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
-            # (the clone itself is always small)
-            next_token_logits = outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=input_ids.device)
+            # Extract last-token logits. A copy is needed when outputs.logits is large (e.g. first/prefill
+            # iteration with shape (batch, seq_len, vocab)) to avoid keeping the full tensor alive.
+            # For autoregressive steps where logits are already (batch, 1, vocab), a view is sufficient
+            # since del outputs below will leave only this small view alive.
+            logits = outputs.logits
+            if _logits_need_conversion is None:
+                _logits_need_conversion = logits.dtype != torch.float32 or logits.device != target_device
+            if _logits_need_conversion:
+                next_token_logits = logits[:, -1, :].to(copy=True, dtype=torch.float32, device=target_device)
+            elif logits.shape[1] > 1:
+                # Large logits (prefill) — clone to release the big tensor
+                next_token_logits = logits[:, -1, :].clone()
+            else:
+                # Autoregressive step — logits are already (batch, 1, vocab), view is enough
+                next_token_logits = logits[:, -1, :]
 
             # pre-process distribution
-            next_token_scores = logits_processor(input_ids, next_token_logits)
+            next_token_scores = logits_processor(input_ids[:, :cur_len], next_token_logits)
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
@@ -2801,6 +2835,9 @@ class GenerationMixin(ContinuousMixin):
                 probs = nn.functional.softmax(next_token_scores, dim=-1)
                 # TODO (joao): this OP throws "skipping cudagraphs due to ['incompatible ops']", find solution
                 next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+            elif next_token_scores.device.type == "cpu":
+                # numpy argmax is ~10x faster than torch.argmax on CPU due to lower dispatch overhead
+                next_tokens = torch.from_numpy(next_token_scores.numpy().argmax(axis=-1))
             else:
                 next_tokens = torch.argmax(next_token_scores, dim=-1)
 
@@ -2808,17 +2845,22 @@ class GenerationMixin(ContinuousMixin):
             if has_eos_stopping_criteria:
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
-            # update generated ids, model inputs, and length for next step
-            input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+            # update generated ids: write into pre-allocated buffer instead of torch.cat
+            input_ids[:, cur_len] = next_tokens
+            cur_len += 1
+
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
 
-            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids[:, :cur_len], scores)
             this_peer_finished = unfinished_sequences.max() == 0
 
             # This is needed to properly delete outputs.logits which may be very large for first iteration
             # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
             del outputs
+
+        # Trim input_ids to actual length
+        input_ids = input_ids[:, :cur_len]
 
         if streamer is not None:
             streamer.end()

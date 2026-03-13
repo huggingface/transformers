@@ -53,6 +53,7 @@ from .. import (
     LogitsProcessorList,
     TextIteratorStreamer,
 )
+from ..generation.streamers import BaseStreamer
 from ..utils import logging
 
 
@@ -77,7 +78,7 @@ serve_dependencies_available = (
 )
 if serve_dependencies_available:
     import uvicorn
-    from fastapi import FastAPI, HTTPException
+    from fastapi import FastAPI, HTTPException, Request
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse, StreamingResponse
     from openai.types.audio.transcription import Transcription
@@ -294,6 +295,13 @@ def create_generation_config_from_req(
     return generation_config
 
 
+class _StreamError:
+    """Sentinel to signal an error from the generate thread."""
+
+    def __init__(self, msg):
+        self.msg = msg
+
+
 class ToolState:
     """Lightweight class to keep track of the tool call state."""
 
@@ -420,6 +428,32 @@ class Serve:
         non_blocking: Annotated[
             bool, typer.Option(hidden=True, help="Whether to run the server in a separate thread.")
         ] = False,
+        gguf_file: Annotated[
+            str | None,
+            typer.Option(
+                help="GGUF filename to load via llama.cpp (requires llama-cpp-transformers). "
+                "When set, the model is loaded with LlamaCppTransformersModel instead of the default PyTorch path."
+            ),
+        ] = None,
+        n_gpu_layers: Annotated[
+            int,
+            typer.Option(help="Number of layers to offload to GPU when using GGUF models (-1 = all)."),
+        ] = -1,
+        tokenizer: Annotated[
+            str | None,
+            typer.Option(
+                help="Tokenizer model ID or path (e.g. 'Qwen/Qwen2.5-0.5B-Instruct'). "
+                "Useful when the GGUF repo doesn't include tokenizer files."
+            ),
+        ] = None,
+        stream_batch_size: Annotated[
+            int,
+            typer.Option(
+                help="Number of tokens to batch per HTTP write when streaming. "
+                "Higher values reduce HTTP overhead at the cost of slightly bursty delivery. "
+                "Each token still gets its own SSE event."
+            ),
+        ] = 1,
     ) -> None:
         if not serve_dependencies_available:
             raise ImportError(
@@ -442,6 +476,10 @@ class Serve:
         self.input_validation = input_validation
         self.force_model = force_model
         self.non_blocking = non_blocking
+        self.gguf_file = gguf_file
+        self.n_gpu_layers = n_gpu_layers
+        self.tokenizer = tokenizer
+        self.stream_batch_size = stream_batch_size
 
         # Seed
         if default_seed is not None:
@@ -475,6 +513,7 @@ class Serve:
 
         @asynccontextmanager
         async def lifespan(app: FastAPI):
+            self._event_loop = asyncio.get_event_loop()
             yield
             for model in self.loaded_models.values():
                 model.delete_model()
@@ -496,8 +535,6 @@ class Serve:
             logger.warning_once(
                 "CORS allow origin is set to `*`. This is not recommended for production environments."
             )
-
-        from fastapi import Request
 
         @app.post("/v1/chat/completions")
         def chat_completion(request: Request, body: dict):
@@ -1078,10 +1115,12 @@ class Serve:
         generation_config = create_generation_config_from_req(req, model_generation_config=model.generation_config)
 
         last_kv_cache = None
-        if self.is_continuation(req) and not must_discard_cache:
-            seq_len = self.last_kv_cache.get_seq_length()
-            if inputs["input_ids"].shape[-1] > seq_len:
-                last_kv_cache = self.last_kv_cache
+        # Stateful models (e.g. llama.cpp) manage their own KV cache — skip cache reuse logic
+        if not getattr(model, "_is_stateful", False):
+            if self.is_continuation(req) and not must_discard_cache:
+                seq_len = self.last_kv_cache.get_seq_length()
+                if inputs["input_ids"].shape[-1] > seq_len:
+                    last_kv_cache = self.last_kv_cache
 
         generation_kwargs = {
             **inputs,
@@ -1091,7 +1130,7 @@ class Serve:
             "past_key_values": last_kv_cache,
         }
 
-        def stream_chat_completion(streamer, _request_id):
+        def stream_chat_completion(streamer, _request_id, fast_sse=False):
             # Temporary hack for GPTOS 2: filter out the CoT tokens. Full solution here implies defining new output
             # classes and piping the reasoning trace into a new field
             filter_cot = False
@@ -1208,9 +1247,18 @@ class Serve:
 
                     # All non-tool related tokens are emitted as assistant messages. Empty text is skipped.
                     if result != "":
-                        yield self.build_chat_completion_chunk(
-                            _request_id, content=result, model=model_id_and_revision
-                        )
+                        if fast_sse:
+                            # Fast path: build SSE string directly, avoiding pydantic object
+                            # creation + model_dump_json overhead on the hot token-streaming loop.
+                            yield (
+                                f'data: {{"id":"{_request_id}","object":"chat.completion.chunk",'
+                                f'"model":"{model_id_and_revision}",'
+                                f'"choices":[{{"delta":{{"content":{json.dumps(result)}}},"index":0}}]}}\n\n'
+                            )
+                        else:
+                            yield self.build_chat_completion_chunk(
+                                _request_id, content=result, model=model_id_and_revision
+                            )
 
                 generated_all_tokens = (
                     generation_config.max_new_tokens is not None
@@ -1235,25 +1283,151 @@ class Serve:
                 thread.join()
 
         if req.get("stream"):
-            return StreamingResponse(
-                map(self.chunk_to_sse_element, stream_chat_completion(generation_streamer, request_id)),
-                media_type="text/event-stream",
+            # Fast async streaming path: eliminates TextIteratorStreamer's O(n²) decode,
+            # the bridge thread, and the double queue by using a lightweight streamer that
+            # pushes text directly to an asyncio.Queue via DecodeStream (O(1) per token).
+            loop = self._event_loop
+            text_queue: asyncio.Queue = asyncio.Queue()
+
+            class _DirectStreamer(BaseStreamer):
+                """Streamer that decodes tokens incrementally and pushes text to an asyncio.Queue.
+
+                Batches multiple tokens into a single queue item to reduce per-token
+                HTTP/event-loop overhead while preserving a streaming feel.
+                """
+
+                def __init__(self, tokenizer, _loop, _queue, skip_special_tokens=True, batch_size=4):
+                    self._tokenizer = tokenizer._tokenizer  # raw tokenizers.Tokenizer
+                    self._loop = _loop
+                    self._queue = _queue
+                    self._decode_stream = DecodeStream([], skip_special_tokens)
+                    self._first = True
+                    self._batch_size = batch_size
+                    self._token_texts = []
+                    self._n_buffered = 0
+                    self.tokenizer = tokenizer  # kept for eos_token check
+                    self.total_tokens = 0
+
+                def put(self, value):
+                    if self._first:
+                        self._first = False
+                        return  # skip prompt tokens
+                    if len(value.shape) > 1:
+                        value = value[0]
+                    for token_id in value.tolist():
+                        self.total_tokens += 1
+                        text = self._decode_stream.step(self._tokenizer, token_id)
+                        if text is not None:
+                            self._token_texts.append(text)
+                        self._n_buffered += 1
+                        if self._n_buffered >= self._batch_size:
+                            self._flush()
+
+                def _flush(self):
+                    if self._token_texts:
+                        self._loop.call_soon_threadsafe(self._queue.put_nowait, self._token_texts)
+                        self._token_texts = []
+                    self._n_buffered = 0
+
+                def end(self):
+                    self._flush()  # send any remaining tokens
+                    self._loop.call_soon_threadsafe(self._queue.put_nowait, None)
+
+            direct_streamer = _DirectStreamer(
+                processor, loop, text_queue, skip_special_tokens, batch_size=self.stream_batch_size
             )
+            generation_kwargs["streamer"] = direct_streamer
+
+            def _run_generate():
+                try:
+                    generate_output = model.generate(**generation_kwargs)
+                    self.last_kv_cache = generate_output.past_key_values
+                except Exception as e:
+                    logger.error(str(e))
+                    loop.call_soon_threadsafe(
+                        text_queue.put_nowait, _StreamError(str(e))
+                    )
+
+            Thread(target=_run_generate, daemon=True).start()
+
+            async def async_sse_gen():
+                # Emit assistant role
+                yield Serve.chunk_to_sse_element(
+                    self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
+                )
+
+                filter_cot = False
+                cot_trace_end = None
+                if "gptoss" in model.config.architectures[0].lower():
+                    filter_cot = True
+                    cot_trace_end = "<|channel|>final<|message|>"
+
+                results = ""
+                is_gptoss = "gptoss" in model.config.architectures[0].lower()
+
+                while True:
+                    token_texts = await text_queue.get()
+                    if token_texts is None:
+                        break
+                    if isinstance(token_texts, _StreamError):
+                        yield f'data: {{"error": "{token_texts.msg}"}}\n\n'
+                        return
+
+                    # Build one SSE event per token, yield all at once (single HTTP write).
+                    # Client sees individual token events → appears token-by-token.
+                    batch = []
+                    for text in token_texts:
+                        if is_gptoss:
+                            text = text.removesuffix("<|return|>")
+                        results += text
+
+                        if filter_cot:
+                            if cot_trace_end in results:
+                                filter_cot = False
+                            continue
+
+                        if text != "":
+                            batch.append(
+                                f'data: {{"id":"{request_id}","object":"chat.completion.chunk",'
+                                f'"model":"{model_id_and_revision}",'
+                                f'"choices":[{{"delta":{{"content":{json.dumps(text)}}},"index":0}}]}}\n\n'
+                            )
+                    if batch:
+                        yield "".join(batch)
+
+                n_tokens_generated = direct_streamer.total_tokens
+                generated_all_tokens = (
+                    generation_config.max_new_tokens is not None
+                    and n_tokens_generated >= generation_config.max_new_tokens
+                )
+                reason = "length" if generated_all_tokens else "stop"
+                yield Serve.chunk_to_sse_element(
+                    self.build_chat_completion_chunk(request_id, finish_reason=reason, model=model_id_and_revision)
+                )
+
+            return StreamingResponse(async_sse_gen(), media_type="text/event-stream")
         else:
-            content = []
-            finish_reason = "stop"
+            # Non-streaming: call generate() directly — no streamer, no per-token decode overhead.
+            generate_kwargs = {
+                **inputs,
+                "generation_config": generation_config,
+                "return_dict_in_generate": True,
+                "past_key_values": last_kv_cache,
+            }
+            generate_output = model.generate(**generate_kwargs)
+            self.last_kv_cache = generate_output.past_key_values
 
-            generator = stream_chat_completion(generation_streamer, request_id)
-            usage = None
+            # Decode only the generated tokens
+            input_len = inputs["input_ids"].shape[-1]
+            generated_ids = generate_output.sequences[0, input_len:]
+            content_text = processor.decode(generated_ids, skip_special_tokens=True)
 
-            for chunk in generator:
-                choice = chunk.choices[0]
-                if getattr(choice.delta, "content", None):
-                    content.append(choice.delta.content)
-                if choice.finish_reason:
-                    finish_reason = choice.finish_reason
-                if getattr(chunk, "usage", None):
-                    usage = chunk.usage
+            n_generated = len(generated_ids)
+            generated_all_tokens = (
+                generation_config.max_new_tokens is not None
+                and n_generated >= generation_config.max_new_tokens
+            )
+            finish_reason = "length" if generated_all_tokens else "stop"
 
             chat_completion_result = ChatCompletion(
                 id=request_id,
@@ -1262,14 +1436,11 @@ class Serve:
                 model=model_id_and_revision,
                 choices=[
                     Choice(
-                        # TODO check the index
                         index=0,
-                        message=ChatCompletionMessage(content="".join(content), role="assistant"),
+                        message=ChatCompletionMessage(content=content_text, role="assistant"),
                         finish_reason=finish_reason,
                     )
                 ],
-                # TODO implement function calling
-                usage=usage,
             )
 
             result = chat_completion_result.model_dump(exclude_none=True)
@@ -1329,10 +1500,11 @@ class Serve:
         generation_config = create_generation_config_from_req(req, model_generation_config=model.generation_config)
 
         last_kv_cache = None
-        if self.is_continuation(req) and not must_discard_cache:
-            seq_len = self.last_kv_cache.get_seq_length()
-            if inputs["input_ids"].shape[-1] > seq_len:
-                last_kv_cache = self.last_kv_cache
+        if not getattr(model, "_is_stateful", False):
+            if self.is_continuation(req) and not must_discard_cache:
+                seq_len = self.last_kv_cache.get_seq_length()
+                if inputs["input_ids"].shape[-1] > seq_len:
+                    last_kv_cache = self.last_kv_cache
 
         generation_kwargs = {
             "inputs": inputs,
@@ -1630,10 +1802,11 @@ class Serve:
         generation_config = create_generation_config_from_req(req, model_generation_config=model.generation_config)
 
         last_kv_cache = None
-        if self.is_continuation(req) and not must_discard_cache:
-            seq_len = self.last_kv_cache.get_seq_length()
-            if inputs.shape[-1] > seq_len:
-                last_kv_cache = self.last_kv_cache
+        if not getattr(model, "_is_stateful", False):
+            if self.is_continuation(req) and not must_discard_cache:
+                seq_len = self.last_kv_cache.get_seq_length()
+                if inputs.shape[-1] > seq_len:
+                    last_kv_cache = self.last_kv_cache
 
         generate_output = model.generate(
             inputs=inputs,
@@ -1817,37 +1990,50 @@ class Serve:
         else:
             model_id, revision = model_id_and_revision, "main"
 
+        tokenizer_id = self.tokenizer or model_id
         try:
             data_processor = AutoProcessor.from_pretrained(
-                model_id,
-                revision=revision,
+                tokenizer_id,
+                revision=revision if tokenizer_id == model_id else "main",
                 trust_remote_code=self.trust_remote_code,
             )
         except OSError:
             try:
                 data_processor = AutoTokenizer.from_pretrained(
-                    model_id,
-                    revision=revision,
+                    tokenizer_id,
+                    revision=revision if tokenizer_id == model_id else "main",
                     trust_remote_code=self.trust_remote_code,
                 )
             except OSError:
                 raise OSError("Failed to load processor with `AutoProcessor` and `AutoTokenizer`.")
 
-        dtype = self.dtype if self.dtype in ["auto", None] else getattr(torch, self.dtype)
-        quantization_config = self.get_quantization_config()
+        if self.gguf_file is not None:
+            # GGUF model — load via llama.cpp
+            from llama_cpp_transformers import LlamaCppTransformersModel
 
-        model_kwargs = {
-            "revision": revision,
-            "attn_implementation": self.attn_implementation,
-            "dtype": dtype,
-            "device_map": self.device,
-            "trust_remote_code": self.trust_remote_code,
-            "quantization_config": quantization_config,
-        }
+            flash_attn = True if self.attn_implementation == "flash_attention_2" else "auto"
+            model = LlamaCppTransformersModel.from_pretrained(
+                model_id,
+                gguf_file=self.gguf_file,
+                n_gpu_layers=self.n_gpu_layers,
+                flash_attn=flash_attn,
+            )
+        else:
+            dtype = self.dtype if self.dtype in ["auto", None] else getattr(torch, self.dtype)
+            quantization_config = self.get_quantization_config()
 
-        config = AutoConfig.from_pretrained(model_id, **model_kwargs)
-        architecture = getattr(transformers, config.architectures[0])
-        model = architecture.from_pretrained(model_id, **model_kwargs)
+            model_kwargs = {
+                "revision": revision,
+                "attn_implementation": self.attn_implementation,
+                "dtype": dtype,
+                "device_map": self.device,
+                "trust_remote_code": self.trust_remote_code,
+                "quantization_config": quantization_config,
+            }
+
+            config = AutoConfig.from_pretrained(model_id, **model_kwargs)
+            architecture = getattr(transformers, config.architectures[0])
+            model = architecture.from_pretrained(model_id, **model_kwargs)
 
         has_default_max_length = (
             model.generation_config.max_new_tokens is None and model.generation_config.max_length == 20
