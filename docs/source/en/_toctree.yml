@@ -1252,10 +1252,10 @@
         title: PaddleOCRVL
       - local: model_doc/paligemma
         title: PaliGemma
-      - local: model_doc/penguinvl
-        title: PenguinVL
       - local: model_doc/pe_audio_video
         title: PE Audio Video
+      - local: model_doc/penguinvl
+        title: PenguinVL
       - local: model_doc/perceiver
         title: Perceiver
       - local: model_doc/perception_lm

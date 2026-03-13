@@ -194,18 +194,18 @@ class PenguinVLProcessor(ProcessorMixin):
     Processor for PenguinVL that wraps an image processor and a tokenizer.
 
     Args:
-        image_processor (`PenguinVLImageProcessor`):
-            The image processor.
-        tokenizer (`PreTrainedTokenizer`):
-            The tokenizer.
-        image_token (`str`, *optional*, defaults to `" "`):
-            The image placeholder token.
-        image_merge_size (`int`, *optional*, defaults to 1):
-            Spatial merge size for images.
-        video_merge_size (`int`, *optional*, defaults to 2):
-            Spatial merge size for video frames.
-        chat_template (`str`, *optional*):
-            A Jinja template for formatting conversations.
+            image_processor (`PenguinVLImageProcessor`, *optional*):
+                The image processor.
+            tokenizer (`PreTrainedTokenizer`, *optional*):
+                The tokenizer.
+            image_token (`str`, *optional*, defaults to `"<image>"`):
+                The image placeholder token.
+            image_merge_size (`int`, *optional*, defaults to 1):
+                Spatial merge size for images.
+            video_merge_size (`int`, *optional*, defaults to 2):
+                Spatial merge size for video frames.
+            chat_template (`str`, *optional*):
+                A Jinja template for formatting conversations.
     """
 
     attributes = ["image_processor", "tokenizer"]
