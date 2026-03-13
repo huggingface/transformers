@@ -1359,13 +1359,11 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
         if isinstance(module, Xcodec2SnakeBeta):
             # Initialize alpha and beta based on the logscale setting
             if module.logscale:
-                # Log scale alphas initialized to zeros
-                module.alpha.data.zero_()
-                module.beta.data.zero_()
+                init.zeros_(module.alpha)
+                init.zeros_(module.beta)
             else:
-                # Linear scale alphas initialized to ones
-                module.alpha.data.fill_(1.0)
-                module.beta.data.fill_(1.0)
+                init.ones_(module.alpha)
+                init.ones_(module.beta)
         elif isinstance(module, Xcodec2FSQ):
             # Non-persistent buffers computed deterministically from config; must be
             # materialized here for the meta-device initialization flow (same pattern
