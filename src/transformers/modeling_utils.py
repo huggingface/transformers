@@ -1896,7 +1896,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
             # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
             if self._supports_flash_attn or getattr(self, "_supports_flash_attn_2", False):
-                message += ', '
+                message += ", "
                 for fa_version in FLASH_ATTENTION_COMPATIBILITY_MATRIX.keys():
                     message += f'`"attn_implementation=flash_attention_{fa_version}"`, `"attn_implementation=paged|flash_attention_{fa_version}"`, '
                 message = message[:-2]  # remove trailing comma
