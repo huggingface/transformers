@@ -23,7 +23,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BackboneOutput,
@@ -36,6 +36,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import auto_docstring, logging, torch_int
+from ...utils.generic import can_return_tuple
 from .configuration_beit import BeitConfig
 
 
@@ -1369,6 +1370,8 @@ class BeitBackbone(BackboneMixin, BeitPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,

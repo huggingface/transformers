@@ -114,6 +114,9 @@ def _build_checkpoint_conversion_mapping():
         "gemma3n_text": [
             WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
         ],
+        "chmv2": [WeightRenaming(r"backbone.layer.", r"backbone.model.layer.")],
+        "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
+        "dinov3_vit": [WeightRenaming(r"(?<!model\.)layer.", r"model.layer.")],
         "timesfm2_5": [
             WeightRenaming("ff0", "fc1"),
             WeightRenaming("ff1", "fc2"),

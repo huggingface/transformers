@@ -98,10 +98,6 @@ class AyaVisionPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_flex_attn = True
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": "DecoderLayer",
-        "attentions": "Attention",
-    }
 
 
 @dataclass
@@ -175,8 +171,8 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    @can_return_tuple
     @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
