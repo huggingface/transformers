@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""ONNX exporter utilities.
+"""ONNX exporter.
 
 This module provides the `OnnxExporter` class and helper functions used to
-export PyTorch models to ONNX via TorchDynamo and `torch.onnx.export`.
+export `PreTrainedModel` instances to ONNX via TorchDynamo and `torch.onnx.export`.
 
 The export pipeline has four stages, each with its own set of patches/fixes:
 
@@ -41,7 +41,7 @@ from ..utils import logging
 from ..utils.export_config import OnnxConfig
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
 from .exporter_dynamo import DynamoExporter
-from .utils import dedup_output_tensors, get_inputs_outputs_names, get_leaf_tensors, prepare_for_export
+from .utils import get_leaf_tensors, prepare_for_export
 
 
 if is_torch_available():
@@ -81,8 +81,8 @@ class OnnxExporter(DynamoExporter):
         inputs = copy.deepcopy(sample_inputs)
         model, inputs = prepare_for_export(model, inputs)
 
-        with patch_model(model), patch_torch_ops():
-            inputs_names, outputs_names = get_inputs_outputs_names(model, inputs)
+        with _patch_model(model), patch_torch_ops():
+            inputs_names, outputs_names = _get_inputs_outputs_names(model, inputs)
             exported_program: ExportedProgram = super().export(model, inputs)
             patch_fx_graph(exported_program.graph_module)
             onnx_program: ONNXProgram = torch.onnx.export(
@@ -103,8 +103,12 @@ class OnnxExporter(DynamoExporter):
         return onnx_program
 
 
+# ── ONNX helpers ────────────────────────────────────────────────────────────
+# Model forward wrapper and I/O naming used by OnnxExporter.export.
+
+
 @contextmanager
-def patch_model(model):
+def _patch_model(model):
     """Temporarily wrap model.forward to return flat dict[str, Tensor] with deduped outputs."""
 
     original_forward = model.forward
@@ -112,13 +116,61 @@ def patch_model(model):
     @functools.wraps(original_forward)
     def patched_forward(*args, **kwargs):
         outputs = original_forward(*args, **kwargs)
-        return get_leaf_tensors(dedup_output_tensors(outputs), default="output")
+        return get_leaf_tensors(_dedup_output_tensors(outputs), default="output")
 
     try:
         model.forward = patched_forward
         yield
     finally:
         model.forward = original_forward
+
+
+def _dedup_output_tensors(obj: Any, seen: dict | None = None) -> Any:
+    """Clone tensors that appear more than once in an output structure.
+
+    When a model returns the same tensor under two output names (e.g. ``last_hidden_state``
+    and ``hidden_states[0]``), the ONNX optimizer deduplicates the two output nodes and
+    renames one, breaking the expected name mapping. Cloning duplicates gives each output
+    leaf a distinct identity so the optimizer has nothing to merge.
+    """
+    if seen is None:
+        seen = {}
+    if isinstance(obj, type):  # class objects: not tensors, can't be reconstructed generically
+        return obj
+    if isinstance(obj, torch.Tensor):
+        if id(obj) in seen:
+            return obj.clone()
+        seen[id(obj)] = True
+        return obj
+    if isinstance(obj, dict):
+        return type(obj)({k: _dedup_output_tensors(v, seen) for k, v in obj.items()})
+    if isinstance(obj, (list, tuple)):
+        items = [_dedup_output_tensors(v, seen) for v in obj]
+        try:
+            return type(obj)(items)
+        except TypeError:
+            return type(obj)(*items)  # NamedTuple
+    if hasattr(obj, "__dict__"):
+        cls = type(obj)
+        instance = cls.__new__(cls)
+        instance.__dict__.update({k: _dedup_output_tensors(v, seen) for k, v in vars(obj).items()})
+        return instance
+    return obj
+
+
+def _get_inputs_outputs_names(model: "PreTrainedModel", inputs: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """Get input/output names for ONNX export, disambiguating collisions with input./output. prefixes."""
+
+    with torch.no_grad():
+        outputs = model(**copy.deepcopy(inputs))
+
+    inputs_names = list(get_leaf_tensors(inputs).keys())
+    outputs_names = list(get_leaf_tensors(outputs).keys())
+    for name in set(inputs_names).intersection(set(outputs_names)):
+        inputs_names[inputs_names.index(name)] = f"input.{name}"
+        outputs_names[outputs_names.index(name)] = f"output.{name}"
+
+    return inputs_names, outputs_names
 
 
 # ── Stage 1: Torch patches ─────────────────────────────────────────────────────
@@ -541,23 +593,3 @@ def patch_onnx_ir(onnx_program: "ONNXProgram") -> None:
         fix(onnx_program.model.graph)
         for func in onnx_program.model.functions.values():
             fix(func)
-
-
-# Models that export but produce extremely inaccurate outputs.
-ONNX_EXTREMELY_INACCURATE_MODEL_TYPES: set[str] = {
-    "blt",  # 94.3% mismatch in last_hidden_state
-    "flaubert",  # 40% mismatch in end_top_index (top-k beam search non-determinism)
-    "parakeet_ctc",  # 100% NaN in logits
-    "parakeet_encoder",  # 100% NaN in last_hidden_state
-    "patchtst",  # NaN loss output
-    "pp_doclayout_v2",  # 68.3% mismatch in enc_topk_bboxes (non-deterministic top-k selection)
-    "pp_doclayout_v3",  # 68.3% mismatch in enc_topk_bboxes
-    "d_fine",  # 43.3% mismatch in enc_topk_bboxes (non-deterministic top-k)
-    "mm-grounding-dino",  # 25% mismatch in encoder_pred_boxes (non-deterministic top-k selection)
-    "rt_detr",  # 43.3% mismatch in enc_topk_bboxes
-    "rt_detr_v2",  # 43.3% mismatch in enc_topk_bboxes (non-deterministic top-k)
-    "siglip2",  # 100% mismatch in logits
-    "siglip2_vision_model",  # 73.8% mismatch in last_hidden_state
-    "vit_mae",  # 99.3% mismatch in ids_restore (random masking)
-    "xlm",  # 6.2% mismatch in end_top_index
-}

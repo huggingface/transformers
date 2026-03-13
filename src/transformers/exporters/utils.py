@@ -12,10 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+"""Shared export utilities used by multiple exporter backends.
+
+This module contains helpers that are backend-agnostic and used by more than
+one exporter (Dynamo, ONNX, ExecuTorch):
+
+- `get_leaf_tensors`: recursively extract all leaf tensors from nested outputs.
+- `prepare_for_export`: configure model config, attention/experts implementations,
+  and patch non-exportable module behaviours before any export.
+- `simulate_generation`: run `model.generate()` and capture the forward kwargs
+  for the prefill and decode steps.
+"""
+
 import copy
 import functools
-import importlib
-import inspect
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
@@ -29,164 +40,16 @@ logger = get_logger(__name__)
 if is_torch_available():
     import torch
 
-    from ..cache_utils import Cache
-
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 
-def _path_to_class(path: str) -> type:
-    module_name, qualname = path.split(":", 1)
-    obj = importlib.import_module(module_name)
-    for part in qualname.split("."):
-        obj = getattr(obj, part)
-    return obj
+# Output flags that should be set on model.config, not passed as forward() kwargs.
+_OUTPUT_FLAGS = ("use_cache", "output_attentions", "output_hidden_states", "return_dict", "return_loss")
 
 
-def _flatten_to_context(obj: Any, tensors: list) -> Any:
-    """Single-pass: recursively build a JSON-native context while collecting tensors into `tensors`."""
-    # --- Pure Python / JSON-native (exact type check — subclasses fall through to stateful objects) ---
-    if obj is None or type(obj) in (bool, int, float, str):
-        return obj
-    if type(obj) is list:
-        return [_flatten_to_context(i, tensors) for i in obj]
-    if type(obj) is dict:
-        return {k: _flatten_to_context(v, tensors) for k, v in obj.items()}
-
-    # --- Torch objects ---
-    if isinstance(obj, torch.Tensor):
-        idx = len(tensors)
-        tensors.append(obj)
-        return {"_t": "tensor", "i": idx}
-    if isinstance(obj, torch.Size):
-        return {"_t": "size", "v": list(obj)}
-    if isinstance(obj, torch.device):
-        return {"_t": "device", "s": str(obj)}
-    if isinstance(obj, torch.dtype):
-        return {"_t": "dtype", "n": str(obj).removeprefix("torch.")}
-    if isinstance(obj, torch.layout):
-        return {"_t": "layout", "n": str(obj).removeprefix("torch.")}
-    if isinstance(obj, (torch.SymInt, torch.SymFloat, torch.SymBool)):
-        idx = len(tensors)
-        tensors.append(obj)
-        return {"_t": "sym", "i": idx}
-
-    # --- Python types ---
-    if isinstance(obj, type):
-        return {"_t": "type", "p": _class_to_path(obj)}
-
-    # --- Generic Python objects (by structural category) ---
-    cls = type(obj)
-    if isinstance(obj, dict):  # dict subclasses (OrderedDict, etc.)
-        return {
-            "_t": "map",
-            "p": _class_to_path(cls),
-            "v": {k: _flatten_to_context(v, tensors) for k, v in obj.items()},
-        }
-    if isinstance(obj, (tuple, list, set, frozenset)):  # sequences/sets incl. NamedTuple
-        return {
-            "_t": "seq",
-            "p": _class_to_path(cls),
-            "v": [_flatten_to_context(i, tensors) for i in obj],
-        }
-    if hasattr(obj, "__dict__"):
-        return {
-            "_t": "obj",
-            "p": _class_to_path(cls),
-            "s": {k: _flatten_to_context(v, tensors) for k, v in vars(obj).items()},
-        }
-
-    raise TypeError(f"Cannot flatten {type(obj).__name__} for pytree context")
-
-
-def _unflatten_from_context(ctx: Any, tensors: list) -> Any:
-    """Reconstruct an object from its JSON-native context, substituting tensor index markers."""
-    # --- Pure Python / JSON-native ---
-    if ctx is None or type(ctx) in (bool, int, float, str):
-        return ctx
-    if type(ctx) is list:
-        return [_unflatten_from_context(i, tensors) for i in ctx]
-    if type(ctx) is dict and "_t" not in ctx:
-        return {k: _unflatten_from_context(v, tensors) for k, v in ctx.items()}
-
-    # --- Torch objects ---
-    t = ctx["_t"]
-    if t == "tensor":
-        return tensors[ctx["i"]]
-    if t == "layout":
-        return getattr(torch, ctx["n"])
-    if t == "dtype":
-        return getattr(torch, ctx["n"])
-    if t == "device":
-        return torch.device(ctx["s"])
-    if t == "size":
-        return torch.Size(ctx["v"])
-    if t == "sym":
-        return tensors[ctx["i"]]
-
-    # --- Python types ---
-    if t == "type":
-        return _path_to_class(ctx["p"])
-
-    # --- Generic Python objects ---
-    if t == "map":
-        cls = _path_to_class(ctx["p"])
-        return cls({k: _unflatten_from_context(v, tensors) for k, v in ctx["v"].items()})
-    if t == "seq":
-        cls = _path_to_class(ctx["p"])
-        items = [_unflatten_from_context(i, tensors) for i in ctx["v"]]
-        try:
-            return cls(items)  # tuple, list subclass, set, frozenset, etc.
-        except TypeError:
-            return cls(*items)  # NamedTuple (requires positional args)
-    if t == "obj":
-        cls = _path_to_class(ctx["p"])
-        state = {k: _unflatten_from_context(v, tensors) for k, v in ctx["s"].items()}
-        instance = cls.__new__(cls)
-        instance.__dict__.update(state)
-        return instance
-
-    raise TypeError(f"Unknown tag {t!r} in pytree context")
-
-
-def _iter_subclasses(cls: type):
-    for subclass in cls.__subclasses__():
-        yield subclass
-        yield from _iter_subclasses(subclass)
-
-
-def _class_to_path(cls: type) -> str:
-    return f"{cls.__module__}:{cls.__qualname__}"
-
-
-def _pytree_flatten(obj: Any) -> tuple[list, Any]:
-    tensors: list = []
-    context = _flatten_to_context(obj, tensors)
-    return tensors, context
-
-
-def _pytree_flatten_with_keys(obj: Any):
-    leaves, context = _pytree_flatten(obj)
-    return [(torch.utils._pytree.SequenceKey(i), leaf) for i, leaf in enumerate(leaves)], context
-
-
-def _pytree_unflatten(values, context: Any) -> Any:
-    return _unflatten_from_context(context, list(values))
-
-
-def register_for_export(object_cls: type):
-    try:
-        torch.utils._pytree.register_pytree_node(
-            object_cls,
-            _pytree_flatten,
-            _pytree_unflatten,
-            serialized_type_name=_class_to_path(object_cls),
-            flatten_with_keys_fn=_pytree_flatten_with_keys,
-        )
-    except ValueError as e:
-        if "already registered as pytree node" not in str(e):
-            raise
+# ── Leaf tensors ────────────────────────────────────────────────────────────
 
 
 def _iter_leaf_tensors(obj: Any, prefix: str = "", default: str = "output"):
@@ -209,20 +72,8 @@ def get_leaf_tensors(obj: Any, default: str = "output") -> dict[str, torch.Tenso
     return dict(_iter_leaf_tensors(obj, default=default))
 
 
-def register_pytrees_for_model(model: "PreTrainedModel"):
-    """Register all relevant cache types as pytree nodes for torch.export."""
-    # All transformers Cache subclasses
-    for cache_type in _iter_subclasses(Cache):
-        register_for_export(cache_type)
-    # Model-specific cache classes not inheriting from Cache (e.g. custom per-model caches)
-    for _, obj in inspect.getmembers(inspect.getmodule(model)):
-        if (
-            inspect.isclass(obj)
-            and obj.__module__ == model.__class__.__module__
-            and obj.__name__.endswith("Cache")
-            and not issubclass(obj, Cache)
-        ):
-            register_for_export(obj)
+# ── Model patching ──────────────────────────────────────────────────────────
+# Backend-agnostic patches applied by prepare_for_export before any export.
 
 
 def _exportable_update_mask(attention_mask, past_key_values_or_cache_position=None, *args, **kwargs):
@@ -247,8 +98,13 @@ def prepare_for_export(
     model: "PreTrainedModel",
     inputs: dict[str, Any],
 ) -> tuple["PreTrainedModel", dict[str, Any]]:
-    """Configure the model for export (no inference). Moves output flags from inputs to model.config,
-    sets optimal attention/experts implementations, and patches non-exportable module behaviours."""
+    """Configure the model for export (no inference). Sets optimal attention/experts
+    implementations and patches non-exportable module behaviours.
+
+    Output flags (use_cache, return_dict, etc.) should be set on model.config before calling
+    this function, not passed in inputs. If found in inputs, they are moved to config with a
+    warning — callers should fix their input preparation instead of relying on this fallback.
+    """
     # Validate inputs: loss computation is not supported during export
     for label_key in ("labels", "future_values"):
         if label_key in inputs:
@@ -267,10 +123,13 @@ def prepare_for_export(
             "Please remove 'return_loss' from your inputs or set it to False."
         )
 
-    # handle output flags passed in inputs
-    for output_flag in ("use_cache", "output_attentions", "output_hidden_states", "return_dict", "return_loss"):
+    # Fallback: move output flags from inputs to config. Callers should do this beforehand.
+    for output_flag in _OUTPUT_FLAGS:
         if output_flag in inputs:
-            logger.info(f"Found an output flag '{output_flag}' in inputs. Setting model.config.{output_flag} instead.")
+            logger.warning_once(
+                f"Found output flag '{output_flag}' in inputs. Moving to model.config.{output_flag} instead. "
+                f"Please set output flags on model.config before calling export()."
+            )
             setattr(model.config, output_flag, inputs.pop(output_flag))
 
     # set experts implementation to batched_mm for export
@@ -310,6 +169,9 @@ def prepare_for_export(
     return model, inputs
 
 
+# ── Simulate generation ─────────────────────────────────────────────────────
+
+
 def simulate_generation(model: "PreTrainedModel", inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     """Run generate() for 2 tokens and capture the prefill and decode inputs.
 
@@ -347,97 +209,3 @@ def simulate_generation(model: "PreTrainedModel", inputs: dict[str, Any]) -> tup
         ) from e
 
     return captured[0], captured[1]
-
-
-def get_inputs_outputs_names(model: "PreTrainedModel", inputs: dict[str, Any]) -> tuple[list[str], list[str]]:
-    """Get input/output names for export, disambiguating collisions with input./output. prefixes."""
-
-    with torch.no_grad():
-        outputs = model(**copy.deepcopy(inputs))
-
-    inputs_names = list(get_leaf_tensors(inputs).keys())
-    outputs_names = list(get_leaf_tensors(outputs).keys())
-    for name in set(inputs_names).intersection(set(outputs_names)):
-        inputs_names[inputs_names.index(name)] = f"input.{name}"
-        outputs_names[outputs_names.index(name)] = f"output.{name}"
-
-    return inputs_names, outputs_names
-
-
-# Dynamic shapes utilities
-def _auto_dynamic_shape(tensor: torch.Tensor) -> dict[int, torch.export.Dim]:
-    """
-    Utility function to generate a dynamic shape with all dimensions set to Dim.AUTO for a given tensor.
-    Args:
-        tensor (`torch.Tensor`):
-            The tensor for which to generate the dynamic shape.
-    Returns:
-        `dict[int, torch.export.Dim]`: A dictionary mapping dimension indices to Dim.AUTO.
-    """
-
-    return dict.fromkeys(range(len(tensor.shape)), torch.export.Dim.AUTO)
-
-
-def get_auto_dynamic_shapes(inputs: dict[str, Any]) -> dict[str, Any]:
-    """
-    Utility function to automatically generate dynamic shapes for all tensor inputs and cache inputs.
-    Args:
-        inputs (`dict[str, Any]`):
-            A dictionary of model inputs.
-    Returns:
-        `dict[str, Any]`: A dictionary mapping input names to their dynamic shapes.
-    """
-    dynamic_shapes = {}
-    for name, input in inputs.items():
-        if isinstance(input, torch.Tensor):
-            dynamic_shapes[name] = _auto_dynamic_shape(input)
-        elif input is None or isinstance(input, (int, float, bool, str)):
-            dynamic_shapes[name] = None
-        elif isinstance(input, dict):
-            dynamic_shapes[name] = get_auto_dynamic_shapes(input)
-        elif isinstance(input, (list, tuple, set)):
-            dynamic_shapes[name] = type(input)(get_auto_dynamic_shapes(dict(enumerate(input))).values())
-        elif hasattr(input, "__dict__"):
-            leaves, _ = _pytree_flatten(input)
-            dynamic_shapes[name] = [_auto_dynamic_shape(t) for t in leaves]
-        else:
-            raise ValueError(
-                f"Input '{name}' is of unsupported type '{type(input)}'. "
-                "Only torch.Tensor, Cache, int, float, bool, str, dict, list, tuple, set, "
-                "and objects with a __dict__ (e.g. custom cache classes) are supported."
-            )
-
-    return dynamic_shapes
-
-
-def dedup_output_tensors(obj: Any, seen: dict | None = None) -> Any:
-    """Clone tensors that appear more than once in an output structure.
-
-    When a model returns the same tensor under two output names (e.g. ``last_hidden_state``
-    and ``hidden_states[0]``), the ONNX optimizer deduplicates the two output nodes and
-    renames one, breaking the expected name mapping. Cloning duplicates gives each output
-    leaf a distinct identity so the optimizer has nothing to merge.
-    """
-    if seen is None:
-        seen = {}
-    if isinstance(obj, type):  # class objects: not tensors, can't be reconstructed generically
-        return obj
-    if isinstance(obj, torch.Tensor):
-        if id(obj) in seen:
-            return obj.clone()
-        seen[id(obj)] = True
-        return obj
-    if isinstance(obj, dict):
-        return type(obj)({k: dedup_output_tensors(v, seen) for k, v in obj.items()})
-    if isinstance(obj, (list, tuple)):
-        items = [dedup_output_tensors(v, seen) for v in obj]
-        try:
-            return type(obj)(items)
-        except TypeError:
-            return type(obj)(*items)  # NamedTuple
-    if hasattr(obj, "__dict__"):
-        cls = type(obj)
-        instance = cls.__new__(cls)
-        instance.__dict__.update({k: dedup_output_tensors(v, seen) for k, v in vars(obj).items()})
-        return instance
-    return obj
