@@ -385,6 +385,8 @@ class HCXVisionConfig(PretrainedConfig):
             if auto_AutoConfig is not None:
                 kwargs["auto_map"].pop("AutoConfig")
 
+        kwargs.pop("model_type", None)
+
         super().__init__(**kwargs)
 
 
