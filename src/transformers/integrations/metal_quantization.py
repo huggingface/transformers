@@ -47,21 +47,193 @@ logger = logging.get_logger(__name__)
 
 _metal_kernel = None
 
+# ---------------------------------------------------------------------------
+# Locally-compiled Metal fallback for affine_qmm_t
+# ---------------------------------------------------------------------------
+
+_AFFINE_QMM_T_METAL_SOURCE = """
+#include <metal_stdlib>
+using namespace metal;
+
+// Fused dequantize + matmul:  y = x @ dequant(w).T
+// x: [M, K], w: [N, K_packed] (uint32), scales/biases: [N, n_groups], out: [M, N]
+// Each thread computes one (m, n) output element.
+
+kernel void affine_qmm_t_float(
+    device const float* x        [[buffer(0)]],
+    device const uint*  w        [[buffer(1)]],
+    device const float* scales   [[buffer(2)]],
+    device const float* biases   [[buffer(3)]],
+    device float*       out      [[buffer(4)]],
+    constant uint& M             [[buffer(5)]],
+    constant uint& N             [[buffer(6)]],
+    constant uint& K             [[buffer(7)]],
+    constant uint& group_size    [[buffer(8)]],
+    constant uint& bits          [[buffer(9)]],
+    uint2 tid                    [[thread_position_in_grid]])
+{
+    uint m = tid.y;
+    uint n = tid.x;
+    if (m >= M || n >= N) return;
+
+    uint elems_per_int = 32 / bits;
+    uint mask = (1u << bits) - 1u;
+    uint K_packed = K / elems_per_int;
+    uint n_groups = K / group_size;
+
+    float acc = 0.0f;
+    for (uint k = 0; k < K; k++) {
+        uint packed_val = w[n * K_packed + k / elems_per_int];
+        float q = float((packed_val >> ((k % elems_per_int) * bits)) & mask);
+        uint g = k / group_size;
+        acc += x[m * K + k] * (q * scales[n * n_groups + g] + biases[n * n_groups + g]);
+    }
+    out[m * N + n] = acc;
+}
+
+kernel void affine_qmm_t_half(
+    device const half*  x        [[buffer(0)]],
+    device const uint*  w        [[buffer(1)]],
+    device const half*  scales   [[buffer(2)]],
+    device const half*  biases   [[buffer(3)]],
+    device half*        out      [[buffer(4)]],
+    constant uint& M             [[buffer(5)]],
+    constant uint& N             [[buffer(6)]],
+    constant uint& K             [[buffer(7)]],
+    constant uint& group_size    [[buffer(8)]],
+    constant uint& bits          [[buffer(9)]],
+    uint2 tid                    [[thread_position_in_grid]])
+{
+    uint m = tid.y;
+    uint n = tid.x;
+    if (m >= M || n >= N) return;
+
+    uint elems_per_int = 32 / bits;
+    uint mask = (1u << bits) - 1u;
+    uint K_packed = K / elems_per_int;
+    uint n_groups = K / group_size;
+
+    float acc = 0.0f;
+    for (uint k = 0; k < K; k++) {
+        uint packed_val = w[n * K_packed + k / elems_per_int];
+        float q = float((packed_val >> ((k % elems_per_int) * bits)) & mask);
+        uint g = k / group_size;
+        acc += float(x[m * K + k]) * (q * float(scales[n * n_groups + g]) + float(biases[n * n_groups + g]));
+    }
+    out[m * N + n] = half(acc);
+}
+
+kernel void affine_qmm_t_bfloat(
+    device const bfloat* x       [[buffer(0)]],
+    device const uint*   w       [[buffer(1)]],
+    device const bfloat* scales  [[buffer(2)]],
+    device const bfloat* biases  [[buffer(3)]],
+    device bfloat*       out     [[buffer(4)]],
+    constant uint& M             [[buffer(5)]],
+    constant uint& N             [[buffer(6)]],
+    constant uint& K             [[buffer(7)]],
+    constant uint& group_size    [[buffer(8)]],
+    constant uint& bits          [[buffer(9)]],
+    uint2 tid                    [[thread_position_in_grid]])
+{
+    uint m = tid.y;
+    uint n = tid.x;
+    if (m >= M || n >= N) return;
+
+    uint elems_per_int = 32 / bits;
+    uint mask = (1u << bits) - 1u;
+    uint K_packed = K / elems_per_int;
+    uint n_groups = K / group_size;
+
+    float acc = 0.0f;
+    for (uint k = 0; k < K; k++) {
+        uint packed_val = w[n * K_packed + k / elems_per_int];
+        float q = float((packed_val >> ((k % elems_per_int) * bits)) & mask);
+        uint g = k / group_size;
+        acc += float(x[m * K + k]) * (q * float(scales[n * n_groups + g]) + float(biases[n * n_groups + g]));
+    }
+    out[m * N + n] = bfloat(acc);
+}
+"""
+
+_compiled_shader_lib = None
+
+
+class _LocalMetalKernel:
+    """Wrapper that mimics the Hub kernel interface using ``torch.mps.compile_shader``."""
+
+    def __init__(self):
+        global _compiled_shader_lib
+        if _compiled_shader_lib is None:
+            _compiled_shader_lib = torch.mps.compile_shader(_AFFINE_QMM_T_METAL_SOURCE)
+        self._lib = _compiled_shader_lib
+
+    def affine_qmm_t(self, x, w, scales, biases, group_size, bits):
+        K_packed = w.shape[1]
+        N = w.shape[0]
+        elems_per_int = 32 // bits
+        K = K_packed * elems_per_int
+
+        x_2d = x.reshape(-1, K).contiguous()
+        M_total = x_2d.shape[0]
+        out = torch.empty(M_total, N, dtype=x.dtype, device=x.device)
+
+        M_t = torch.tensor(M_total, dtype=torch.uint32, device="mps")
+        N_t = torch.tensor(N, dtype=torch.uint32, device="mps")
+        K_t = torch.tensor(K, dtype=torch.uint32, device="mps")
+        gs_t = torch.tensor(group_size, dtype=torch.uint32, device="mps")
+        bits_t = torch.tensor(bits, dtype=torch.uint32, device="mps")
+
+        if x.dtype == torch.float32:
+            fn = self._lib.affine_qmm_t_float
+        elif x.dtype == torch.float16:
+            fn = self._lib.affine_qmm_t_half
+        elif x.dtype == torch.bfloat16:
+            fn = self._lib.affine_qmm_t_bfloat
+        else:
+            raise ValueError(f"Unsupported dtype {x.dtype} for Metal affine_qmm_t")
+
+        fn(x_2d, w, scales, biases, out, M_t, N_t, K_t, gs_t, bits_t, threads=[N, M_total, 1])
+
+        return out.reshape(*x.shape[:-1], N)
+
 
 def _get_metal_kernel():
-    """Lazily load the quantization-mlx kernel from Hugging Face Hub."""
+    """Lazily load the quantization-mlx kernel from Hugging Face Hub, falling back to a
+    locally-compiled Metal shader if the Hub kernel is unavailable or incompatible."""
     global _metal_kernel
     if _metal_kernel is None:
         try:
+            import os
+
             from .hub_kernels import get_kernel
 
-            _metal_kernel = get_kernel("kernels-community/mlx-quantization-metal-kernels")
-        except Exception as e:
-            raise ImportError(
-                f"Failed to load the quantization-mlx kernel from the Hub: {e}. "
-                "Make sure you have `kernels` installed (`pip install kernels`) "
-                "and are running on an Apple Silicon machine."
-            ) from e
+            hub_kernel = get_kernel("kernels-community/mlx-quantization-metal-kernels")
+            # Smoke-test: the pre-built metallib may target an MSL version newer
+            # than the current OS supports.  A tiny matmul catches this at init
+            # time rather than mid-inference.
+            # Suppress Metal runtime stderr noise ("Failed to create Metal library
+            # from embedded header") by temporarily redirecting fd 2 to /dev/null.
+            _x = torch.zeros(1, 64, dtype=torch.float32, device="mps")
+            _w = torch.zeros(1, 2, dtype=torch.uint32, device="mps")  # K=64 at 8-bit → 2 packed
+            _s = torch.ones(1, 1, dtype=torch.float32, device="mps")
+            _b = torch.zeros(1, 1, dtype=torch.float32, device="mps")
+            stderr_fd = os.dup(2)
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            try:
+                os.dup2(devnull, 2)
+                hub_kernel.affine_qmm_t(_x, _w, _s, _b, 64, 8)
+            finally:
+                os.dup2(stderr_fd, 2)
+                os.close(stderr_fd)
+                os.close(devnull)
+            _metal_kernel = hub_kernel
+        except Exception:
+            logger.info(
+                "Hub kernel 'kernels-community/mlx-quantization-metal-kernels' unavailable; "
+                "using locally-compiled Metal shader fallback."
+            )
+            _metal_kernel = _LocalMetalKernel()
     return _metal_kernel
 
 
@@ -111,6 +283,14 @@ class MetalLinear(nn.Linear):
             self.bias = nn.Parameter(torch.zeros(out_features))
         else:
             self.register_parameter("bias", None)
+
+    def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
+        # MLX-quantized models store quantization biases as "biases" instead of "qbiases"
+        biases_key = prefix + "biases"
+        qbiases_key = prefix + "qbiases"
+        if biases_key in state_dict and qbiases_key not in state_dict:
+            state_dict[qbiases_key] = state_dict.pop(biases_key)
+        super()._load_from_state_dict(state_dict, prefix, *args, **kwargs)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         if self.weight.dtype != torch.uint32:
@@ -285,12 +465,16 @@ class MetalDequantize(ConversionOps):
         bits = self.hf_quantizer.quantization_config.bits
         group_size = self.hf_quantizer.quantization_config.group_size
 
-        if len(input_dict) < 2:
-            return {full_layer_name: input_dict["weight$"]}
+        # Use source_patterns from kwargs as dict keys (they are the keys in input_dict).
+        # Fall back to the default patterns for backward compatibility.
+        source_patterns = kwargs.get("source_patterns", ["weight$", "scales", "qbiases"])
 
-        quantized = input_dict["weight$"][0]
-        scales = input_dict["scales"][0]
-        qbiases = input_dict["qbiases"][0]
+        if len(input_dict) < 2:
+            return {full_layer_name: input_dict[source_patterns[0]]}
+
+        quantized = input_dict[source_patterns[0]][0]
+        scales = input_dict[source_patterns[1]][0]
+        qbiases = input_dict[source_patterns[2]][0]
 
         w_deq = _affine_dequantize_tensor(quantized, scales, qbiases, group_size, bits)
         return {full_layer_name: w_deq.to(scales.dtype)}

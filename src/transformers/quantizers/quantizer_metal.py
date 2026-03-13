@@ -92,9 +92,16 @@ class MetalHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from ..integrations.metal_quantization import replace_with_metal_linear
 
-        self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
-        )
+        self._model_type = getattr(model.config, "model_type", None)
+
+        skip_modules = self.quantization_config.modules_to_not_convert
+        if self.pre_quantized and skip_modules is None:
+            # Pre-quantized checkpoints (e.g. MLX) may have quantized the lm_head /
+            # output embedding too.  Don't auto-skip them; only honour explicit user
+            # overrides via modules_to_not_convert.
+            skip_modules = []
+
+        self.modules_to_not_convert = self.get_modules_to_not_convert(model, skip_modules, model._keep_in_fp32_modules)
 
         model = replace_with_metal_linear(
             model,
@@ -116,7 +123,7 @@ class MetalHfQuantizer(HfQuantizer):
         return MetalQuantize(self)
 
     def get_weight_conversions(self):
-        from ..core_model_loading import WeightConverter
+        from ..core_model_loading import WeightConverter, WeightRenaming
         from ..integrations.metal_quantization import MetalDequantize
 
         if self.pre_quantized and self.quantization_config.dequantize:
@@ -127,4 +134,34 @@ class MetalHfQuantizer(HfQuantizer):
                     operations=[MetalDequantize(self)],
                 )
             ]
+
+        if self.pre_quantized:
+            conversions = [
+                # MLX uses "biases", MetalLinear expects "qbiases"
+                WeightRenaming(source_patterns="biases", target_patterns="qbiases"),
+                # MLX quantizes embed_tokens but transformers keeps it as nn.Embedding (float);
+                # dequantize the embedding back to float so the standard Embedding layer can load it
+                WeightConverter(
+                    source_patterns=[r"embed_tokens\.weight$", r"embed_tokens\.scales", r"embed_tokens\.qbiases"],
+                    target_patterns="embed_tokens.weight",
+                    operations=[MetalDequantize(self)],
+                ),
+            ]
+
+            # MLX checkpoints may use different key prefixes than the model expects.
+            # These renamings are model-specific and only needed for pre-quantized MLX loads.
+            model_type = getattr(self, "_model_type", None)
+            if model_type == "qwen3_vl":
+                conversions.extend(
+                    [
+                        WeightRenaming(
+                            source_patterns="language_model.model.", target_patterns="model.language_model."
+                        ),
+                        WeightRenaming(source_patterns="language_model.lm_head.", target_patterns="lm_head."),
+                        WeightRenaming(source_patterns="vision_tower.", target_patterns="model.visual."),
+                    ]
+                )
+
+            return conversions
+
         return []
