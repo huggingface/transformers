@@ -28,8 +28,6 @@ from ..qwen3_omni_moe.configuration_qwen3_omni_moe import (
 )
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeAudioEncoder,
-    Qwen3OmniMoePreTrainedModelForConditionalGeneration,
-    Qwen3OmniMoeThinkerForConditionalGeneration,
     Qwen3OmniMoeThinkerTextAttention,
     Qwen3OmniMoeThinkerTextDecoderLayer,
     Qwen3OmniMoeThinkerTextMLP,
@@ -265,79 +263,10 @@ class Qwen3ASRTextConfig(Qwen3OmniMoeTextConfig):
         self.tie_word_embeddings = tie_word_embeddings
 
 
-class Qwen3ASRThinkerConfig(PreTrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`Qwen3ASRThinker`]. It is used to instantiate a
-    Qwen3-ASR-Thinker model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the thinker component of the Qwen3-Omni
-    architecture.
-
-    e.g. [Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B)
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        audio_config (`dict`, *optional*):
-            The config dictionary of the audio backbone.
-        text_config (`dict`, *optional*):
-            The config dictionary of the text backbone.
-        audio_token_id (`int`, *optional*, defaults to 151646):
-            The audio token id to encode the audio prompt.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
-    Example:
-
-    ```python
-    >>> from transformers import Qwen3ASRThinkerModel, Qwen3ASRThinkerConfig
-
-    >>> # Initializing a default Qwen3ASRThinkerConfig
-    >>> configuration = Qwen3ASRThinkerConfig()
-
-    >>> # Initializing a model (with random weights) from the default configuration
-    >>> model = Qwen3ASRThinkerModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-
-    model_type = "qwen3_asr_thinker"
-    sub_configs = {
-        "audio_config": Qwen3ASRAudioEncoderConfig,
-        "text_config": Qwen3ASRTextConfig,
-    }
-
-    def __init__(
-        self,
-        audio_config=None,
-        text_config=None,
-        audio_token_id=151676,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.initializer_range = initializer_range
-
-        if isinstance(audio_config, dict):
-            audio_config = Qwen3ASRAudioEncoderConfig(**audio_config)
-        elif audio_config is None:
-            audio_config = Qwen3ASRAudioEncoderConfig()
-        self.audio_config = audio_config
-
-        if isinstance(text_config, dict):
-            text_config = Qwen3ASRTextConfig(**text_config)
-        elif text_config is None:
-            text_config = Qwen3ASRTextConfig()
-        self.text_config = text_config
-        self.audio_token_id = audio_token_id
-
-
 class Qwen3ASRConfig(PreTrainedConfig):
-    """
+    r"""
     This is the configuration class to store the configuration of a [`Qwen3ASRForConditionalGeneration`]. It is used to instantiate a Qwen3ASR
-    model according to the specified sub-models configurations, defining the model architecture.
+    model according to the specified arguments, defining the model architecture.
 
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
     [Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B) architecture.
@@ -346,17 +275,19 @@ class Qwen3ASRConfig(PreTrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
-        support_languages (`List[str]`, *optional*): The languages supported by the model.
+        audio_config (`Union[Qwen3ASRAudioEncoderConfig, dict]`, *optional*, defaults to `Qwen3ASRAudioEncoderConfig`):
+            The config object or dictionary of the audio backbone.
+        text_config (`Union[Qwen3ASRTextConfig, dict]`, *optional*, defaults to `Qwen3ASRTextConfig`):
+            The config object or dictionary of the text backbone.
+        audio_token_id (`int`, *optional*, defaults to 151676):
+            The audio token id to encode the audio prompt.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
 
     ```python
-    >>> from transformers import (
-    ...     Qwen3ASRThinkerConfig,
-    ...     Qwen3ASRForConditionalGeneration,
-    ...     Qwen3ASRConfig,
-    ... )
+    >>> from transformers import Qwen3ASRForConditionalGeneration, Qwen3ASRConfig
 
     >>> # Initializing a Qwen3ASR style configuration
     >>> configuration = Qwen3ASRConfig()
@@ -370,19 +301,36 @@ class Qwen3ASRConfig(PreTrainedConfig):
 
     model_type = "qwen3_asr"
     sub_configs = {
-        "thinker_config": Qwen3ASRThinkerConfig,
+        "audio_config": Qwen3ASRAudioEncoderConfig,
+        "text_config": Qwen3ASRTextConfig,
     }
 
     def __init__(
         self,
-        thinker_config=None,
+        audio_config=None,
+        text_config=None,
+        audio_token_id=151676,
+        pad_token_id=151645,
+        eos_token_id=[151643, 151645],
+        initializer_range=0.02,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-        if thinker_config is None:
-            thinker_config = {}
+        self.audio_token_id = audio_token_id
+        self.initializer_range = initializer_range
 
-        self.thinker_config = Qwen3ASRThinkerConfig(**thinker_config)
+        if isinstance(audio_config, dict):
+            audio_config = Qwen3ASRAudioEncoderConfig(**audio_config)
+        elif audio_config is None:
+            audio_config = Qwen3ASRAudioEncoderConfig()
+        self.audio_config = audio_config
+
+        if isinstance(text_config, dict):
+            text_config = Qwen3ASRTextConfig(**text_config)
+        elif text_config is None:
+            text_config = Qwen3ASRTextConfig()
+        self.text_config = text_config
+
+        super().__init__(pad_token_id=pad_token_id, eos_token_id=eos_token_id, **kwargs)
 
 
 class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
@@ -551,56 +499,6 @@ class Qwen3ASRThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     rope_deltas: torch.LongTensor | None = None
 
 
-class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3OmniMoePreTrainedModelForConditionalGeneration):
-    input_modalities = ("audio", "text")
-
-    def get_llm_pos_ids_for_vision(self, *args, **kwargs):
-        raise NotImplementedError("Not needed")
-
-    def get_chunked_index(self, *args, **kwargs):
-        raise NotImplementedError("Not needed")
-
-    def _prepare_4d_causal_attention_mask_with_cache_position(self, *args, **kwargs):
-        raise NotImplementedError("Not needed")
-
-
-    def get_rope_index(
-        self,
-        attention_mask: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Calculate the rope index in LLM.
-
-        Explanation:
-            Each embedding sequence contains text embedding.
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-                it.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-            audio_seqlens (`torch.LongTensor` of shape `(num_audios)`, *optional*):
-                The length of feature shape of each audio in LLM.
-
-        Returns:
-            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
-            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
-        """
-        mrope_position_deltas = []
-
-        position_ids = attention_mask.float().cumsum(-1) - 1
-        position_ids.masked_fill_(attention_mask == 0, 1)
-        position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
-        max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
-        mrope_position_deltas = max_position_ids + 1 - torch.sum(attention_mask, dim=-1, keepdim=True)
-
-        return position_ids, mrope_position_deltas
-
-
 class Qwen3ASRAudioEncoder(Qwen3OmniMoeAudioEncoder):
     pass
 
@@ -715,28 +613,66 @@ class Qwen3ASRThinkerTextModel(Qwen3OmniMoeThinkerTextModel):
 
 @auto_docstring(
     custom_intro="""
-    The Qwen3ASRThinker model which consists of a audio backbone and a language model.
+    The Qwen3ASR model which consists of an audio backbone and a language model.
     """
 )
-class Qwen3ASRThinkerForConditionalGeneration(Qwen3OmniMoeThinkerForConditionalGeneration):
+class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin):
+    config_class = Qwen3ASRConfig
     _no_split_modules = ["Qwen3ASRAudioEncoder", "Qwen3ASRThinkerTextDecoderLayer"]
     _can_record_outputs = {
         "hidden_states": Qwen3ASRThinkerTextDecoderLayer,
         "attentions": Qwen3ASRTextAttention,
     }
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen3ASRConfig):
         super().__init__(config)
+        self.vocab_size = config.text_config.vocab_size
+        # TODO use AutoModel? at least for audio encoder
+        self.audio_tower = Qwen3ASRAudioEncoder(config.audio_config)
+        self.model = Qwen3ASRThinkerTextModel(config.text_config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.pad_token_id = (
             self.config.text_config.pad_token_id if self.config.text_config.pad_token_id is not None else -1
         )
+        self.rope_deltas = None    # TODO remove
         self.post_init()
-        del self.visual
-        del self.spatial_merge_size
-        del self.num_experts
-        del self.num_experts_per_tok
-        del self.router_aux_loss_coef
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def get_rope_index(
+        self,
+        attention_mask: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Calculate the rope index in LLM.
+
+        Args:
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+        Returns:
+            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
+            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
+        """
+        position_ids = attention_mask.float().cumsum(-1) - 1
+        position_ids.masked_fill_(attention_mask == 0, 1)
+        position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
+        max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
+        mrope_position_deltas = max_position_ids + 1 - torch.sum(attention_mask, dim=-1, keepdim=True)
+
+        return position_ids, mrope_position_deltas
 
     def get_audio_features(
         self,
@@ -773,12 +709,6 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3OmniMoeThinkerForConditionalG
         audio_features = torch.cat(audio_features, dim=0)
 
         return audio_features
-
-    def get_video_features(self, *args, **kwargs):
-        raise NotImplementedError("Not needed")
-
-    def get_image_features(self, *args, **kwargs):
-        raise NotImplementedError("Not needed")
 
     def get_placeholder_mask(
         self,
@@ -836,7 +766,6 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3OmniMoeThinkerForConditionalG
         """
 
         if inputs_embeds is None:
-            # 1. Extract the input embeddings
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         # 2. Merge text, audios
@@ -850,77 +779,6 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3OmniMoeThinkerForConditionalG
             audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
 
-        if input_features_mask is not None:
-            audio_feature_lengths = torch.sum(input_features_mask, dim=1)
-        else:
-            audio_feature_lengths = None
-
-        ### Changed the following in order to pass test_generate_from_inputs_embeds_with_static_cache
-        ### old
-        # if attention_mask is not None and position_ids is None:
-        #    if (
-        #        cache_position is None
-        #        or (cache_position is not None and cache_position[0] == 0)
-        #        or self.rope_deltas is None
-        #    ):
-        #        delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
-        #        position_ids, rope_deltas = self.get_rope_index(
-        #            attention_mask,
-        #        )
-        #        rope_deltas = rope_deltas - delta0
-        #        self.rope_deltas = rope_deltas
-        #    else:
-        #        batch_size, seq_length = input_ids.shape
-        #        delta = cache_position[0] + self.rope_deltas if cache_position is not None else 0
-        #        position_ids = torch.arange(seq_length, device=input_ids.device)
-        #        position_ids = position_ids.view(1, -1).expand(batch_size, -1)
-        #        position_ids = position_ids.add(delta)
-        #        position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
-        ### new
-        # Determine batch and sequence length early
-        batch_size, seq_length = inputs_embeds.shape[:2]
-
-        # -------------------------------------------------
-        # 1. Build cache_position if missing
-        # -------------------------------------------------
-        if cache_position is None:
-            past_seen = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen,
-                past_seen + seq_length,
-                device=inputs_embeds.device,
-            )
-
-        # -------------------------------------------------
-        # 2. Build position_ids only if not provided
-        # -------------------------------------------------
-        if position_ids is None:
-            position_ids = cache_position.view(1, 1, -1).expand(3, batch_size, -1)
-
-        # -------------------------------------------------
-        # 3. Compute rope_deltas ONLY during prefill
-        # -------------------------------------------------
-        if (
-            self.rope_deltas is None
-            and attention_mask is not None
-            and attention_mask.dim() == 2
-            and cache_position is not None
-            and cache_position[0] == 0
-        ):
-            max_position = cache_position[-1]
-            valid_tokens = attention_mask.sum(dim=-1)
-            rope_deltas = (max_position + 1 - valid_tokens).unsqueeze(-1)
-            self.rope_deltas = rope_deltas
-
-        # -------------------------------------------------
-        # 4. Apply rope delta if it exists
-        # -------------------------------------------------
-        if self.rope_deltas is not None:
-            position_ids = position_ids + self.rope_deltas.unsqueeze(0)
-        ###
-
-        batch_size, seq_length = inputs_embeds.shape[:2]
-
         outputs = self.model(
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -930,7 +788,6 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3OmniMoeThinkerForConditionalG
             cache_position=cache_position,
             **kwargs,
         )
-
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
 
@@ -949,156 +806,30 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3OmniMoeThinkerForConditionalG
             rope_deltas=self.rope_deltas,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        cache_position=None,
-        position_ids=None,
-        use_cache=True,
-        input_features=None,
-        input_features_mask=None,
-        **kwargs,
-    ):
-        model_inputs = GenerationMixin.prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            input_features=input_features,
-            input_features_mask=input_features_mask,
-            **kwargs,
-        )
+    def prepare_inputs_for_generation(self, *args, is_first_iteration=False, **kwargs):
+        input_features = kwargs.pop("input_features", None)
+        input_features_mask = kwargs.pop("input_features_mask", None)
+
+        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
         model_inputs["position_ids"] = None
 
-        if cache_position is not None and cache_position[0] != 0:
-            model_inputs["input_features"] = None
+        if is_first_iteration:
+            if input_features is not None:
+                model_inputs["input_features"] = input_features
+            if input_features_mask is not None:
+                model_inputs["input_features_mask"] = input_features_mask
 
         return model_inputs
 
-
-@auto_docstring
-class Qwen3ASRThinkerTextPreTrainedModel(PreTrainedModel):
-    config = Qwen3ASRTextConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Qwen3ASRThinkerTextDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": Qwen3ASRThinkerTextDecoderLayer,
-        "attentions": Qwen3ASRTextAttention,
-    }
-    config_class = Qwen3ASRTextConfig
-
-
-class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin):
-    config_class = Qwen3ASRConfig
-    base_model_prefix = "thinker"
-
-    def __init__(self, config: Qwen3ASRConfig):
-        super().__init__(config)
-        self.config = config
-        self.thinker = Qwen3ASRThinkerForConditionalGeneration._from_config(config.thinker_config)
-        self.post_init()
-
-    @torch.no_grad()
-    def generate(
-        self,
-        input_ids: torch.Tensor | None = None,
-        max_new_tokens: int = 4096,
-        eos_token_id: int | list[int] = [151645, 151643],
-        **kwargs,
-    ):
-        shared_kwargs = {}
-        thinker_kwargs = {
-            "max_new_tokens": max_new_tokens,
-            "eos_token_id": eos_token_id,
-        }
-
-        for key, value in kwargs.items():
-            # Process special input values
-            if key == "input_features_mask":
-                thinker_kwargs[key] = value
-            elif key in ("input_features", "attention_mask"):
-                thinker_kwargs[key] = value
-            # Put other key to shared kwargs
-            else:
-                shared_kwargs[key] = value
-
-        # Merge kwargs
-        for key, value in shared_kwargs.items():
-            if key not in thinker_kwargs:
-                thinker_kwargs[key] = value
-
-        thinker_result = self.thinker.generate(input_ids=input_ids, **thinker_kwargs)
-
-        return thinker_result
-
-    ### added the following in order to pass tests
-    @property
-    def base_model(self):
-        return getattr(self, self.base_model_prefix)
-
-    def get_input_embeddings(self):
-        return self.thinker.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.thinker.set_input_embeddings(value)
-
-    def forward(
-        self,
-        input_ids=None,
-        input_features=None,
-        attention_mask=None,
-        input_features_mask=None,
-        audio_feature_lengths=None,
-        position_ids=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        rope_deltas=None,
-        labels=None,
-        use_cache=None,
-        cache_position=None,
-        **kwargs,
-    ):
-        return self.thinker(
-            input_ids=input_ids,
-            input_features=input_features,
-            attention_mask=attention_mask,
-            input_features_mask=input_features_mask,
-            audio_feature_lengths=audio_feature_lengths,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            rope_deltas=rope_deltas,
-            labels=labels,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            **kwargs,
-        )
 
 
 __all__ = [
     "Qwen3ASRAudioEncoderConfig",
     "Qwen3ASRTextConfig",
-    "Qwen3ASRThinkerConfig",
     "Qwen3ASRConfig",
     "Qwen3ASRProcessor",
     "Qwen3ASRForConditionalGeneration",
-    "Qwen3ASRThinkerTextModel",
-    "Qwen3ASRThinkerForConditionalGeneration",
     "Qwen3ASRPreTrainedModel",
-    "Qwen3ASRPreTrainedModelForConditionalGeneration",
-    "Qwen3ASRThinkerTextPreTrainedModel",
+    "Qwen3ASRAudioEncoder",
 ]

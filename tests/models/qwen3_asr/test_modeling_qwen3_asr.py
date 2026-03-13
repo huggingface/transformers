@@ -153,7 +153,7 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
         batch = self.processor.apply_chat_template(
             conversation, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         ).to(model.device, dtype=model.dtype)
-        seq = model.generate(**batch, max_new_tokens=32, do_sample=False)
+        seq = model.generate(**batch, max_new_tokens=32)
 
         inp_len = batch["input_ids"].shape[1]
         gen_ids = seq[:, inp_len:] if seq.shape[1] >= inp_len else seq
@@ -210,7 +210,7 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
             truncation=True,
         ).to(model.device, dtype=model.dtype)
 
-        seq = model.generate(**batch, max_new_tokens=32, do_sample=False)
+        seq = model.generate(**batch, max_new_tokens=32)
 
         inp_len = batch["input_ids"].shape[1]
         gen_ids = seq[:, inp_len:] if seq.shape[1] >= inp_len else seq

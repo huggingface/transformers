@@ -251,78 +251,10 @@ class Qwen3ASRTextConfig(PreTrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
 
 
-class Qwen3ASRThinkerConfig(PreTrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`Qwen3ASRThinker`]. It is used to instantiate a
-    Qwen3-ASR-Thinker model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the thinker component of the Qwen3-Omni
-    architecture.
-
-    e.g. [Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B)
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        audio_config (`dict`, *optional*):
-            The config dictionary of the audio backbone.
-        text_config (`dict`, *optional*):
-            The config dictionary of the text backbone.
-        audio_token_id (`int`, *optional*, defaults to 151646):
-            The audio token id to encode the audio prompt.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
-    Example:
-
-    ```python
-    >>> from transformers import Qwen3ASRThinkerModel, Qwen3ASRThinkerConfig
-
-    >>> # Initializing a default Qwen3ASRThinkerConfig
-    >>> configuration = Qwen3ASRThinkerConfig()
-
-    >>> # Initializing a model (with random weights) from the default configuration
-    >>> model = Qwen3ASRThinkerModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-    model_type = "qwen3_asr_thinker"
-    sub_configs = {
-        "audio_config": Qwen3ASRAudioEncoderConfig,
-        "text_config": Qwen3ASRTextConfig,
-    }
-
-    def __init__(
-        self,
-        audio_config=None,
-        text_config=None,
-        audio_token_id=151676,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.initializer_range = initializer_range
-
-        if isinstance(audio_config, dict):
-            audio_config = Qwen3ASRAudioEncoderConfig(**audio_config)
-        elif audio_config is None:
-            audio_config = Qwen3ASRAudioEncoderConfig()
-        self.audio_config = audio_config
-
-        if isinstance(text_config, dict):
-            text_config = Qwen3ASRTextConfig(**text_config)
-        elif text_config is None:
-            text_config = Qwen3ASRTextConfig()
-        self.text_config = text_config
-        self.audio_token_id = audio_token_id
-
-
 class Qwen3ASRConfig(PreTrainedConfig):
-    """
+    r"""
     This is the configuration class to store the configuration of a [`Qwen3ASRForConditionalGeneration`]. It is used to instantiate a Qwen3ASR
-    model according to the specified sub-models configurations, defining the model architecture.
+    model according to the specified arguments, defining the model architecture.
 
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
     [Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B) architecture.
@@ -331,17 +263,19 @@ class Qwen3ASRConfig(PreTrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
-        support_languages (`List[str]`, *optional*): The languages supported by the model.
+        audio_config (`Union[Qwen3ASRAudioEncoderConfig, dict]`, *optional*, defaults to `Qwen3ASRAudioEncoderConfig`):
+            The config object or dictionary of the audio backbone.
+        text_config (`Union[Qwen3ASRTextConfig, dict]`, *optional*, defaults to `Qwen3ASRTextConfig`):
+            The config object or dictionary of the text backbone.
+        audio_token_id (`int`, *optional*, defaults to 151676):
+            The audio token id to encode the audio prompt.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
 
     ```python
-    >>> from transformers import (
-    ...     Qwen3ASRThinkerConfig,
-    ...     Qwen3ASRForConditionalGeneration,
-    ...     Qwen3ASRConfig,
-    ... )
+    >>> from transformers import Qwen3ASRForConditionalGeneration, Qwen3ASRConfig
 
     >>> # Initializing a Qwen3ASR style configuration
     >>> configuration = Qwen3ASRConfig()
@@ -355,19 +289,36 @@ class Qwen3ASRConfig(PreTrainedConfig):
 
     model_type = "qwen3_asr"
     sub_configs = {
-        "thinker_config": Qwen3ASRThinkerConfig,
+        "audio_config": Qwen3ASRAudioEncoderConfig,
+        "text_config": Qwen3ASRTextConfig,
     }
 
     def __init__(
         self,
-        thinker_config=None,
+        audio_config=None,
+        text_config=None,
+        audio_token_id=151676,
+        pad_token_id=151645,
+        eos_token_id=[151643, 151645],
+        initializer_range=0.02,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-        if thinker_config is None:
-            thinker_config = {}
+        self.audio_token_id = audio_token_id
+        self.initializer_range = initializer_range
 
-        self.thinker_config = Qwen3ASRThinkerConfig(**thinker_config)
+        if isinstance(audio_config, dict):
+            audio_config = Qwen3ASRAudioEncoderConfig(**audio_config)
+        elif audio_config is None:
+            audio_config = Qwen3ASRAudioEncoderConfig()
+        self.audio_config = audio_config
+
+        if isinstance(text_config, dict):
+            text_config = Qwen3ASRTextConfig(**text_config)
+        elif text_config is None:
+            text_config = Qwen3ASRTextConfig()
+        self.text_config = text_config
+
+        super().__init__(pad_token_id=pad_token_id, eos_token_id=eos_token_id, **kwargs)
 
 
-__all__ = ["Qwen3ASRAudioEncoderConfig", "Qwen3ASRTextConfig", "Qwen3ASRThinkerConfig", "Qwen3ASRConfig"]
+__all__ = ["Qwen3ASRAudioEncoderConfig", "Qwen3ASRTextConfig", "Qwen3ASRConfig"]
