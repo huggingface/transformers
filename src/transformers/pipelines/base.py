@@ -787,6 +787,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         self.feature_extractor = feature_extractor
         self.image_processor = image_processor
         self.processor = processor
+        self.modelcard = None
 
         # `accelerate` device map
         hf_device_map = getattr(self.model, "hf_device_map", None)

@@ -259,6 +259,23 @@ class CommonPipelineTest(unittest.TestCase):
             # the invalid adapter config path
             pipeline("text-generation", tmp_dir)
 
+    @require_torch
+    def test_save_pretrained_without_modelcard(self):
+        """
+        Tests that calling save_pretrained() works even if the pipeline
+        has no modelcard set.
+        """
+        pipe = pipeline("text-classification", model="hf-internal-testing/tiny-random-distilbert")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_path = Path(tmp_dir)
+            # Ensure no exception is raised
+            pipe.save_pretrained(save_path)
+
+            # Reload pipeline from saved path to confirm it works
+            reloaded = pipeline("text-classification", model=save_path)
+            self.assertIsInstance(reloaded, TextClassificationPipeline)
+
 
 @is_pipeline_test
 @require_torch
