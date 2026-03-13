@@ -107,7 +107,7 @@ class Mistral4IntegrationTest(unittest.TestCase):
 
     @slow
     @require_deterministic_for_xpu
-    def test_model_3b_generation(self):
+    def test_mistral_small_4_generation(self):
         # fmt: off
         EXPECTED_TEXTS = Expectations(
             {
