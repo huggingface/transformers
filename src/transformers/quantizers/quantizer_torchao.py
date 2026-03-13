@@ -14,8 +14,6 @@
 import re
 from typing import TYPE_CHECKING
 
-from transformers.utils.import_utils import get_torch_version, is_torch_greater_or_equal
-
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name, should_convert_module
 

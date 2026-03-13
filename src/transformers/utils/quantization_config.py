@@ -1518,9 +1518,7 @@ class TorchAoConfig(QuantizationConfigMixin):
         from torchao.quantization.quant_api import AOBaseConfig
 
         if not isinstance(self.quant_type, AOBaseConfig):
-            raise TypeError(
-                f"quant_type must be an AOBaseConfig instance, got {type(self.quant_type)}"
-            )
+            raise TypeError(f"quant_type must be an AOBaseConfig instance, got {type(self.quant_type)}")
 
     def get_apply_tensor_subclass(self):
         """Return the quantization config to apply."""
@@ -1531,6 +1529,7 @@ class TorchAoConfig(QuantizationConfigMixin):
         d = super().to_dict()
 
         from torchao.core.config import config_to_dict
+
         d["quant_type"] = {"default": config_to_dict(self.quant_type)}
 
         return d
@@ -1539,6 +1538,7 @@ class TorchAoConfig(QuantizationConfigMixin):
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
         """Create configuration from a dictionary."""
         from torchao.core.config import config_from_dict
+
         config_dict = config_dict.copy()
         quant_type = config_dict.pop("quant_type")
 
