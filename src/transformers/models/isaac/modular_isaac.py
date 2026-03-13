@@ -655,7 +655,6 @@ class IsaacConfig(PretrainedConfig):
         # Mirror frequently accessed composite-level attributes.
         self.vocab_size = self.text_config.vocab_size
         self.hidden_size = self.text_config.hidden_size
-        self.num_hidden_layers = self.text_config.num_hidden_layers
         self.use_cache = self.text_config.use_cache
         self.rope_theta = self.text_config.rope_parameters["rope_theta"]
         self.max_position_embeddings = getattr(self.text_config, "max_position_embeddings", max_sequence_length)
