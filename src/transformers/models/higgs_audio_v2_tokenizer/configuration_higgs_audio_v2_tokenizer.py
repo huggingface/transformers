@@ -91,8 +91,7 @@ class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
         "mask_time_prob": 0.0,
     }
 
-    target_bandwidths: list[float | int] | None = None
-
+    target_bandwidths: list[int | float] | tuple[int | float] = (0.5, 1, 1.5, 2, 4)
     sample_rate: int = 24000
     kernel_size: int = 3
     channel_ratios: list[int] | tuple[int, ...] = (1, 1)
@@ -132,7 +131,6 @@ class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
                 **{**self._default_semantic_model_config_kwargs, **self.semantic_model_config}
             )
 
-        self.target_bandwidths = self.target_bandwidths or [0.5, 1, 1.5, 2]
         if self.codebook_dim is None:
             self.codebook_dim = self.acoustic_model_config.hidden_size + self.semantic_model_config.hidden_size
 
