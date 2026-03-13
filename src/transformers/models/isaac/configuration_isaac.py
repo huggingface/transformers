@@ -269,29 +269,16 @@ class IsaacConfig(PretrainedConfig):
         elif vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
 
-        # Seed RoPE parameters before base init so the shared mixin can standardize/validate them.
-        self.rope_parameters = getattr(self.text_config, "rope_parameters", None)
-        self.layer_types = getattr(self.text_config, "layer_types", None)
-
         super().__init__(**kwargs)
 
-        # Keep rope parameters aligned between the composite and text sub-configs.
-        self.text_config.rope_parameters = self.rope_parameters
-
-        # Mirror frequently accessed Qwen3 attributes at the composite config level
+        # Mirror frequently accessed composite-level attributes.
         self.vocab_size = self.text_config.vocab_size
         self.hidden_size = self.text_config.hidden_size
         self.num_hidden_layers = self.text_config.num_hidden_layers
-        self.num_attention_heads = self.text_config.num_attention_heads
-        self.head_dim = self.text_config.head_dim
-        self.hidden_act = self.text_config.hidden_act
         self.use_cache = self.text_config.use_cache
-        self.rope_theta = self.rope_parameters["rope_theta"]
+        self.rope_theta = self.text_config.rope_parameters["rope_theta"]
         self.max_position_embeddings = getattr(self.text_config, "max_position_embeddings", max_sequence_length)
         self.text_config.max_position_embeddings = self.max_position_embeddings
-
-        self.layer_types = getattr(self.text_config, "layer_types", None)
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Vision normalization parameters
         self.vision_rescale_factor = float(vision_rescale_factor)
