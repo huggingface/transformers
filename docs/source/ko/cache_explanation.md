@@ -78,8 +78,6 @@ Transformers의 [`Cache`] 클래스를 사용할 때, 셀프 어텐션 모듈은
 
 2. `forward` 메소드가 반복적으로 호출될 때, 어텐션 마스크 형태가 과거와 현재 kv 쌍의 결합된 길이와 일치하는 것이 중요합니다. 어텐션 마스크는 `(batch_size, past_kv_length + new_tokens_length)` 형태여야 합니다. 이는 일반적으로 [`~GenerationMixin.generate`]에서 내부적으로 처리되지만, [`Cache`]로 자체 생성 루프를 구현하고 싶다면 이를 염두에 두세요! 어텐션 마스크는 과거와 현재 토큰값을 보유해야 합니다.
 
-3. `cache_position`을 인식하는 것도 중요합니다. 이는 유효한 `cache_position` 값을 전달해야 하므로 `forward` 메소드로 미리 채워진 [`Cache`]를 재사용하고 싶을 때 중요합니다. 이는 시퀀스에서의 입력 위치를 나타냅니다. `cache_position`은 패딩에 영향받지 않으며, 각 토큰에 대해 항상 하나씩 더 많은 위치를 추가합니다. 예를 들어, kv 캐시가 10개의 토큰을 포함하면 - 패드 토큰과 관계없이 - 다음 토큰의 캐시 위치는 `torch.tensor([10])`이어야 합니다.
-
 ## 캐시 저장소 구현[[cache-storage-implementation]]
 
 캐시는 각 레이어가 key와 value 캐시를 포함하는 레이어 목록 형태로 구성되어 있습니다. key 및 value 캐시는 `[batch_size, num_heads, seq_len, head_dim]` 형태의 텐서입니다.
@@ -112,11 +110,10 @@ messages = [{"role": "user", "content": "Hello, what's your name."}]
 inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
 
 generated_ids = inputs.input_ids
-cache_position = torch.arange(inputs.input_ids.shape[1], dtype=torch.int64, device=model.device)
 max_new_tokens = 10
 
 for _ in range(max_new_tokens):
-    outputs = model(**inputs, cache_position=cache_position, past_key_values=past_key_values, use_cache=True)
+    outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
     # 탐욕적 기법으로 다음 토큰 하나를 샘플링
     next_token_ids = outputs.logits[:, -1:].argmax(-1)
     generated_ids = torch.cat([generated_ids, next_token_ids], dim=-1)
@@ -125,7 +122,6 @@ for _ in range(max_new_tokens):
     attention_mask = inputs["attention_mask"]
     attention_mask = torch.cat([attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1)
     inputs = {"input_ids": next_token_ids, "attention_mask": attention_mask}
-    cache_position = cache_position[-1:] + 1 # 다음 토큰을 위해 하나 더 위치 추가
 
 print(tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0])
 "[INST] Hello, what's your name. [/INST]  Hello! My name is LLaMA,"

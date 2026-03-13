@@ -567,7 +567,6 @@ class GenerationMixin(ContinuousMixin):
                 # we only need batch size, seq_length, dtype and device here - so we pass a 0-sized tensor with only the metadata
                 inputs_embeds=torch.empty((batch_size, sequence_length, 0), dtype=self.dtype, device=input_ids.device),
                 attention_mask=attention_mask,
-                cache_position=model_inputs.get("cache_position"),
                 past_key_values=model_inputs.get("past_key_values"),
                 position_ids=model_inputs.get(position_ids_key),
                 token_type_ids=model_inputs.get("token_type_ids"),

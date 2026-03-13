@@ -92,25 +92,19 @@ class CacheTest(unittest.TestCase):
 
         mha_config = LlamaConfig(num_attention_heads=32)
         mha_static_cache = StaticCache(config=mha_config, max_cache_len=10)
-        cached_keys, cached_values = mha_static_cache.update(
-            *_random_kvs(mha_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
-        )
+        cached_keys, cached_values = mha_static_cache.update(*_random_kvs(mha_config), 0)
         self.assertTrue(cached_keys.shape == (1, 32, 10, 128))
         self.assertTrue(cached_values.shape == (1, 32, 10, 128))
 
         gqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=4)
         gqa_static_cache = StaticCache(config=gqa_config, max_cache_len=10)
-        cached_keys, cached_values = gqa_static_cache.update(
-            *_random_kvs(gqa_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
-        )
+        cached_keys, cached_values = gqa_static_cache.update(*_random_kvs(gqa_config), 0)
         self.assertTrue(cached_keys.shape == (1, 4, 10, 128))
         self.assertTrue(cached_values.shape == (1, 4, 10, 128))
 
         mqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=1)
         mqa_static_cache = StaticCache(config=mqa_config, max_cache_len=10)
-        cached_keys, cached_values = mqa_static_cache.update(
-            *_random_kvs(mqa_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
-        )
+        cached_keys, cached_values = mqa_static_cache.update(*_random_kvs(mqa_config), 0)
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
 
@@ -737,13 +731,11 @@ class CacheExportIntegrationTest(unittest.TestCase):
 
         # Export with dynamic shapes
         input_ids = torch.zeros((1, 3), dtype=torch.long, device=device)
-        cache_position = torch.tensor([0, 1, 2], dtype=torch.long, device=device)
-        dynamic_shapes = {"input_ids": {1: torch.export.Dim.DYNAMIC}, "cache_position": {0: torch.export.Dim.DYNAMIC}}
+        dynamic_shapes = {"input_ids": {1: torch.export.Dim.DYNAMIC}}
         strict = version.parse(torch.__version__) != version.parse("2.7.0")
         exported_program = convert_and_export_with_cache(
             model,
             example_input_ids=input_ids,
-            example_cache_position=cache_position,
             dynamic_shapes=dynamic_shapes,
             strict=strict,
         )
@@ -753,7 +745,6 @@ class CacheExportIntegrationTest(unittest.TestCase):
         exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
         exported_program = exportable_module.export(
             input_ids=input_ids,
-            cache_position=cache_position,
             dynamic_shapes=dynamic_shapes,
             strict=strict,
         )
@@ -794,7 +785,6 @@ class CacheExportIntegrationTest(unittest.TestCase):
         exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
         exported_program = exportable_module.export(
             input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
-            cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
         )
         n_g_key_caches = n_g_value_caches = 0
         for buffer_name, buffer in exported_program.named_buffers():
@@ -811,12 +801,10 @@ class CacheExportIntegrationTest(unittest.TestCase):
 
         # Export with dynamic shapes using Dim.AUTO
         input_ids = torch.zeros((1, 3), dtype=torch.long)
-        cache_position = torch.tensor([0, 1, 2], dtype=torch.long)
-        dynamic_shapes = {"input_ids": {1: torch.export.Dim.DYNAMIC}, "cache_position": {0: torch.export.Dim.DYNAMIC}}
+        dynamic_shapes = {"input_ids": {1: torch.export.Dim.DYNAMIC}}
         strict = version.parse(torch.__version__) < version.parse("2.7.0")
         exported_program = exportable_module.export(
             input_ids=input_ids,
-            cache_position=cache_position,
             dynamic_shapes=dynamic_shapes,
             strict=strict,
         )
@@ -882,7 +870,6 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=torch.tensor(4.0)[None, None, None, None],
             value_states=torch.tensor(4.0)[None, None, None, None],
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([3])},
         )
         self.assertEqual(
             static_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "StaticCache Scenario 2 failed"
@@ -912,13 +899,11 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=prefill,
             value_states=prefill,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(2)},
         )
         sliding_cache.update(
             key_states=torch.tensor(3.0)[None, None, None, None],
             value_states=torch.tensor(3.0)[None, None, None, None],
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([2])},
         )
         self.assertEqual(
             sliding_cache.layers[0].keys[0, 0, :, 0].tolist(),
@@ -933,13 +918,11 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=prefill,
             value_states=prefill,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(4)},
         )
         sliding_cache.update(
             key_states=torch.tensor(5.0)[None, None, None, None],
             value_states=torch.tensor(5.0)[None, None, None, None],
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([4])},
         )
         self.assertEqual(
             sliding_cache.layers[0].keys[0, 0, :, 0].tolist(),
@@ -954,7 +937,6 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=long_prefill,
             value_states=long_prefill,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(6)},
         )
         self.assertEqual(
             sliding_cache.layers[0].keys[0, 0, :, 0].tolist(),
@@ -1057,7 +1039,6 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=prefill_static,
             value_states=prefill_static,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(3)},
         )
 
         # Update sliding layer (layer 1)
@@ -1065,7 +1046,7 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=prefill_sliding,
             value_states=prefill_sliding,
             layer_idx=1,
-            cache_kwargs={"cache_position": torch.arange(3), "sliding_window": self.window_size},
+            cache_kwargs={"sliding_window": self.window_size},
         )
 
         # Verify initial states
@@ -1099,7 +1080,6 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=new_key_static,
             value_states=new_key_static,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([3])},
         )
 
         # Update sliding layer (layer 1)
@@ -1107,7 +1087,6 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=new_key_sliding,
             value_states=new_key_sliding,
             layer_idx=1,
-            cache_kwargs={"cache_position": torch.tensor([3])},
         )
 
         # The static layer does not slide, so it should have updated the element at position 3
@@ -1160,13 +1139,11 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=prefill_static,
             value_states=prefill_static,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(3)},
         )
         res_sliding = chunked_cache.update(
             key_states=prefill_sliding,
             value_states=prefill_sliding,
             layer_idx=1,
-            cache_kwargs={"cache_position": torch.arange(3)},
         )
 
         # Static layer keeps everything
@@ -1183,13 +1160,11 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=new_static,
             value_states=new_static,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([3])},
         )
         res_one = chunked_cache.update(
             key_states=new_sliding,
             value_states=new_sliding,
             layer_idx=1,
-            cache_kwargs={"cache_position": torch.tensor([3])},
         )
 
         self.assertEqual(chunked_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 5.0])
@@ -1202,7 +1177,6 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=new_sliding_2,
             value_states=new_sliding_2,
             layer_idx=1,
-            cache_kwargs={"cache_position": torch.tensor([4, 5])},  # arbitrary positions; ignored in full mode
         )
 
         # Cache now keeps the latest two tokens
@@ -1238,7 +1212,6 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=first_chunk,
             value_states=first_chunk,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(2)},  # p = 0,1
         )
 
         # internal cache should have first two tokens and a zero pad
@@ -1251,7 +1224,6 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=second_chunk,
             value_states=second_chunk,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([2, 3])},  # p = 2
         )
 
         self.assertEqual(cache.layers[0].keys[0, 0, :, 0].tolist(), [20.0, 30.0, 40.0])

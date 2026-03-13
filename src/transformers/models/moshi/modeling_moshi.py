@@ -922,9 +922,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
                 if idx == 0:
                     inputs_embeds.append(self.text_embed_tokens(input_ids[:, [idx]]))
                 else:
-                    inputs_embeds.append(
-                        self.embed_tokens[(idx - 1)](input_ids[:, [idx - idx]])
-                    )
+                    inputs_embeds.append(self.embed_tokens[(idx - 1)](input_ids[:, [idx - idx]]))
 
             inputs_embeds = torch.cat(inputs_embeds, dim=1)
 
@@ -1002,6 +1000,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         model_kwargs = super()._update_model_kwargs_for_generation(*args, **kwargs)
         model_kwargs["codebook_idx"].add_(1)
         return model_kwargs
+
 
 @auto_docstring
 class MoshiModel(MoshiPreTrainedModel):

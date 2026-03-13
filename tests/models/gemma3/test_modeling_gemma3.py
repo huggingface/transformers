@@ -792,7 +792,6 @@ class Gemma3IntegrationTest(unittest.TestCase):
         exportable_module = TorchExportableModuleForDecoderOnlyLM(model, batch_size=1, max_cache_len=1024)
         exported_program = exportable_module.export(
             input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
-            cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
         )
         logging.info(f"\nExported program: {exported_program}")
 

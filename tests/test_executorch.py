@@ -58,12 +58,12 @@ class ExecutorchTest(unittest.TestCase):
 
         # Test with input_ids
         eager_output_ids = self.model(input_ids=self.input_ids, use_cache=False).logits
-        wrapped_output_ids = module.forward(input_ids=self.input_ids, cache_position=self.cache_position)
+        wrapped_output_ids = module.forward(input_ids=self.input_ids)
         torch.testing.assert_close(eager_output_ids, wrapped_output_ids, atol=1e-4, rtol=1e-4)
 
         # Test with inputs_embeds
         eager_output_embeds = self.model(inputs_embeds=self.inputs_embeds, use_cache=False).logits
-        wrapped_output_embeds = module.forward(inputs_embeds=self.inputs_embeds, cache_position=self.cache_position)
+        wrapped_output_embeds = module.forward(inputs_embeds=self.inputs_embeds)
         torch.testing.assert_close(eager_output_embeds, wrapped_output_embeds, atol=1e-4, rtol=1e-4)
 
     def test_hybrid_cache_module_forward(self):
@@ -84,12 +84,12 @@ class ExecutorchTest(unittest.TestCase):
 
         # Test with input_ids
         eager_output_ids = self.model(input_ids=self.input_ids, use_cache=False).logits
-        wrapped_output_ids = module.forward(input_ids=self.input_ids, cache_position=self.cache_position)
+        wrapped_output_ids = module.forward(input_ids=self.input_ids)
         torch.testing.assert_close(eager_output_ids, wrapped_output_ids, atol=1e-4, rtol=1e-4)
 
         # Test with inputs_embeds
         eager_output_embeds = self.model(inputs_embeds=self.inputs_embeds, use_cache=False).logits
-        wrapped_output_embeds = module.forward(inputs_embeds=self.inputs_embeds, cache_position=self.cache_position)
+        wrapped_output_embeds = module.forward(inputs_embeds=self.inputs_embeds)
         torch.testing.assert_close(eager_output_embeds, wrapped_output_embeds, atol=1e-4, rtol=1e-4)
 
     def test_decoder_only_lm_export_validation(self):
@@ -109,17 +109,13 @@ class ExecutorchTest(unittest.TestCase):
         module = TorchExportableModuleForDecoderOnlyLM(self.model)
 
         # Test export with input_ids
-        exported_program_ids = module.export(input_ids=self.input_ids, cache_position=self.cache_position)
+        exported_program_ids = module.export(input_ids=self.input_ids)
         eager_output_ids = self.model(input_ids=self.input_ids, use_cache=False).logits
-        exported_output_ids = exported_program_ids.module()(
-            input_ids=self.input_ids, cache_position=self.cache_position
-        )
+        exported_output_ids = exported_program_ids.module()(input_ids=self.input_ids)
         torch.testing.assert_close(eager_output_ids, exported_output_ids, atol=1e-4, rtol=1e-4)
 
         # Test export with inputs_embeds
-        exported_program_embeds = module.export(inputs_embeds=self.inputs_embeds, cache_position=self.cache_position)
+        exported_program_embeds = module.export(inputs_embeds=self.inputs_embeds)
         eager_output_embeds = self.model(inputs_embeds=self.inputs_embeds, use_cache=False).logits
-        exported_output_embeds = exported_program_embeds.module()(
-            inputs_embeds=self.inputs_embeds, cache_position=self.cache_position
-        )
+        exported_output_embeds = exported_program_embeds.module()(inputs_embeds=self.inputs_embeds)
         torch.testing.assert_close(eager_output_embeds, exported_output_embeds, atol=1e-4, rtol=1e-4)

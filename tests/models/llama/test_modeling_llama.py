@@ -279,7 +279,6 @@ class LlamaIntegrationTest(unittest.TestCase):
             exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
             exported_program = exportable_module.export(
                 input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
-                cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
             )
             ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
                 exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
@@ -445,7 +444,6 @@ class Mask4DTestHard(unittest.TestCase):
             input_ids_shared_prefix,
             attention_mask=padded_attention_mask,
             position_ids=position_ids_shared_prefix,
-            cache_position=torch.arange(input_ids_shared_prefix.shape[-1], device=torch_device),
             past_key_values=past_key_values,
         ).logits
         logits_shared_prefix_last = logits_shared_prefix[
@@ -493,7 +491,6 @@ class Mask4DTestHard(unittest.TestCase):
             input_1a,
             attention_mask=padded_mask_1a,
             position_ids=position_ids_1a,
-            cache_position=torch.arange(part_a, device=torch_device),
             past_key_values=past_key_values,
         )
 
@@ -510,11 +507,6 @@ class Mask4DTestHard(unittest.TestCase):
             input_1b,
             attention_mask=padded_mask_1b,
             position_ids=position_ids_1b,
-            cache_position=torch.arange(
-                part_a,
-                input_ids_shared_prefix.shape[-1],
-                device=torch_device,
-            ),
             past_key_values=past_key_values,
         )
         decoded_1b = [
