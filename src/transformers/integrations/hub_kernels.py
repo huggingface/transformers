@@ -353,7 +353,11 @@ def load_and_register_attn_kernel(
 
     # Register the kernel as a valid attention
     ALL_ATTENTION_FUNCTIONS.register(attn_implementation, kernel_function)
-    ALL_MASK_ATTENTION_FUNCTIONS.register(attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"])
+
+    # Allow the kernel module to declare its preferred mask function (e.g., MASK_FUNCTION = "sdpa").
+    # Falls back to "flash_attention_2" for backward compatibility with existing kernels.
+    mask_type = getattr(kernel, "MASK_FUNCTION", "flash_attention_2")
+    ALL_MASK_ATTENTION_FUNCTIONS.register(attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS[mask_type])
 
     return kernel
 

@@ -419,6 +419,40 @@ class TestAttentionKernelRegistration(TestCasePlus):
             except Exception as e:
                 print(f"Could not clean up `ALL_MASK_ATTENTION_FUNCTIONS`: {e}")
 
+    def test_kernel_mask_function_default(self):
+        """Kernels without MASK_FUNCTION attribute should default to flash_attention_2 mask."""
+        kernel_obj = types.SimpleNamespace(my_func=lambda *a, **k: None)
+        with patch("transformers.integrations.hub_kernels.get_kernel", return_value=kernel_obj):
+            attn_impl = "org/default-mask:my_func"
+            load_and_register_attn_kernel(attn_impl)
+            self.assertIn(attn_impl, ALL_MASK_ATTENTION_FUNCTIONS.valid_keys())
+            self.assertEqual(
+                ALL_MASK_ATTENTION_FUNCTIONS[attn_impl],
+                ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"],
+            )
+            try:
+                ALL_ATTENTION_FUNCTIONS.pop(attn_impl, None)
+                ALL_MASK_ATTENTION_FUNCTIONS.pop(attn_impl, None)
+            except Exception as e:
+                print(f"Could not clean up registrations: {e}")
+
+    def test_kernel_mask_function_custom(self):
+        """Kernels with MASK_FUNCTION attribute should use the declared mask type."""
+        kernel_obj = types.SimpleNamespace(my_func=lambda *a, **k: None, MASK_FUNCTION="sdpa")
+        with patch("transformers.integrations.hub_kernels.get_kernel", return_value=kernel_obj):
+            attn_impl = "org/custom-mask:my_func"
+            load_and_register_attn_kernel(attn_impl)
+            self.assertIn(attn_impl, ALL_MASK_ATTENTION_FUNCTIONS.valid_keys())
+            self.assertEqual(
+                ALL_MASK_ATTENTION_FUNCTIONS[attn_impl],
+                ALL_MASK_ATTENTION_FUNCTIONS["sdpa"],
+            )
+            try:
+                ALL_ATTENTION_FUNCTIONS.pop(attn_impl, None)
+                ALL_MASK_ATTENTION_FUNCTIONS.pop(attn_impl, None)
+            except Exception as e:
+                print(f"Could not clean up registrations: {e}")
+
 
 @require_kernels
 class TestUseKernelsLifecycle(TestCasePlus):
