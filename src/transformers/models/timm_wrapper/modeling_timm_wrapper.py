@@ -112,9 +112,19 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        # Also, reinit all non-persistemt buffers if any!
+        # Also, reinit all non-persistent buffers if any!
         if hasattr(module, "init_non_persistent_buffers"):
             module.init_non_persistent_buffers()
+        elif (
+            hasattr(module, "_get_pos_embed_values")
+            and hasattr(module, "feat_shape")
+            and module.feat_shape is not None
+        ):
+            module.pos_embed = module._get_pos_embed_values(
+                feat_shape=module.feat_shape,
+                device=module.pos_embed.device if module.pos_embed is not None else None,
+                dtype=module.pos_embed.dtype if module.pos_embed is not None else torch.float32,
+            )
         elif isinstance(module, nn.BatchNorm2d):
             # TimmWrapper always creates models with pretrained=False, so buffers are never pre-loaded
             # Always initialize buffers (handles both meta device and to_empty() cases)

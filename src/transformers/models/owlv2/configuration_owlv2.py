@@ -144,7 +144,6 @@ class Owlv2Config(PreTrainedConfig):
         vision_config=None,
         projection_dim=512,
         logit_scale_init_value=2.6592,
-        return_dict=True,
         **kwargs,
     ):
         if text_config is None:
@@ -164,7 +163,6 @@ class Owlv2Config(PreTrainedConfig):
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
-        self.return_dict = return_dict
         self.initializer_factor = 1.0
         super().__init__(**kwargs)
 
