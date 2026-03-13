@@ -23,18 +23,85 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(custom_intro="Configuration for the SLANeXt model.")
-class SLANeXtConfig(PreTrainedConfig):
-    model_type = "slanext"
+@auto_docstring(checkpoint="facebook/sam-vit-huge")
+class SLANeXtVisionConfig(PreTrainedConfig):
+    r"""
+    output_channels (`int`, *optional*, defaults to 256):
+        Dimensionality of the output channels in the Patch Encoder.
+    window_size (`int`, *optional*, defaults to 14):
+        Window size for relative position.
+    use_abs_pos (`bool`, *optional*, defaults to `True`):
+        Whether to use absolute position embedding.
+    use_rel_pos (`bool`, *optional*, defaults to `True`):
+        Whether to use relative position embedding.
+    global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
+        The indexes of the global attention layers.
+    mlp_dim (`int`, *optional*, defaults to 3072):
+        The dimensionality of the MLP layer in the Transformer encoder.
     """
-    This is the configuration class to store the configuration of a [`SLANeXt`]. It is used to instantiate a
-    SLANeXt table recognition model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the SLANeXt
-    PaddlePaddle/SLANeXt_wired and PaddlePaddle/SLANeXt_wireless architecture.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    base_config_key = "vision_config"
+
+    def __init__(
+        self,
+        hidden_size=768,
+        output_channels=256,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        num_channels=3,
+        image_size=1024,
+        patch_size=16,
+        hidden_act="gelu",
+        layer_norm_eps=1e-06,
+        attention_dropout=0.0,
+        initializer_range=1e-10,
+        qkv_bias=True,
+        use_abs_pos=True,
+        use_rel_pos=True,
+        window_size=14,
+        global_attn_indexes=[2, 5, 8, 11],
+        mlp_dim=3072,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        self.hidden_size = hidden_size
+        self.output_channels = output_channels
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.hidden_act = hidden_act
+        self.layer_norm_eps = layer_norm_eps
+        self.attention_dropout = attention_dropout
+        self.initializer_range = initializer_range
+        self.qkv_bias = qkv_bias
+        self.use_abs_pos = use_abs_pos
+        self.use_rel_pos = use_rel_pos
+        self.window_size = window_size
+        self.global_attn_indexes = global_attn_indexes
+        self.mlp_dim = mlp_dim
+
+
+@auto_docstring(custom_intro="Configuration for the SLANeXt model.", checkpoint="PaddlePaddle/SLANeXt_wired")
+class SLANeXtConfig(PreTrainedConfig):
+    r"""
+    encoder_embed_dim (`int`, *optional*, defaults to 768):
+        Dimensionality of the encoder embeddings.
+    encoder_depth (`int`, *optional*, defaults to 12):
+        Number of encoder layers.
+    encoder_global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
+        Indexes of the encoder layers that use global attention.
+    out_channels (`int`, *optional*, defaults to 50):
+        Number of output channels for the structure prediction head.
+    max_text_length (`int`, *optional*, defaults to 500):
+        Maximum text length for the decoder.
+    loc_reg_num (`int`, *optional*, defaults to 8):
+        Number of location regression values.
     """
+
+    model_type = "slanext"
 
     def __init__(
         self,

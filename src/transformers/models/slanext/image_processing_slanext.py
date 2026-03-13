@@ -142,25 +142,19 @@ class SLANeXtImageProcessor(BaseImageProcessor):
 
         return output
 
-    def calc_padding(self, img):
-        height, width = img.shape[:2]
-        pad_right = max(0, self.target_pad_size - width)
-        pad_bottom = max(0, self.target_pad_size - height)
-        return ((0, pad_bottom), (0, pad_right))
-
-    def calc_resize(self, img):
+    def preprocess(self, img):
+        img = np.array(img)
         height, width = img.shape[:2]
         scale = self.target_long_edge / max(height, width)
         height_resize = round(height * scale)
         width_resize = round(width * scale)
-        return [width_resize, height_resize]
-
-    def preprocess(self, img):
-        img = np.array(img)
-        img = self._tablerec_resize(img, self.calc_resize(img))
+        img = self._tablerec_resize(img, [width_resize, height_resize])
         img = img / 255.0
         img = normalize(image=img, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        img = pad(image=img, padding=self.calc_padding(img))
+        height, width = img.shape[:2]
+        pad_right = max(0, self.target_pad_size - width)
+        pad_bottom = max(0, self.target_pad_size - height)
+        img = pad(image=img, padding=((0, pad_bottom), (0, pad_right)))
         img = img.transpose((2, 0, 1))
         img = np.expand_dims(img, axis=0)
         img = torch.tensor(img).float()
@@ -192,29 +186,16 @@ class SLANeXtImageProcessor(BaseImageProcessor):
             if "<td>" in dict_character:
                 dict_character.remove("<td>")
 
-        dict_character = self.add_special_char(dict_character)
+        dict_character = ["sos"] + dict_character + ["eos"]
         self.dict = {char: i for i, char in enumerate(dict_character)}
         self.character = dict_character
         self.td_token = ["<td>", "<td", "<td></td>"]
 
-    def add_special_char(self, dict_character):
-        """add_special_char"""
-        self.beg_str = "sos"
-        self.end_str = "eos"
-        return [self.beg_str] + dict_character + [self.end_str]
-
-    def get_ignored_tokens(self):
-        """get_ignored_tokens"""
-        beg_idx = self.get_beg_end_flag_idx("beg")
-        end_idx = self.get_beg_end_flag_idx("end")
-        return [beg_idx, end_idx]
-
     def get_beg_end_flag_idx(self, beg_or_end):
-        """get_beg_end_flag_idx"""
         if beg_or_end == "beg":
-            idx = np.array(self.dict[self.beg_str])
+            idx = np.array(self.dict["sos"])
         elif beg_or_end == "end":
-            idx = np.array(self.dict[self.end_str])
+            idx = np.array(self.dict["eos"])
         else:
             assert False, "unsupported type %s in get_beg_end_flag_idx" % beg_or_end
         return idx
@@ -223,8 +204,8 @@ class SLANeXtImageProcessor(BaseImageProcessor):
         self.pred = pred
         structure_probs = np.array([list(self.pred[0])])
         """convert text-label into text-index."""
-        ignored_tokens = self.get_ignored_tokens()
-        end_idx = self.dict[self.end_str]
+        ignored_tokens = [self.get_beg_end_flag_idx("beg"), self.get_beg_end_flag_idx("end")]
+        end_idx = self.dict["eos"]
 
         structure_idx = structure_probs.argmax(axis=2)
         structure_probs = structure_probs.max(axis=2)

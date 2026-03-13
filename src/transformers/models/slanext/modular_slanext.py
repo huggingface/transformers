@@ -15,7 +15,6 @@
 
 import math
 from dataclasses import dataclass
-from functools import partial
 
 import numpy as np
 import torch
@@ -28,82 +27,110 @@ from ...image_processing_utils import BaseImageProcessor
 from ...image_transforms import normalize, pad
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring
+from ..focalnet.modeling_focalnet import FocalNetMlp
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2VisionConfig
 from ..got_ocr2.modeling_got_ocr2 import (
     GotOcr2VisionAttention,
     GotOcr2VisionEncoder,
 )
-from ..vitdet.modeling_vitdet import VitDetLayerNorm
 
 
-# This class and its supporting functions below lightly adapted from the ViTDet backbone available at: https://github.com/facebookresearch/detectron2/blob/main/detectron2/modeling/backbone/vit.py # noqa
-class SLANeXtImageEncoderViT(nn.Module):
+class SLANeXtVisionConfig(GotOcr2VisionConfig):
+    pass
+
+
+class SLANeXtMlp(FocalNetMlp):
+    pass
+
+
+class SLANeXtVisionAttention(GotOcr2VisionAttention):
+    pass
+
+
+@auto_docstring(custom_intro="Configuration for the SLANeXt model.", checkpoint="PaddlePaddle/SLANeXt_wired")
+class SLANeXtConfig(PreTrainedConfig):
+    r"""
+    encoder_embed_dim (`int`, *optional*, defaults to 768):
+        Dimensionality of the encoder embeddings.
+    encoder_depth (`int`, *optional*, defaults to 12):
+        Number of encoder layers.
+    encoder_global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
+        Indexes of the encoder layers that use global attention.
+    out_channels (`int`, *optional*, defaults to 50):
+        Number of output channels for the structure prediction head.
+    max_text_length (`int`, *optional*, defaults to 500):
+        Maximum text length for the decoder.
+    loc_reg_num (`int`, *optional*, defaults to 8):
+        Number of location regression values.
+    """
+
+    model_type = "slanext"
+
     def __init__(
         self,
-        img_size: int = 1024,
-        patch_size: int = 16,
-        in_chans: int = 3,
-        embed_dim: int = 768,
-        depth: int = 12,
-        num_heads: int = 12,
-        mlp_ratio: float = 4.0,
-        out_chans: int = 256,
-        qkv_bias: bool = True,
-        norm_layer: type[nn.Module] = nn.LayerNorm,
-        act_layer: type[nn.Module] = nn.GELU,
-        use_abs_pos: bool = True,
-        use_rel_pos: bool = False,
-        rel_pos_zero_init: bool = True,
-        window_size: int = 0,
-        global_attn_indexes: tuple[int, ...] = (),
+        encoder_embed_dim: int = 768,
+        encoder_depth: int = 12,
+        encoder_num_heads: int = 12,
+        encoder_global_attn_indexes: list[int] = [2, 5, 8, 11],
+        out_channels: int = 50,
+        hidden_size: int = 512,
+        max_text_length: int = 500,
+        loc_reg_num: int = 8,
+        **kwargs,
     ) -> None:
-        """
-        Args:
-            img_size (int): Input image size.
-            patch_size (int): Patch size.
-            in_chans (int): Number of input image channels.
-            embed_dim (int): Patch embedding dimension.
-            depth (int): Depth of ViT.
-            num_heads (int): Number of attention heads in each ViT block.
-            mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
-            qkv_bias (bool): If True, add a learnable bias to query, key, value.
-            norm_layer (nn.Layer): Normalization layer.
-            act_layer (nn.Layer): Activation layer.
-            use_abs_pos (bool): If True, use absolute positional embeddings.
-            use_rel_pos (bool): If True, add relative positional embeddings to the attention map.
-            rel_pos_zero_init (bool): If True, zero initialize relative positional parameters.
-            window_size (int): Window size for window attention blocks.
-            global_attn_indexes (list): Indexes for blocks using global attention.
-        """
-        super().__init__()
+        super().__init__(**kwargs)
 
-        self.img_size = img_size
+        self.encoder_embed_dim = encoder_embed_dim
+        self.encoder_depth = encoder_depth
+        self.encoder_num_heads = encoder_num_heads
+        self.encoder_global_attn_indexes = encoder_global_attn_indexes
+        self.out_channels = out_channels
+        self.hidden_size = hidden_size
+        self.max_text_length = max_text_length
+        self.loc_reg_num = loc_reg_num
 
-        vision_config = GotOcr2VisionConfig(
-            hidden_size=embed_dim,
-            output_channels=out_chans,
-            num_hidden_layers=depth,
-            num_attention_heads=num_heads,
-            num_channels=in_chans,
-            image_size=img_size,
-            patch_size=patch_size,
-            hidden_act="gelu",
-            layer_norm_eps=1e-6,
-            attention_dropout=0.0,
-            qkv_bias=qkv_bias,
-            use_abs_pos=use_abs_pos,
-            use_rel_pos=use_rel_pos,
-            window_size=window_size,
-            global_attn_indexes=list(global_attn_indexes),
-            mlp_dim=int(embed_dim * mlp_ratio),
-        )
-        self.encoder = GotOcr2VisionEncoder(vision_config)
-        self.net_2 = nn.Conv2d(out_chans, out_chans * 2, kernel_size=3, stride=2, padding=1, bias=False)
 
-    def forward(self, hidden_states):
-        hidden_states = self.encoder(hidden_states).last_hidden_state
-        hidden_states = self.net_2(hidden_states)
-        return hidden_states
+class SLANeXtPreTrainedModel(PreTrainedModel):
+    """
+    Base class for all SLANeXt pre-trained models. Handles model initialization,
+    configuration, and loading of pre-trained weights, following the Transformers library conventions.
+    """
+
+    config: SLANeXtConfig
+    base_model_prefix = "slanext"
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+
+        # Initialize positional embeddings to zero (SLANeXtVisionEncoder holds pos_embed)
+        if isinstance(module, SLANeXtVisionEncoder):
+            if module.pos_embed is not None:
+                init.constant_(module.pos_embed, 0.0)
+
+        # Initialize relative positional embeddings to zero (SLANeXtVisionAttention holds rel_pos_h/w)
+        if isinstance(module, SLANeXtVisionAttention):
+            if module.use_rel_pos:
+                init.constant_(module.rel_pos_h, 0.0)
+                init.constant_(module.rel_pos_w, 0.0)
+
+        # Initialize SLAHead layers
+        if isinstance(module, SLANeXtSLAHead):
+            stdv = 1.0 / math.sqrt(module.hidden_size * 1.0)
+            # Initialize structure_generator and loc_generator layers
+            for generator in (module.structure_generator, module.loc_generator):
+                for layer in generator:
+                    if isinstance(layer, nn.Linear):
+                        init.uniform_(layer.weight, -stdv, stdv)
+                        if layer.bias is not None:
+                            init.uniform_(layer.bias, -stdv, stdv)
+
+
+class SLANeXtVisionEncoder(GotOcr2VisionEncoder):
+    pass
 
 
 class SLANeXtVary_VIT_B(nn.Module):
@@ -118,25 +145,35 @@ class SLANeXtVary_VIT_B(nn.Module):
     ):
         super().__init__()
 
-        self.vision_tower_high = SLANeXtImageEncoderViT(
-            depth=encoder_depth,
-            embed_dim=encoder_embed_dim,
-            img_size=image_size,
-            mlp_ratio=4,
-            num_heads=encoder_num_heads,
+        vision_config = SLANeXtVisionConfig(
+            hidden_size=encoder_embed_dim,
+            output_channels=256,
+            num_hidden_layers=encoder_depth,
+            num_attention_heads=encoder_num_heads,
+            num_channels=in_channels,
+            image_size=image_size,
             patch_size=16,
+            hidden_act="gelu",
+            layer_norm_eps=1e-6,
+            attention_dropout=0.0,
             qkv_bias=True,
+            use_abs_pos=True,
             use_rel_pos=True,
-            global_attn_indexes=encoder_global_attn_indexes,
             window_size=14,
-            out_chans=256,
+            global_attn_indexes=encoder_global_attn_indexes,
+            mlp_dim=int(encoder_embed_dim * 4),
         )
+        # Reuse GotOcr2VisionEncoder directly (replaces SLANeXtImageEncoderViT.encoder)
+        self.vision_tower_high = nn.Module()
+        self.vision_tower_high.encoder = SLANeXtVisionEncoder(vision_config)
+        self.vision_tower_high.net_2 = nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1, bias=False)
         self.out_channels = 1024
 
     def forward(self, hidden_states):
         if hidden_states.shape[1] == 1:
             hidden_states = torch.repeat_interleave(hidden_states, repeats=3, dim=1)
-        hidden_states = self.vision_tower_high(hidden_states)
+        hidden_states = self.vision_tower_high.encoder(hidden_states).last_hidden_state
+        hidden_states = self.vision_tower_high.net_2(hidden_states)
         hidden_states = hidden_states.flatten(2).permute(0, 2, 1)
         return hidden_states
 
@@ -169,33 +206,6 @@ class SLANeXtAttentionGRUCell(nn.Module):
         cur_hidden = self.rnn(concat_context, prev_hidden)
 
         return (cur_hidden, cur_hidden), alpha
-
-
-class SLANeXtMlp(nn.Module):
-    def __init__(
-        self,
-        in_features,
-        hidden_features=None,
-        out_features=None,
-        act_layer=nn.GELU,
-        drop=0.0,
-    ):
-        super().__init__()
-
-        out_features = out_features or in_features
-        hidden_features = hidden_features or in_features
-        self.fc1 = nn.Linear(in_features, hidden_features)
-        self.act = act_layer()
-        self.fc2 = nn.Linear(hidden_features, out_features)
-        self.drop = nn.Dropout(drop)
-
-    def forward(self, hidden_states):
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.drop(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = self.drop(hidden_states)
-        return hidden_states
 
 
 class SLANeXtHWAttention(nn.Module):
@@ -280,9 +290,9 @@ class SLANeXtHead_Block(nn.Module):
         self.drop_path = nn.Identity()
         self.norm2 = norm_layer(dim, eps=eps)
         self.mlp = SLANeXtMlp(
+            type("_MlpConfig", (), {"hidden_act": "gelu"})(),
             in_features=dim,
             hidden_features=mlp_hidden_dim,
-            act_layer=act_layer,
             drop=drop,
         )
 
@@ -352,16 +362,18 @@ class SLANeXtSLAHead(nn.Module):
 
         self.use_attn = use_attn
         if use_attn:
-            self.cross_atten = nn.Sequential(*[
-                SLANeXtHead_Block(
-                    in_channels,
-                    num_heads=2,
-                    mlp_ratio=4.0,
-                    qkv_bias=True,
-                    drop_path=dpr[i],
-                )
-                for i in range(2)
-            ])
+            self.cross_atten = nn.Sequential(
+                *[
+                    SLANeXtHead_Block(
+                        in_channels,
+                        num_heads=2,
+                        mlp_ratio=4.0,
+                        qkv_bias=True,
+                        drop_path=dpr[i],
+                    )
+                    for i in range(2)
+                ]
+            )
 
         self.loc_generator = nn.Sequential(
             nn.Linear(self.hidden_size, self.hidden_size),
@@ -382,7 +394,9 @@ class SLANeXtSLAHead(nn.Module):
             features = features.permute(0, 2, 1)
 
         hidden = torch.zeros((batch_size, self.hidden_size), device=features.device)
-        structure_preds = torch.zeros((batch_size, self.max_text_length + 1, self.num_embeddings), device=features.device)
+        structure_preds = torch.zeros(
+            (batch_size, self.max_text_length + 1, self.num_embeddings), device=features.device
+        )
         loc_preds = torch.zeros((batch_size, self.max_text_length + 1, self.loc_reg_num), device=features.device)
         structure_preds.requires_grad = False
         loc_preds.requires_grad = False
@@ -397,7 +411,9 @@ class SLANeXtSLAHead(nn.Module):
             structure_preds = structure_preds[:, : max_len + 1]
             loc_preds = loc_preds[:, : max_len + 1]
         else:
-            structure_ids = torch.zeros((batch_size, self.max_text_length + 1), dtype=torch.long, device=features.device)
+            structure_ids = torch.zeros(
+                (batch_size, self.max_text_length + 1), dtype=torch.long, device=features.device
+            )
             pre_chars = torch.zeros(size=[batch_size], dtype=torch.long, device=features.device)
             for i in range(self.max_text_length + 1):
                 hidden, structure_step, loc_step = self._decode(pre_chars, features, hidden)
@@ -432,82 +448,6 @@ class SLANeXtSLAHead(nn.Module):
         return F.one_hot(input_char, self.num_embeddings).float()
 
 
-@auto_docstring(custom_intro="Configuration for the SLANeXt model.")
-class SLANeXtConfig(PreTrainedConfig):
-    model_type = "slanext"
-    """
-    This is the configuration class to store the configuration of a [`SLANeXt`]. It is used to instantiate a
-    SLANeXt table recognition model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the SLANeXt
-    PaddlePaddle/SLANeXt_wired and PaddlePaddle/SLANeXt_wireless architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-    """
-
-    def __init__(
-        self,
-        encoder_embed_dim: int = 768,
-        encoder_depth: int = 12,
-        encoder_num_heads: int = 12,
-        encoder_global_attn_indexes: list[int] = [2, 5, 8, 11],
-        out_channels: int = 50,
-        hidden_size: int = 512,
-        max_text_length: int = 500,
-        loc_reg_num: int = 8,
-        **kwargs,
-    ) -> None:
-        super().__init__(**kwargs)
-
-        self.encoder_embed_dim = encoder_embed_dim
-        self.encoder_depth = encoder_depth
-        self.encoder_num_heads = encoder_num_heads
-        self.encoder_global_attn_indexes = encoder_global_attn_indexes
-        self.out_channels = out_channels
-        self.hidden_size = hidden_size
-        self.max_text_length = max_text_length
-        self.loc_reg_num = loc_reg_num
-
-
-class SLANeXtPreTrainedModel(PreTrainedModel):
-    """
-    Base class for all SLANeXt pre-trained models. Handles model initialization,
-    configuration, and loading of pre-trained weights, following the Transformers library conventions.
-    """
-
-    config: SLANeXtConfig
-    base_model_prefix = "slanext"
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        super()._init_weights(module)
-
-        # Initialize positional embeddings to zero (GotOcr2VisionEncoder holds pos_embed)
-        if isinstance(module, GotOcr2VisionEncoder):
-            if module.pos_embed is not None:
-                init.constant_(module.pos_embed, 0.0)
-
-        # Initialize relative positional embeddings to zero (GotOcr2VisionAttention holds rel_pos_h/w)
-        if isinstance(module, GotOcr2VisionAttention):
-            if module.use_rel_pos:
-                init.constant_(module.rel_pos_h, 0.0)
-                init.constant_(module.rel_pos_w, 0.0)
-
-        # Initialize SLAHead layers
-        if isinstance(module, SLANeXtSLAHead):
-            stdv = 1.0 / math.sqrt(module.hidden_size * 1.0)
-            # Initialize structure_generator and loc_generator layers
-            for generator in (module.structure_generator, module.loc_generator):
-                for layer in generator:
-                    if isinstance(layer, nn.Linear):
-                        init.uniform_(layer.weight, -stdv, stdv)
-                        if layer.bias is not None:
-                            init.uniform_(layer.bias, -stdv, stdv)
-
-
 @auto_docstring(custom_intro="The SLANeXt model.")
 class SLANeXtModel(SLANeXtPreTrainedModel):
     """
@@ -533,7 +473,7 @@ class SLANeXtModel(SLANeXtPreTrainedModel):
         )
         self.post_init()
 
-    def forward(self, pixel_values):
+    def forward(self, pixel_values, **kwargs):
         hidden_states = self.backbone(pixel_values)
         hidden_states = self.head(hidden_states)
         return hidden_states
@@ -654,25 +594,19 @@ class SLANeXtImageProcessor(BaseImageProcessor):
 
         return output
 
-    def calc_padding(self, img):
-        height, width = img.shape[:2]
-        pad_right = max(0, self.target_pad_size - width)
-        pad_bottom = max(0, self.target_pad_size - height)
-        return ((0, pad_bottom), (0, pad_right))
-
-    def calc_resize(self, img):
+    def preprocess(self, img):
+        img = np.array(img)
         height, width = img.shape[:2]
         scale = self.target_long_edge / max(height, width)
         height_resize = round(height * scale)
         width_resize = round(width * scale)
-        return [width_resize, height_resize]
-
-    def preprocess(self, img):
-        img = np.array(img)
-        img = self._tablerec_resize(img, self.calc_resize(img))
+        img = self._tablerec_resize(img, [width_resize, height_resize])
         img = img / 255.0
         img = normalize(image=img, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        img = pad(image=img, padding=self.calc_padding(img))
+        height, width = img.shape[:2]
+        pad_right = max(0, self.target_pad_size - width)
+        pad_bottom = max(0, self.target_pad_size - height)
+        img = pad(image=img, padding=((0, pad_bottom), (0, pad_right)))
         img = img.transpose((2, 0, 1))
         img = np.expand_dims(img, axis=0)
         img = torch.tensor(img).float()
@@ -704,29 +638,16 @@ class SLANeXtImageProcessor(BaseImageProcessor):
             if "<td>" in dict_character:
                 dict_character.remove("<td>")
 
-        dict_character = self.add_special_char(dict_character)
+        dict_character = ["sos"] + dict_character + ["eos"]
         self.dict = {char: i for i, char in enumerate(dict_character)}
         self.character = dict_character
         self.td_token = ["<td>", "<td", "<td></td>"]
 
-    def add_special_char(self, dict_character):
-        """add_special_char"""
-        self.beg_str = "sos"
-        self.end_str = "eos"
-        return [self.beg_str] + dict_character + [self.end_str]
-
-    def get_ignored_tokens(self):
-        """get_ignored_tokens"""
-        beg_idx = self.get_beg_end_flag_idx("beg")
-        end_idx = self.get_beg_end_flag_idx("end")
-        return [beg_idx, end_idx]
-
     def get_beg_end_flag_idx(self, beg_or_end):
-        """get_beg_end_flag_idx"""
         if beg_or_end == "beg":
-            idx = np.array(self.dict[self.beg_str])
+            idx = np.array(self.dict["sos"])
         elif beg_or_end == "end":
-            idx = np.array(self.dict[self.end_str])
+            idx = np.array(self.dict["eos"])
         else:
             assert False, "unsupported type %s in get_beg_end_flag_idx" % beg_or_end
         return idx
@@ -735,8 +656,8 @@ class SLANeXtImageProcessor(BaseImageProcessor):
         self.pred = pred
         structure_probs = np.array([list(self.pred[0])])
         """convert text-label into text-index."""
-        ignored_tokens = self.get_ignored_tokens()
-        end_idx = self.dict[self.end_str]
+        ignored_tokens = [self.get_beg_end_flag_idx("beg"), self.get_beg_end_flag_idx("end")]
+        end_idx = self.dict["eos"]
 
         structure_idx = structure_probs.argmax(axis=2)
         structure_probs = structure_probs.max(axis=2)

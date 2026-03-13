@@ -153,6 +153,7 @@ IGNORE_NON_TESTED = (
         "FastSpeech2ConformerWithHifiGan",  # Built with two smaller (tested) models.
         "GlmImageVQVAE",  # Building part of bigger (tested) model.
         "GraphormerDecoderHead",  # Building part of bigger (tested) model.
+        "SLANeXtModel",  # Building part of bigger (tested) model.
         "JukeboxVQVAE",  # Building part of bigger (tested) model.
         "JukeboxPrior",  # Building part of bigger (tested) model.
         "DecisionTransformerGPT2Model",  # Building part of bigger (tested) model.
@@ -386,6 +387,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "HubertForCTC",
     "SEWForCTC",
     "SEWDForCTC",
+    "SLANeXtModel",
     "XLMForQuestionAnswering",
     "XLNetForQuestionAnswering",
     "SeparableConv1D",
