@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import httpx
 
-from transformers.testing_utils import (
+from transformers.utils.network_logging import (
     clear_network_debug_report,
     disable_network_debug_report,
     enable_network_debug_report,
@@ -41,7 +41,7 @@ class _SlowHandler(BaseHTTPRequestHandler):
         return
 
 
-class NetworkDebugReportTester(unittest.TestCase):
+class NetworkLoggingTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._server = ThreadingHTTPServer(("127.0.0.1", 0), _SlowHandler)

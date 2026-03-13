@@ -27,16 +27,18 @@ import pytest
 from transformers.testing_utils import (
     HfDoctestModule,
     HfDocTestParser,
-    enable_network_debug_report_from_env,
     is_torch_available,
+    patch_testing_methods_to_collect_info,
+    patch_torch_compile_force_graph,
+)
+from transformers.utils import enable_tf32
+from transformers.utils.network_logging import (
+    enable_network_debug_report_from_env,
     network_debug_dump_worker_records,
     network_debug_set_shared_dir,
     network_debug_setup_shared_dir,
-    patch_testing_methods_to_collect_info,
-    patch_torch_compile_force_graph,
     write_network_debug_report_terminal_summary,
 )
-from transformers.utils import enable_tf32
 
 
 NOT_DEVICE_TESTS = {
