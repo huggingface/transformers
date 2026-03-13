@@ -557,7 +557,7 @@ class PenguinVLIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         decoded = self.processor.decode(output[0], skip_special_tokens=True)
-        EXPECTED_DECODED_TEXT = "user\nTime 0s:,Time 1s:,Time 2s:,Time 3s:\nDescribe what you see in this video.\nassistant\n<think>\n\n</think>\n\nThe video features a serene and cozy scene of two cats lounging on a bright pink couch. The"
+        EXPECTED_DECODED_TEXT = "user\nTime 0s:,Time 1s:,Time 2s:,Time 3s:\nDescribe what you see in this video.\nassistant\n<think>\n\n</think>\n\nThe video features a serene and heartwarming scene of two cats lounging on a bright pink couch"
         self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
 
     def test_small_model_integration_test_batch(self):

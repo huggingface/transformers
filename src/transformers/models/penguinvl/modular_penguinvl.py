@@ -48,7 +48,7 @@ from ...image_utils import (
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
@@ -68,7 +68,15 @@ from ...utils.output_capturing import capture_outputs
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs, smart_resize
 from ..qwen2_vl.image_processing_qwen2_vl_fast import Qwen2VLImageProcessorFast
 from ..qwen3.configuration_qwen3 import Qwen3Config
-from ..qwen3.modeling_qwen3 import Qwen3MLP, Qwen3Model, Qwen3RMSNorm, eager_attention_forward, rotate_half
+from ..qwen3.modeling_qwen3 import (
+    Qwen3Attention,
+    Qwen3MLP,
+    Qwen3Model,
+    Qwen3PreTrainedModel,
+    Qwen3RMSNorm,
+    eager_attention_forward,
+    rotate_half,
+)
 
 
 if is_vision_available():
@@ -286,7 +294,7 @@ class PenguinVLVisionEmbeddings(nn.Module):
 
 
 class PenguinVLVisionRotaryEmbedding(nn.Module):
-    """2D rotary position embedding for the vision encoder.
+    r"""2D rotary position embedding for the vision encoder.
 
     Produces per-token ``(cos, sin)`` of shape ``(total_seq, head_dim)`` where
     the first ``head_dim / 2`` dimensions encode height positions and the last
@@ -319,7 +327,7 @@ class PenguinVLVisionRotaryEmbedding(nn.Module):
         device: Optional["torch.device"] = None,
         seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
-        """
+        r"""
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
@@ -369,35 +377,16 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-class PenguinVLVisionAttention(nn.Module):
-    """Multi-headed attention with QK normalization for the vision encoder."""
+class PenguinVLVisionAttention(Qwen3Attention):
+    r"""Multi-headed attention with QK normalization for the vision encoder.
+
+    Inherits from Qwen3Attention; differs by: bidirectional (is_causal=False),
+    2D RoPE via apply_multimodal_rotary_pos_emb, and cu_seqlens for packed sequences.
+    """
 
     def __init__(self, config: PenguinVLVisionConfig, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
+        super().__init__(config, layer_idx)
         self.is_causal = False
-
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
-        self.q_norm = PenguinVLRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
-        self.k_norm = PenguinVLRMSNorm(
-            self.head_dim, eps=config.rms_norm_eps
-        )  # thus post q_norm does not need reshape
 
     def forward(
         self,
@@ -556,15 +545,14 @@ class PenguinVLVisionEncoder(nn.Module):
         **kwargs,
     ) -> tuple | BaseModelOutput:
         r"""
-        Args:
-            hidden_states (`torch.Tensor`):
-                Input hidden states for the vision encoder.
-            cu_seqlens (`torch.Tensor`):
-                Cumulative sequence lengths for variable-length sequences in the batch.
-            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
-                Temporal, height and width dimensions of the feature grid for each image/video.
-            merge_sizes (`torch.Tensor` of shape `(num_images_or_videos,)`):
-                Spatial downsampling ratio for each image or video.
+        hidden_states (`torch.Tensor`):
+            Input hidden states for the vision encoder.
+        cu_seqlens (`torch.Tensor`):
+            Cumulative sequence lengths for variable-length sequences in the batch.
+        grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
+            Temporal, height and width dimensions of the feature grid for each image/video.
+        merge_sizes (`torch.Tensor` of shape `(num_images_or_videos,)`):
+            Spatial downsampling ratio for each image or video.
         """
         cache_position = torch.arange(0, hidden_states.shape[1], device=hidden_states.device)
         position_ids = cache_position.view(1, 1, -1).expand(2, hidden_states.shape[0], -1)
@@ -583,16 +571,9 @@ class PenguinVLVisionEncoder(nn.Module):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-class PenguinVLPreTrainedModel(PreTrainedModel):
+class PenguinVLPreTrainedModel(Qwen3PreTrainedModel):
     config_class = PenguinVLConfig
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["PenguinVLVisionEncoderLayer"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
+    _no_split_modules = ["PenguinVLVisionEncoderLayer", "Qwen3DecoderLayer"]
 
 
 class PenguinVLVisionModel(PenguinVLPreTrainedModel):
@@ -925,13 +906,12 @@ class PenguinVLForConditionalGeneration(PenguinVLPreTrainedModel, GenerationMixi
         **kwargs,
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Args:
-            pixel_values (`torch.FloatTensor`):
-                Pixel values for the vision encoder.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
-                Temporal, height and width of feature shape for each image.
-            image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
-                Spatial downsampling ratio for each image.
+        pixel_values (`torch.FloatTensor`):
+            Pixel values for the vision encoder.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+            Temporal, height and width of feature shape for each image.
+        image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
+            Spatial downsampling ratio for each image.
         """
         return self.model.get_image_features(
             pixel_values=pixel_values,
@@ -1038,7 +1018,7 @@ class PenguinVLForConditionalGeneration(PenguinVLPreTrainedModel, GenerationMixi
 
 
 def _make_batched_clips(images) -> list[list]:
-    """
+    r"""
     Normalize visual inputs to a list of clips, where each clip is a list of frames.
 
     - Single image: ``image`` -> ``[[image]]``
@@ -1063,7 +1043,7 @@ def _simple_batched_resize(
     input_data_format=None,
     frame_types=None,
 ):
-    """
+    r"""
     Compute per-frame target ``(h, w)`` for a clip using TRA (Temporal Redundancy-Aware)
     token compression.
 
@@ -1137,7 +1117,7 @@ def _simple_batched_resize(
 
 
 def _allocate_token_budget(clips, clip_merge_sizes, min_tokens, max_tokens, patch_size, input_data_format=None):
-    """Distribute ``max_tokens`` across clips proportionally to their raw token counts."""
+    r"""Distribute ``max_tokens`` across clips proportionally to their raw token counts."""
     clip_raw_tokens = []
     for clip, ms in zip(clips, clip_merge_sizes):
         first_frame = clip[0]
@@ -1172,7 +1152,7 @@ def _get_frame_sim(
     threshold: float = 0.7,
     epsilon: float = 1e-8,
 ) -> float:
-    """Cosine similarity between two frames averaged over patches. Returns mean similarity in [0, 1]."""
+    r"""Cosine similarity between two frames averaged over patches. Returns mean similarity in [0, 1]."""
 
     def _to_comparison_tensor(tensor: torch.Tensor) -> torch.Tensor:
         if is_cv2_available():
@@ -1215,7 +1195,7 @@ def _extract_ki_frames(
     frames: torch.Tensor,
     threshold: float = _MIN_FRAME_SIMILARITY,
 ) -> list:
-    """
+    r"""
     Label each frame as keyframe (0) or non-keyframe (1) by comparing to the
     previous keyframe. First frame is always a keyframe; a new keyframe is chosen
     when similarity drops below threshold.
@@ -1252,32 +1232,35 @@ class PenguinVLImageProcessor(Qwen2VLImageProcessor):
     token compression for video frames.
 
     Args:
-            do_resize (`bool`, *optional*, defaults to `True`):
-                Whether to resize the image.
-            size (`dict[str, int] | None`, *optional*): <fill_docstring>
-            resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-                Resampling filter to use when resizing.
-            do_rescale (`bool`, *optional*, defaults to `True`):
-                Whether to rescale the image by `rescale_factor`.
-            rescale_factor (`float`, *optional*, defaults to `1/255`):
-                Scale factor for rescaling.
-            do_normalize (`bool`, *optional*, defaults to `True`):
-                Whether to normalize the image.
-            image_mean (`list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
-                Mean for normalization.
-            image_std (`list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
-                Standard deviation for normalization.
-            do_convert_rgb (`bool`, *optional*, defaults to `True`):
-                Whether to convert the image to RGB.
-            min_pixels (`int`, *optional*, defaults to 3136):
-                Minimum pixels for resizing (equivalent to ``min_tokens * patch_size ** 2``).
-            max_pixels (`int`, *optional*, defaults to 3211264):
-                Maximum pixels for resizing (equivalent to ``max_tokens * patch_size ** 2``).
-            patch_size (`int`, *optional*, defaults to 14):
-                Spatial patch size of the vision encoder.
-            temporal_patch_size (`int`, *optional*, defaults to 1): <fill_docstring>
-            merge_size (`int`, *optional*, defaults to 1):
-                Default spatial merge size for token compression (1 for images, 2 for video).
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the image.
+        size (`dict[str, int] | None`, *optional*, defaults to `{"shortest_edge": 3136, "longest_edge": 3211264}`):
+            Size constraints for resizing. Must contain `shortest_edge` and `longest_edge` keys. When None, uses
+            `min_pixels` and `max_pixels` instead.
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
+            Resampling filter to use when resizing.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image by `rescale_factor`.
+        rescale_factor (`float`, *optional*, defaults to `1/255`):
+            Scale factor for rescaling.
+        do_normalize (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the image.
+        image_mean (`list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
+            Mean for normalization.
+        image_std (`list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
+            Standard deviation for normalization.
+        do_convert_rgb (`bool`, *optional*, defaults to `True`):
+            Whether to convert the image to RGB.
+        min_pixels (`int`, *optional*, defaults to 3136):
+            Minimum pixels for resizing (equivalent to ``min_tokens * patch_size ** 2``).
+        max_pixels (`int`, *optional*, defaults to 3211264):
+            Maximum pixels for resizing (equivalent to ``max_tokens * patch_size ** 2``).
+        patch_size (`int`, *optional*, defaults to 14):
+            Spatial patch size of the vision encoder.
+        temporal_patch_size (`int`, *optional*, defaults to 1):
+            Temporal patch size of the vision encoder. Must be 1 for PenguinVL.
+        merge_size (`int`, *optional*, defaults to 1):
+            Default spatial merge size for token compression (1 for images, 2 for video).
     """
 
     model_input_names = ["pixel_values", "image_grid_thw", "image_merge_sizes"]
@@ -1345,7 +1328,7 @@ class PenguinVLImageProcessor(Qwen2VLImageProcessor):
         data_format: ChannelDimension | None = ChannelDimension.FIRST,
         input_data_format: str | ChannelDimension | None = None,
     ):
-        """
+        r"""
         Preprocess images or video clips with optional TRA key/intermediate frame compression.
 
         Args:
@@ -1659,18 +1642,18 @@ class PenguinVLProcessor(ProcessorMixin):
     Processor for PenguinVL that wraps an image processor and a tokenizer.
 
     Args:
-            image_processor (`PenguinVLImageProcessor`, *optional*):
-                The image processor.
-            tokenizer (`PreTrainedTokenizer`, *optional*):
-                The tokenizer.
-            image_token (`str`, *optional*, defaults to `"<image>"`):
-                The image placeholder token.
-            image_merge_size (`int`, *optional*, defaults to 1):
-                Spatial merge size for images.
-            video_merge_size (`int`, *optional*, defaults to 2):
-                Spatial merge size for video frames.
-            chat_template (`str`, *optional*):
-                A Jinja template for formatting conversations.
+        image_processor (`PenguinVLImageProcessor`, *optional*):
+            The image processor.
+        tokenizer (`PreTrainedTokenizer`, *optional*):
+            The tokenizer.
+        image_token (`str`, *optional*, defaults to `"<image>"`):
+            The image placeholder token.
+        image_merge_size (`int`, *optional*, defaults to 1):
+            Spatial merge size for images.
+        video_merge_size (`int`, *optional*, defaults to 2):
+            Spatial merge size for video frames.
+        chat_template (`str`, *optional*):
+            A Jinja template for formatting conversations.
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -1776,7 +1759,7 @@ class PenguinVLProcessor(ProcessorMixin):
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def _load_visual(self, source):
-        """Load a single image from URL, file:// path, local path, or pass through PIL images."""
+        r"""Load a single image from URL, file:// path, local path, or pass through PIL images."""
         if isinstance(source, str):
             source = source.removeprefix("file://")
             return load_image(source)
@@ -1785,7 +1768,7 @@ class PenguinVLProcessor(ProcessorMixin):
         return source
 
     def _load_video_frames(self, video_url, fps=1, max_frames=128):
-        """
+        r"""
         Load frames from a video with fps-based sampling capped at max_frames,
         then extract KI (key/intermediate) frame types.
 
@@ -1860,7 +1843,7 @@ class PenguinVLProcessor(ProcessorMixin):
         return frames, frame_types, timestamps
 
     def _convert_messages_for_chat_template(self, messages):
-        """
+        r"""
         Convert Qwen2-VL style messages for the Jinja chat template.
 
         Image entries become ``{"type": "image"}``.  Video entries keep their
@@ -1903,7 +1886,7 @@ class PenguinVLProcessor(ProcessorMixin):
         fps: int = 1,
         max_frames: int = 128,
     ) -> tuple[list, list] | tuple[None, None]:
-        """
+        r"""
         Extract and load visual inputs from Qwen2-VL style conversation messages.
 
         Walks through ``messages`` and collects images / video frames in order.
@@ -2008,6 +1991,7 @@ __all__ = [
     "PenguinVLConfig",
     "PenguinVLVisionModel",
     "PenguinVLPreTrainedModel",
+    "PenguinVLLanguageModel",
     "PenguinVLModel",
     "PenguinVLForConditionalGeneration",
     "PenguinVLProcessor",

@@ -87,7 +87,7 @@ def smart_resize(
 
 
 def _make_batched_clips(images) -> list[list]:
-    """
+    r"""
     Normalize visual inputs to a list of clips, where each clip is a list of frames.
 
     - Single image: ``image`` -> ``[[image]]``
@@ -120,7 +120,7 @@ def _get_frame_sim(
     threshold: float = 0.7,
     epsilon: float = 1e-8,
 ) -> float:
-    """Cosine similarity between two frames averaged over patches. Returns mean similarity in [0, 1]."""
+    r"""Cosine similarity between two frames averaged over patches. Returns mean similarity in [0, 1]."""
 
     def _to_comparison_tensor(tensor: torch.Tensor) -> torch.Tensor:
         if is_cv2_available():
@@ -163,7 +163,7 @@ def _extract_ki_frames(
     frames: torch.Tensor,
     threshold: float = _MIN_FRAME_SIMILARITY,
 ) -> list:
-    """
+    r"""
     Label each frame as keyframe (0) or non-keyframe (1) by comparing to the
     previous keyframe. First frame is always a keyframe; a new keyframe is chosen
     when similarity drops below threshold.
@@ -194,18 +194,18 @@ class PenguinVLProcessor(ProcessorMixin):
     Processor for PenguinVL that wraps an image processor and a tokenizer.
 
     Args:
-            image_processor (`PenguinVLImageProcessor`, *optional*):
-                The image processor.
-            tokenizer (`PreTrainedTokenizer`, *optional*):
-                The tokenizer.
-            image_token (`str`, *optional*, defaults to `"<image>"`):
-                The image placeholder token.
-            image_merge_size (`int`, *optional*, defaults to 1):
-                Spatial merge size for images.
-            video_merge_size (`int`, *optional*, defaults to 2):
-                Spatial merge size for video frames.
-            chat_template (`str`, *optional*):
-                A Jinja template for formatting conversations.
+        image_processor (`PenguinVLImageProcessor`, *optional*):
+            The image processor.
+        tokenizer (`PreTrainedTokenizer`, *optional*):
+            The tokenizer.
+        image_token (`str`, *optional*, defaults to `"<image>"`):
+            The image placeholder token.
+        image_merge_size (`int`, *optional*, defaults to 1):
+            Spatial merge size for images.
+        video_merge_size (`int`, *optional*, defaults to 2):
+            Spatial merge size for video frames.
+        chat_template (`str`, *optional*):
+            A Jinja template for formatting conversations.
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -311,7 +311,7 @@ class PenguinVLProcessor(ProcessorMixin):
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def _load_visual(self, source):
-        """Load a single image from URL, file:// path, local path, or pass through PIL images."""
+        r"""Load a single image from URL, file:// path, local path, or pass through PIL images."""
         if isinstance(source, str):
             source = source.removeprefix("file://")
             return load_image(source)
@@ -320,7 +320,7 @@ class PenguinVLProcessor(ProcessorMixin):
         return source
 
     def _load_video_frames(self, video_url, fps=1, max_frames=128):
-        """
+        r"""
         Load frames from a video with fps-based sampling capped at max_frames,
         then extract KI (key/intermediate) frame types.
 
@@ -395,7 +395,7 @@ class PenguinVLProcessor(ProcessorMixin):
         return frames, frame_types, timestamps
 
     def _convert_messages_for_chat_template(self, messages):
-        """
+        r"""
         Convert Qwen2-VL style messages for the Jinja chat template.
 
         Image entries become ``{"type": "image"}``.  Video entries keep their
@@ -438,7 +438,7 @@ class PenguinVLProcessor(ProcessorMixin):
         fps: int = 1,
         max_frames: int = 128,
     ) -> tuple[list, list] | tuple[None, None]:
-        """
+        r"""
         Extract and load visual inputs from Qwen2-VL style conversation messages.
 
         Walks through ``messages`` and collects images / video frames in order.

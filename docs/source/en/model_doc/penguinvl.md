@@ -198,22 +198,28 @@ print(output_text)
 > You must call `process_vision_info` *before* `apply_chat_template`, because it modifies the `messages` in-place when processing videos.
 
 Supported content block formats:
-
-**Image** — URL (HTTP or file) or PIL Image:
+<hfoptions id="supported-content">
+<hfoption id="image">
 
 ```python
+# URL (HTTP or file) or PIL Image
 {"type": "image", "image": "https://example.com/photo.jpg"}
 {"type": "image", "image": "file:///path/to/image.png"}
 {"type": "image", "image": <PIL.Image.Image>}
 ```
 
-**Video** — URL, or list of frames with timestamps:
+</hfoption>
+<hfoption id="video">
 
 ```python
+# URL, or list of frames with timestamps
 {"type": "video", "video": "https://example.com/clip.mp4"}
 {"type": "video", "video": ["file:///path/frame1.jpg", ...], "timestamps": [0, ...]}
 {"type": "video", "video": [<PIL.Image.Image>, ...], "timestamps": [0, ...]}
 ```
+
+</hfoption>
+</hfoptions>
 
 ### Flash-Attention 2 to speed up generation
 
@@ -291,6 +297,11 @@ model = PenguinVLForConditionalGeneration.from_pretrained(
 [[autodoc]] PenguinVLModel
     - forward
     - get_image_features
+
+## PenguinVLLanguageModel
+
+[[autodoc]] PenguinVLLanguageModel
+    - forward
 
 ## PenguinVLForConditionalGeneration
 

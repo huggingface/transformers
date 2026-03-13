@@ -78,7 +78,7 @@ def smart_resize(
 
 
 def _make_batched_clips(images) -> list[list]:
-    """
+    r"""
     Normalize visual inputs to a list of clips, where each clip is a list of frames.
 
     - Single image: ``image`` -> ``[[image]]``
@@ -103,7 +103,7 @@ def _simple_batched_resize(
     input_data_format=None,
     frame_types=None,
 ):
-    """
+    r"""
     Compute per-frame target ``(h, w)`` for a clip using TRA (Temporal Redundancy-Aware)
     token compression.
 
@@ -177,7 +177,7 @@ def _simple_batched_resize(
 
 
 def _allocate_token_budget(clips, clip_merge_sizes, min_tokens, max_tokens, patch_size, input_data_format=None):
-    """Distribute ``max_tokens`` across clips proportionally to their raw token counts."""
+    r"""Distribute ``max_tokens`` across clips proportionally to their raw token counts."""
     clip_raw_tokens = []
     for clip, ms in zip(clips, clip_merge_sizes):
         first_frame = clip[0]

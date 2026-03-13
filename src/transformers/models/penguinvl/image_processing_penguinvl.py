@@ -105,7 +105,7 @@ def smart_resize(
 
 
 def _make_batched_clips(images) -> list[list]:
-    """
+    r"""
     Normalize visual inputs to a list of clips, where each clip is a list of frames.
 
     - Single image: ``image`` -> ``[[image]]``
@@ -130,7 +130,7 @@ def _simple_batched_resize(
     input_data_format=None,
     frame_types=None,
 ):
-    """
+    r"""
     Compute per-frame target ``(h, w)`` for a clip using TRA (Temporal Redundancy-Aware)
     token compression.
 
@@ -204,7 +204,7 @@ def _simple_batched_resize(
 
 
 def _allocate_token_budget(clips, clip_merge_sizes, min_tokens, max_tokens, patch_size, input_data_format=None):
-    """Distribute ``max_tokens`` across clips proportionally to their raw token counts."""
+    r"""Distribute ``max_tokens`` across clips proportionally to their raw token counts."""
     clip_raw_tokens = []
     for clip, ms in zip(clips, clip_merge_sizes):
         first_frame = clip[0]
@@ -229,32 +229,35 @@ class PenguinVLImageProcessor(BaseImageProcessor):
     token compression for video frames.
 
     Args:
-            do_resize (`bool`, *optional*, defaults to `True`):
-                Whether to resize the image.
-            size (`dict[str, int] | None`, *optional*): <fill_docstring>
-            resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-                Resampling filter to use when resizing.
-            do_rescale (`bool`, *optional*, defaults to `True`):
-                Whether to rescale the image by `rescale_factor`.
-            rescale_factor (`float`, *optional*, defaults to `1/255`):
-                Scale factor for rescaling.
-            do_normalize (`bool`, *optional*, defaults to `True`):
-                Whether to normalize the image.
-            image_mean (`list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
-                Mean for normalization.
-            image_std (`list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
-                Standard deviation for normalization.
-            do_convert_rgb (`bool`, *optional*, defaults to `True`):
-                Whether to convert the image to RGB.
-            min_pixels (`int`, *optional*, defaults to 3136):
-                Minimum pixels for resizing (equivalent to ``min_tokens * patch_size ** 2``).
-            max_pixels (`int`, *optional*, defaults to 3211264):
-                Maximum pixels for resizing (equivalent to ``max_tokens * patch_size ** 2``).
-            patch_size (`int`, *optional*, defaults to 14):
-                Spatial patch size of the vision encoder.
-            temporal_patch_size (`int`, *optional*, defaults to 1): <fill_docstring>
-            merge_size (`int`, *optional*, defaults to 1):
-                Default spatial merge size for token compression (1 for images, 2 for video).
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the image.
+        size (`dict[str, int] | None`, *optional*, defaults to `{"shortest_edge": 3136, "longest_edge": 3211264}`):
+            Size constraints for resizing. Must contain `shortest_edge` and `longest_edge` keys. When None, uses
+            `min_pixels` and `max_pixels` instead.
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
+            Resampling filter to use when resizing.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image by `rescale_factor`.
+        rescale_factor (`float`, *optional*, defaults to `1/255`):
+            Scale factor for rescaling.
+        do_normalize (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the image.
+        image_mean (`list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
+            Mean for normalization.
+        image_std (`list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
+            Standard deviation for normalization.
+        do_convert_rgb (`bool`, *optional*, defaults to `True`):
+            Whether to convert the image to RGB.
+        min_pixels (`int`, *optional*, defaults to 3136):
+            Minimum pixels for resizing (equivalent to ``min_tokens * patch_size ** 2``).
+        max_pixels (`int`, *optional*, defaults to 3211264):
+            Maximum pixels for resizing (equivalent to ``max_tokens * patch_size ** 2``).
+        patch_size (`int`, *optional*, defaults to 14):
+            Spatial patch size of the vision encoder.
+        temporal_patch_size (`int`, *optional*, defaults to 1):
+            Temporal patch size of the vision encoder. Must be 1 for PenguinVL.
+        merge_size (`int`, *optional*, defaults to 1):
+            Default spatial merge size for token compression (1 for images, 2 for video).
     """
 
     model_input_names = ["pixel_values", "image_grid_thw", "image_merge_sizes"]
@@ -464,7 +467,7 @@ class PenguinVLImageProcessor(BaseImageProcessor):
         data_format: ChannelDimension | None = ChannelDimension.FIRST,
         input_data_format: str | ChannelDimension | None = None,
     ):
-        """
+        r"""
         Preprocess images or video clips with optional TRA key/intermediate frame compression.
 
         Args:
