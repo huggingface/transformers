@@ -341,7 +341,8 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             f"Failed for {block_size=}, {block_table=}, {past_length=}, {query_length=}",
         )
 
-    def test_continuous_batching_cpu_only_unavailable(self) -> None:
+    @slow
+    def test_continuous_batching_no_accelerators(self) -> None:
         """Test continuous batching generation when no accelerator is available. It uses a simulated CPU-only PyTorch
         environment by mocking all acceleratoravailability checks to return False"""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
