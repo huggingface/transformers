@@ -26,7 +26,7 @@ Citation:
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Union
+from typing import Any, Union
 
 import torch
 from packaging import version
@@ -35,9 +35,17 @@ from ..utils import is_torch_flex_attn_available, logging
 from ..utils.import_utils import get_torch_version, is_torch_less_or_equal, is_torchdynamo_compiling
 
 
+_TORCH_FLEX_USE_AUX = version.parse(get_torch_version()) >= version.parse("2.9.0")
+
+
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import _DEFAULT_SPARSE_BLOCK_SIZE as flex_default_block_size
     from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
+
+    if _TORCH_FLEX_USE_AUX:
+        from torch.nn.attention.flex_attention import AuxRequest
+    else:
+        AuxRequest = None
 
 
 logger = logging.get_logger(__name__)
@@ -82,6 +90,17 @@ class WrappedFlexAttention:
 
     def __call__(self):
         return self._compiled_flex_attention
+
+
+def _get_flex_attention_lse_kwargs(return_lse: bool) -> dict[str, Any]:
+    if _TORCH_FLEX_USE_AUX:
+        return {
+            "return_aux": AuxRequest(lse=True) if return_lse else None,
+        }
+
+    return {
+        "return_lse": return_lse,
+    }
 
 
 def compile_friendly_flex_attention(
@@ -298,12 +317,17 @@ def flex_attention_forward(
         kernel_options=kernel_options,
         # Last time checked on PyTorch == 2.5.1: Flex Attention always computes the lse regardless.
         # For simplification, we thus always return it as no additional computations are introduced.
-        return_lse=return_lse,
         training=module.training,
+        # inject the lse args
+        **_get_flex_attention_lse_kwargs(return_lse),
     )
     # lse is returned in float32
     if return_lse:
-        attention_output, lse = flex_attention_output  # type: ignore[misc]
+        if _TORCH_FLEX_USE_AUX:
+            attention_output, aux = flex_attention_output  # type: ignore[misc]
+            lse = aux.lse
+        else:
+            attention_output, lse = flex_attention_output  # type: ignore[misc]
         lse = lse.to(value.dtype)
 
         if s_aux is not None:
