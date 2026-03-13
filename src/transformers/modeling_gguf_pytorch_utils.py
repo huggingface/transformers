@@ -462,6 +462,13 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         updated_architecture = "qwen2_moe"
     elif "qwen3moe" in architecture:
         updated_architecture = "qwen3_moe"
+    elif architecture == "gpt-oss":
+        logger.warning(
+            "GGUF architecture 'gpt-oss' is not fully supported yet. "
+            "Falling back to 'gpt-neox' configuration. "
+            "MoE layers are not supported and inference correctness is not guaranteed."
+        )
+        updated_architecture = "gpt-neox"
 
     # For stablelm architecture, we need to set qkv_bias and use_parallel_residual from tensors
     # If `qkv_bias=True`, qkv_proj with bias will be present in the tensors
