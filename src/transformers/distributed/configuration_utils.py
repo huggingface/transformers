@@ -48,7 +48,6 @@ class DistributedConfig:
             kwargs.pop(key, None)
         return config
 
-    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.to_json_file
     def to_json_file(self, json_file_path: str | os.PathLike):
         """
         Save this instance to a JSON file.
