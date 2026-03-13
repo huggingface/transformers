@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib
 import inspect
 import os
 from collections.abc import Callable
@@ -24,11 +25,13 @@ from .utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
+    is_torch_cuda_available,
+    is_torch_mlu_available,
     is_torch_npu_available,
     is_torch_xpu_available,
     logging,
 )
-from .utils.import_utils import is_tracing
+from .utils.import_utils import PACKAGE_DISTRIBUTION_MAPPING, is_tracing
 
 
 logger = logging.get_logger(__name__)
@@ -53,6 +56,55 @@ def is_flash_attn_available():
         or is_torch_npu_available()
         or is_torch_xpu_available()
     )
+
+
+# Mapping from flash attention implementations to their kernel fallback repositories
+FLASH_ATTN_KERNEL_FALLBACK = {
+    "flash_attention_2": "kernels-community/flash-attn2",
+    "flash_attention_3": "kernels-community/vllm-flash-attn3",
+}
+
+
+# Meta information on each mainline FA compatibility:
+#   1. The import structure and availability
+#   2. Device support (with custom ones that use other workarounds, e.g. kernels)
+#   3. Supported major cuda devices, e.g. Hopper, Blackwell. Mostly found in the newest FA versions
+FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
+    2: {
+        "flash_attn_version": 2,
+        "general_availability_check": is_flash_attn_2_available,
+        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn") is not None
+        and "flash_attn" in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"],
+        "supported_devices": (
+            (is_torch_cuda_available, "cuda"),
+            (is_torch_mlu_available, "mlu"),
+            (is_torch_npu_available, "npu"),
+            (is_torch_xpu_available, "xpu"),
+        ),
+        "custom_supported_devices": (
+            (is_torch_npu_available, "Detect using FlashAttention2 on Ascend NPU."),
+            (
+                is_torch_xpu_available,
+                f"Detect using FlashAttention2 (via kernel `{FLASH_ATTN_KERNEL_FALLBACK['flash_attention_2']}`) on XPU.",
+            ),
+        ),
+    },
+    3: {
+        "flash_attn_version": 3,
+        "general_availability_check": is_flash_attn_3_available,
+        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn_3") is not None,
+        "supported_devices": ((is_torch_cuda_available, "cuda"),),
+        "cuda_min_major_version": 8,  # Ampere
+    },
+    4: {
+        "flash_attn_version": 4,
+        "general_availability_check": is_flash_attn_4_available,
+        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn") is not None
+        and importlib.util.find_spec("flash_attn.cute") is not None,
+        "supported_devices": ((is_torch_cuda_available, "cuda"),),
+        "cuda_min_major_version": 9,  # Hopper
+    },
+}
 
 
 # `globals()` is not compatible with dynamo, hence we have do define them in global scope ourselves

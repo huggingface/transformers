@@ -15,7 +15,6 @@
 import collections
 import copy
 import functools
-import importlib.metadata
 import inspect
 import json
 import os
@@ -84,7 +83,12 @@ from .integrations.tensor_parallel import (
     verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
-from .modeling_flash_attention_utils import lazy_import_flash_attention, lazy_import_paged_flash_attention
+from .modeling_flash_attention_utils import (
+    FLASH_ATTENTION_COMPATIBILITY_MATRIX,
+    FLASH_ATTN_KERNEL_FALLBACK,
+    lazy_import_flash_attention,
+    lazy_import_paged_flash_attention,
+)
 from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from .monkey_patching import apply_patches, patch_output_recorders
 from .pytorch_utils import id_tensor_storage
@@ -111,10 +115,8 @@ from .utils import (
     is_env_variable_true,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
-    is_flash_attn_4_available,
     is_kernels_available,
     is_torch_flex_attn_available,
-    is_torch_mlu_available,
     is_torch_npu_available,
     is_torch_xpu_available,
     logging,
@@ -122,7 +124,6 @@ from .utils import (
 from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
-    PACKAGE_DISTRIBUTION_MAPPING,
     is_flash_attn_greater_or_equal,
     is_huggingface_hub_greater_or_equal,
     is_sagemaker_mp_enabled,
@@ -157,12 +158,6 @@ XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreTrainedModel")
 _is_quantized = False
 _is_ds_init_called = False
-
-# Mapping from flash attention implementations to their kernel fallback repositories
-FLASH_ATTN_KERNEL_FALLBACK = {
-    "flash_attention_2": "kernels-community/flash-attn2",
-    "flash_attention_3": "kernels-community/vllm-flash-attn3",
-}
 
 
 @dataclass(frozen=True)
@@ -1646,46 +1641,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if flash_attn_version not in [2, 3, 4]:
             raise ValueError(f"Requested Flash Attention {flash_attn_version} which is not supported.")
 
-        # Big matrix that shows each FA versions limitations by device and major cuda versions
-        flash_attention_compatibility_matrix = {
-            2: {
-                "flash_attn_version": 2,
-                "general_availability_check": is_flash_attn_2_available,
-                "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn") is not None
-                and "flash_attn" in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"],
-                "supported_devices": (
-                    (is_torch_cuda_available, "cuda"),
-                    (is_torch_mlu_available, "mlu"),
-                    (is_torch_npu_available, "npu"),
-                    (is_torch_xpu_available, "xpu"),
-                ),
-                "custom_supported_devices": (
-                    (is_torch_npu_available, "Detect using FlashAttention2 on Ascend NPU."),
-                    (
-                        is_torch_xpu_available,
-                        f"Detect using FlashAttention2 (via kernel `{FLASH_ATTN_KERNEL_FALLBACK['flash_attention_2']}`) on XPU.",
-                    ),
-                ),
-            },
-            3: {
-                "flash_attn_version": 3,
-                "general_availability_check": is_flash_attn_3_available,
-                "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn_3") is not None,
-                "supported_devices": ((is_torch_cuda_available, "cuda"),),
-                "cuda_min_major_version": 8,  # Ampere
-            },
-            4: {
-                "flash_attn_version": 4,
-                "general_availability_check": is_flash_attn_4_available,
-                "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn") is not None
-                and importlib.util.find_spec("flash_attn.cute") is not None,
-                "supported_devices": ((is_torch_cuda_available, "cuda"),),
-                "cuda_min_major_version": 9,  # Hopper
-            },
-        }
-
         # Check if we can even use the FA version based on the env of the user
-        self._flash_attn_import_error(**flash_attention_compatibility_matrix[flash_attn_version])
+        self._flash_attn_import_error(**FLASH_ATTENTION_COMPATIBILITY_MATRIX[flash_attn_version])
 
         # Check for attention dropout, which is incompatible with newer FA versions
         # (many should not really care about dropout as it is not super effective, hence warning for now)
@@ -1714,7 +1671,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             param_devices = list({param.device for param in self.parameters()})
             if len(param_devices) == 1 and param_devices[0].type == "cpu":
                 found_device = False
-                for device_availability_check, device_name in flash_attention_compatibility_matrix[flash_attn_version][
+                for device_availability_check, device_name in FLASH_ATTENTION_COMPATIBILITY_MATRIX[flash_attn_version][
                     "supported_devices"
                 ]:
                     if device_availability_check():
