@@ -810,7 +810,7 @@ def _get_dtype(
         dtype = torch.get_default_dtype()
 
     if hf_quantizer is not None:
-        hf_quantizer.update_dtype(dtype)
+        dtype = hf_quantizer.update_dtype(dtype)
 
     # Get the main dtype
     if isinstance(dtype, dict):
