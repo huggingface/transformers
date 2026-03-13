@@ -158,7 +158,7 @@ class AwqTest(unittest.TestCase):
             if isinstance(module, torch.nn.Linear):
                 nb_linears += 1
 
-        model, _ = replace_with_awq_linear(model, quantization_config=quantization_config)
+        model = replace_with_awq_linear(model, quantization_config=quantization_config)
         nb_awq_linear = 0
         for module in model.modules():
             if isinstance(module, (AwqGEMMQuantLinear, AwqGEMVQuantLinear)):
@@ -170,7 +170,7 @@ class AwqTest(unittest.TestCase):
         with torch.device("meta"):
             model = OPTForCausalLM(config)
 
-        model, _ = replace_with_awq_linear(
+        model = replace_with_awq_linear(
             model, quantization_config=quantization_config, modules_to_not_convert=["lm_head"]
         )
         nb_awq_linear = 0
