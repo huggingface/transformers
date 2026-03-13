@@ -1542,6 +1542,7 @@ class CompileConfig:
         return copy.deepcopy({key: value for key, value in self.__dict__.items() if key != "_compile_all_devices"})
 
 
+# TODO: add the @strict decorator to prevent attributes passed as args rather than kwargs
 @dataclass
 class ContinuousBatchingConfig:
     """
