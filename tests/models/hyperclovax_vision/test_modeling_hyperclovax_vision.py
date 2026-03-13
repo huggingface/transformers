@@ -16,25 +16,20 @@
 import copy
 import unittest
 
-from transformers import (
-    HyperClovaXVisionConfig,
-    is_torch_available,
-    is_vision_available,
-)
-from transformers.testing_utils import require_torch, torch_device
+from transformers import HCXVisionConfig, is_torch_available
+from transformers.image_utils import load_image
+from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
     import torch
 
-    from transformers import HCXVisionForConditionalGeneration, HCXVisionModel
-
-if is_vision_available():
-    pass  # PIL imports if needed in future tests
+    from transformers import HCXVisionForConditionalGeneration, HCXVisionModel, HCXVisionV2Processor
 
 
 class HCXVisionModelTester:
@@ -94,7 +89,7 @@ class HCXVisionModelTester:
         self.seq_length = seq_length + self.num_image_tokens
 
     def get_config(self):
-        return HyperClovaXVisionConfig(
+        return HCXVisionConfig(
             text_config={
                 "vocab_size": self.vocab_size,
                 "hidden_size": self.hidden_size,
@@ -166,7 +161,7 @@ class HCXVisionForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         self.model_tester = HCXVisionModelTester(self)
         self.config_tester = ConfigTester(
             self,
-            config_class=HyperClovaXVisionConfig,
+            config_class=HCXVisionConfig,
             has_text_modality=False,
         )
 
@@ -243,107 +238,55 @@ class HCXVisionForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
 
 
 @require_torch
+@require_torch_accelerator
 class HCXVisionIntegrationTest(unittest.TestCase):
-    """
-    Integration tests that use a tiny randomly-initialised model created in-memory on CPU.
-    No Hub upload required.
-    """
+    model_id = "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B"
 
-    def _get_tiny_config(self):
-        return HyperClovaXVisionConfig(
-            text_config={
-                "vocab_size": 200,
-                "hidden_size": 64,
-                "intermediate_size": 128,
-                "num_hidden_layers": 2,
-                "num_attention_heads": 4,
-                "num_key_value_heads": 2,
-                "bos_token_id": 1,
-                "eos_token_id": 2,
-                "pad_token_id": 0,
-            },
-            vision_config={
-                "depth": 2,
-                "hidden_size": 64,
-                "num_heads": 4,
-                "patch_size": 14,
-                "spatial_merge_size": 1,
-                "temporal_patch_size": 2,
-                "in_channels": 3,
-                "intermediate_size": 64,
-                "out_hidden_size": 64,
-            },
-            img_start_id=50,
-            video_start_id=51,
-            mm_projector_type="mlp",
+    def setUp(self):
+        self.processor = HCXVisionV2Processor.from_pretrained(self.model_id)
+        self.messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": "What is shown in this image?"},
+                ],
+            }
+        ]
+        img_url = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
+        self.image = load_image(img_url).convert("RGB")
+        cleanup(torch_device, gc_collect=True)
 
-    def test_small_model_logits(self):
-        """
-        Verifies that a tiny randomly-initialised model produces logits of the expected
-        shape, and that results are reproducible given the same random seed.
-        """
-        config = self._get_tiny_config()
-        patch_size = config.vision_config.patch_size
-        temporal_patch_size = config.vision_config.temporal_patch_size
-        pixel_dim = 3 * (patch_size**2) * temporal_patch_size
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
 
-        # Inputs: single image with 1 patch, sequence length 3
-        pixel_values = torch.randn(1, pixel_dim)
-        image_grid_thw = torch.tensor([[1, 1, 1]])
-        input_ids = torch.tensor([[1, 50, 2]])  # [bos, img_start_id, eos]
-        attention_mask = torch.ones_like(input_ids)
+    def test_model_logits(self):
+        model = HCXVisionForConditionalGeneration.from_pretrained(
+            self.model_id, dtype=torch.bfloat16, device_map="auto"
+        )
+        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
 
-        torch.manual_seed(42)
-        model = HCXVisionForConditionalGeneration(config).eval()
         with torch.no_grad():
-            output = model(
-                input_ids=input_ids,
-                pixel_values=pixel_values,
-                image_grid_thw=image_grid_thw,
-                attention_mask=attention_mask,
-            )
+            output = model(**inputs)
 
-        self.assertIsNotNone(output.logits)
-        self.assertEqual(output.logits.shape[:2], torch.Size([1, 3]))
-        self.assertEqual(output.logits.shape[2], config.text_config.vocab_size)
+        EXPECTED_LOGITS_SLICE = torch.tensor(
+            [[-4.5938, -4.4062, -0.4121], [-5.5625, -5.4375, -0.8750], [-5.3750, -5.4375, -1.3984]],
+            dtype=torch.float32,
+        )
+        torch.testing.assert_close(output.logits[0, :3, :3].float().cpu(), EXPECTED_LOGITS_SLICE, atol=1e-2, rtol=1e-3)
 
-        # Reproducibility: same seed → same logits
-        torch.manual_seed(42)
-        model2 = HCXVisionForConditionalGeneration(config).eval()
-        with torch.no_grad():
-            output2 = model2(
-                input_ids=input_ids,
-                pixel_values=pixel_values,
-                image_grid_thw=image_grid_thw,
-                attention_mask=attention_mask,
-            )
-        torch.testing.assert_close(output.logits, output2.logits)
+    def test_model_generate(self):
+        model = HCXVisionForConditionalGeneration.from_pretrained(
+            self.model_id, dtype=torch.bfloat16, device_map="auto"
+        )
+        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
 
-    def test_small_model_generate(self):
-        """
-        Verifies that greedy generation produces a non-empty token sequence using a
-        tiny randomly-initialised model on CPU.
-        """
-        config = self._get_tiny_config()
-        patch_size = config.vision_config.patch_size
-        temporal_patch_size = config.vision_config.temporal_patch_size
-        pixel_dim = 3 * (patch_size**2) * temporal_patch_size
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        EXPECTED_DECODED_TEXT = "user\nWhat is shown in this image?\nassistant\n"
 
-        pixel_values = torch.randn(1, pixel_dim)
-        image_grid_thw = torch.tensor([[1, 1, 1]])
-        input_ids = torch.tensor([[1, 50]])  # [bos, img_start_id]
-
-        torch.manual_seed(0)
-        model = HCXVisionForConditionalGeneration(config).eval()
-        with torch.no_grad():
-            generated = model.generate(
-                input_ids=input_ids,
-                pixel_values=pixel_values,
-                image_grid_thw=image_grid_thw,
-                max_new_tokens=5,
-                do_sample=False,
-            )
-
-        # Generated sequence should be longer than input
-        self.assertGreater(generated.shape[1], input_ids.shape[1])
+        decoded = self.processor.decode(output[0], skip_special_tokens=True)
+        self.assertTrue(decoded.startswith(EXPECTED_DECODED_TEXT))
