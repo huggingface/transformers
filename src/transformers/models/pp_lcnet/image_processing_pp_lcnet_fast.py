@@ -27,12 +27,14 @@ import torchvision.transforms.v2.functional as tvF
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import SizeDict
-from ...utils import auto_docstring, requires_backends
+from ...utils import auto_docstring
 from ...utils.generic import TensorType
+from ...utils.import_utils import requires
 from .image_processing_pp_lcnet import PPLCNetImageProcessorKwargs
 
 
 @auto_docstring
+@requires(backends=("torch",))
 class PPLCNetImageProcessorFast(BaseImageProcessorFast):
     resample = 2
     image_mean = [0.406, 0.456, 0.485]
@@ -63,8 +65,6 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
         interpolation: Optional["tvF.InterpolationMode"],
         **kwargs,
     ) -> BatchFeature:
-        requires_backends(self, ["torch"])
-
         data = {}
         resize_images = []
         if do_resize:

@@ -19,7 +19,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_pp_ocrv5_mobile_det import *
-    from .image_processing_pp_ocrv5_mobile_det_fast import *
     from .modeling_pp_ocrv5_mobile_det import *
 else:
     import sys

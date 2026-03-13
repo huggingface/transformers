@@ -38,9 +38,9 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    requires_backends,
 )
 from ...utils.generic import TensorType, merge_with_config_defaults
+from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..mobilenet_v2.modeling_mobilenet_v2 import make_divisible
 from ..resnet.modeling_resnet import ResNetConvLayer
@@ -144,6 +144,7 @@ class PPLCNetImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
+@requires(backends=("torch",))
 class PPLCNetImageProcessorFast(BaseImageProcessorFast):
     resample = 2
     image_mean = [0.406, 0.456, 0.485]
@@ -174,8 +175,6 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
         interpolation: Optional["tvF.InterpolationMode"],
         **kwargs,
     ) -> BatchFeature:
-        requires_backends(self, ["torch"])
-
         data = {}
         resize_images = []
         if do_resize:
@@ -427,8 +426,8 @@ class PPLCNetBackbone(BackboneMixin, PPLCNetPreTrainedModel):
 
         self.post_init()
 
-    @filter_output_hidden_states
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -453,7 +452,7 @@ class PPLCNetBackbone(BackboneMixin, PPLCNetPreTrainedModel):
         >>> feature_maps = outputs.feature_maps
         >>> list(feature_maps[-1].shape)
         ```"""
-        kwargs["output_hidden_states"] = True
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
         hidden_states = self.encoder(pixel_values, **kwargs).hidden_states
 
         feature_maps = ()

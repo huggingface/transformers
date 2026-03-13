@@ -255,8 +255,8 @@ class PPLCNetBackbone(BackboneMixin, PPLCNetPreTrainedModel):
 
         self.post_init()
 
-    @filter_output_hidden_states
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -281,7 +281,7 @@ class PPLCNetBackbone(BackboneMixin, PPLCNetPreTrainedModel):
         >>> feature_maps = outputs.feature_maps
         >>> list(feature_maps[-1].shape)
         ```"""
-        kwargs["output_hidden_states"] = True
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
         hidden_states = self.encoder(pixel_values, **kwargs).hidden_states
 
         feature_maps = ()

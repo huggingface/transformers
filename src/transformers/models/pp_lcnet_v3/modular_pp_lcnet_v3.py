@@ -16,6 +16,7 @@ import torch
 import torch.nn as nn
 
 from ...activations import ACT2FN
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
 )
@@ -115,14 +116,14 @@ class PPLCNetV3LearnableAffineBlock(HGNetV2LearnableAffineBlock):
     pass
 
 
-class PPLCNetV3Act(nn.Module):
+class PPLCNetV3ActLearnableAffineBlock(nn.Module):
     """
     Activation block with a trainable affine transformation applied after the non-linear activation.
     """
 
     def __init__(self, activation="hardswish"):
         super().__init__()
-        self.act = ACT2FN[activation] if activation is not None else nn.Identity()
+        self.act = ACT2FN[activation]
         self.lab = PPLCNetV3LearnableAffineBlock()
 
     def forward(self, hidden_state: torch.Tensor):
@@ -180,7 +181,7 @@ class PPLCNetV3LearnableRepLayer(nn.Module):
         )
 
         self.lab = PPLCNetV3LearnableAffineBlock()
-        self.act = PPLCNetV3Act(activation=activation)
+        self.act = PPLCNetV3ActLearnableAffineBlock(activation=activation)
 
     def forward(self, hidden_state: torch.Tensor):
         output = None
@@ -239,7 +240,12 @@ class PPLCNetV3DepthwiseSeparableConvLayer(PPLCNetDepthwiseSeparableConvLayer):
 
 
 class PPLCNetV3PreTrainedModel(PPLCNetPreTrainedModel):
-    pass
+    @torch.no_grad()
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(module)
+        if isinstance(module, (PPLCNetV3LearnableAffineBlock)):
+            nn.init.ones_(module.scale)
+            nn.init.zeros_(module.bias)
 
 
 class PPLCNetV3Backbone(PPLCNetBackbone):

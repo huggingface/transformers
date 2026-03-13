@@ -25,22 +25,15 @@ from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
-    is_cv2_available,
     logging,
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
-from ..pp_ocrv5_server_det.image_processing_pp_ocrv5_server_det import PPOCRV5ServerDetImageProcessorKwargs
-from ..pp_ocrv5_server_det.image_processing_pp_ocrv5_server_det_fast import PPOCRV5ServerDetImageProcessorFast
 from ..pp_ocrv5_server_det.modeling_pp_ocrv5_server_det import (
     PPOCRV5ServerDetForObjectDetection,
     PPOCRV5ServerDetPreTrainedModel,
 )
-
-
-if is_cv2_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
@@ -104,15 +97,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         self.layer_list_out_channels = layer_list_out_channels
 
         super().__init__(**kwargs)
-
-
-class PPOCRV5MobileDetImageProcessorKwargs(PPOCRV5ServerDetImageProcessorKwargs):
-    pass
-
-
-@auto_docstring
-class PPOCRV5MobileDetImageProcessorFast(PPOCRV5ServerDetImageProcessorFast):
-    pass
 
 
 @auto_docstring
@@ -215,11 +199,13 @@ class PPOCRV5MobileDetNeck(nn.Module):
         for i in range(2, -1, -1):  # p4 -> p3-> p2
             fused[i] = fused[i] + F.interpolate(fused[i + 1], scale_factor=2, mode=self.interpolate_mode)
 
-        fused = [conv(feat) for conv, feat in zip(self.input_conv, [fused[0], fused[1], fused[2], fused[3]])]
-        upsample_scales = [1, 2, 4, 8]  # p2, p3, p4, p5
+        features = []
+        for conv, feat in zip(self.input_conv, [fused[0], fused[1], fused[2], fused[3]]):
+            features.append(conv(feat))
 
         processed = []
-        for feat, scale in zip(fused, upsample_scales):
+        upsample_scales = [1, 2, 4, 8]  # p2, p3, p4, p5
+        for feat, scale in zip(features, upsample_scales):
             if scale != 1:
                 hidden_states = F.interpolate(feat, scale_factor=scale, mode=self.interpolate_mode)
             else:
@@ -285,6 +271,7 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
     def __init__(self, config: PPOCRV5MobileDetConfig):
         super().__init__(config)
 
+        self.config = config
         self.backbone = load_backbone(config)
         out_channels = [self.backbone.num_features[i] for i in self.backbone.out_indices]
         self.layer = nn.ModuleList()
@@ -302,11 +289,14 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
         hidden_states: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+        if getattr(self.config, "output_hidden_states", False):  # get output_hidden_states from config
+            kwargs["output_hidden_states"] = True
         outputs = self.backbone(hidden_states, **kwargs)
-        feature_maps = list(outputs.feature_maps)
+        feature_maps = outputs.feature_maps
+        processed_features = []
         for i in range(len(feature_maps)):
-            feature_maps[i] = self.layer[i](feature_maps[i])
-        hidden_states = self.neck(feature_maps)
+            processed_features.append(self.layer[i](feature_maps[i]))
+        hidden_states = self.neck(processed_features)
 
         return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=outputs.hidden_states)
 
@@ -323,7 +313,6 @@ class PPOCRV5MobileDetForObjectDetection(PPOCRV5ServerDetForObjectDetection):
 
 __all__ = [
     "PPOCRV5MobileDetForObjectDetection",
-    "PPOCRV5MobileDetImageProcessorFast",
     "PPOCRV5MobileDetConfig",
     "PPOCRV5MobileDetModel",
     "PPOCRV5MobileDetPreTrainedModel",

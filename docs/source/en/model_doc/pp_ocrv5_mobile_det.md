@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-05-20 and added to Hugging Face Transformers on 2026-03-11.*
+*This model was released on 2025-05-20 and added to Hugging Face Transformers on 2026-03-13.*
 
 # PP-OCRv5_mobile_det
 
@@ -34,9 +34,33 @@ PP-OCRv5_mobile_det is one of the PP-OCRv5_det series, the latest generation of 
 
 ### Single input inference
 
-The example below demonstrates how to detect text with PP-OCRV5_Mobile_Det using the [`AutoModel`].
+The example below demonstrates how to detect text with PP-OCRV5_Mobile_Det using the [`Pipeline`] or the [`AutoModel`].
 
 <hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```py
+import requests
+from PIL import Image
+from transformers import pipeline
+
+image = Image.open(
+    requests.get(
+        "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True
+    ).raw)
+detector = pipeline(
+    task="object-detection", 
+    model="PaddlePaddle/PP-OCRV5_mobile_det_safetensors",
+    device_map="auto",
+)
+results = detector(image)
+
+for result in results:
+    print(result)
+
+```
+
+</hfoption>
 <hfoption id="AutoModel">
 
 ```py
@@ -45,11 +69,11 @@ from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
 model_path="PaddlePaddle/PP-OCRv5_mobile_det_safetensors"
-model = AutoModelForObjectDetection.from_pretrained(model_path)
+model = AutoModelForObjectDetection.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True).raw).convert("RGB")
-inputs = image_processor(images=image, return_tensors="pt")
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
 results = image_processor.post_process_object_detection(outputs, target_sizes=inputs["target_sizes"])
@@ -65,9 +89,34 @@ for result in results:
 
 ### Batched inference
 
-Here is how you can do it with PP-OCRV5_Mobile_Det using the [`AutoModel`]:
+Here is how you can do it with PP-OCRV5_Mobile_Det using the [`Pipeline`] or the [`AutoModel`]:
 
 <hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```py
+import requests
+from PIL import Image
+from transformers import pipeline
+
+image = Image.open(
+    requests.get(
+        "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True
+    ).raw)
+detector = pipeline(
+    task="object-detection", 
+    model="PaddlePaddle/PP-OCRV5_mobile_det_safetensors",
+    device_map="auto",
+)
+results = detector([image, image])
+
+for result in results:
+    print(result)
+
+```
+
+</hfoption>
+
 <hfoption id="AutoModel">
 
 ```py
@@ -76,11 +125,11 @@ from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
 model_path="PaddlePaddle/PP-OCRv5_mobile_det_safetensors"
-model = AutoModelForObjectDetection.from_pretrained(model_path)
+model = AutoModelForObjectDetection.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True).raw).convert("RGB")
-inputs = image_processor(images=[image, image], return_tensors="pt")
+inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
 results = image_processor.post_process_object_detection(outputs, target_sizes=inputs["target_sizes"])
@@ -105,11 +154,3 @@ for result in results:
 ## PPOCRV5MobileDetModel
 
 [[autodoc]] PPOCRV5MobileDetModel
-
-## PPOCRV5MobileDetImageProcessorFast
-
-[[autodoc]] PPOCRV5MobileDetImageProcessorFast
-
-## PPOCRV5MobileDetImageProcessor
-
-[[autodoc]] PPOCRV5MobileDetImageProcessor

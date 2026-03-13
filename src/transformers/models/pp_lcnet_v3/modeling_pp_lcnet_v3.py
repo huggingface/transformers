@@ -75,14 +75,14 @@ class PPLCNetV3LearnableAffineBlock(nn.Module):
         return hidden_state
 
 
-class PPLCNetV3Act(nn.Module):
+class PPLCNetV3ActLearnableAffineBlock(nn.Module):
     """
     Activation block with a trainable affine transformation applied after the non-linear activation.
     """
 
     def __init__(self, activation="hardswish"):
         super().__init__()
-        self.act = ACT2FN[activation] if activation is not None else nn.Identity()
+        self.act = ACT2FN[activation]
         self.lab = PPLCNetV3LearnableAffineBlock()
 
     def forward(self, hidden_state: torch.Tensor):
@@ -140,7 +140,7 @@ class PPLCNetV3LearnableRepLayer(nn.Module):
         )
 
         self.lab = PPLCNetV3LearnableAffineBlock()
-        self.act = PPLCNetV3Act(activation=activation)
+        self.act = PPLCNetV3ActLearnableAffineBlock(activation=activation)
 
     def forward(self, hidden_state: torch.Tensor):
         output = None
@@ -306,6 +306,13 @@ class PPLCNetV3PreTrainedModel(PreTrainedModel):
         "hidden_states": PPLCNetV3Block,
     }
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, (PPLCNetV3LearnableAffineBlock)):
+            nn.init.ones_(module.scale)
+            nn.init.zeros_(module.bias)
+
 
 @auto_docstring(
     custom_intro="""
@@ -325,8 +332,8 @@ class PPLCNetV3Backbone(BackboneMixin, PPLCNetV3PreTrainedModel):
 
         self.post_init()
 
-    @filter_output_hidden_states
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -351,7 +358,7 @@ class PPLCNetV3Backbone(BackboneMixin, PPLCNetV3PreTrainedModel):
         >>> feature_maps = outputs.feature_maps
         >>> list(feature_maps[-1].shape)
         ```"""
-        kwargs["output_hidden_states"] = True
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
         hidden_states = self.encoder(pixel_values, **kwargs).hidden_states
 
         feature_maps = ()

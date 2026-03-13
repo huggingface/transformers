@@ -45,6 +45,7 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.generic import TensorType
+from ...utils.import_utils import requires
 from ..auto import AutoConfig
 
 
@@ -148,6 +149,7 @@ class PPOCRV5ServerDetImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
+@requires(backends=("torch",))
 class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
     resample = 2
     image_mean = [0.406, 0.456, 0.485]
@@ -179,8 +181,6 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        requires_backends(self, ["torch"])
-
         target_sizes = []
 
         # Group images by their original spatial shape to enable batched resizing (optimization for efficiency)

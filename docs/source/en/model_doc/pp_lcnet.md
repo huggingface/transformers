@@ -110,10 +110,10 @@ from transformers import AutoImageProcessor, AutoModelForImageClassification
 
 model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
 model = AutoModelForImageClassification.from_pretrained(model_path, device_map="auto")
-image_processor = AutoImageProcessor.from_pretrained(model_path).to(model.device)
+image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg", stream=True).raw)
-inputs = image_processor(images=[image, image], return_tensors="pt")
+inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
 predicted_labels = outputs.logits.argmax(-1)

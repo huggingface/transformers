@@ -23,12 +23,11 @@ from parameterized import parameterized
 from transformers import (
     PPOCRV5MobileDetConfig,
     PPOCRV5MobileDetForObjectDetection,
-    PPOCRV5MobileDetImageProcessorFast,
+    PPOCRV5ServerDetImageProcessorFast,
     is_torch_available,
     is_vision_available,
 )
 from transformers.testing_utils import (
-    is_flaky,
     require_cv2,
     require_torch,
     require_torch_accelerator,
@@ -150,9 +149,9 @@ class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @is_flaky()
-    def test_batching_equivalence(self, atol=5e-2, rtol=5e-2):
-        super().test_batching_equivalence(atol=atol, rtol=rtol)
+    # @is_flaky()
+    # def test_batching_equivalence(self, atol=5e-2, rtol=5e-2):
+    #     super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     @unittest.skip(reason="PPOCRV5MobileDet does not support input and output embeddings")
     def test_model_common_attributes(self):
@@ -242,7 +241,7 @@ class PPOCRV5MobileDetModelIntegrationTest(unittest.TestCase):
         model_path = "PaddlePaddle/PP-OCRv5_mobile_det_safetensors"
         self.model = PPOCRV5MobileDetForObjectDetection.from_pretrained(model_path).to(torch_device)
         self.image_processor = (
-            PPOCRV5MobileDetImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
+            PPOCRV5ServerDetImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
         )
         url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png"
         self.image = Image.open(requests.get(url, stream=True).raw)

@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -142,11 +143,13 @@ class PPOCRV5MobileDetNeck(nn.Module):
         for i in range(2, -1, -1):  # p4 -> p3-> p2
             fused[i] = fused[i] + F.interpolate(fused[i + 1], scale_factor=2, mode=self.interpolate_mode)
 
-        fused = [conv(feat) for conv, feat in zip(self.input_conv, [fused[0], fused[1], fused[2], fused[3]])]
-        upsample_scales = [1, 2, 4, 8]  # p2, p3, p4, p5
+        features = []
+        for conv, feat in zip(self.input_conv, [fused[0], fused[1], fused[2], fused[3]]):
+            features.append(conv(feat))
 
         processed = []
-        for feat, scale in zip(fused, upsample_scales):
+        upsample_scales = [1, 2, 4, 8]  # p2, p3, p4, p5
+        for feat, scale in zip(features, upsample_scales):
             if scale != 1:
                 hidden_states = F.interpolate(feat, scale_factor=scale, mode=self.interpolate_mode)
             else:
@@ -212,6 +215,7 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
     def __init__(self, config: PPOCRV5MobileDetConfig):
         super().__init__(config)
 
+        self.config = config
         self.backbone = load_backbone(config)
         out_channels = [self.backbone.num_features[i] for i in self.backbone.out_indices]
         self.layer = nn.ModuleList()
@@ -229,18 +233,21 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
         hidden_states: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+        if getattr(self.config, "output_hidden_states", False):  # get output_hidden_states from config
+            kwargs["output_hidden_states"] = True
         outputs = self.backbone(hidden_states, **kwargs)
-        feature_maps = list(outputs.feature_maps)
+        feature_maps = outputs.feature_maps
+        processed_features = []
         for i in range(len(feature_maps)):
-            feature_maps[i] = self.layer[i](feature_maps[i])
-        hidden_states = self.neck(feature_maps)
+            processed_features.append(self.layer[i](feature_maps[i]))
+        hidden_states = self.neck(processed_features)
 
         return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=outputs.hidden_states)
 
 
 @auto_docstring(
     custom_intro="""
-    PPOCRV5 Server Det model for object (text) detection tasks. Wraps the core PPOCRV5MobileDetModel
+    PPOCRV5 Mobile Det model for object (text) detection tasks. Wraps the core PPOCRV5MobileDetModel
     and returns outputs compatible with the Transformers object detection API.
     """
 )
