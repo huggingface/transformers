@@ -294,7 +294,7 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 ]
             )
             if model.__class__.__name__ == "AutoformerModel":
-                expected_arg_names.extend(["cache_position", "kwargs"])
+                expected_arg_names.extend(["kwargs"])
             elif model.__class__.__name__ == "AutoformerForPrediction":
                 expected_arg_names.extend(["kwargs"])
 
