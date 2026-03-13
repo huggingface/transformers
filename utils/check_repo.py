@@ -46,7 +46,7 @@ from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_M
 from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
 from transformers.models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
 from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
-from transformers.testing_utils import _COMMON_MODEL_NAMES_MAP
+from transformers.testing_utils import _COMMON_MODEL_NAMES_MAP, _VLM_COMMON_MODEL_NAMES_MAP
 from transformers.utils import ENV_VARS_TRUE_VALUES, direct_transformers_import
 
 
@@ -126,6 +126,10 @@ PRIVATE_MODELS = [
     "MetaClip2TextTransformer",
     "MetaClip2VisionTransformer",
     "MLCDVisionTransformer",
+    "Kosmos2TextTransformer",
+    "Kosmos2VisionTransformer",
+    "Kosmos2_5TextTransformer",
+    "XCLIPVisionTransformer",
     # end of should have beens
     "VoxtralRealtimeTextModel",
     "VoxtralRealtimeTextForCausalLM",
@@ -180,6 +184,7 @@ IGNORE_NON_TESTED = (
         "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
         "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
         "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
+        "PPOCRV5ServerDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerDetForObjectDetection.
         "PPDocLayoutV2ReadingOrder",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
         "PPDocLayoutV2Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
         "PPDocLayoutV3Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV3ForObjectDetection.
@@ -433,6 +438,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Emu3TextModel",  # Building part of bigger (tested) model
     "JanusVQVAE",  # no autoclass for VQ-VAE models
     "JanusVisionModel",  # Building part of bigger (tested) model
+    "PPOCRV5ServerDetModel",  # Building part of bigger (tested) model
     "PPDocLayoutV2Model",  # Building part of bigger (tested) model
     "PaddleOCRVLModel",  # Building part of bigger (tested) model
     "PaddleOCRVisionModel",  # Building part of bigger (tested) model
@@ -682,6 +688,9 @@ def find_tested_models(test_file: str) -> set[str]:
     Returns:
         `Set[str]`: The set of models tested in that file.
     """
+    # TODO Matt: Some of the regexes here are ugly / hacky, and we can probably parse the content better.
+    #            Also we should be clear about exactly what rules we're enforcing and which classes
+    #            are actually mandatory.
     with open(os.path.join(PATH_TO_TESTS, test_file), "r", encoding="utf-8", newline="\n") as f:
         content = f.read()
 
@@ -717,6 +726,29 @@ def find_tested_models(test_file: str) -> set[str]:
                 tested_class = tested_class[0].split("=")[1].strip()
             else:
                 tested_class = model_name + _COMMON_MODEL_NAMES_MAP[test_class_type]
+            model_tested.add(tested_class)
+    # Same as above, but for VLMModelTester. We scope the search to the VLMModelTester subclass body, as some
+    # files may contain both a CausalLMModelTester and a VLMModelTester (e.g. gemma3).
+    vlm_class_match = re.search(r"class \w+\(VLMModelTester\)", content)
+    if vlm_class_match is not None:
+        vlm_content = content[vlm_class_match.start() :]
+        base_model_class = re.findall(r"base_model_class\s+=.*", vlm_content)  # Required attribute
+        base_class = base_model_class[0].split("=")[1].strip()
+        model_tested.add(base_class)
+
+        model_name = base_class.replace("Model", "")
+        # Optional attributes: if not set explicitly, the tester will attempt to infer and use the corresponding class
+        for test_class_type in [
+            "conditional_generation_class",
+            "sequence_classification_class",
+        ]:
+            tested_class = re.findall(rf"{test_class_type}\s+=.*", vlm_content)
+            if tested_class:
+                tested_class = tested_class[0].split("=")[1].strip()
+            elif test_class_type in _VLM_COMMON_MODEL_NAMES_MAP:
+                tested_class = model_name + _VLM_COMMON_MODEL_NAMES_MAP[test_class_type]
+            else:
+                continue
             model_tested.add(tested_class)
 
     return model_tested

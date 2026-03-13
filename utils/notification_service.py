@@ -35,7 +35,7 @@ from slack_sdk import WebClient
 # `additional_files`.
 job_to_test_map = {
     "run_models_gpu": "Models",
-    "run_trainer_and_fsdp_gpu": "Trainer & FSDP",
+    "run_trainer_and_fsdp_gpu": "Trainer & DDP & FSDP",
     "run_pipelines_torch_gpu": "PyTorch pipelines",
     "run_examples_gpu": "Examples directory",
     "run_torch_cuda_extensions_gpu": "DeepSpeed",
@@ -46,7 +46,7 @@ job_to_test_map = {
 # The values are used as the file names where to save the corresponding CI job results.
 test_to_result_name = {
     "Models": "model",
-    "Trainer & FSDP": "trainer_and_fsdp",
+    "Trainer & DDP & FSDP": "trainer_and_fsdp",
     "PyTorch pipelines": "torch_pipeline",
     "Examples directory": "example",
     "DeepSpeed": "deepspeed",
@@ -55,8 +55,9 @@ test_to_result_name = {
 }
 
 NON_MODEL_TEST_MODULES = [
+    "ddp",
     "deepspeed",
-    "extended",
+    "fsdp",
     "fixtures",
     "generation",
     "onnx",
@@ -65,7 +66,6 @@ NON_MODEL_TEST_MODULES = [
     "sagemaker",
     "trainer",
     "utils",
-    "fsdp",
     "quantization",
     "kernels",
 ]

@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
+@auto_docstring(checkpoint="facebook/sam3")
 class Sam3TrackerPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -59,7 +59,7 @@ class Sam3TrackerPromptEncoderConfig(PreTrainedConfig):
         self.scale = scale
 
 
-@auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
+@auto_docstring(checkpoint="facebook/sam3")
 class Sam3TrackerMaskDecoderConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*, defaults to 2048):
@@ -117,7 +117,7 @@ class Sam3TrackerMaskDecoderConfig(PreTrainedConfig):
         self.attention_downsample_rate = attention_downsample_rate
 
 
-@auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
+@auto_docstring(checkpoint="facebook/sam3")
 class Sam3TrackerConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `Sam3TrackerPromptEncoderConfig`], *optional*):
