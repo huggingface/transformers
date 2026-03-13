@@ -127,10 +127,8 @@ class AwqTest(unittest.TestCase):
         Setup quantized model
         """
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        # Use GEMM so that test_save_pretrained() writes out the quantized weights.
-        quantization_config = AwqConfig(backend=AwqBackend.GEMM)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
-            cls.model_name, device_map=cls.device_map, quantization_config=quantization_config
+            cls.model_name, device_map=cls.device_map
         )
 
     def tearDown(self):
