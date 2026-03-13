@@ -629,10 +629,12 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.assertTrue(hasattr(model, "lm_head"))
         self.assertTrue(hasattr(model.model, "vision_embedding"))
 
-        input_ids = torch.randint(0, config.vocab_size, (1, 10), device=torch_device, dtype=torch.long)
+        input_vocab_size = model.get_input_embeddings().num_embeddings
+        output_vocab_size = model.get_output_embeddings().out_features
+        input_ids = torch.randint(0, input_vocab_size, (1, 10), device=torch_device, dtype=torch.long)
         with torch.no_grad():
             outputs = model(input_ids=input_ids, return_dict=True)
-        self.assertEqual(outputs.logits.shape, (1, 10, config.vocab_size))
+        self.assertEqual(outputs.logits.shape, (1, 10, output_vocab_size))
 
     def test_isaac_for_conditional_generation_loss_and_generate_flag(self):
         config = self.model_tester.get_config()
@@ -640,13 +642,15 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.assertTrue(model.can_generate())
 
         batch_size, seq_len = 1, 8
-        input_ids = torch.randint(0, config.vocab_size, (batch_size, seq_len), device=torch_device)
-        labels = torch.randint(0, config.vocab_size, (batch_size, seq_len), device=torch_device)
+        input_vocab_size = model.get_input_embeddings().num_embeddings
+        output_vocab_size = model.get_output_embeddings().out_features
+        input_ids = torch.randint(0, input_vocab_size, (batch_size, seq_len), device=torch_device)
+        labels = torch.randint(0, output_vocab_size, (batch_size, seq_len), device=torch_device)
         with torch.no_grad():
             outputs = model(input_ids=input_ids, labels=labels, return_dict=True)
         self.assertIsNotNone(outputs.loss)
         self.assertEqual(outputs.loss.ndim, 0)
-        self.assertEqual(outputs.logits.shape, (batch_size, seq_len, config.vocab_size))
+        self.assertEqual(outputs.logits.shape, (batch_size, seq_len, output_vocab_size))
 
 
 @require_torch
