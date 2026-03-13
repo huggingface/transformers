@@ -149,10 +149,6 @@ class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # @is_flaky()
-    # def test_batching_equivalence(self, atol=5e-2, rtol=5e-2):
-    #     super().test_batching_equivalence(atol=atol, rtol=rtol)
-
     @unittest.skip(reason="PPOCRV5MobileDet does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
@@ -206,7 +202,7 @@ class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
             # check that output_hidden_states also work using config
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
-
+            self._set_subconfig_attributes(config, "output_hidden_states", True)
             check_hidden_states_output(inputs_dict, config, model_class)
 
     @parameterized.expand(["float32", "float16", "bfloat16"])

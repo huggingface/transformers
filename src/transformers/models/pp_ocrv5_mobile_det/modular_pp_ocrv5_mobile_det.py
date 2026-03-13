@@ -33,6 +33,7 @@ from ..auto import AutoConfig
 from ..pp_ocrv5_server_det.modeling_pp_ocrv5_server_det import (
     PPOCRV5ServerDetForObjectDetection,
     PPOCRV5ServerDetPreTrainedModel,
+    PPOCRV5ServerDetSegmentationHead,
 )
 
 
@@ -216,48 +217,13 @@ class PPOCRV5MobileDetNeck(nn.Module):
         return fused_feature_map
 
 
-class PPOCRV5MobileDetHead(nn.Module):
-    """
-    Head sub-module for PPOCRV5 Mobile Det, responsible for generating text segmentation maps.
-    Uses two transposed convolutions for upsampling to recover the original image spatial scale,
-    and a sigmoid activation to produce binary segmentation logits.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-
-        in_channels = config.neck_out_channels
-        kernel_list = config.kernel_list
-        self.conv1 = nn.Conv2d(
-            in_channels=in_channels,
-            out_channels=in_channels // 4,
-            kernel_size=kernel_list[0],
-            padding=int(kernel_list[0] // 2),
-            bias=False,
-        )
-        self.bn1 = nn.BatchNorm2d(in_channels // 4)
-        self.relu1 = nn.ReLU()
-
-        self.conv2 = nn.ConvTranspose2d(
-            in_channels=in_channels // 4,
-            out_channels=in_channels // 4,
-            kernel_size=kernel_list[1],
-            stride=2,
-        )
-        self.bn2 = nn.BatchNorm2d(in_channels // 4)
-        self.relu2 = nn.ReLU()
-
-        self.conv3 = nn.ConvTranspose2d(
-            in_channels=in_channels // 4,
-            out_channels=1,
-            kernel_size=kernel_list[2],
-            stride=2,
-        )
-
-    def forward(self, hidden_states):
-        hidden_states = self.relu1(self.bn1(self.conv1(hidden_states)))
-        hidden_states = self.relu2(self.bn2(self.conv2(hidden_states)))
-        hidden_states = torch.sigmoid(self.conv3(hidden_states))
+class PPOCRV5MobileDetHead(PPOCRV5ServerDetSegmentationHead):
+    # MobileDet does not return residual features
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        hidden_states = self.conv_down(hidden_states)
+        hidden_states = self.conv_up(hidden_states)
+        hidden_states = self.conv_final(hidden_states)
+        hidden_states = torch.sigmoid(hidden_states)
         return hidden_states
 
 
@@ -289,8 +255,6 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
         hidden_states: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
-        if getattr(self.config, "output_hidden_states", False):  # get output_hidden_states from config
-            kwargs["output_hidden_states"] = True
         outputs = self.backbone(hidden_states, **kwargs)
         feature_maps = outputs.feature_maps
         processed_features = []

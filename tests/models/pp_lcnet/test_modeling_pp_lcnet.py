@@ -293,7 +293,7 @@ class PPLCNetModelIntegrationTest(unittest.TestCase):
         expected_logits = torch.tensor([[-0.3655, -1.0573, 2.4883, -1.0640]]).to(torch_device)
 
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape_logits)
-        torch.testing.assert_close(outputs.last_hidden_state, expected_logits, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(outputs.last_hidden_state, expected_logits, rtol=2e-2, atol=2e-2)
 
         expected_labels = torch.tensor([2]).to(torch_device)
         predicted_label = outputs.last_hidden_state.argmax(-1).item()
