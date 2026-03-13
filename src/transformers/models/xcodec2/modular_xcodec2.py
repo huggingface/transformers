@@ -30,6 +30,7 @@ from torch.nn import Module, Parameter
 
 from transformers.activations import ACT2FN
 
+from ... import initialization as init
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -315,6 +316,8 @@ class LowPassFilter1d(nn.Module):
         self.stride = stride
         self.padding = padding
         self.padding_mode = padding_mode
+        self.cutoff = cutoff
+        self.half_width = half_width
         filter = kaiser_sinc_filter1d(cutoff, half_width, kernel_size)
         self.register_buffer("filter", filter)
 
@@ -351,7 +354,9 @@ class UpSample1d(nn.Module):
         self.pad = self.kernel_size // ratio - 1
         self.pad_left = self.pad * self.stride + (self.kernel_size - self.stride) // 2
         self.pad_right = self.pad * self.stride + (self.kernel_size - self.stride + 1) // 2
-        filter = kaiser_sinc_filter1d(cutoff=0.5 / ratio, half_width=0.6 / ratio, kernel_size=self.kernel_size)
+        self.cutoff = 0.5 / ratio
+        self.half_width = 0.6 / ratio
+        filter = kaiser_sinc_filter1d(cutoff=self.cutoff, half_width=self.half_width, kernel_size=self.kernel_size)
         self.register_buffer("filter", filter)
 
     def forward(self, x):
@@ -904,6 +909,8 @@ class Xcodec2FSQ(Module):
     ):
         super().__init__()
 
+        self.levels = levels
+
         _levels = torch.tensor(levels, dtype=int32)
         self.register_buffer("_levels", _levels, persistent=False)
 
@@ -1359,6 +1366,20 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
                 # Linear scale alphas initialized to ones
                 module.alpha.data.fill_(1.0)
                 module.beta.data.fill_(1.0)
+        elif isinstance(module, Xcodec2FSQ):
+            # Non-persistent buffers computed deterministically from config; must be
+            # materialized here for the meta-device initialization flow (same pattern
+            # as RotaryEmbedding.inv_freq in the base PreTrainedModel._init_weights).
+            levels = module.levels
+            init.copy_(module._levels, torch.tensor(levels, dtype=int32))
+            init.copy_(module._basis, torch.cumprod(torch.tensor([1] + levels[:-1]), dim=0, dtype=int32))
+            if module.return_indices:
+                init.copy_(module.implicit_codebook, module._indices_to_codes(torch.arange(module.codebook_size)))
+        elif isinstance(module, Xcodec2ResidualFSQ):
+            # scales buffer: (levels - 1) ** -ind for each quantizer
+            levels_tensor = torch.tensor(module.levels, dtype=torch.float)
+            scales = torch.stack([(levels_tensor - 1) ** -ind for ind in range(module.num_quantizers)])
+            init.copy_(module.scales, scales)
 
 
 XCODEC2_START_DOCSTRING = r"""
