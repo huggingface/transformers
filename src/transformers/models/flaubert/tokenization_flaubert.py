@@ -184,22 +184,13 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         cls_token="</s>",
         mask_token="<special1>",
-        additional_special_tokens=[
-            "<special0>",
-            "<special1>",
-            "<special2>",
-            "<special3>",
-            "<special4>",
-            "<special5>",
-            "<special6>",
-            "<special7>",
-            "<special8>",
-            "<special9>",
-        ],
+        additional_special_tokens=None,
         lang2id=None,
         id2lang=None,
         **kwargs,
     ):
+        if additional_special_tokens is None:
+            additional_special_tokens = []
         do_lowercase_and_remove_accent = kwargs.pop("do_lowercase_and_remove_accent", None)
         if do_lowercase_and_remove_accent is not None:
             logger.warning(

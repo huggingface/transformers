@@ -160,7 +160,7 @@ class NemotronHConfig(PretrainedConfig):
         norm_topk_prob=True,
         # Multi-token prediction config
         num_nextn_predict_layers=0,
-        mtp_layers_block_type=["attention", "moe"],
+        mtp_layers_block_type=None,
         # General training config
         use_bias=False,
         initializer_range=0.02,
@@ -172,6 +172,8 @@ class NemotronHConfig(PretrainedConfig):
     ):
         # Backward compatibility: convert hybrid_override_pattern to layers_block_type
         # Always pop hybrid_override_pattern from kwargs to prevent it from being set as an attribute
+        if mtp_layers_block_type is None:
+            mtp_layers_block_type = []
         if "hybrid_override_pattern" in kwargs:
             pattern = kwargs.pop("hybrid_override_pattern")
             if layers_block_type is None:

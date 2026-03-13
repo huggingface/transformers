@@ -374,7 +374,7 @@ def convert_model(
 
 
 def _prepare_image(processor: EomtImageProcessorFast) -> torch.Tensor:
-    image = Image.open(requests.get(CAT_URL, stream=True).raw).convert("RGB")
+    image = Image.open(requests.get(CAT_URL, stream=True, timeout=10.0).raw).convert("RGB")
     inputs = processor(images=image, do_normalize=False, return_tensors="pt")
     return inputs.pixel_values
 

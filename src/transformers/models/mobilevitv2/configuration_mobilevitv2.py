@@ -70,17 +70,23 @@ class MobileViTV2Config(PreTrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         aspp_out_channels=512,
-        atrous_rates=[6, 12, 18],
+        atrous_rates=None,
         aspp_dropout_prob=0.1,
         semantic_loss_ignore_index=255,
-        n_attn_blocks=[2, 4, 3],
-        base_attn_unit_dims=[128, 192, 256],
+        n_attn_blocks=None,
+        base_attn_unit_dims=None,
         width_multiplier=1.0,
         ffn_multiplier=2,
         attn_dropout=0.0,
         ffn_dropout=0.0,
         **kwargs,
     ):
+        if atrous_rates is None:
+            atrous_rates = []
+        if n_attn_blocks is None:
+            n_attn_blocks = []
+        if base_attn_unit_dims is None:
+            base_attn_unit_dims = []
         super().__init__(**kwargs)
 
         self.num_channels = num_channels

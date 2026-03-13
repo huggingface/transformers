@@ -119,7 +119,7 @@ class OneFormerConfig(PreTrainedConfig):
         is_training: bool = False,
         use_auxiliary_loss: bool = True,
         output_auxiliary_logits: bool = True,
-        strides: list | None = [4, 8, 16, 32],
+        strides: list | None = None,
         task_seq_len: int = 77,
         text_encoder_width: int = 256,
         text_encoder_context_length: int = 77,
@@ -144,6 +144,8 @@ class OneFormerConfig(PreTrainedConfig):
         common_stride: int = 4,
         **kwargs,
     ):
+        if strides is None:
+            strides = []
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
             default_config_type="swin",

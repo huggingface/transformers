@@ -76,24 +76,46 @@ class HGNetV2Config(BackboneConfigMixin, PreTrainedConfig):
         self,
         num_channels=3,
         embedding_size=64,
-        depths=[3, 4, 6, 3],
-        hidden_sizes=[256, 512, 1024, 2048],
+        depths=None,
+        hidden_sizes=None,
         hidden_act="relu",
         out_features=None,
         out_indices=None,
-        stem_channels=[3, 32, 48],
-        stage_in_channels=[48, 128, 512, 1024],
-        stage_mid_channels=[48, 96, 192, 384],
-        stage_out_channels=[128, 512, 1024, 2048],
-        stage_num_blocks=[1, 1, 3, 1],
-        stage_downsample=[False, True, True, True],
-        stage_light_block=[False, False, True, True],
-        stage_kernel_size=[3, 3, 5, 5],
-        stage_numb_of_layers=[6, 6, 6, 6],
+        stem_channels=None,
+        stage_in_channels=None,
+        stage_mid_channels=None,
+        stage_out_channels=None,
+        stage_num_blocks=None,
+        stage_downsample=None,
+        stage_light_block=None,
+        stage_kernel_size=None,
+        stage_numb_of_layers=None,
         use_learnable_affine_block=False,
         initializer_range=0.02,
         **kwargs,
     ):
+        if depths is None:
+            depths = []
+        if hidden_sizes is None:
+            hidden_sizes = []
+        if stem_channels is None:
+            stem_channels = []
+        if stage_in_channels is None:
+            stage_in_channels = []
+        if stage_mid_channels is None:
+            stage_mid_channels = []
+        if stage_out_channels is None:
+            stage_out_channels = []
+        if stage_num_blocks is None:
+            stage_num_blocks = []
+        if stage_downsample is None:
+            stage_downsample = []
+        if stage_light_block is None:
+            stage_light_block = []
+        if stage_kernel_size is None:
+            stage_kernel_size = []
+        if stage_numb_of_layers is None:
+            stage_numb_of_layers = []
         super().__init__(**kwargs)
         self.num_channels = num_channels
         self.embedding_size = embedding_size

@@ -104,7 +104,7 @@ def load_config_from_state_dict(opus_dict):
     import yaml
 
     cfg_str = "".join([chr(x) for x in opus_dict[CONFIG_KEY]])
-    yaml_cfg = yaml.load(cfg_str[:-1], Loader=yaml.BaseLoader)
+    yaml_cfg = yaml.safe_load(cfg_str[:-1], Loader=yaml.BaseLoader)
     return cast_marian_config(yaml_cfg)
 
 
@@ -211,12 +211,14 @@ def write_model_card(
     repo_root=DEFAULT_REPO,
     save_dir=Path("marian_converted"),
     dry_run=False,
-    extra_metadata={},
+    extra_metadata=None,
 ) -> str:
     """
     Copy the most recent model's readme section from opus, and add metadata. upload command: aws s3 sync model_card_dir
     s3://models.huggingface.co/bert/Helsinki-NLP/ --dryrun
     """
+    if extra_metadata is None:
+        extra_metadata = {}
     import pandas as pd
 
     hf_model_name = remove_prefix(hf_model_name, ORG_NAME)
@@ -681,7 +683,7 @@ def load_yaml(path):
     import yaml
 
     with open(path, encoding="utf-8") as f:
-        return yaml.load(f, Loader=yaml.BaseLoader)
+        return yaml.safe_load(f, Loader=yaml.BaseLoader)
 
 
 def save_json(content: dict | list, path: str) -> None:

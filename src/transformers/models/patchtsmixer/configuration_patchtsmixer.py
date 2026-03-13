@@ -149,7 +149,7 @@ class PatchTSMixerConfig(PreTrainedConfig):
         # Pretrain model configuration
         mask_type: str = "random",
         random_mask_ratio: float = 0.5,
-        num_forecast_mask_patches: list[int] | int | None = [2],
+        num_forecast_mask_patches: list[int] | int | None = None,
         mask_value: int = 0,
         masked_loss: bool = True,
         channel_consistent_masking: bool = True,
@@ -166,6 +166,8 @@ class PatchTSMixerConfig(PreTrainedConfig):
         head_aggregation: str = "max_pool",
         **kwargs,
     ):
+        if num_forecast_mask_patches is None:
+            num_forecast_mask_patches = []
         self.num_input_channels = num_input_channels
         self.context_length = context_length
         self.patch_length = patch_length

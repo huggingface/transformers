@@ -75,18 +75,13 @@ class ApertusConfig(PreTrainedConfig):
         bos_token_id: int | None = 1,
         eos_token_id: int | None = 2,
         tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | None = {
-            "rope_type": "llama3",
-            "rope_theta": 12000000.0,
-            "factor": 8.0,
-            "original_max_position_embeddings": 8192,
-            "low_freq_factor": 1.0,
-            "high_freq_factor": 4.0,
-        },
+        rope_parameters: RopeParameters | None = None,
         attention_bias: bool | None = False,
         attention_dropout: float | None = 0.0,
         **kwargs,
     ):
+        if rope_parameters is None:
+            rope_parameters = {}
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

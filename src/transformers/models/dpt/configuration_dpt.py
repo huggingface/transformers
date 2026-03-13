@@ -100,10 +100,10 @@ class DPTConfig(PreTrainedConfig):
         num_channels=3,
         is_hybrid=False,
         qkv_bias=True,
-        backbone_out_indices=[2, 5, 8, 11],
+        backbone_out_indices=None,
         readout_type="project",
-        reassemble_factors=[4, 2, 1, 0.5],
-        neck_hidden_sizes=[96, 192, 384, 768],
+        reassemble_factors=None,
+        neck_hidden_sizes=None,
         fusion_hidden_size=256,
         head_in_index=-1,
         use_batch_norm_in_fusion_residual=False,
@@ -113,13 +113,23 @@ class DPTConfig(PreTrainedConfig):
         auxiliary_loss_weight=0.4,
         semantic_loss_ignore_index=255,
         semantic_classifier_dropout=0.1,
-        backbone_featmap_shape=[1, 1024, 24, 24],
-        neck_ignore_stages=[0, 1],
+        backbone_featmap_shape=None,
+        neck_ignore_stages=None,
         backbone_config=None,
         pooler_output_size=None,
         pooler_act="tanh",
         **kwargs,
     ):
+        if backbone_out_indices is None:
+            backbone_out_indices = []
+        if reassemble_factors is None:
+            reassemble_factors = []
+        if neck_hidden_sizes is None:
+            neck_hidden_sizes = []
+        if backbone_featmap_shape is None:
+            backbone_featmap_shape = []
+        if neck_ignore_stages is None:
+            neck_ignore_stages = []
         self.hidden_size = hidden_size
         self.is_hybrid = is_hybrid
 

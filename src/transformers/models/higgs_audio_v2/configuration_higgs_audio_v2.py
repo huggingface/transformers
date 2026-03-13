@@ -86,14 +86,7 @@ class HiggsAudioV2Config(PreTrainedConfig):
         eos_token_id=128009,
         pretraining_tp=1,
         tie_word_embeddings=False,
-        rope_parameters={
-            "factor": 32.0,
-            "rope_theta": 500000.0,
-            "high_freq_factor": 0.5,
-            "low_freq_factor": 0.125,
-            "original_max_position_embeddings": 1024,
-            "rope_type": "llama3",
-        },
+        rope_parameters=None,
         attention_bias=False,
         attention_dropout=0.0,
         mlp_bias=False,
@@ -107,6 +100,8 @@ class HiggsAudioV2Config(PreTrainedConfig):
         audio_stream_eos_id=1025,
         **kwargs,
     ):
+        if rope_parameters is None:
+            rope_parameters = {}
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

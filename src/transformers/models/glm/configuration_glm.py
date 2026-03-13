@@ -68,11 +68,13 @@ class GlmConfig(PreTrainedConfig):
         tie_word_embeddings: bool | None = False,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         pad_token_id: int | None = 151329,
-        eos_token_id: list[int] | None = [151329, 151336, 151338],
+        eos_token_id: list[int] | None = None,
         bos_token_id: int | None = None,
         attention_bias: bool | None = True,
         **kwargs,
     ):
+        if eos_token_id is None:
+            eos_token_id = []
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

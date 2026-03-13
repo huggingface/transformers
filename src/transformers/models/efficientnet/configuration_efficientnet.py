@@ -72,13 +72,13 @@ class EfficientNetConfig(PreTrainedConfig):
         width_coefficient: float = 2.0,
         depth_coefficient: float = 3.1,
         depth_divisor: int = 8,
-        kernel_sizes: list[int] = [3, 3, 5, 3, 5, 5, 3],
-        in_channels: list[int] = [32, 16, 24, 40, 80, 112, 192],
-        out_channels: list[int] = [16, 24, 40, 80, 112, 192, 320],
-        depthwise_padding: list[int] = [],
-        strides: list[int] = [1, 2, 2, 2, 1, 2, 1],
-        num_block_repeats: list[int] = [1, 2, 2, 3, 3, 4, 1],
-        expand_ratios: list[int] = [1, 6, 6, 6, 6, 6, 6],
+        kernel_sizes: list[int] = None,
+        in_channels: list[int] = None,
+        out_channels: list[int] = None,
+        depthwise_padding: list[int] = None,
+        strides: list[int] = None,
+        num_block_repeats: list[int] = None,
+        expand_ratios: list[int] = None,
         squeeze_expansion_ratio: float = 0.25,
         hidden_act: str = "swish",
         hidden_dim: int = 2560,
@@ -90,6 +90,20 @@ class EfficientNetConfig(PreTrainedConfig):
         drop_connect_rate: float = 0.2,
         **kwargs,
     ):
+        if kernel_sizes is None:
+            kernel_sizes = []
+        if in_channels is None:
+            in_channels = []
+        if out_channels is None:
+            out_channels = []
+        if depthwise_padding is None:
+            depthwise_padding = []
+        if strides is None:
+            strides = []
+        if num_block_repeats is None:
+            num_block_repeats = []
+        if expand_ratios is None:
+            expand_ratios = []
         super().__init__(**kwargs)
 
         self.num_channels = num_channels

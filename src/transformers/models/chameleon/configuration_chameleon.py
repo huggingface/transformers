@@ -52,7 +52,7 @@ class ChameleonVQVAEConfig(PreTrainedConfig):
         resolution: int = 512,
         in_channels: int = 3,
         base_channels: int = 128,
-        channel_multiplier: list[int] = [1, 1, 2, 2, 4],
+        channel_multiplier: list[int] = None,
         num_res_blocks: int = 2,
         attn_resolutions: list[int] | None = None,
         dropout: float = 0.0,
@@ -60,6 +60,8 @@ class ChameleonVQVAEConfig(PreTrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
+        if channel_multiplier is None:
+            channel_multiplier = []
         super().__init__(**kwargs)
         self.embed_dim = embed_dim
         self.num_embeddings = num_embeddings

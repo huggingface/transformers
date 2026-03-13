@@ -124,10 +124,10 @@ class OmDetTurboConfig(PreTrainedConfig):
         encoder_feedforward_dropout=0.0,
         encoder_dropout=0.0,
         hidden_expansion=1,
-        vision_features_channels=[256, 256, 256],
+        vision_features_channels=None,
         encoder_hidden_dim=256,
-        encoder_in_channels=[192, 384, 768],
-        encoder_projection_indices=[2],
+        encoder_in_channels=None,
+        encoder_projection_indices=None,
         encoder_attention_heads=8,
         encoder_dim_feedforward=2048,
         encoder_layers=1,
@@ -147,6 +147,12 @@ class OmDetTurboConfig(PreTrainedConfig):
         **kwargs,
     ):
         # Init timm backbone with hardcoded values for BC
+        if vision_features_channels is None:
+            vision_features_channels = []
+        if encoder_in_channels is None:
+            encoder_in_channels = []
+        if encoder_projection_indices is None:
+            encoder_projection_indices = []
         timm_default_kwargs = {
             "out_indices": [1, 2, 3],
             "img_size": image_size,

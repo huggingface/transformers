@@ -94,7 +94,7 @@ class AutoformerConfig(PreTrainedConfig):
         distribution_output: str = "student_t",
         loss: str = "nll",
         input_size: int = 1,
-        lags_sequence: list[int] = [1, 2, 3, 4, 5, 6, 7],
+        lags_sequence: list[int] = None,
         scaling: bool = True,
         num_time_features: int = 0,
         num_dynamic_real_features: int = 0,
@@ -126,6 +126,8 @@ class AutoformerConfig(PreTrainedConfig):
         **kwargs,
     ):
         # time series specific configuration
+        if lags_sequence is None:
+            lags_sequence = []
         self.prediction_length = prediction_length
         self.context_length = context_length if context_length is not None else prediction_length
         self.distribution_output = distribution_output

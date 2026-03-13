@@ -113,10 +113,10 @@ class GroupViTVisionConfig(PreTrainedConfig):
         self,
         hidden_size=384,
         intermediate_size=1536,
-        depths=[6, 3, 3],
+        depths=None,
         num_hidden_layers=12,
-        num_group_tokens=[64, 8, 0],
-        num_output_groups=[64, 8, 8],
+        num_group_tokens=None,
+        num_output_groups=None,
         num_attention_heads=6,
         image_size=224,
         patch_size=16,
@@ -128,9 +128,17 @@ class GroupViTVisionConfig(PreTrainedConfig):
         initializer_range=0.02,
         initializer_factor=1.0,
         assign_eps=1.0,
-        assign_mlp_ratio=[0.5, 4],
+        assign_mlp_ratio=None,
         **kwargs,
     ):
+        if depths is None:
+            depths = []
+        if num_group_tokens is None:
+            num_group_tokens = []
+        if num_output_groups is None:
+            num_output_groups = []
+        if assign_mlp_ratio is None:
+            assign_mlp_ratio = []
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size

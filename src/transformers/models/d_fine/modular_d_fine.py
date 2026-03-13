@@ -179,14 +179,14 @@ class DFineConfig(PreTrainedConfig):
         freeze_backbone_batch_norms=True,
         # encoder HybridEncoder
         encoder_hidden_dim=256,
-        encoder_in_channels=[512, 1024, 2048],
-        feat_strides=[8, 16, 32],
+        encoder_in_channels=None,
+        feat_strides=None,
         encoder_layers=1,
         encoder_ffn_dim=1024,
         encoder_attention_heads=8,
         dropout=0.0,
         activation_dropout=0.0,
-        encode_proj_layers=[2],
+        encode_proj_layers=None,
         positional_encoding_temperature=10000,
         encoder_activation_function="gelu",
         activation_function="silu",
@@ -196,7 +196,7 @@ class DFineConfig(PreTrainedConfig):
         # decoder DFineTransformer
         d_model=256,
         num_queries=300,
-        decoder_in_channels=[256, 256, 256],
+        decoder_in_channels=None,
         decoder_ffn_dim=1024,
         num_feature_levels=3,
         decoder_n_points=4,
@@ -241,6 +241,14 @@ class DFineConfig(PreTrainedConfig):
         tie_word_embeddings=True,
         **kwargs,
     ):
+        if encoder_in_channels is None:
+            encoder_in_channels = []
+        if feat_strides is None:
+            feat_strides = []
+        if encode_proj_layers is None:
+            encode_proj_layers = []
+        if decoder_in_channels is None:
+            decoder_in_channels = []
         self.initializer_range = initializer_range
         self.initializer_bias_prior_prob = initializer_bias_prior_prob
         self.layer_norm_eps = layer_norm_eps

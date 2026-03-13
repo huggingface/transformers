@@ -71,18 +71,18 @@ class HieraConfig(BackboneConfigMixin, PreTrainedConfig):
     def __init__(
         self,
         embed_dim=96,
-        image_size=[224, 224],
-        patch_size=[7, 7],
-        patch_stride=[4, 4],
-        patch_padding=[3, 3],
+        image_size=None,
+        patch_size=None,
+        patch_stride=None,
+        patch_padding=None,
         mlp_ratio=4.0,
-        depths=[2, 3, 16, 3],
-        num_heads=[1, 2, 4, 8],
+        depths=None,
+        num_heads=None,
         embed_dim_multiplier=2.0,
         num_query_pool=3,
-        query_stride=[2, 2],
-        masked_unit_size=[8, 8],
-        masked_unit_attention=[True, True, False, False],
+        query_stride=None,
+        masked_unit_size=None,
+        masked_unit_attention=None,
         drop_path_rate=0.0,
         num_channels=3,
         hidden_act="gelu",
@@ -98,6 +98,24 @@ class HieraConfig(BackboneConfigMixin, PreTrainedConfig):
         out_indices=None,
         **kwargs,
     ):
+        if image_size is None:
+            image_size = []
+        if patch_size is None:
+            patch_size = []
+        if patch_stride is None:
+            patch_stride = []
+        if patch_padding is None:
+            patch_padding = []
+        if depths is None:
+            depths = []
+        if num_heads is None:
+            num_heads = []
+        if query_stride is None:
+            query_stride = []
+        if masked_unit_size is None:
+            masked_unit_size = []
+        if masked_unit_attention is None:
+            masked_unit_attention = []
         super().__init__(**kwargs)
         if masked_unit_size[0] % query_stride[0] ** (len(depths) - 1) != 0:
             raise ValueError(

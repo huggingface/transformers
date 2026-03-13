@@ -54,7 +54,7 @@ class CwmConfig(LlamaConfig):
         rms_norm_eps: float = 1e-5,
         use_cache: bool = True,
         pad_token_id: int | None = None,
-        eos_token_id=[128001, 128008, 128009],
+        eos_token_id=None,
         bos_token_id: int = 128000,
         tie_word_embeddings: bool = False,
         attention_dropout: float = 0.0,
@@ -66,6 +66,8 @@ class CwmConfig(LlamaConfig):
         layer_types: list[str] | None = None,  # ["full_attention"|"sliding_attention"] per layer
         **kwargs,
     ):
+        if eos_token_id is None:
+            eos_token_id = []
         if rope_parameters is None:
             rope_parameters = {
                 "rope_theta": 1_000_000.0,

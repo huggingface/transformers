@@ -55,7 +55,7 @@ class GPTNeoConfig(PreTrainedConfig):
         max_position_embeddings=2048,
         hidden_size=2048,
         num_layers=24,
-        attention_types=[[["global", "local"], 12]],
+        attention_types=None,
         num_heads=16,
         intermediate_size=None,
         window_size=256,
@@ -73,6 +73,8 @@ class GPTNeoConfig(PreTrainedConfig):
         tie_word_embeddings=True,
         **kwargs,
     ):
+        if attention_types is None:
+            attention_types = []
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

@@ -53,8 +53,8 @@ class DonutSwinConfig(PreTrainedConfig):
         patch_size=4,
         num_channels=3,
         embed_dim=96,
-        depths=[2, 2, 6, 2],
-        num_heads=[3, 6, 12, 24],
+        depths=None,
+        num_heads=None,
         window_size=7,
         mlp_ratio=4.0,
         qkv_bias=True,
@@ -67,6 +67,10 @@ class DonutSwinConfig(PreTrainedConfig):
         layer_norm_eps=1e-5,
         **kwargs,
     ):
+        if depths is None:
+            depths = []
+        if num_heads is None:
+            num_heads = []
         super().__init__(**kwargs)
 
         self.image_size = image_size

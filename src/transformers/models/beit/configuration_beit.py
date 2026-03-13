@@ -88,7 +88,7 @@ class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
         layer_scale_init_value=0.1,
         drop_path_rate=0.1,
         use_mean_pooling=True,
-        pool_scales=[1, 2, 3, 6],
+        pool_scales=None,
         use_auxiliary_head=True,
         auxiliary_loss_weight=0.4,
         auxiliary_channels=256,
@@ -101,6 +101,8 @@ class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
         reshape_hidden_states=True,
         **kwargs,
     ):
+        if pool_scales is None:
+            pool_scales = []
         if "segmentation_indices" in kwargs and out_indices is None:
             out_indices = kwargs.pop("segmentation_indices")
         super().__init__(**kwargs)

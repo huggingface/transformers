@@ -87,12 +87,16 @@ class LasrEncoderConfig(PreTrainedConfig):
         max_position_embeddings=10000,
         initializer_range=0.02,
         layer_norm_eps=1e-6,
-        feed_forward_residual_weights=[1.5, 0.5],
-        conv_residual_weights=[2.0, 1.0],
+        feed_forward_residual_weights=None,
+        conv_residual_weights=None,
         batch_norm_momentum=0.01,
         rope_parameters=None,
         **kwargs,
     ):
+        if feed_forward_residual_weights is None:
+            feed_forward_residual_weights = []
+        if conv_residual_weights is None:
+            conv_residual_weights = []
         self.rope_parameters = rope_parameters
         self.layer_norm_eps = layer_norm_eps
         self.feed_forward_residual_weights = feed_forward_residual_weights

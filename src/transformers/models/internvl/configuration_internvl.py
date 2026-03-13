@@ -64,8 +64,8 @@ class InternVLVisionConfig(PreTrainedConfig):
         initializer_range=0.02,
         norm_type="layer_norm",
         layer_norm_eps=1e-06,
-        image_size=[448, 448],
-        patch_size=[14, 14],
+        image_size=None,
+        patch_size=None,
         num_channels=3,
         use_mask_token=False,
         use_absolute_position_embeddings=True,
@@ -73,6 +73,10 @@ class InternVLVisionConfig(PreTrainedConfig):
         use_mean_pooling=True,
         **kwargs,
     ):
+        if image_size is None:
+            image_size = []
+        if patch_size is None:
+            patch_size = []
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size

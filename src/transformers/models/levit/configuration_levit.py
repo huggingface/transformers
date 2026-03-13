@@ -60,16 +60,28 @@ class LevitConfig(PreTrainedConfig):
         stride=2,
         padding=1,
         patch_size=16,
-        hidden_sizes=[128, 256, 384],
-        num_attention_heads=[4, 8, 12],
-        depths=[4, 4, 4],
-        key_dim=[16, 16, 16],
+        hidden_sizes=None,
+        num_attention_heads=None,
+        depths=None,
+        key_dim=None,
         drop_path_rate=0,
-        mlp_ratio=[2, 2, 2],
-        attention_ratio=[2, 2, 2],
+        mlp_ratio=None,
+        attention_ratio=None,
         initializer_range=0.02,
         **kwargs,
     ):
+        if hidden_sizes is None:
+            hidden_sizes = []
+        if num_attention_heads is None:
+            num_attention_heads = []
+        if depths is None:
+            depths = []
+        if key_dim is None:
+            key_dim = []
+        if mlp_ratio is None:
+            mlp_ratio = []
+        if attention_ratio is None:
+            attention_ratio = []
         super().__init__(**kwargs)
         self.image_size = image_size
         self.num_channels = num_channels

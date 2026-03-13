@@ -81,11 +81,11 @@ class DepthProConfig(PreTrainedConfig):
         fusion_hidden_size=256,
         patch_size=384,
         initializer_range=0.02,
-        intermediate_hook_ids=[11, 5],
-        intermediate_feature_dims=[256, 256],
-        scaled_images_ratios=[0.25, 0.5, 1],
-        scaled_images_overlap_ratios=[0.0, 0.5, 0.25],
-        scaled_images_feature_dims=[1024, 1024, 512],
+        intermediate_hook_ids=None,
+        intermediate_feature_dims=None,
+        scaled_images_ratios=None,
+        scaled_images_overlap_ratios=None,
+        scaled_images_feature_dims=None,
         merge_padding_value=3,
         use_batch_norm_in_fusion_residual=False,
         use_bias_in_fusion_residual=True,
@@ -97,6 +97,16 @@ class DepthProConfig(PreTrainedConfig):
         **kwargs,
     ):
         # scaled_images_ratios is sorted
+        if intermediate_hook_ids is None:
+            intermediate_hook_ids = []
+        if intermediate_feature_dims is None:
+            intermediate_feature_dims = []
+        if scaled_images_ratios is None:
+            scaled_images_ratios = []
+        if scaled_images_overlap_ratios is None:
+            scaled_images_overlap_ratios = []
+        if scaled_images_feature_dims is None:
+            scaled_images_feature_dims = []
         if scaled_images_ratios != sorted(scaled_images_ratios):
             raise ValueError(
                 f"Values in scaled_images_ratios={scaled_images_ratios} should be sorted from low to high"

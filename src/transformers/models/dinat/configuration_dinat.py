@@ -54,10 +54,10 @@ class DinatConfig(BackboneConfigMixin, PreTrainedConfig):
         patch_size=4,
         num_channels=3,
         embed_dim=64,
-        depths=[3, 4, 6, 5],
-        num_heads=[2, 4, 8, 16],
+        depths=None,
+        num_heads=None,
         kernel_size=7,
-        dilations=[[1, 8, 1], [1, 4, 1, 4], [1, 2, 1, 2, 1, 2], [1, 1, 1, 1, 1]],
+        dilations=None,
         mlp_ratio=3.0,
         qkv_bias=True,
         hidden_dropout_prob=0.0,
@@ -71,6 +71,12 @@ class DinatConfig(BackboneConfigMixin, PreTrainedConfig):
         out_indices=None,
         **kwargs,
     ):
+        if depths is None:
+            depths = []
+        if num_heads is None:
+            num_heads = []
+        if dilations is None:
+            dilations = []
         super().__init__(**kwargs)
 
         self.patch_size = patch_size

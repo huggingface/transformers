@@ -165,7 +165,7 @@ class JanusVQVAEConfig(ChameleonVQVAEConfig):
         in_channels: int = 3,
         out_channels: int = 3,
         base_channels: int = 128,
-        channel_multiplier: list[int] = [1, 1, 2, 2, 4],
+        channel_multiplier: list[int] = None,
         num_res_blocks: int = 2,
         dropout: float = 0.0,
         initializer_range=0.02,
@@ -175,6 +175,8 @@ class JanusVQVAEConfig(ChameleonVQVAEConfig):
         image_token_embed_dim=2048,
         **kwargs,
     ):
+        if channel_multiplier is None:
+            channel_multiplier = []
         super().__init__(
             embed_dim=embed_dim,
             num_embeddings=num_embeddings,
