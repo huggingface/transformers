@@ -91,6 +91,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "flash_attn_test: mark test which tests flash attention functionality")
     config.addinivalue_line("markers", "flash_attn_3_test: mark test which tests flash attention 3 functionality")
     config.addinivalue_line("markers", "flash_attn_4_test: mark test which tests flash attention 4 functionality")
+    config.addinivalue_line("markers", "all_flash_attn_test: mark test which tests all mainline flash attentions' functionality")
     config.addinivalue_line("markers", "training_ci: mark test for training CI validation")
     config.addinivalue_line("markers", "tensor_parallel_ci: mark test for tensor parallel CI validation")
 

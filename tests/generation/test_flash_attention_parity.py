@@ -22,13 +22,7 @@ import pytest
 import torch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.testing_utils import (
-    require_flash_attn,
-    require_flash_attn_3,
-    require_flash_attn_4,
-    require_torch_gpu,
-    slow,
-)
+from transformers.testing_utils import require_all_flash_attn, require_torch_gpu, slow
 
 
 class FlashAttentionParityTest(unittest.TestCase):
@@ -81,14 +75,10 @@ class FlashAttentionParityTest(unittest.TestCase):
 
         return start_time.elapsed_time(end_time) / n_runs
 
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @pytest.mark.flash_attn_3_test
-    @pytest.mark.flash_attn_4_test
-    @require_flash_attn
-    @require_flash_attn_3
-    @require_flash_attn_4
     @slow
+    @require_torch_gpu
+    @require_all_flash_attn
+    @pytest.mark.all_flash_attn_test
     def test_flash_attention_parity(self):
         flash_attn_versions = [2, 3, 4]
 
