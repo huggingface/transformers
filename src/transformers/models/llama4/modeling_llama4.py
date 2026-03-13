@@ -485,6 +485,8 @@ class Llama4PreTrainedModel(PreTrainedModel):
         if isinstance(module, Llama4TextExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, Llama4VisionRotaryEmbedding):
+            init.copy_(module.freqs_ci, module._compute_freqs_ci(module.config))
         elif isinstance(module, Llama4VisionModel):
             init.normal_(module.class_embedding, std=module.scale)
             init.normal_(module.positional_embedding_vlm, std=module.scale)
@@ -1001,6 +1003,11 @@ class Llama4UnfoldConvolution(nn.Module):
 class Llama4VisionRotaryEmbedding(nn.Module):
     def __init__(self, config: Llama4VisionConfig):
         super().__init__()
+        self.config = config
+        self.register_buffer("freqs_ci", self._compute_freqs_ci(config), persistent=False)
+
+    @staticmethod
+    def _compute_freqs_ci(config):
         idx = config.image_size // config.patch_size
         img_idx = torch.arange(idx**2, dtype=torch.int32).reshape(idx**2, 1)
         img_idx = torch.cat([img_idx, img_idx[:1]], dim=0)
@@ -1017,7 +1024,7 @@ class Llama4VisionRotaryEmbedding(nn.Module):
         freqs = torch.cat([freqs_x, freqs_y], dim=-1).float().contiguous()[..., ::2]
         freqs = freqs.masked_fill(img_idx.reshape(-1, 1, 1) < 0, 0)
         freq_cis = torch.view_as_complex(torch.stack([torch.cos(freqs), torch.sin(freqs)], dim=-1))
-        self.freqs_ci = freq_cis  # idx**2, idx**2, idx * 2
+        return freq_cis  # idx**2, idx**2, idx * 2
 
     def forward(self, hidden_states):
         return self.freqs_ci.to(hidden_states.device)
