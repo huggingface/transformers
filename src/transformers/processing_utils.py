@@ -833,6 +833,14 @@ class ProcessorMixin(PushToHubMixin):
             elif attribute._auto_class is not None:
                 custom_object_save(attribute, save_directory, config=attribute)
 
+            # Also save primary non-tokenizer sub-processors (e.g. image_processor, feature_extractor)
+            # to their own standalone config files for backward compatibility.
+            # The unified processor_config.json already contains these as nested dicts,
+            # but saving them separately ensures tools and code that expect standalone
+            # config files (e.g. preprocessor_config.json) continue to work.
+            if modality != "tokenizer" and is_primary and hasattr(attribute, "save_pretrained"):
+                attribute.save_pretrained(save_directory)
+
         if self._auto_class is not None:
             # We added an attribute to the init_kwargs of the tokenizers, which needs to be cleaned up.
             for attribute_name in self.get_attributes():
