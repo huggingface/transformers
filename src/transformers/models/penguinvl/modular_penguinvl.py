@@ -108,6 +108,8 @@ class PenguinVLVisionConfig(PreTrainedConfig):
             The dropout ratio for the attention probabilities.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use bias in attention layers.
+        rope_scaling (`dict`, *optional*, defaults to `None`):
+            Dictionary containing the scaling configuration for the RoPE embeddings.
         rope_theta (`float`, *optional*, defaults to 1000000.0):
             The base period of the RoPE embeddings.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -555,6 +557,17 @@ class PenguinVLVisionEncoder(nn.Module):
         merge_sizes: torch.Tensor,
         **kwargs,
     ) -> tuple | BaseModelOutput:
+        r"""
+        Args:
+            hidden_states (`torch.Tensor`):
+                Input hidden states for the vision encoder.
+            cu_seqlens (`torch.Tensor`):
+                Cumulative sequence lengths for variable-length sequences in the batch.
+            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
+                Temporal, height and width dimensions of the feature grid for each image/video.
+            merge_sizes (`torch.Tensor` of shape `(num_images_or_videos,)`):
+                Spatial downsampling ratio for each image or video.
+        """
         cache_position = torch.arange(0, hidden_states.shape[1], device=hidden_states.device)
         position_ids = cache_position.view(1, 1, -1).expand(2, hidden_states.shape[0], -1)
         position_ids = self.get_rope_index(grid_thw, merge_sizes, position_ids)
@@ -706,6 +719,7 @@ class PenguinVLModelOutputWithPast(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
     image_hidden_states: torch.FloatTensor | None = None
+
 
 class PenguinVLLanguageModel(Qwen3Model):
     pass
@@ -912,6 +926,15 @@ class PenguinVLForConditionalGeneration(PenguinVLPreTrainedModel, GenerationMixi
         image_merge_sizes: torch.LongTensor,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        Args:
+            pixel_values (`torch.FloatTensor`):
+                Pixel values for the vision encoder.
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+                Temporal, height and width of feature shape for each image.
+            image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
+                Spatial downsampling ratio for each image.
+        """
         return self.model.get_image_features(
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,

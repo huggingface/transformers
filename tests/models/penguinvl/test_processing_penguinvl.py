@@ -22,8 +22,7 @@ from transformers.utils import is_torch_available, is_vision_available
 
 
 if is_vision_available():
-    from transformers import PenguinVLImageProcessor
-    from transformers import PenguinVLProcessor
+    from transformers import PenguinVLImageProcessor, PenguinVLProcessor
     from transformers.models.penguinvl.image_processing_penguinvl import _make_batched_clips
 
 if is_torch_available():
@@ -343,7 +342,9 @@ class PenguinVLProcessorUnitTest(unittest.TestCase):
             }
         ]
         text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-        EXPECTED_TEXT = "<|im_start|>user\n<image>\nDescribe this image.<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+        EXPECTED_TEXT = (
+            "<|im_start|>user\n<image>\nDescribe this image.<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+        )
         self.assertEqual(text, EXPECTED_TEXT)
 
     def test_convert_messages_for_chat_template_image(self):
@@ -370,7 +371,12 @@ class PenguinVLProcessorUnitTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "video", "video": "https://example.com/vid.mp4", "num_frames": 4, "timestamps": [0, 1, 2, 3]},
+                    {
+                        "type": "video",
+                        "video": "https://example.com/vid.mp4",
+                        "num_frames": 4,
+                        "timestamps": [0, 1, 2, 3],
+                    },
                     {"type": "text", "text": "Describe."},
                 ],
             }

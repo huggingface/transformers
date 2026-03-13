@@ -456,8 +456,8 @@ class PenguinVLProcessor(ProcessorMixin):
             {"type": "image", "image": "file:///path/to/image.png"}
             {"type": "image", "image": <PIL.Image.Image>}
             {"type": "video", "video": "https://example.com/clip.mp4"}
-            {"type": "video", "video": ["file:///path/frame1.jpg", ...]}
-            {"type": "video", "video": [<PIL.Image.Image>, ...]}
+            {"type": "video", "video": ["file:///path/frame1.jpg", ...], "timestamps": [0, ...]}
+            {"type": "video", "video": [<PIL.Image.Image>, ...], "timestamps": [0, ...]}
 
         Args:
             messages: Conversation in Qwen2-VL dict format. Video content items

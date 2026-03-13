@@ -52,6 +52,8 @@ class PenguinVLVisionConfig(PreTrainedConfig):
             The dropout ratio for the attention probabilities.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use bias in attention layers.
+        rope_scaling (`dict`, *optional*, defaults to `None`):
+            Dictionary containing the scaling configuration for the RoPE embeddings.
         rope_theta (`float`, *optional*, defaults to 1000000.0):
             The base period of the RoPE embeddings.
         initializer_range (`float`, *optional*, defaults to 0.02):

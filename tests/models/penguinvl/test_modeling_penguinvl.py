@@ -19,25 +19,20 @@ import tempfile
 import unittest
 
 import numpy as np
-import pytest
 import requests
 import torch.nn as nn
 from parameterized import parameterized
 from PIL import Image
 
 from transformers import (
-    PenguinVLConfig,
     PenguinVLForConditionalGeneration,
-    PenguinVLModel,
     PenguinVLVisionConfig,
     PenguinVLVisionModel,
     is_torch_available,
 )
 from transformers.testing_utils import (
-    Expectations,
     backend_empty_cache,
     require_torch,
-    require_torch_accelerator,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
     slow,
@@ -48,13 +43,11 @@ from transformers.utils import (
     is_torch_fp16_available_on_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
-    ids_tensor,
     sdpa_kernel,
 )
 
@@ -180,8 +173,7 @@ def _test_penguin_vision_sdpa_inference(
                 ):
                     prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
                     prepared_inputs = {
-                        k: v.to(torch_device) if isinstance(v, torch.Tensor) else v
-                        for k, v in prepared_inputs.items()
+                        k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in prepared_inputs.items()
                     }
                     outputs_eager = model_eager(**prepared_inputs)
                     outputs_sdpa = model_sdpa(**prepared_inputs)
@@ -510,7 +502,7 @@ class PenguinVLIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded = self.processor.decode(output[0], skip_special_tokens=True)
-        EXPECTED_DECODED_TEXT = 'user\n\nDescribe the image in one sentence.\nassistant\n<think>\n\n</think>\n\nTwo cats are sleeping on a pink couch next to two remote controls.'
+        EXPECTED_DECODED_TEXT = "user\n\nDescribe the image in one sentence.\nassistant\n<think>\n\n</think>\n\nTwo cats are sleeping on a pink couch next to two remote controls."
         self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
 
     def test_small_model_integration_test_multi_image(self):
@@ -537,7 +529,7 @@ class PenguinVLIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         decoded = self.processor.decode(output[0], skip_special_tokens=True)
-        EXPECTED_DECODED_TEXT = 'user\n\n\nAre these two images the same?\nassistant\n<think>\n\n</think>\n\nYes, these two images are the same. They both show two cats lying on a pink couch with'
+        EXPECTED_DECODED_TEXT = "user\n\n\nAre these two images the same?\nassistant\n<think>\n\n</think>\n\nYes, these two images are the same. They both show two cats lying on a pink couch with"
         self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
 
     def test_small_model_integration_test_video(self):
@@ -565,7 +557,7 @@ class PenguinVLIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         decoded = self.processor.decode(output[0], skip_special_tokens=True)
-        EXPECTED_DECODED_TEXT = 'user\nTime 0s:,Time 1s:,Time 2s:,Time 3s:\nDescribe what you see in this video.\nassistant\n<think>\n\n</think>\n\nThe video features a serene and cozy scene of two cats lounging on a bright pink couch. The'
+        EXPECTED_DECODED_TEXT = "user\nTime 0s:,Time 1s:,Time 2s:,Time 3s:\nDescribe what you see in this video.\nassistant\n<think>\n\n</think>\n\nThe video features a serene and cozy scene of two cats lounging on a bright pink couch. The"
         self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
 
     def test_small_model_integration_test_batch(self):
@@ -596,7 +588,7 @@ class PenguinVLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         decoded = self.processor.batch_decode(output, skip_special_tokens=True)
         EXPECTED_DECODED_TEXT = [
-            'user\n\nDescribe the image.\nassistant\n<think>\n\n</think>\n\nThe image shows two cats lying on a bright pink surface, likely a couch or bed. Both cats', 
-            'user\n\nDescribe the image.\nassistant\n<think>\n\n</think>\n\nThe image shows two cats lying on a bright pink surface, likely a couch or bed. Both cats'
+            "user\n\nDescribe the image.\nassistant\n<think>\n\n</think>\n\nThe image shows two cats lying on a bright pink surface, likely a couch or bed. Both cats",
+            "user\n\nDescribe the image.\nassistant\n<think>\n\n</think>\n\nThe image shows two cats lying on a bright pink surface, likely a couch or bed. Both cats",
         ]
         self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
