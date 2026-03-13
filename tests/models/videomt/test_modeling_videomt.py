@@ -57,6 +57,7 @@ class VideomtForUniversalSegmentationTester:
         hidden_size=8,
         num_attention_heads=2,
         num_hidden_layers=2,
+        is_training=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -69,6 +70,7 @@ class VideomtForUniversalSegmentationTester:
         self.num_attention_heads = num_attention_heads
         self.num_hidden_layers = num_hidden_layers
         self.num_register_tokens = num_register_tokens
+        self.is_training = is_training
 
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1 + self.num_register_tokens
@@ -136,22 +138,6 @@ class VideomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin,
 
     @unittest.skip(reason="VideoMT does not use token embeddings")
     def test_resize_tokens_embeddings(self):
-        pass
-
-    @unittest.skip(reason="VideoMT requires 5D video input; training with labels is not supported for video")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="VideoMT requires 5D video input; training with labels is not supported for video")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="VideoMT requires 5D video input; training with labels is not supported for video")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="VideoMT requires 5D video input; training with labels is not supported for video")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     def test_image_inputs_raise(self):
