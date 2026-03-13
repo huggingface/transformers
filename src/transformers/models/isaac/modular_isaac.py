@@ -1289,6 +1289,7 @@ class IsaacModel(Qwen3PreTrainedModel):
         return position_ids, rope_deltas
 
     @auto_docstring
+    @can_return_tuple
     @merge_with_config_defaults
     def forward(
         self,
