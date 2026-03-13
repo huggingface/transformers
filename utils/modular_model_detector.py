@@ -205,44 +205,22 @@ def _leading_symbol_prefix(name: str) -> str:
     match = re.match(r"^([a-z0-9]+)(?=[A-Z])", name)
     if match:
         return match.group(1)
-    # fallback: match any alphanumeric
     match = re.match(r"^([A-Za-z0-9]+)", name)
     return match.group(1) if match else ""
 
 
 def _strip_type_hints(code: str) -> str:
-    """
-    Strip type hints from Python code to improve embedding similarity.
-
-    Removes:
-    - Function parameter type hints: `def foo(x: int)` -> `def foo(x)`
-    - Return type hints: `def foo() -> int:` -> `def foo():`
-    - Variable annotations: `x: int = 5` -> `x = 5`
-
-    Args:
-        code (`str`): The source code to strip type hints from.
-
-    Returns:
-        `str`: The code with type hints removed.
-    """
-    # Remove return type hints first: `-> Type:` -> `:`
-    # Match: -> followed by optional whitespace, type expression, then colon
-    # The type can contain brackets, dots, spaces, etc.
-    # Remove any whitespace before the colon
+    """Strip type hints from Python code to improve embedding similarity."""
+    # Remove return type hints like `-> Type:` → `:`
     code = re.sub(r"->\s*[^:\n]+:\s*", ": ", code)
-    
-    # Remove function parameter type hints: `param: Type` -> `param`
-    # Match identifier followed by colon and type, ending at comma, ), =, or newline
-    # Use lookahead to ensure we're in a function parameter context
-    # Pattern: word boundary, identifier, colon, type (not containing = or :), then comma/paren/equals
+
+    # Remove function parameter type hints: `param: Type` → `param`
     code = re.sub(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*[^=,):\n]+(?=\s*[,)=])", r"\1", code)
-    
-    # Remove variable annotations: `var: Type = value` -> `var = value`
-    # Match identifier, colon, type, equals sign
-    # Preserve spacing around equals
+
+    # Remove variable annotations: `var: Type = value` → `var = value`
     code = re.sub(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*[^=\n]+\s*=", r"\1 =", code)
-    
-    # Clean up any extra spaces that might have been created
+
+    # Clean up spacing artifacts
     code = re.sub(r"  +", " ", code)
     # Clean up spaces around commas
     code = re.sub(r"\s*,\s*", ", ", code)
@@ -255,20 +233,12 @@ def _strip_type_hints(code: str) -> str:
     code = re.sub(r"\s*=\s*", " = ", code)
     # Remove double spaces again after all replacements
     code = re.sub(r"  +", " ", code)
-    
+
     return code
 
 
 def _normalize_dtype_patterns(code: str) -> str:
-    """
-    Normalize dtype save-and-cast patterns to a canonical form for better embedding comparison.
-
-    Removes dtype-saving lines and the corresponding cast-back calls:
-    - ``q_type, k_type = q.dtype, k.dtype`` → (line removed)
-    - ``input_dtype = hidden_states.dtype`` → (line removed)
-    - ``.to(dtype=some_var)`` → (removed)
-    - ``.to(VARNAME)`` where VARNAME ends in ``_type`` or ``_dtype`` or is ``dtype`` → (removed)
-    """
+    """Normalize dtype save-and-cast patterns for embedding comparison."""
     # Remove lines that are purely dtype variable assignments (tuple or single)
     code = re.sub(r"^[^\S\n]*\w+\s*,\s*\w+\s*=\s*\w+\.dtype\s*,\s*\w+\.dtype[^\S\n]*$", "", code, flags=re.MULTILINE)
     code = re.sub(r"^[^\S\n]*\w+\s*=\s*\w+\.dtype[^\S\n]*$", "", code, flags=re.MULTILINE)
@@ -280,10 +250,7 @@ def _normalize_dtype_patterns(code: str) -> str:
 
 
 def _normalize_layer_constructor_kwargs(code: str) -> str:
-    """
-    Remove minor config-driven keyword arguments from standard layer constructors so that
-    e.g. ``bias=False`` and ``bias=config.mlp_bias`` don't create false negatives.
-    """
+    """Remove minor config kwargs (e.g. bias) from layer constructors."""
     code = re.sub(r",\s*bias\s*=\s*[^,)]+", "", code)
     return code
 
@@ -348,7 +315,11 @@ class CodeSimilarityAnalyzer:
 
         self.device = self.model.device
         # Get dtype from model parameters
-        self.dtype = next(self.model.parameters()).dtype if hasattr(self.model, 'parameters') and len(list(self.model.parameters())) > 0 else torch.float32
+        self.dtype = (
+            next(self.model.parameters()).dtype
+            if hasattr(self.model, "parameters") and len(list(self.model.parameters())) > 0
+            else torch.float32
+        )
         self.index_dir: Path | None = None
 
     # ---------- HUB IO ----------
@@ -536,7 +507,7 @@ class CodeSimilarityAnalyzer:
             f"encoding {len(sanitized_sources)} definitions with {EMBEDDING_MODEL} (device={self.device.type}, batch={BATCH_SIZE}, max_length={MAX_LENGTH})"
         )
         embeddings = self.encode(sanitized_sources)
-        
+
         logging.info("Saving index files...")
         with tqdm(total=3, desc="Saving index", unit="file") as pbar:
             safetensors_save({"embeddings": embeddings}, EMBEDDINGS_PATH)
@@ -562,7 +533,7 @@ class CodeSimilarityAnalyzer:
     ) -> list[tuple[str, float]]:
         similarities = query_embedding_row @ base_embeddings.T
         buffer_size = min(k + 200, len(similarities))
-        indices = np.argpartition(-similarities, buffer_size)[: buffer_size]
+        indices = np.argpartition(-similarities, buffer_size)[:buffer_size]
         indices = indices[np.argsort(-similarities[indices])]
         output = []
         for match_id in indices:
@@ -575,12 +546,14 @@ class CodeSimilarityAnalyzer:
             output.append((identifier, float(similarities[match_id])))
         # Sort by score (descending), then by release date (ascending, oldest first) for tie-breaking
         if dates:
+
             def sort_key(item):
                 identifier, score = item
                 relative_path = identifier.split(":")[0]
                 model_id = Path(relative_path).parts[0] if Path(relative_path).parts else ""
                 release = dates.get(model_id, "9999-99-99")  # Unknown dates sort last
                 return (-score, release)
+
             output.sort(key=sort_key)
         return output[:k]
 
@@ -640,13 +613,18 @@ class CodeSimilarityAnalyzer:
             relative_path, symbol_name = parts
             model_id = Path(relative_path).parts[0] if Path(relative_path).parts else ""
             by_name[(model_id, symbol_name)] = idx
-            suffix = symbol_name[len(_leading_symbol_prefix(symbol_name)):]
+            suffix = symbol_name[len(_leading_symbol_prefix(symbol_name)) :]
             if suffix:
                 by_suffix.setdefault((model_id, suffix), idx)
         return by_name, by_suffix
 
     def analyze_file(
-        self, modeling_file: Path, top_k_per_item: int = 10, allow_hub_fallback: bool = True, use_jaccard=False, dates: dict[str, str] | None = None
+        self,
+        modeling_file: Path,
+        top_k_per_item: int = 10,
+        allow_hub_fallback: bool = True,
+        use_jaccard=False,
+        dates: dict[str, str] | None = None,
     ) -> dict[str, dict[str, list]]:
         """
         Analyze a modeling file and find similar code definitions in the index.
@@ -693,7 +671,13 @@ class CodeSimilarityAnalyzer:
         for i, query_identifier in enumerate(query_identifiers):
             query_name = query_identifier.split(":")[-1]
             embedding_top = self._topk_embedding(
-                query_embeddings[i], base_embeddings, identifier_map, self_model_normalized, query_name, top_k_per_item, dates
+                query_embeddings[i],
+                base_embeddings,
+                identifier_map,
+                self_model_normalized,
+                query_name,
+                top_k_per_item,
+                dates,
             )
 
             # Expand results with parent models from modular inheritance.
@@ -710,7 +694,7 @@ class CodeSimilarityAnalyzer:
                     continue
                 match_relative_path, match_name = parts
                 model_id = Path(match_relative_path).parts[0] if Path(match_relative_path).parts else ""
-                match_suffix = match_name[len(_leading_symbol_prefix(match_name)):]
+                match_suffix = match_name[len(_leading_symbol_prefix(match_name)) :]
                 for parent_model in inheritance_map.get(model_id, ()):
                     if parent_model in seen_parents or _normalize(parent_model) == self_model_normalized:
                         continue
@@ -983,11 +967,9 @@ def compute_model_class_match_summary(
     model_class_matches: dict[str, set[str]] = {}
     model_class_scores: dict[str, dict[str, float]] = {}
     for query_name, data in class_entries:
-        # For each Sarvam class (query_name), compute the best score per identifier
-        # across all available metrics (embedding, jaccard). We then attribute that
-        # best score to the corresponding model. This way, if Jaccard provides a
-        # stronger signal than embeddings for a given model+class, it is the one
-        # that influences the summary.
+        # For each query class, compute the best score per identifier across
+        # all available metrics (embedding, jaccard) and attribute it to the
+        # corresponding model so the strongest signal drives the summary.
         best_per_identifier: dict[str, float] = {}
 
         # 1) embedding scores
@@ -1034,12 +1016,14 @@ def compute_model_class_match_summary(
         pct = 100.0 * len(matched) / total_classes
         scores_for_model = model_class_scores.get(model_id, {})
         mean_score = sum(scores_for_model.values()) / len(scores_for_model) if scores_for_model else 0.0
-        ordered_summary.append({
-            "model_id": model_id,
-            "num_matched": len(matched),
-            "pct": round(pct, 1),
-            "mean_score": round(mean_score, 4),
-        })
+        ordered_summary.append(
+            {
+                "model_id": model_id,
+                "num_matched": len(matched),
+                "pct": round(pct, 1),
+                "mean_score": round(mean_score, 4),
+            }
+        )
     return total_classes, ordered_summary
 
 
@@ -1052,9 +1036,7 @@ def main():
     parser.add_argument(
         "--push-new-index", action="store_true", help="After --build, push index files to a Hub dataset."
     )
-    parser.add_argument(
-        "--push-only", action="store_true", help="Push existing index files to Hub without rebuilding."
-    )
+    parser.add_argument("--push-only", action="store_true", help="Push index files to Hub without rebuilding.")
     parser.add_argument(
         "--hub-dataset", type=str, default=HUB_DATASET_DEFAULT, help="Hub dataset repo id to pull/push the index."
     )
@@ -1289,6 +1271,7 @@ def main():
                     f"mean score {mean_score:.4f}"
                 )
             logging.info("")
+
 
 if __name__ == "__main__":
     main()
