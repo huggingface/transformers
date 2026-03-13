@@ -115,6 +115,9 @@ class VibeVoiceAcousticTokenizerEncoderConfig(VibeVoiceAcousticTokenizerConfig):
     model_type = "vibevoice_acoustic_tokenizer_encoder"
     base_config_key = "encoder_config"
 
+    @property
+    def encoder_config(self):
+        return None
 
 @auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
 @strict(accept_kwargs=True)
@@ -141,6 +144,14 @@ class VibeVoiceAcousticTokenizerDecoderConfig(VibeVoiceAcousticTokenizerConfig):
 
     model_type = "vibevoice_acoustic_tokenizer_decoder"
     base_config_key = "decoder_config"
+
+    @property
+    def encoder_config(self):
+        return None
+
+    @property
+    def decoder_config(self):
+        return None
 
     @property
     def upsampling_ratios(self):

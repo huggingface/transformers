@@ -448,7 +448,7 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
             # check that output_hidden_states also work using config
             del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
+            self._set_subconfig_attributes(config, "output_hidden_states", True)
 
             check_hidden_states_output(inputs_dict, config, model_class)
 

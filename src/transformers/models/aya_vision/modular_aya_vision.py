@@ -88,10 +88,6 @@ class AyaVisionMultiModalProjector(nn.Module):
 
 class AyaVisionPreTrainedModel(LlavaPreTrainedModel):
     _can_compile_fullgraph = False
-    _can_record_outputs = {
-        "hidden_states": "DecoderLayer",
-        "attentions": "Attention",
-    }
 
 
 class AyaVisionCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
@@ -104,8 +100,8 @@ class AyaVisionModelOutputWithPast(LlavaModelOutputWithPast):
 
 class AyaVisionModel(LlavaModel):
     # Unlike LLaVA, the model doesn't have to deal with Pixtral-style image states
-    @can_return_tuple
     @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )

@@ -570,10 +570,6 @@ class Glm4vModelOutputWithPast(Qwen2_5_VLModelOutputWithPast):
 
 class Glm4vPreTrainedModel(Qwen2_5_VLPreTrainedModel):
     _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
-    _can_record_outputs = {
-        "hidden_states": Glm4vTextDecoderLayer,
-        "attentions": Glm4vTextAttention,
-    }
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
@@ -712,6 +708,11 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
 
 
 class Glm4vTextModel(Qwen2_5_VLTextModel):
+    _can_record_outputs = {
+        "hidden_states": Glm4vTextDecoderLayer,
+        "attentions": Glm4vTextAttention,
+    }
+
     def __init__(self, config: Glm4vTextConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(

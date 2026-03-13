@@ -21,11 +21,12 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.generic import can_return_tuple
 from .configuration_vitdet import VitDetConfig
 
 
@@ -697,6 +698,8 @@ class VitDetBackbone(BackboneMixin, VitDetPreTrainedModel):
     def get_input_embeddings(self) -> VitDetEmbeddings:
         return self.embeddings.projection
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,

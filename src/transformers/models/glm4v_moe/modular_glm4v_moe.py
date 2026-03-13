@@ -228,12 +228,7 @@ class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
     input_modalities = ("text", "image", "video")
     _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
-
-    _can_record_outputs = {
-        "hidden_states": Glm4vMoeTextDecoderLayer,
-        "attentions": Glm4vMoeTextAttention,
-        "router_logits": Glm4vMoeTextTopkRouter,
-    }
+    _can_record_outputs = {}
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -257,6 +252,12 @@ class Glm4vMoeVisionModel(Glm4vVisionModel):
 
 @auto_docstring
 class Glm4vMoeTextModel(Glm4vTextModel):
+    _can_record_outputs = {
+        "hidden_states": Glm4vMoeTextDecoderLayer,
+        "attentions": Glm4vMoeTextAttention,
+        "router_logits": Glm4vMoeTextTopkRouter,
+    }
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

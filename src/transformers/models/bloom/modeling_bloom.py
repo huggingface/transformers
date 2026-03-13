@@ -248,7 +248,7 @@ class BloomAttention(nn.Module):
         layer_past: Cache | None = None,
         use_cache: bool = False,
         output_attentions: bool = False,
-        cache_position: torch.LongTensor | None = None,
+        **kwargs,
     ):
         batch_size, q_length, _ = hidden_states.shape
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
@@ -256,8 +256,7 @@ class BloomAttention(nn.Module):
         query_layer, key_layer, value_layer = self._reshape(fused_qkv)
 
         if layer_past is not None:
-            cache_kwargs = {"cache_position": cache_position}
-            key_layer, value_layer = layer_past.update(key_layer, value_layer, self.layer_idx, cache_kwargs)
+            key_layer, value_layer = layer_past.update(key_layer, value_layer, self.layer_idx)
 
         # reshape qkv for further computations
         query_layer = query_layer.reshape(batch_size * self.num_heads, -1, self.head_dim)
@@ -362,7 +361,7 @@ class BloomBlock(GradientCheckpointingLayer):
         layer_past: Cache | None = None,
         use_cache: bool = False,
         output_attentions: bool = False,
-        cache_position: torch.LongTensor | None = None,
+        **kwargs,
     ):
         # hidden_states: [batch_size, seq_length, hidden_size]
 
@@ -384,7 +383,6 @@ class BloomBlock(GradientCheckpointingLayer):
             alibi=alibi,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
 
         layernorm_output = self.post_attention_layernorm(attention_output)
@@ -454,7 +452,6 @@ class BloomModel(BloomPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, ...] | BaseModelOutputWithPastAndCrossAttentions:
         r"""
@@ -495,8 +492,6 @@ class BloomModel(BloomPreTrainedModel):
         batch_size, seq_length, _ = inputs_embeds.shape
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         seq_length_with_past = seq_length + past_length
-        if cache_position is None:
-            cache_position = torch.arange(past_length, past_length + seq_length, device=inputs_embeds.device)
 
         hidden_states = self.word_embeddings_layernorm(inputs_embeds)
 
@@ -514,7 +509,6 @@ class BloomModel(BloomPreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
         )
 
@@ -529,7 +523,6 @@ class BloomModel(BloomPreTrainedModel):
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 alibi=alibi,
-                cache_position=cache_position,
             )
 
             hidden_states = outputs[0]
@@ -581,7 +574,6 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         use_cache=True,
         is_first_iteration=False,
         **kwargs,
@@ -593,7 +585,6 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             use_cache=use_cache,
             is_first_iteration=is_first_iteration,
             **kwargs,
@@ -624,7 +615,6 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple[torch.Tensor] | CausalLMOutputWithCrossAttentions:
@@ -656,7 +646,6 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         hidden_states = transformer_outputs[0]
