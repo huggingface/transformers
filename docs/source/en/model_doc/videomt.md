@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-02-19 and added to Hugging Face Transformers on 2026-03-11.*
+*This model was released on 2026-02-19 and added to Hugging Face Transformers on 2026-03-13.*
 
 
 # VidEoMT
@@ -55,7 +55,7 @@ The early encoder layers process all frames independently (in parallel), while t
 
 ## Usage Examples
 
-Use the Hugging Face implementation of VidEoMT for inference with pre-trained models. The examples below demonstrate video instance, semantic, and panoptic segmentation on a sample video.
+Use the Hugging Face implementation of VidEoMT for inference with pre-trained models. The examples below reuse the public `tue-mps/videomt-dinov2-small-ytvis2019` checkpoint to demonstrate video instance, semantic, and panoptic post-processing on a sample video.
 
 ### Video Instance Segmentation
 
@@ -64,13 +64,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from transformers import VideomtForUniversalSegmentation, VideomtVideoProcessor
+from transformers import AutoModelForUniversalSegmentation, AutoVideoProcessor
 from transformers.video_utils import load_video
 
 
-model_id = "tue-mps/videomt-dinov2-large-ytvis2019"
-processor = VideomtVideoProcessor.from_pretrained(model_id)
-model = VideomtForUniversalSegmentation.from_pretrained(model_id)
+model_id = "tue-mps/videomt-dinov2-small-ytvis2019"
+processor = AutoVideoProcessor.from_pretrained(model_id)
+model = AutoModelForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
 
 video_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/videos/pexels-allan-mas-5362370.mp4"
 # Sample 8 frames to keep the example lightweight.
@@ -92,7 +92,7 @@ results = processor.post_process_instance_segmentation(
 fig, axes = plt.subplots(2, 4, figsize=(16, 8))
 for idx, (ax, frame, result) in enumerate(zip(axes.flatten(), video_frames, results)):
     ax.imshow(frame)
-    seg = result["segmentation"].numpy()
+    seg = result["segmentation"].cpu().numpy()
     masked = np.ma.masked_where(seg == -1, seg)
     ax.imshow(masked, alpha=0.6, cmap="tab20")
     ax.set_title(f"Frame {idx}")
@@ -108,13 +108,13 @@ plt.show()
 import matplotlib.pyplot as plt
 import torch
 
-from transformers import VideomtForUniversalSegmentation, VideomtVideoProcessor
+from transformers import AutoModelForUniversalSegmentation, AutoVideoProcessor
 from transformers.video_utils import load_video
 
 
-model_id = "tue-mps/videomt-dinov2-large-vspw"
-processor = VideomtVideoProcessor.from_pretrained(model_id)
-model = VideomtForUniversalSegmentation.from_pretrained(model_id)
+model_id = "tue-mps/videomt-dinov2-small-ytvis2019"
+processor = AutoVideoProcessor.from_pretrained(model_id)
+model = AutoModelForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
 
 video_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/videos/pexels-allan-mas-5362370.mp4"
 # Sample 8 frames to keep the example lightweight.
@@ -136,7 +136,7 @@ preds = processor.post_process_semantic_segmentation(
 fig, axes = plt.subplots(2, 4, figsize=(16, 8))
 for idx, (ax, frame, seg_map) in enumerate(zip(axes.flatten(), video_frames, preds)):
     ax.imshow(frame)
-    ax.imshow(seg_map, alpha=0.6, cmap="tab20")
+    ax.imshow(seg_map.cpu().numpy(), alpha=0.6, cmap="tab20")
     ax.set_title(f"Frame {idx}")
     ax.axis("off")
 plt.suptitle("Video Semantic Segmentation")
@@ -151,13 +151,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from transformers import VideomtForUniversalSegmentation, VideomtVideoProcessor
+from transformers import AutoModelForUniversalSegmentation, AutoVideoProcessor
 from transformers.video_utils import load_video
 
 
-model_id = "tue-mps/videomt-dinov2-large-vipseg"
-processor = VideomtVideoProcessor.from_pretrained(model_id)
-model = VideomtForUniversalSegmentation.from_pretrained(model_id)
+model_id = "tue-mps/videomt-dinov2-small-ytvis2019"
+processor = AutoVideoProcessor.from_pretrained(model_id)
+model = AutoModelForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
 
 video_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/videos/pexels-allan-mas-5362370.mp4"
 # Sample 8 frames to keep the example lightweight.
@@ -179,7 +179,7 @@ results = processor.post_process_panoptic_segmentation(
 fig, axes = plt.subplots(2, 4, figsize=(16, 8))
 for idx, (ax, frame, result) in enumerate(zip(axes.flatten(), video_frames, results)):
     ax.imshow(frame)
-    seg = result["segmentation"].numpy()
+    seg = result["segmentation"].cpu().numpy()
     masked = np.ma.masked_where(seg == -1, seg)
     ax.imshow(masked, alpha=0.6, cmap="tab20")
     ax.set_title(f"Frame {idx}")
@@ -192,7 +192,6 @@ plt.show()
 ## VideomtVideoProcessor
 
 [[autodoc]] VideomtVideoProcessor
-    - preprocess
     - post_process_semantic_segmentation
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation

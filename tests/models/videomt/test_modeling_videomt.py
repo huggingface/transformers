@@ -49,7 +49,6 @@ class VideomtForUniversalSegmentationTester:
         parent,
         batch_size=2,
         num_frames=1,
-        is_training=False,
         image_size=40,
         patch_size=2,
         num_queries=5,
@@ -62,7 +61,6 @@ class VideomtForUniversalSegmentationTester:
         self.parent = parent
         self.batch_size = batch_size
         self.num_frames = num_frames
-        self.is_training = is_training
         self.num_queries = num_queries
         self.image_size = image_size
         self.patch_size = patch_size
@@ -164,6 +162,18 @@ class VideomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin,
         with self.assertRaisesRegex(ValueError, "only supports 5D video inputs"):
             model(inputs_dict["pixel_values"][:, 0])
 
+    def test_pixel_values_videos_alias(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = VideomtForUniversalSegmentation(config).to(torch_device)
+        model.eval()
+
+        with torch.inference_mode():
+            outputs = model(pixel_values_videos=inputs_dict["pixel_values"])
+
+        expected_batch = inputs_dict["pixel_values"].shape[0] * inputs_dict["pixel_values"].shape[1]
+        self.assertEqual(outputs.class_queries_logits.shape[0], expected_batch)
+        self.assertEqual(outputs.masks_queries_logits.shape[0], expected_batch)
+
 
 @slow
 @require_torch
@@ -186,6 +196,17 @@ class VideomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         inputs = processor(videos=[video_frames], return_tensors="pt").to(model.device)
         return model, processor, video_frames, inputs
 
+    def run_inference(self, model_id, num_frames=2, dtype=None):
+        model, processor, video_frames, inputs = self.prepare_model_and_inputs(
+            model_id, num_frames=num_frames, dtype=dtype
+        )
+
+        with torch.inference_mode():
+            outputs = model(**inputs)
+
+        self.assert_common_video_outputs(outputs, model, len(video_frames))
+        return model, processor, video_frames, outputs
+
     def assert_common_video_outputs(self, outputs, model, num_frames):
         expected_mask_size = (
             (model.config.image_size // model.config.patch_size) * (2**model.config.num_upscale_blocks),
@@ -202,12 +223,7 @@ class VideomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.isfinite(outputs.masks_queries_logits.float()).all())
 
     def test_instance_segmentation_inference(self):
-        model, processor, video_frames, inputs = self.prepare_model_and_inputs(self.instance_model_id)
-
-        with torch.inference_mode():
-            outputs = model(**inputs)
-
-        self.assert_common_video_outputs(outputs, model, len(video_frames))
+        _, processor, video_frames, outputs = self.run_inference(self.instance_model_id)
 
         target_sizes = [frame.shape[:2] for frame in video_frames]
         results = processor.post_process_instance_segmentation(outputs, target_sizes=target_sizes)
@@ -221,13 +237,32 @@ class VideomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
                 self.assertIn("score", info)
                 self.assertTrue(0.0 <= info["score"] <= 1.0)
 
+    def test_video_post_processing_variants(self):
+        _, processor, video_frames, outputs = self.run_inference(self.instance_model_id)
+
+        target_sizes = [frame.shape[:2] for frame in video_frames]
+        semantic_results = processor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
+        panoptic_results = processor.post_process_panoptic_segmentation(outputs, target_sizes=target_sizes)
+
+        self.assertEqual(len(semantic_results), len(video_frames))
+        for frame, seg_map in zip(video_frames, semantic_results):
+            self.assertEqual(seg_map.shape, frame.shape[:2])
+            self.assertFalse(torch.is_floating_point(seg_map))
+            self.assertGreaterEqual(seg_map.min().item(), 0)
+            self.assertLess(seg_map.max().item(), outputs.class_queries_logits.shape[-1] - 1)
+
+        self.assertEqual(len(panoptic_results), len(video_frames))
+        for frame, result in zip(video_frames, panoptic_results):
+            self.assertEqual(result["segmentation"].shape, frame.shape[:2])
+            self.assertIsInstance(result["segments_info"], list)
+            for info in result["segments_info"]:
+                self.assertIn("label_id", info)
+                self.assertIn("score", info)
+                self.assertTrue(0.0 <= info["score"] <= 1.0)
+
     @require_torch_gpu
     def test_instance_segmentation_inference_bf16(self):
-        model, _, video_frames, inputs = self.prepare_model_and_inputs(self.instance_model_id, dtype=torch.bfloat16)
+        _, _, _, outputs = self.run_inference(self.instance_model_id, dtype=torch.bfloat16)
 
-        with torch.inference_mode():
-            outputs = model(**inputs)
-
-        self.assert_common_video_outputs(outputs, model, len(video_frames))
         self.assertEqual(outputs.class_queries_logits.dtype, torch.bfloat16)
         self.assertEqual(outputs.masks_queries_logits.dtype, torch.bfloat16)

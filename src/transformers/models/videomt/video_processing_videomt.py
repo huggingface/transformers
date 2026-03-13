@@ -14,7 +14,7 @@
 """Video processor class for Videomt."""
 
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
-from ...utils import is_torch_available
+from ...utils import is_torch_available, requires_backends
 from ...video_processing_utils import BaseVideoProcessor
 
 
@@ -23,48 +23,21 @@ if is_torch_available():
     import torch.nn.functional as F
 
 
-def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
-    """
-    Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
-    `labels`.
+def check_segment_validity(mask_labels, mask_probs, query_idx, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
+    """Checks whether a predicted query produces a valid panoptic segment."""
+    query_mask = mask_labels == query_idx
+    query_mask_area = query_mask.sum()
 
-    Args:
-        masks (`torch.Tensor`):
-            A tensor of shape `(num_queries, height, width)`.
-        scores (`torch.Tensor`):
-            A tensor of shape `(num_queries)`.
-        labels (`torch.Tensor`):
-            A tensor of shape `(num_queries)`.
-        object_mask_threshold (`float`):
-            A number between 0 and 1 used to binarize the masks.
-    Raises:
-        `ValueError`: Raised when the first dimension doesn't match in all input tensors.
-    Returns:
-        `tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
-        < `object_mask_threshold`.
-    """
-    if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
-        raise ValueError("mask, scores and labels must have the same shape!")
-
-    to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
-
-    return masks[to_keep], scores[to_keep], labels[to_keep]
-
-
-def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
-    mask_k = mask_labels == k
-    mask_k_area = mask_k.sum()
-
-    original_mask = mask_probs[k] >= mask_threshold
+    original_mask = mask_probs[query_idx] >= mask_threshold
     original_area = original_mask.sum()
 
-    final_mask = mask_k & original_mask
+    final_mask = query_mask & original_mask
     final_mask_area = final_mask.sum()
 
-    mask_exists = mask_k_area > 0 and original_area > 0 and final_mask_area > 0
+    mask_exists = query_mask_area > 0 and original_area > 0 and final_mask_area > 0
 
     if mask_exists:
-        area_ratio = mask_k_area / original_area
+        area_ratio = query_mask_area / original_area
         if not area_ratio.item() > overlap_mask_area_threshold:
             mask_exists = False
 
@@ -80,6 +53,7 @@ def compute_segments(
     overlap_mask_area_threshold: float = 0.8,
     target_size: tuple[int, int] | None = None,
 ):
+    """Converts per-query mask predictions into a panoptic segmentation map."""
     height = mask_probs.shape[1] if target_size is None else target_size[0]
     width = mask_probs.shape[2] if target_size is None else target_size[1]
 
@@ -90,13 +64,13 @@ def compute_segments(
     mask_labels = (pred_scores[:, None, None] * mask_probs).argmax(0)
 
     current_segment_id = 0
-    stuff_memory_list: dict[str, int] = {}
+    stuff_memory_list: dict[int, int] = {}
 
-    for k in range(pred_labels.shape[0]):
-        pred_class = pred_labels[k].item()
+    for query_idx in range(pred_labels.shape[0]):
+        pred_class = pred_labels[query_idx].item()
 
         mask_exists, final_mask = check_segment_validity(
-            mask_labels, mask_probs, k, mask_threshold, overlap_mask_area_threshold
+            mask_labels, mask_probs, query_idx, mask_threshold, overlap_mask_area_threshold
         )
 
         if not mask_exists:
@@ -110,7 +84,7 @@ def compute_segments(
                 stuff_memory_list[pred_class] = current_segment_id
 
         segmentation[final_mask] = current_segment_id
-        segment_score = round(pred_scores[k].item(), 6)
+        segment_score = round(pred_scores[query_idx].item(), 6)
         segments.append(
             {
                 "id": current_segment_id,
@@ -134,12 +108,7 @@ class VideomtVideoProcessor(BaseVideoProcessor):
     do_normalize = True
     do_convert_rgb = True
     do_sample_frames = False
-    model_input_names = ["pixel_values"]
-
-    def preprocess(self, videos, **kwargs):
-        batch = super().preprocess(videos, **kwargs)
-        batch["pixel_values"] = batch.pop("pixel_values_videos")
-        return batch
+    model_input_names = ["pixel_values_videos"]
 
     def _resize_mask_logits(
         self,
@@ -177,6 +146,8 @@ class VideomtVideoProcessor(BaseVideoProcessor):
             `list[torch.Tensor]`: A list of tensors, each of shape `(height, width)`, where each value is the
             predicted class index for the corresponding pixel.
         """
+        requires_backends(self, ["torch"])
+
         masks_queries_logits = outputs.masks_queries_logits  # [num_frames, num_queries, height, width]
         class_queries_logits = outputs.class_queries_logits  # [num_frames, num_queries, num_classes+1]
 
@@ -221,6 +192,8 @@ class VideomtVideoProcessor(BaseVideoProcessor):
                 - `"segmentation"` -- A `torch.Tensor` of shape `(height, width)` with instance IDs (or -1 for background).
                 - `"segments_info"` -- A list of dicts with `"id"`, `"label_id"`, and `"score"` for each instance.
         """
+        requires_backends(self, ["torch"])
+
         class_queries_logits = outputs.class_queries_logits
         masks_queries_logits = outputs.masks_queries_logits
 
@@ -232,31 +205,31 @@ class VideomtVideoProcessor(BaseVideoProcessor):
 
         results = []
 
-        for i in range(num_frames):
-            mask_pred = mask_probs_batch[i]
-            mask_class = class_queries_logits[i]
+        for frame_idx in range(num_frames):
+            mask_pred = mask_probs_batch[frame_idx]
+            mask_class = class_queries_logits[frame_idx]
 
             scores, pred_classes = mask_class.softmax(dim=-1)[..., :-1].max(-1)
-            pred_masks = (mask_pred > 0).float()
+            pred_masks = mask_pred > 0
 
             mask_scores = (mask_pred.sigmoid().flatten(1) * pred_masks.flatten(1)).sum(1) / (
                 pred_masks.flatten(1).sum(1) + 1e-6
             )
             pred_scores = scores * mask_scores
 
-            segmentation = torch.zeros(target_sizes[i], device=device) - 1
+            segmentation = torch.full(target_sizes[frame_idx], fill_value=-1, dtype=torch.long, device=device)
 
             segments = []
             current_segment_id = 0
-            for j in range(num_queries):
-                score = pred_scores[j].item()
+            for query_idx in range(num_queries):
+                score = pred_scores[query_idx].item()
 
-                if not torch.all(pred_masks[j] == 0) and score >= threshold:
-                    segmentation[pred_masks[j] == 1] = current_segment_id
+                if torch.any(pred_masks[query_idx]) and score >= threshold:
+                    segmentation[pred_masks[query_idx]] = current_segment_id
                     segments.append(
                         {
                             "id": current_segment_id,
-                            "label_id": pred_classes[j].item(),
+                            "label_id": pred_classes[query_idx].item(),
                             "score": round(score, 6),
                         }
                     )
@@ -297,6 +270,8 @@ class VideomtVideoProcessor(BaseVideoProcessor):
                 - `"segmentation"` -- A `torch.Tensor` of shape `(height, width)` with segment IDs (or -1 for background).
                 - `"segments_info"` -- A list of dicts with `"id"`, `"label_id"`, and `"score"` for each segment.
         """
+        requires_backends(self, ["torch"])
+
         masks_queries_logits = outputs.masks_queries_logits
         class_queries_logits = outputs.class_queries_logits
 
@@ -308,14 +283,24 @@ class VideomtVideoProcessor(BaseVideoProcessor):
 
         results: list = []
 
-        for i in range(num_frames):
-            mask_probs, pred_scores, pred_labels = remove_low_and_no_objects(
-                mask_probs_batch[i], pred_scores_batch[i], pred_labels_batch[i], threshold, num_labels
-            )
+        for frame_idx in range(num_frames):
+            mask_probs = mask_probs_batch[frame_idx]
+            pred_scores = pred_scores_batch[frame_idx]
+            pred_labels = pred_labels_batch[frame_idx]
+
+            if not (mask_probs.shape[0] == pred_scores.shape[0] == pred_labels.shape[0]):
+                raise ValueError("mask, scores and labels must have the same shape!")
+
+            to_keep = pred_labels.ne(num_labels) & (pred_scores > threshold)
+            mask_probs = mask_probs[to_keep]
+            pred_scores = pred_scores[to_keep]
+            pred_labels = pred_labels[to_keep]
 
             if mask_probs.shape[0] <= 0:
-                height, width = target_sizes[i] if target_sizes is not None else mask_probs.shape[1:]
-                segmentation = torch.zeros((height, width)) - 1
+                height, width = target_sizes[frame_idx] if target_sizes is not None else mask_probs.shape[1:]
+                segmentation = torch.full(
+                    (height, width), fill_value=-1, dtype=torch.long, device=masks_queries_logits.device
+                )
                 results.append({"segmentation": segmentation, "segments_info": []})
                 continue
 
@@ -326,7 +311,7 @@ class VideomtVideoProcessor(BaseVideoProcessor):
                 stuff_classes=stuff_classes,
                 mask_threshold=mask_threshold,
                 overlap_mask_area_threshold=overlap_mask_area_threshold,
-                target_size=target_sizes[i] if target_sizes is not None else None,
+                target_size=target_sizes[frame_idx] if target_sizes is not None else None,
             )
 
             results.append({"segmentation": segmentation, "segments_info": segments})

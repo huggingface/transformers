@@ -115,7 +115,7 @@ class VideomtVideoProcessingTester:
 @require_torchvision
 class VideomtVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
     fast_video_processing_class = VideomtVideoProcessor if is_torchvision_available() else None
-    input_name = "pixel_values"
+    input_name = "pixel_values_videos"
 
     def setUp(self):
         super().setUp()
@@ -135,7 +135,7 @@ class VideomtVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(video_processing, "image_std"))
         self.assertTrue(hasattr(video_processing, "do_convert_rgb"))
         self.assertTrue(hasattr(video_processing, "model_input_names"))
-        self.assertIn("pixel_values", video_processing.model_input_names)
+        self.assertIn("pixel_values_videos", video_processing.model_input_names)
 
     def test_video_processor_from_dict_with_kwargs(self):
         video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict)

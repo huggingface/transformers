@@ -18,7 +18,8 @@ import torch
 from torch import nn
 
 from ...file_utils import ModelOutput
-from ...utils import auto_docstring
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring
 from ..eomt.configuration_eomt import EomtConfig
 from ..eomt.modeling_eomt import (
     EomtEmbeddings,
@@ -48,36 +49,18 @@ class VideomtEmbeddings(EomtEmbeddings):
             batch_size, num_frames, num_channels, height, width = pixel_values.shape
             pixel_values = pixel_values.reshape(batch_size * num_frames, num_channels, height, width)
 
-            if bool_masked_pos is not None and bool_masked_pos.ndim >= 3:
+            if bool_masked_pos is not None:
                 bool_masked_pos = bool_masked_pos.reshape(batch_size * num_frames, -1)
         elif bool_masked_pos is not None and bool_masked_pos.ndim > 2:
             bool_masked_pos = bool_masked_pos.reshape(bool_masked_pos.shape[0], -1)
-
-        if bool_masked_pos is not None:
-            if bool_masked_pos.dtype != torch.bool:
-                raise ValueError(f"Expected bool_masked_pos dtype to be torch.bool, but got {bool_masked_pos.dtype}.")
-
-            if bool_masked_pos.shape[0] != pixel_values.shape[0]:
-                raise ValueError(
-                    f"Expected bool_masked_pos batch dimension to match pixel_values batch dimension "
-                    f"({pixel_values.shape[0]}), but got {bool_masked_pos.shape[0]}."
-                )
-
-            patch_size = self.config.patch_size
-            expected_num_patches = (pixel_values.shape[-2] // patch_size) * (pixel_values.shape[-1] // patch_size)
-            if bool_masked_pos.shape[-1] != expected_num_patches:
-                raise ValueError(
-                    f"Expected bool_masked_pos to provide one value per patch ({expected_num_patches}), "
-                    f"but got {bool_masked_pos.shape[-1]}."
-                )
 
         batch_size = pixel_values.shape[0]
         target_dtype = self.patch_embeddings.projection.weight.dtype
         embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
 
         if bool_masked_pos is not None:
-            mask_token = self.mask_token.to(embeddings.dtype)
-            embeddings = torch.where(bool_masked_pos.unsqueeze(-1), mask_token, embeddings)
+            mask = bool_masked_pos.to(device=embeddings.device, dtype=torch.bool).unsqueeze(-1)
+            embeddings = torch.where(mask, self.mask_token, embeddings)
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         register_tokens = self.register_tokens.expand(batch_size, -1, -1)
@@ -171,25 +154,35 @@ class VideomtForUniversalSegmentation(EomtForUniversalSegmentation):
         self.query_updater = nn.Linear(config.hidden_size, config.hidden_size)
 
     @staticmethod
-    def _disable_attention_mask(attn_mask, *args, **kwargs):
-        return attn_mask
+    def _disable_attention_mask(attn_mask, prob, num_query_tokens, encoder_start_tokens, device):
+        raise AttributeError("Not needed for Videomt")
 
     def forward(
         self,
-        pixel_values: torch.Tensor,
+        pixel_values: torch.Tensor | None = None,
         mask_labels: list[torch.Tensor] | None = None,
         class_labels: list[torch.Tensor] | None = None,
-        **kwargs,
+        patch_offsets: list[torch.Tensor] | None = None,  # Unused, kept for modular compatibility.
+        **kwargs: Unpack[TransformersKwargs],
     ) -> VideomtForUniversalSegmentationOutput:
         r"""
-        pixel_values (`torch.Tensor`):
-            Video inputs of shape `(batch_size, num_frames, num_channels, height, width)`.
+        pixel_values (`torch.Tensor`, *optional*):
+            Video inputs of shape `(batch_size, num_frames, num_channels, height, width)`. Can also be passed as
+            `pixel_values_videos`.
         mask_labels (`list[torch.Tensor]`, *optional*):
             Not supported for 5D video inputs.
         class_labels (`list[torch.LongTensor]`, *optional*):
             Not supported for 5D video inputs.
+        patch_offsets (`list[torch.Tensor]`, *optional*):
+            Unused for video inputs and only kept for modular compatibility.
         """
-        kwargs.pop("patch_offsets", None)
+
+        pixel_values_videos = kwargs.pop("pixel_values_videos", None)
+        if pixel_values is None:
+            pixel_values = pixel_values_videos
+
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values or pixel_values_videos")
 
         if pixel_values.ndim != 5:
             raise ValueError(
@@ -240,7 +233,7 @@ class VideomtForUniversalSegmentation(EomtForUniversalSegmentation):
             propagated_query = frame_hidden_states[:, : self.config.num_queries, :]
 
         return VideomtForUniversalSegmentationOutput(
-            loss=None,
+            loss=None,  # Training not supported yet
             masks_queries_logits=torch.cat(all_masks_queries_logits, dim=0),
             class_queries_logits=torch.cat(all_class_queries_logits, dim=0),
             last_hidden_state=torch.cat(all_last_hidden_states, dim=0),
