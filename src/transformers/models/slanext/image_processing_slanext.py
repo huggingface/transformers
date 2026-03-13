@@ -53,8 +53,8 @@ class SLANeXtImageProcessor(BaseImageProcessor):
         Returns:
             `np.ndarray`: Resized image in HWC format.
         """
-        h, w = img.shape[:2]
-        target_w, target_h = target_size
+        height, width = img.shape[:2]
+        target_width, target_height = target_size
 
         # Ensure uint8 format
         if img.dtype != np.uint8:
@@ -72,38 +72,38 @@ class SLANeXtImageProcessor(BaseImageProcessor):
         INTER_RESIZE_COEF_SCALE = 1 << INTER_RESIZE_COEF_BITS  # 2048
 
         # Calculate scale factors using float32 (matching OpenCV)
-        scale_x = np.float32(w) / np.float32(target_w)
-        scale_y = np.float32(h) / np.float32(target_h)
+        scale_x = np.float32(width) / np.float32(target_width)
+        scale_y = np.float32(height) / np.float32(target_height)
 
         # Pre-compute X interpolation tables (vectorized)
-        dx_arr = np.arange(target_w, dtype=np.float32)
+        dx_arr = np.arange(target_width, dtype=np.float32)
         fx_arr = (dx_arr + np.float32(0.5)) * scale_x - np.float32(0.5)
         sx_arr = np.floor(fx_arr).astype(np.int32)
         fx_frac_arr = fx_arr - sx_arr.astype(np.float32)
 
         # Handle X boundaries
         mask_left = sx_arr < 0
-        mask_right = sx_arr >= w - 1
+        mask_right = sx_arr >= width - 1
         sx_arr[mask_left] = 0
         fx_frac_arr[mask_left] = 0.0
-        sx_arr[mask_right] = w - 2
+        sx_arr[mask_right] = width - 2
         fx_frac_arr[mask_right] = 1.0
 
         xalpha = np.round(fx_frac_arr * np.float32(INTER_RESIZE_COEF_SCALE)).astype(np.int32)
         xofs = sx_arr
 
         # Pre-compute Y interpolation tables (vectorized)
-        dy_arr = np.arange(target_h, dtype=np.float32)
+        dy_arr = np.arange(target_height, dtype=np.float32)
         fy_arr = (dy_arr + np.float32(0.5)) * scale_y - np.float32(0.5)
         sy_arr = np.floor(fy_arr).astype(np.int32)
         fy_frac_arr = fy_arr - sy_arr.astype(np.float32)
 
         # Handle Y boundaries
         mask_top = sy_arr < 0
-        mask_bottom = sy_arr >= h - 1
+        mask_bottom = sy_arr >= height - 1
         sy_arr[mask_top] = 0
         fy_frac_arr[mask_top] = 0.0
-        sy_arr[mask_bottom] = h - 2
+        sy_arr[mask_bottom] = height - 2
         fy_frac_arr[mask_bottom] = 1.0
 
         yalpha = np.round(fy_frac_arr * np.float32(INTER_RESIZE_COEF_SCALE)).astype(np.int32)
@@ -119,14 +119,14 @@ class SLANeXtImageProcessor(BaseImageProcessor):
         ax_inv = INTER_RESIZE_COEF_SCALE - ax_grid
 
         # Perform vectorized bilinear interpolation for each channel
-        output = np.zeros((target_h, target_w, img.shape[2]), dtype=np.uint8)
+        output = np.zeros((target_height, target_width, img.shape[2]), dtype=np.uint8)
 
-        for c in range(img.shape[2]):
+        for channel_idx in range(img.shape[2]):
             # Get 4 corner pixels using advanced indexing
-            p00 = img[sy_grid, sx_grid, c].astype(np.int32)  # (target_h, target_w)
-            p10 = img[sy_grid, sx_grid + 1, c].astype(np.int32)
-            p01 = img[sy_grid + 1, sx_grid, c].astype(np.int32)
-            p11 = img[sy_grid + 1, sx_grid + 1, c].astype(np.int32)
+            p00 = img[sy_grid, sx_grid, channel_idx].astype(np.int32)  # (target_h, target_w)
+            p10 = img[sy_grid, sx_grid + 1, channel_idx].astype(np.int32)
+            p01 = img[sy_grid + 1, sx_grid, channel_idx].astype(np.int32)
+            p11 = img[sy_grid + 1, sx_grid + 1, channel_idx].astype(np.int32)
 
             # Vectorized bilinear interpolation
             val = ay_inv * (ax_inv * p00 + ax_grid * p10) + ay_grid * (ax_inv * p01 + ax_grid * p11)
@@ -135,7 +135,7 @@ class SLANeXtImageProcessor(BaseImageProcessor):
             shift_bits = INTER_RESIZE_COEF_BITS * 2
             val = (val + (1 << (shift_bits - 1))) >> shift_bits
 
-            output[:, :, c] = np.clip(val, 0, 255).astype(np.uint8)
+            output[:, :, channel_idx] = np.clip(val, 0, 255).astype(np.uint8)
 
         if squeeze_output:
             output = output[:, :, 0]
@@ -143,17 +143,17 @@ class SLANeXtImageProcessor(BaseImageProcessor):
         return output
 
     def calc_padding(self, img):
-        h, w = img.shape[:2]
-        pad_right = max(0, self.target_pad_size - w)
-        pad_bottom = max(0, self.target_pad_size - h)
+        height, width = img.shape[:2]
+        pad_right = max(0, self.target_pad_size - width)
+        pad_bottom = max(0, self.target_pad_size - height)
         return ((0, pad_bottom), (0, pad_right))
 
     def calc_resize(self, img):
-        h, w = img.shape[:2]
-        scale = self.target_long_edge / max(h, w)
-        h_resize = round(h * scale)
-        w_resize = round(w * scale)
-        return [w_resize, h_resize]
+        height, width = img.shape[:2]
+        scale = self.target_long_edge / max(height, width)
+        height_resize = round(height * scale)
+        width_resize = round(width * scale)
+        return [width_resize, height_resize]
 
     def preprocess(self, img):
         img = np.array(img)
@@ -167,8 +167,8 @@ class SLANeXtImageProcessor(BaseImageProcessor):
 
         return img
 
-    def post_process_table_recognition(self, x):
-        return self.decode(x[0].detach().cpu())[0]
+    def post_process_table_recognition(self, hidden_states):
+        return self.decode(hidden_states[0].detach().cpu())[0]
 
     def init_decoder(self, merge_no_span_structure=True):
         dict_character = [
@@ -183,10 +183,8 @@ class SLANeXtImageProcessor(BaseImageProcessor):
             ">",
             "</td>",
         ]
-        for i in range(19):
-            dict_character.append(f' colspan="{i + 2}"')
-        for i in range(19):
-            dict_character.append(f' rowspan="{i + 2}"')
+        dict_character += [f' colspan="{i + 2}"' for i in range(19)]
+        dict_character += [f' rowspan="{i + 2}"' for i in range(19)]
 
         if merge_no_span_structure:
             if "<td></td>" not in dict_character:
@@ -195,9 +193,7 @@ class SLANeXtImageProcessor(BaseImageProcessor):
                 dict_character.remove("<td>")
 
         dict_character = self.add_special_char(dict_character)
-        self.dict = {}
-        for i, char in enumerate(dict_character):
-            self.dict[char] = i
+        self.dict = {char: i for i, char in enumerate(dict_character)}
         self.character = dict_character
         self.td_token = ["<td>", "<td", "<td></td>"]
 
@@ -205,9 +201,7 @@ class SLANeXtImageProcessor(BaseImageProcessor):
         """add_special_char"""
         self.beg_str = "sos"
         self.end_str = "eos"
-        dict_character = dict_character
-        dict_character = [self.beg_str] + dict_character + [self.end_str]
-        return dict_character
+        return [self.beg_str] + dict_character + [self.end_str]
 
     def get_ignored_tokens(self):
         """get_ignored_tokens"""
@@ -237,23 +231,23 @@ class SLANeXtImageProcessor(BaseImageProcessor):
 
         structure_str_list = []
         batch_size = len(structure_idx)
-        for batch_idx in range(batch_size):
+        for batch_index in range(batch_size):
             structure_list = []
             score_list = []
-            for idx in range(len(structure_idx[batch_idx])):
-                char_idx = int(structure_idx[batch_idx][idx])
-                if idx > 0 and char_idx == end_idx:
+            for position in range(len(structure_idx[batch_index])):
+                char_idx = int(structure_idx[batch_index][position])
+                if position > 0 and char_idx == end_idx:
                     break
                 if char_idx in ignored_tokens:
                     continue
                 text = self.character[char_idx]
                 structure_list.append(text)
-                score_list.append(structure_probs[batch_idx, idx])
+                score_list.append(structure_probs[batch_index, position])
             structure_str_list.append(structure_list)
             structure_score = np.mean(score_list)
 
         structure_str_list = [
-            (["<html>", "<body>", "<table>"] + structure + ["</table>", "</body>", "</html>"])
+            ["<html>", "<body>", "<table>"] + structure + ["</table>", "</body>", "</html>"]
             for structure in structure_str_list
         ]
 

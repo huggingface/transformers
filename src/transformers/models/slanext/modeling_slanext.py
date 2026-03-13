@@ -21,7 +21,6 @@
 
 import math
 from dataclasses import dataclass
-from functools import partial
 
 import numpy as np
 import torch
@@ -31,31 +30,7 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring
-from ..vitdet.modeling_vitdet import VitDetLayerNorm
 from .configuration_slanext import SLANeXtConfig
-
-
-class SLANeXtMLPBlock(nn.Module):
-    def __init__(
-        self,
-        embedding_dim: int,
-        mlp_dim: int,
-        act: type[nn.Module] = nn.GELU,
-    ) -> None:
-        """
-        Args:
-            embedding_dim (int): Embedding dimension.
-            mlp_dim (int): Hidden dimension of MLP.
-            act (type[nn.Module]): Activation layer.
-        """
-        super().__init__()
-
-        self.lin1 = nn.Linear(embedding_dim, mlp_dim)
-        self.lin2 = nn.Linear(mlp_dim, embedding_dim)
-        self.act = act()
-
-    def forward(self, x):
-        return self.lin2(self.act(self.lin1(x)))
 
 
 # This class and its supporting functions below lightly adapted from the ViTDet backbone available at: https://github.com/facebookresearch/detectron2/blob/main/detectron2/modeling/backbone/vit.py # noqa
@@ -100,348 +75,32 @@ class SLANeXtImageEncoderViT(nn.Module):
         super().__init__()
 
         self.img_size = img_size
-        self.patch_embed = SLANeXtPatchEmbed(
-            kernel_size=(patch_size, patch_size),
-            stride=(patch_size, patch_size),
-            in_chans=in_chans,
-            embed_dim=embed_dim,
-        )
-        self.pos_embed = None
-        if use_abs_pos:
-            self.pos_embed = nn.Parameter(torch.zeros(1, img_size // patch_size, img_size // patch_size, embed_dim))
-        self.blocks = nn.ModuleList()
 
-        for i in range(depth):
-            block = SLANeXtVary_Block(
-                dim=embed_dim,
-                num_heads=num_heads,
-                mlp_ratio=mlp_ratio,
-                qkv_bias=qkv_bias,
-                norm_layer=norm_layer,
-                act_layer=act_layer,
-                use_rel_pos=use_rel_pos,
-                rel_pos_zero_init=rel_pos_zero_init,
-                window_size=window_size if i not in global_attn_indexes else 0,
-                input_size=(img_size // patch_size, img_size // patch_size),
-            )
-            self.blocks.append(block)
-
-        self.neck = nn.Sequential(
-            nn.Conv2d(
-                embed_dim,
-                out_chans,
-                kernel_size=1,
-                bias=False,
-            ),
-            VitDetLayerNorm(out_chans),
-            nn.Conv2d(
-                out_chans,
-                out_chans,
-                kernel_size=3,
-                padding=1,
-                bias=False,
-            ),
-            VitDetLayerNorm(out_chans),
-        )
-
-        self.net_2 = nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1, bias=False)
-
-        self.net_3 = nn.Conv2d(512, 1024, kernel_size=3, stride=2, padding=1, bias=False)
-
-    def forward(self, x):
-        x = self.patch_embed(x)
-        if self.pos_embed is not None:
-            x = x + self.pos_embed
-        for blk in self.blocks:
-            x = blk(x)
-        x = self.neck(x.permute(0, 3, 1, 2))
-        x = self.net_2(x)
-        return x
-
-
-def window_partition(x, window_size: int):
-    """
-    Partition into non-overlapping windows with padding if needed.
-    Args:
-        x (tensor): input tokens with [B, H, W, C].
-        window_size (int): window size.
-
-    Returns:
-        windows: windows after partition with [B * num_windows, window_size, window_size, C].
-        (Hp, Wp): padded height and width before partition
-    """
-    B, H, W, C = x.shape
-    pad_h = (window_size - H % window_size) % window_size
-    pad_w = (window_size - W % window_size) % window_size
-    if pad_h > 0 or pad_w > 0:
-        x = F.pad(x, (0, 0, 0, pad_w, 0, pad_h, 0, 0))
-    Hp, Wp = H + pad_h, W + pad_w
-    x = x.reshape(B, Hp // window_size, window_size, Wp // window_size, window_size, C)
-    windows = x.permute(0, 1, 3, 2, 4, 5).reshape(-1, window_size, window_size, C)
-    return windows, (Hp, Wp)
-
-
-def window_unpartition(windows, window_size: int, pad_hw: tuple[int, int], hw: tuple[int, int]):
-    """
-    Window unpartition into original sequences and removing padding.
-    Args:
-        windows (tensor): input tokens with [B * num_windows, window_size, window_size, C].
-        window_size (int): window size.
-        pad_hw (Tuple): padded height and width (Hp, Wp).
-        hw (Tuple): original height and width (H, W) before padding.
-
-    Returns:
-        x: unpartitioned sequences with [B, H, W, C].
-    """
-    Hp, Wp = pad_hw
-    H, W = hw
-    B = windows.shape[0] // (Hp * Wp // window_size // window_size)
-    x = windows.reshape(B, Hp // window_size, Wp // window_size, window_size, window_size, -1)
-    x = x.permute(0, 1, 3, 2, 4, 5).contiguous().reshape(B, Hp, Wp, -1)
-    if Hp > H or Wp > W:
-        x = x[:, :H, :W, :].contiguous()
-    return x
-
-
-class SLANeXtVary_Block(nn.Module):
-    """Transformer blocks with support of window attention and residual propagation blocks"""
-
-    def __init__(
-        self,
-        dim: int,
-        num_heads: int,
-        mlp_ratio: float = 4.0,
-        qkv_bias: bool = True,
-        norm_layer: type[nn.Module] = nn.LayerNorm,
-        act_layer: type[nn.Module] = nn.GELU,
-        use_rel_pos: bool = False,
-        rel_pos_zero_init: bool = True,
-        window_size: int = 0,
-        input_size: tuple[int, int] | None = None,
-    ) -> None:
-        """
-        Args:
-            dim (int): Number of input channels.
-            num_heads (int): Number of attention heads in each ViT block.
-            mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
-            qkv_bias (bool): If True, add a learnable bias to query, key, value.
-            norm_layer (nn.Layer): Normalization layer.
-            act_layer (nn.Layer): Activation layer.
-            use_rel_pos (bool): If True, add relative positional embeddings to the attention map.
-            rel_pos_zero_init (bool): If True, zero initialize relative positional parameters.
-            window_size (int): Window size for window attention blocks. If it equals 0, then
-                use global attention.
-            input_size (tuple(int, int) or None): Input resolution for calculating the relative
-                positional parameter size.
-        """
-        super().__init__()
-
-        self.norm1 = norm_layer(dim)
-        self.attn = SLANeXtAttention(
-            dim,
-            num_heads=num_heads,
+        vision_config = GotOcr2VisionConfig(
+            hidden_size=embed_dim,
+            output_channels=out_chans,
+            num_hidden_layers=depth,
+            num_attention_heads=num_heads,
+            num_channels=in_chans,
+            image_size=img_size,
+            patch_size=patch_size,
+            hidden_act="gelu",
+            layer_norm_eps=1e-6,
+            attention_dropout=0.0,
             qkv_bias=qkv_bias,
+            use_abs_pos=use_abs_pos,
             use_rel_pos=use_rel_pos,
-            rel_pos_zero_init=rel_pos_zero_init,
-            input_size=input_size if window_size == 0 else (window_size, window_size),
+            window_size=window_size,
+            global_attn_indexes=list(global_attn_indexes),
+            mlp_dim=int(embed_dim * mlp_ratio),
         )
+        self.encoder = GotOcr2VisionEncoder(vision_config)
+        self.net_2 = nn.Conv2d(out_chans, out_chans * 2, kernel_size=3, stride=2, padding=1, bias=False)
 
-        self.norm2 = norm_layer(dim)
-        self.mlp = SLANeXtMLPBlock(embedding_dim=dim, mlp_dim=int(dim * mlp_ratio), act=act_layer)
-
-        self.window_size = window_size
-
-    def forward(self, x):
-        shortcut = x
-        x = self.norm1(x)
-        if self.window_size > 0:
-            H, W = x.shape[1], x.shape[2]
-            x, pad_hw = window_partition(x, self.window_size)
-        x = self.attn(x)
-        if self.window_size > 0:
-            x = window_unpartition(x, self.window_size, pad_hw, (H, W))
-        x = shortcut + x
-        x = x + self.mlp(self.norm2(x))
-        return x
-
-
-def get_rel_pos(q_size: int, k_size: int, rel_pos):
-    """
-    Get relative positional embeddings according to the relative positions of
-        query and key sizes.
-    Args:
-        q_size (int): size of query q.
-        k_size (int): size of key k.
-        rel_pos (Tensor): relative position embeddings (L, C).
-
-    Returns:
-        Extracted positional embeddings according to relative positions.
-    """
-    max_rel_dist = int(2 * max(q_size, k_size) - 1)
-    if rel_pos.shape[0] != max_rel_dist:
-        rel_pos_resized = F.interpolate(
-            rel_pos.reshape(1, rel_pos.shape[0], -1).permute(0, 2, 1),
-            size=max_rel_dist,
-            mode="linear",
-            align_corners=False,
-        )
-        rel_pos_resized = rel_pos_resized.reshape(-1, max_rel_dist).permute(1, 0)
-    else:
-        rel_pos_resized = rel_pos
-    q_coords = torch.arange(q_size, dtype=torch.float32, device=rel_pos.device)[:, None] * max(k_size / q_size, 1.0)
-    k_coords = torch.arange(k_size, dtype=torch.float32, device=rel_pos.device)[None, :] * max(q_size / k_size, 1.0)
-    relative_coords = (q_coords - k_coords) + (k_size - 1) * max(q_size / k_size, 1.0)
-    return rel_pos_resized[relative_coords.long()]
-
-
-def add_decomposed_rel_pos(
-    attn,
-    q,
-    rel_pos_h,
-    rel_pos_w,
-    q_size: tuple[int, int],
-    k_size: tuple[int, int],
-):
-    """
-    Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
-    https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py   # noqa B950
-    Args:
-        attn (Tensor): attention map.
-        q (Tensor): query q in the attention layer with shape (B, q_h * q_w, C).
-        rel_pos_h (Tensor): relative position embeddings (Lh, C) for height axis.
-        rel_pos_w (Tensor): relative position embeddings (Lw, C) for width axis.
-        q_size (Tuple): spatial sequence size of query q with (q_h, q_w).
-        k_size (Tuple): spatial sequence size of key k with (k_h, k_w).
-
-    Returns:
-        attn (Tensor): attention map with added relative positional embeddings.
-    """
-    q_h, q_w = q_size
-    k_h, k_w = k_size
-    Rh = get_rel_pos(q_h, k_h, rel_pos_h)
-    Rw = get_rel_pos(q_w, k_w, rel_pos_w)
-    B, _, dim = q.shape
-    r_q = q.reshape(B, q_h, q_w, dim)
-    rel_h = torch.einsum("bhwc,hkc->bhwk", r_q, Rh)
-    rel_w = torch.einsum("bhwc,wkc->bhwk", r_q, Rw)
-    attn = (attn.reshape(B, q_h, q_w, k_h, k_w) + rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]).reshape(
-        B, q_h * q_w, k_h * k_w
-    )
-    return attn
-
-
-class SLANeXtAttention(nn.Module):
-    """Multi-head Attention block with relative position embeddings."""
-
-    def __init__(
-        self,
-        dim: int,
-        num_heads: int = 8,
-        qkv_bias: bool = True,
-        use_rel_pos: bool = False,
-        rel_pos_zero_init: bool = True,
-        input_size: tuple[int, int] | None = None,
-    ) -> None:
-        """
-        Args:
-            dim (int): Number of input channels.
-            num_heads (int): Number of attention heads.
-            qkv_bias (bool):  If True, add a learnable bias to query, key, value.
-            rel_pos (bool): If True, add relative positional embeddings to the attention map.
-            rel_pos_zero_init (bool): If True, zero initialize relative positional parameters.
-            input_size (tuple(int, int) or None): Input resolution for calculating the relative
-                positional parameter size.
-        """
-        super().__init__()
-
-        self.num_heads = num_heads
-        head_dim = dim // num_heads
-        self.scale = head_dim**-0.5
-
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.proj = nn.Linear(dim, dim)
-
-        self.use_rel_pos = use_rel_pos
-        if self.use_rel_pos:
-            assert input_size is not None, "Input size must be provided if using relative positional encoding."
-            self.rel_pos_h = nn.Parameter(torch.zeros(2 * input_size[0] - 1, head_dim))
-            self.rel_pos_w = nn.Parameter(torch.zeros(2 * input_size[1] - 1, head_dim))
-
-    def forward(self, x):
-        B, H, W, _ = x.shape
-        qkv = self.qkv(x).reshape(B, H * W, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv.reshape(3, B * self.num_heads, H * W, -1).unbind(0)
-        attn = torch.matmul(q * self.scale, k.transpose(1, 2))
-        if self.use_rel_pos:
-            attn = add_decomposed_rel_pos(attn, q, self.rel_pos_h, self.rel_pos_w, (H, W), (H, W))
-        attn = F.softmax(attn, dim=-1)
-        x = torch.matmul(attn, v).reshape(B, self.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
-        x = self.proj(x)
-        return x
-
-
-class SLANeXtPatchEmbed(nn.Module):
-    """
-    Image to Patch Embedding.
-    """
-
-    def __init__(
-        self,
-        kernel_size: tuple[int, int] = (16, 16),
-        stride: tuple[int, int] = (16, 16),
-        padding: tuple[int, int] = (0, 0),
-        in_chans: int = 3,
-        embed_dim: int = 768,
-    ) -> None:
-        """
-        Args:
-            kernel_size (Tuple): kernel size of the projection layer.
-            stride (Tuple): stride of the projection layer.
-            padding (Tuple): padding size of the projection layer.
-            in_chans (int): Number of input image channels.
-            embed_dim (int): Patch embedding dimension.
-        """
-        super().__init__()
-
-        self.proj = nn.Conv2d(
-            in_chans,
-            embed_dim,
-            kernel_size=kernel_size,
-            stride=stride,
-            padding=padding,
-            bias=True,
-        )
-
-    def forward(self, x):
-        x = self.proj(x)
-        x = x.permute(0, 2, 3, 1)
-        return x
-
-
-def _build_vary(
-    encoder_embed_dim,
-    encoder_depth,
-    encoder_num_heads,
-    encoder_global_attn_indexes,
-    image_size,
-):
-    prompt_embed_dim = 256
-    vit_patch_size = 16
-    image_encoder = SLANeXtImageEncoderViT(
-        depth=encoder_depth,
-        embed_dim=encoder_embed_dim,
-        img_size=image_size,
-        mlp_ratio=4,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6),
-        num_heads=encoder_num_heads,
-        patch_size=vit_patch_size,
-        qkv_bias=True,
-        use_rel_pos=True,
-        global_attn_indexes=encoder_global_attn_indexes,
-        window_size=14,
-        out_chans=prompt_embed_dim,
-    )
-    return image_encoder
+    def forward(self, hidden_states):
+        hidden_states = self.encoder(hidden_states).last_hidden_state
+        hidden_states = self.net_2(hidden_states)
+        return hidden_states
 
 
 class SLANeXtVary_VIT_B(nn.Module):
@@ -456,23 +115,27 @@ class SLANeXtVary_VIT_B(nn.Module):
     ):
         super().__init__()
 
-        self.vision_tower_high = _build_vary(
-            encoder_embed_dim=768,
-            encoder_depth=12,
-            encoder_num_heads=12,
-            encoder_global_attn_indexes=[2, 5, 8, 11],
-            image_size=image_size,
+        self.vision_tower_high = SLANeXtImageEncoderViT(
+            depth=encoder_depth,
+            embed_dim=encoder_embed_dim,
+            img_size=image_size,
+            mlp_ratio=4,
+            num_heads=encoder_num_heads,
+            patch_size=16,
+            qkv_bias=True,
+            use_rel_pos=True,
+            global_attn_indexes=encoder_global_attn_indexes,
+            window_size=14,
+            out_chans=256,
         )
         self.out_channels = 1024
 
-    def forward(self, input_data):
-        pixel_values = input_data
-        num_channels = pixel_values.shape[1]
-        if num_channels == 1:
-            pixel_values = torch.repeat_interleave(pixel_values, repeats=3, dim=1)
-        cnn_feature = self.vision_tower_high(pixel_values)
-        cnn_feature = cnn_feature.flatten(2).permute(0, 2, 1)
-        return cnn_feature
+    def forward(self, hidden_states):
+        if hidden_states.shape[1] == 1:
+            hidden_states = torch.repeat_interleave(hidden_states, repeats=3, dim=1)
+        hidden_states = self.vision_tower_high(hidden_states)
+        hidden_states = hidden_states.flatten(2).permute(0, 2, 1)
+        return hidden_states
 
 
 class SLANeXtAttentionGRUCell(nn.Module):
@@ -487,17 +150,17 @@ class SLANeXtAttentionGRUCell(nn.Module):
 
         self.hidden_size = hidden_size
 
-    def forward(self, prev_hidden, batch_H, char_onehots):
-        batch_H_proj = self.i2h(batch_H)
+    def forward(self, prev_hidden, batch_hidden, char_onehots):
+        batch_hidden_proj = self.i2h(batch_hidden)
         prev_hidden_proj = self.h2h(prev_hidden).unsqueeze(1)
 
-        res = batch_H_proj + prev_hidden_proj
-        res = torch.tanh(res)
-        e = self.score(res)
+        attention_scores = batch_hidden_proj + prev_hidden_proj
+        attention_scores = torch.tanh(attention_scores)
+        attention_scores = self.score(attention_scores)
 
-        alpha = F.softmax(e, dim=1)
+        alpha = F.softmax(attention_scores, dim=1)
         alpha = alpha.transpose(1, 2)
-        context = torch.bmm(alpha, batch_H).squeeze(1)
+        context = torch.bmm(alpha, batch_hidden).squeeze(1)
         concat_context = torch.cat([context, char_onehots], 1)
 
         cur_hidden = self.rnn(concat_context, prev_hidden)
@@ -523,13 +186,13 @@ class SLANeXtMlp(nn.Module):
         self.fc2 = nn.Linear(hidden_features, out_features)
         self.drop = nn.Dropout(drop)
 
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.drop(x)
-        x = self.fc2(x)
-        x = self.drop(x)
-        return x
+    def forward(self, hidden_states):
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.drop(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.drop(hidden_states)
+        return hidden_states
 
 
 class SLANeXtHWAttention(nn.Module):
@@ -545,26 +208,28 @@ class SLANeXtHWAttention(nn.Module):
         self.scale = qk_scale or self.head_dim**-0.5
         self.attn_drop = nn.Dropout(attn_drop)
 
-    def forward(self, x):
-        B, N, C = x.shape
-        C_ = C // 3
-        qkv = x.reshape(B, N, 3, C_ // self.head_dim, self.head_dim).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv.unbind(0)
-        attn = torch.matmul(q, k.transpose(2, 3)) * self.scale
+    def forward(self, hidden_states):
+        batch_size, seq_len, total_channels = hidden_states.shape
+        channels_per_head = total_channels // 3
+        qkv = hidden_states.reshape(batch_size, seq_len, 3, channels_per_head // self.head_dim, self.head_dim).permute(
+            2, 0, 3, 1, 4
+        )
+        query, key, value = qkv.unbind(0)
+        attn = torch.matmul(query, key.transpose(2, 3)) * self.scale
         attn = F.softmax(attn, -1)
         attn = self.attn_drop(attn)
-        x = torch.matmul(attn, v)
-        x = x.permute(0, 2, 1, 3).reshape(B, N, C_)
-        return x
+        hidden_states = torch.matmul(attn, value)
+        hidden_states = hidden_states.permute(0, 2, 1, 3).reshape(batch_size, seq_len, channels_per_head)
+        return hidden_states
 
 
 def img2windows(img, H_sp, W_sp):
     """
     img: B C H W
     """
-    B, H, W, C = img.shape
-    img_reshape = img.reshape(B, H // H_sp, H_sp, W // W_sp, W_sp, C)
-    img_perm = img_reshape.permute(0, 1, 3, 2, 4, 5).reshape(-1, H_sp * W_sp, C)
+    batch_size, height, width, channels = img.shape
+    img_reshape = img.reshape(batch_size, height // H_sp, H_sp, width // W_sp, W_sp, channels)
+    img_perm = img_reshape.permute(0, 1, 3, 2, 4, 5).reshape(-1, H_sp * W_sp, channels)
     return img_perm
 
 
@@ -572,8 +237,8 @@ def windows2img(img_splits_hw, H_sp, W_sp, H, W):
     """
     img_splits_hw: B' H W C
     """
-    B = int(img_splits_hw.shape[0] / (H * W / H_sp / W_sp))
-    img = img_splits_hw.reshape(B, H // H_sp, W // W_sp, H_sp, W_sp, -1)
+    batch_size = int(img_splits_hw.shape[0] / (H * W / H_sp / W_sp))
+    img = img_splits_hw.reshape(batch_size, H // H_sp, W // W_sp, H_sp, W_sp, -1)
     img = img.permute(0, 1, 3, 2, 4, 5).flatten(1, 4)
     return img
 
@@ -618,27 +283,27 @@ class SLANeXtHead_Block(nn.Module):
             drop=drop,
         )
 
-    def forward(self, x):
-        B, C, H, W = x.shape
-        x = x.flatten(2).permute(0, 2, 1)
+    def forward(self, hidden_states):
+        batch_size, channels, height, width = hidden_states.shape
+        hidden_states = hidden_states.flatten(2).permute(0, 2, 1)
 
-        qkv = self.qkv(x).reshape(B, H, W, 3 * C)
+        qkv = self.qkv(hidden_states).reshape(batch_size, height, width, 3 * channels)
 
-        x1 = qkv[:, :, :, : 3 * self.h_num_heads * self.head_dim]
-        x2 = qkv[:, :, :, 3 * self.h_num_heads * self.head_dim :]
+        hidden_h = qkv[:, :, :, : 3 * self.h_num_heads * self.head_dim]
+        hidden_w = qkv[:, :, :, 3 * self.h_num_heads * self.head_dim :]
 
-        x1 = self.mixer(img2windows(x1, self.split_h, W))
-        x2 = self.mixer(img2windows(x2, H, self.split_w))
-        x1 = windows2img(x1, self.split_h, W, H, W)
-        x2 = windows2img(x2, H, self.split_w, H, W)
+        hidden_h = self.mixer(img2windows(hidden_h, self.split_h, width))
+        hidden_w = self.mixer(img2windows(hidden_w, height, self.split_w))
+        hidden_h = windows2img(hidden_h, self.split_h, width, height, width)
+        hidden_w = windows2img(hidden_w, height, self.split_w, height, width)
 
-        attened_x = torch.cat([x1, x2], 2)
-        attened_x = self.proj(attened_x)
+        attended = torch.cat([hidden_h, hidden_w], 2)
+        attended = self.proj(attended)
 
-        x = self.norm1(x + self.drop_path(attened_x))
-        x = self.norm2(x + self.drop_path(self.mlp(x)))
-        x = x.permute(0, 2, 1).reshape(-1, C, H, W)
-        return x
+        hidden_states = self.norm1(hidden_states + self.drop_path(attended))
+        hidden_states = self.norm2(hidden_states + self.drop_path(self.mlp(hidden_states)))
+        hidden_states = hidden_states.permute(0, 2, 1).reshape(-1, channels, height, width)
+        return hidden_states
 
 
 class SLANeXtSLAHead(nn.Module):
@@ -684,17 +349,18 @@ class SLANeXtSLAHead(nn.Module):
 
         self.use_attn = use_attn
         if use_attn:
-            layer_list = [
-                SLANeXtHead_Block(
-                    in_channels,
-                    num_heads=2,
-                    mlp_ratio=4.0,
-                    qkv_bias=True,
-                    drop_path=dpr[i],
-                )
-                for i in range(2)
-            ]
-            self.cross_atten = nn.Sequential(*layer_list)
+            self.cross_atten = nn.Sequential(
+                *[
+                    SLANeXtHead_Block(
+                        in_channels,
+                        num_heads=2,
+                        mlp_ratio=4.0,
+                        qkv_bias=True,
+                        drop_path=dpr[i],
+                    )
+                    for i in range(2)
+                ]
+            )
 
         self.loc_generator = nn.Sequential(
             nn.Linear(self.hidden_size, self.hidden_size),
@@ -704,19 +370,21 @@ class SLANeXtSLAHead(nn.Module):
 
     def forward(self, inputs, targets=None):
         if self.is_next:
-            fea = inputs
-            batch_size = fea.shape[0]
+            features = inputs
+            batch_size = features.shape[0]
         else:
-            fea = inputs[-1]
-            batch_size = fea.shape[0]
+            features = inputs[-1]
+            batch_size = features.shape[0]
             if self.use_attn:
-                fea = fea + self.cross_atten(fea)
-            fea = fea.reshape(fea.shape[0], fea.shape[1], -1)
-            fea = fea.permute(0, 2, 1)
+                features = features + self.cross_atten(features)
+            features = features.reshape(features.shape[0], features.shape[1], -1)
+            features = features.permute(0, 2, 1)
 
-        hidden = torch.zeros((batch_size, self.hidden_size), device=fea.device)
-        structure_preds = torch.zeros((batch_size, self.max_text_length + 1, self.num_embeddings), device=fea.device)
-        loc_preds = torch.zeros((batch_size, self.max_text_length + 1, self.loc_reg_num), device=fea.device)
+        hidden = torch.zeros((batch_size, self.hidden_size), device=features.device)
+        structure_preds = torch.zeros(
+            (batch_size, self.max_text_length + 1, self.num_embeddings), device=features.device
+        )
+        loc_preds = torch.zeros((batch_size, self.max_text_length + 1, self.loc_reg_num), device=features.device)
         structure_preds.requires_grad = False
         loc_preds.requires_grad = False
 
@@ -724,17 +392,18 @@ class SLANeXtSLAHead(nn.Module):
             structure = targets[0]
             max_len = targets[-2].max().int()
             for i in range(max_len + 1):
-                hidden, structure_step, loc_step = self._decode(structure[:, i], fea, hidden)
+                hidden, structure_step, loc_step = self._decode(structure[:, i], features, hidden)
                 structure_preds[:, i, :] = structure_step
                 loc_preds[:, i, :] = loc_step
             structure_preds = structure_preds[:, : max_len + 1]
             loc_preds = loc_preds[:, : max_len + 1]
         else:
-            structure_ids = torch.zeros((batch_size, self.max_text_length + 1), dtype=torch.long, device=fea.device)
-            pre_chars = torch.zeros(size=[batch_size], dtype=torch.long, device=fea.device)
-            max_text_length = self.max_text_length
-            for i in range(max_text_length + 1):
-                hidden, structure_step, loc_step = self._decode(pre_chars, fea, hidden)
+            structure_ids = torch.zeros(
+                (batch_size, self.max_text_length + 1), dtype=torch.long, device=features.device
+            )
+            pre_chars = torch.zeros(size=[batch_size], dtype=torch.long, device=features.device)
+            for i in range(self.max_text_length + 1):
+                hidden, structure_step, loc_step = self._decode(pre_chars, features, hidden)
                 pre_chars = structure_step.argmax(dim=1)
                 structure_preds[:, i, :] = structure_step
                 loc_preds[:, i, :] = loc_step
@@ -782,39 +451,27 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         super()._init_weights(module)
 
-        # Initialize positional embeddings to zero
-        if isinstance(module, SLANeXtImageEncoderViT):
+        # Initialize positional embeddings to zero (GotOcr2VisionEncoder holds pos_embed)
+        if isinstance(module, GotOcr2VisionEncoder):
             if module.pos_embed is not None:
                 init.constant_(module.pos_embed, 0.0)
 
-        # Initialize relative positional embeddings to zero
-        if isinstance(module, SLANeXtAttention):
+        # Initialize relative positional embeddings to zero (GotOcr2VisionAttention holds rel_pos_h/w)
+        if isinstance(module, GotOcr2VisionAttention):
             if module.use_rel_pos:
                 init.constant_(module.rel_pos_h, 0.0)
                 init.constant_(module.rel_pos_w, 0.0)
 
         # Initialize SLAHead layers
         if isinstance(module, SLANeXtSLAHead):
-            # Initialize structure_generator layers
-            for i, layer in enumerate(module.structure_generator):
-                if isinstance(layer, nn.Linear):
-                    stdv = 1.0 / math.sqrt(module.hidden_size * 1.0)
-                    init.uniform_(layer.weight, -stdv, stdv)
-                    if layer.bias is not None:
-                        init.uniform_(layer.bias, -stdv, stdv)
-
-            # Initialize loc_generator layers
-            for i, layer in enumerate(module.loc_generator):
-                if isinstance(layer, nn.Linear):
-                    stdv = 1.0 / math.sqrt(module.hidden_size * 1.0)
-                    init.uniform_(layer.weight, -stdv, stdv)
-                    if layer.bias is not None:
-                        init.uniform_(layer.bias, -stdv, stdv)
-
-        # Initialize VitDetLayerNorm (imported from vitdet)
-        if isinstance(module, VitDetLayerNorm):
-            init.constant_(module.weight, 1.0)
-            init.constant_(module.bias, 0.0)
+            stdv = 1.0 / math.sqrt(module.hidden_size * 1.0)
+            # Initialize structure_generator and loc_generator layers
+            for generator in (module.structure_generator, module.loc_generator):
+                for layer in generator:
+                    if isinstance(layer, nn.Linear):
+                        init.uniform_(layer.weight, -stdv, stdv)
+                        if layer.bias is not None:
+                            init.uniform_(layer.bias, -stdv, stdv)
 
 
 @auto_docstring(custom_intro="The SLANeXt model.")
@@ -843,10 +500,9 @@ class SLANeXtModel(SLANeXtPreTrainedModel):
         self.post_init()
 
     def forward(self, pixel_values):
-        x = self.backbone(pixel_values)
-        x = self.head(x)
-
-        return x
+        hidden_states = self.backbone(pixel_values)
+        hidden_states = self.head(hidden_states)
+        return hidden_states
 
 
 @auto_docstring(custom_intro="TableRecognition for the SLANeXt model.")
@@ -861,11 +517,11 @@ class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
         self.post_init()
 
     def forward(self, pixel_values, return_dict: bool | None = None, **kwargs):
-        x = self.model(pixel_values)
+        hidden_states = self.model(pixel_values)
         if not return_dict:
-            return ((x["structure_probs"]),)
+            return ((hidden_states["structure_probs"]),)
         else:
-            return SLANeXtOutput(structure_probs=x["structure_probs"])
+            return SLANeXtOutput(structure_probs=hidden_states["structure_probs"])
 
 
 @dataclass
