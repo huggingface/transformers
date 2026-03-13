@@ -20,16 +20,11 @@
 # limitations under the License.
 
 import math
-import random
 from collections.abc import Callable
-from contextlib import nullcontext
 from dataclasses import dataclass
-from functools import partial, wraps
-from math import ceil
 from typing import Optional
 
 import torch
-import torch.distributed as dist
 import torch.nn.functional as F
 from torch import int32, nn, sin, sinc
 from torch.amp import autocast
@@ -49,6 +44,7 @@ from ...utils import (
     TransformersKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     replace_return_docstrings,
 )
 from ...utils.generic import maybe_autocast
@@ -113,149 +109,6 @@ class Xcodec2DecoderOutput(ModelOutput):
     """
 
     audio_values: torch.FloatTensor | None = None
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-# Default `unsqueeze_dim=2`
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=2):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 2):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-@use_kernelized_func(apply_rotary_pos_emb)
-class Xcodec2Attention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(self, config: Xcodec2Config, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = False
-
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
 
 
 class Xcodec2RotaryEmbedding(nn.Module):
@@ -323,7 +176,6 @@ class Xcodec2RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-# Unlike LlamaMLP, does not have `gate_proj` layer
 class Xcodec2MLP(nn.Module):
     def __init__(self, config: Xcodec2Config):
         super().__init__()
@@ -333,11 +185,11 @@ class Xcodec2MLP(nn.Module):
         self.activation = ACT2FN[config.hidden_act]
         self.fc2 = nn.Linear(4 * dim, dim, bias=False)
 
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.activation(x)
-        x = self.fc2(x)
-        return x
+    def forward(self, hidden_states):
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -359,6 +211,149 @@ class Xcodec2RMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+# RoPE is applied on the attention head rather than sequence dimension
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=2):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 2):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+@use_kernelized_func(apply_rotary_pos_emb)
+class Xcodec2Attention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: Xcodec2Config, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_values is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 class Xcodec2DecoderLayer(GradientCheckpointingLayer):
@@ -407,80 +402,25 @@ class Xcodec2DecoderLayer(GradientCheckpointingLayer):
 
 
 class Xcodec2SnakeBeta(nn.Module):
-    """
-    A modified Snake function which uses separate parameters for the magnitude and frequency of the periodic components.
+    """A modified Snake function from https://arxiv.org/abs/2006.08195"""
 
-    Shape:
-        - Input: (B, C, T)
-        - Output: (B, C, T), same shape as the input
-
-    Parameters:
-        - dim: The number of input features
-        - logscale: Whether to use logarithmic scaling for alpha and beta (default: False)
-
-    References:
-        - This activation function is a modified version based on this paper by Liu Ziyin, Tilman Hartwig, Masahito Ueda:
-        https://arxiv.org/abs/2006.08195
-
-    Examples:
-        >>> activation = Xcodec2SnakeBeta(256)
-        >>> x = torch.randn(1, 256, 100)  # (batch, channels, time)
-        >>> y = activation(x)
-    """
-
-    def __init__(self, dim, logscale=True):
-        """
-        Args:
-            dim: Shape of the input features (channels dimension)
-            logscale: Whether to use log scale initialization (default: True)
-                            If True, alpha and beta are initialized to zeros
-                            If False, alpha and beta are initialized to ones
-
-        Note:
-            - alpha controls the frequency of the periodic components
-            - beta controls the magnitude of the periodic components
-        """
+    def __init__(self, dim):
         super().__init__()
         self.dim = dim
-
-        # initialize alpha
-        self.logscale = logscale
-        if self.logscale:  # log scale alphas initialized to zeros
-            self.alpha = Parameter(torch.zeros(dim))
-            self.beta = Parameter(torch.zeros(dim))
-        else:  # linear scale alphas initialized to ones
-            self.alpha = Parameter(torch.ones(dim))
-            self.beta = Parameter(torch.ones(dim))
+        self.alpha = Parameter(torch.zeros(dim))
+        self.beta = Parameter(torch.zeros(dim))
         self.no_div_by_zero = 0.000000001
 
-    def forward(self, x):
-        """
-        Forward pass of the function.
-        Applies the function to the input elementwise.
-        SnakeBeta ∶= x + 1/b * sin^2 (xa)
-        """
-        alpha = self.alpha.unsqueeze(0).unsqueeze(-1)
-        beta = self.beta.unsqueeze(0).unsqueeze(-1)
-        if self.logscale:
-            alpha = torch.exp(alpha)
-            beta = torch.exp(beta)
-        x = x + (1.0 / (beta + self.no_div_by_zero)) * pow(sin(x * alpha), 2)
+    def forward(self, hidden_states):
+        alpha = torch.exp(self.alpha.unsqueeze(0).unsqueeze(-1))
+        beta = torch.exp(self.beta.unsqueeze(0).unsqueeze(-1))
+        hidden_states = hidden_states + (1.0 / (beta + self.no_div_by_zero)) * pow(sin(hidden_states * alpha), 2)
 
-        return x
+        return hidden_states
 
 
 def kaiser_sinc_filter1d(cutoff, half_width, kernel_size):
-    """
-    Creates a Kaiser-windowed sinc filter for low-pass filtering.
-
-    Args:
-        cutoff: Normalized cutoff frequency (0 to 0.5, where 0.5 is the Nyquist frequency)
-        half_width: Transition bandwidth parameter controlling filter roll-off
-        kernel_size: Size of the filter kernel
-
-    Returns:
-        torch.Tensor: A 1D filter kernel of shape (1, 1, kernel_size)
-    """
+    """Creates a Kaiser-windowed sinc filter for low-pass filtering."""
     even = kernel_size % 2 == 0
     half_size = kernel_size // 2
 
@@ -512,61 +452,8 @@ def kaiser_sinc_filter1d(cutoff, half_width, kernel_size):
     return filter
 
 
-class LowPassFilter1d(nn.Module):
-    """
-    Used by `DownSample1d`.
-    """
-
-    def __init__(
-        self,
-        cutoff=0.5,
-        half_width=0.6,
-        stride: int = 1,
-        padding: bool = True,
-        padding_mode: str = "replicate",
-        kernel_size: int = 12,
-    ):
-        super().__init__()
-        if cutoff < -0.0:
-            raise ValueError("Minimum cutoff must be larger than zero.")
-        if cutoff > 0.5:
-            raise ValueError("A cutoff above 0.5 does not make sense.")
-        self.kernel_size = kernel_size
-        self.even = kernel_size % 2 == 0
-        self.pad_left = kernel_size // 2 - int(self.even)
-        self.pad_right = kernel_size // 2
-        self.stride = stride
-        self.padding = padding
-        self.padding_mode = padding_mode
-        self.cutoff = cutoff
-        self.half_width = half_width
-        filter = kaiser_sinc_filter1d(cutoff, half_width, kernel_size)
-        self.register_buffer("filter", filter)
-
-    # input [B, C, T]
-    def forward(self, x):
-        _, C, _ = x.shape
-
-        if self.padding:
-            x = F.pad(x, (self.pad_left, self.pad_right), mode=self.padding_mode)
-        out = F.conv1d(x, self.filter.expand(C, -1, -1), stride=self.stride, groups=C)
-
-        return out
-
-
 class UpSample1d(nn.Module):
-    """
-    1D upsampling module using transposed convolution with a sinc filter.
-
-    This module performs anti-aliased upsampling by first padding the input signal,
-    then applying a transposed convolution with a Kaiser-windowed sinc filter,
-    and finally trimming the resulting signal to remove boundary effects.
-
-    Args:
-        ratio (int): Upsampling ratio (default: 2)
-        kernel_size (int, optional): Size of the filter kernel.
-            If None, it's automatically calculated as 6 * ratio.
-    """
+    """1D upsampling module using transposed convolution with a sinc filter."""
 
     def __init__(self, ratio=2, kernel_size=None):
         super().__init__()
@@ -581,41 +468,46 @@ class UpSample1d(nn.Module):
         filter = kaiser_sinc_filter1d(cutoff=self.cutoff, half_width=self.half_width, kernel_size=self.kernel_size)
         self.register_buffer("filter", filter)
 
-    def forward(self, x):
-        _, C, _ = x.shape
+    def forward(self, hidden_states):
+        _, channels, _ = hidden_states.shape
 
-        x = F.pad(x, (self.pad, self.pad), mode="replicate")
-        x = self.ratio * F.conv_transpose1d(x, self.filter.expand(C, -1, -1), stride=self.stride, groups=C)
-        x = x[..., self.pad_left : -self.pad_right]
+        hidden_states = F.pad(hidden_states, (self.pad, self.pad), mode="replicate")
+        hidden_states = self.ratio * F.conv_transpose1d(
+            hidden_states, self.filter.expand(channels, -1, -1), stride=self.stride, groups=channels
+        )
+        hidden_states = hidden_states[..., self.pad_left : -self.pad_right]
 
-        return x
+        return hidden_states
 
 
 class DownSample1d(nn.Module):
-    """
-    1D downsampling module using a low-pass filter.
-
-    This module performs anti-aliased downsampling by applying a low-pass filter
-    with an appropriate cutoff frequency followed by strided convolution.
-
-    Args:
-        ratio (int): Downsampling ratio (default: 2)
-        kernel_size (int, optional): Size of the filter kernel.
-            If None, it's automatically calculated as 6 * ratio.
-    """
+    """1D downsampling module using a low-pass filter."""
 
     def __init__(self, ratio=2, kernel_size=None):
         super().__init__()
         self.ratio = ratio
         self.kernel_size = int(6 * ratio // 2) * 2 if kernel_size is None else kernel_size
-        self.lowpass = LowPassFilter1d(
-            cutoff=0.5 / ratio, half_width=0.6 / ratio, stride=ratio, kernel_size=self.kernel_size
+        self.stride = ratio
+
+        # Low-pass filter setup
+        cutoff = 0.5 / ratio
+        half_width = 0.6 / ratio
+        even = self.kernel_size % 2 == 0
+        self.pad_left = self.kernel_size // 2 - int(even)
+        self.pad_right = self.kernel_size // 2
+
+        filter = kaiser_sinc_filter1d(cutoff, half_width, self.kernel_size)
+        self.register_buffer("filter", filter)
+
+    def forward(self, hidden_states):
+        _, channels, _ = hidden_states.shape
+
+        hidden_states = F.pad(hidden_states, (self.pad_left, self.pad_right), mode="replicate")
+        hidden_states = F.conv1d(
+            hidden_states, self.filter.expand(channels, -1, -1), stride=self.stride, groups=channels
         )
 
-    def forward(self, x):
-        x = self.lowpass(x)
-
-        return x
+        return hidden_states
 
 
 class Activation1d(nn.Module):
@@ -649,12 +541,12 @@ class Activation1d(nn.Module):
         self.upsample = UpSample1d(up_ratio, up_kernel_size)
         self.downsample = DownSample1d(down_ratio, down_kernel_size)
 
-    def forward(self, x):
-        x = self.upsample(x)
-        x = self.act(x)
-        x = self.downsample(x)
+    def forward(self, hidden_states):
+        hidden_states = self.upsample(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.downsample(hidden_states)
 
-        return x
+        return hidden_states
 
 
 class ResidualUnit(nn.Module):
@@ -679,18 +571,18 @@ class ResidualUnit(nn.Module):
     def __init__(self, dim: int = 16, dilation: int = 1):
         super().__init__()
         pad = ((7 - 1) * dilation) // 2
-        self.activation1 = Activation1d(activation=Xcodec2SnakeBeta(dim, logscale=True))
+        self.activation1 = Activation1d(activation=Xcodec2SnakeBeta(dim))
         self.conv1 = nn.Conv1d(dim, dim, kernel_size=7, dilation=dilation, padding=pad)
-        self.activation2 = Activation1d(activation=Xcodec2SnakeBeta(dim, logscale=True))
+        self.activation2 = Activation1d(activation=Xcodec2SnakeBeta(dim))
         self.conv2 = nn.Conv1d(dim, dim, kernel_size=1)
 
-    def forward(self, x):
-        residual = x
-        x = self.activation1(x)
-        x = self.conv1(x)
-        x = self.activation2(x)
-        x = self.conv2(x)
-        return residual + x
+    def forward(self, hidden_states):
+        residual = hidden_states
+        hidden_states = self.activation1(hidden_states)
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = self.activation2(hidden_states)
+        hidden_states = self.conv2(hidden_states)
+        return residual + hidden_states
 
 
 class EncoderBlock(nn.Module):
@@ -711,7 +603,7 @@ class EncoderBlock(nn.Module):
     def __init__(self, dim: int = 16, stride: int = 1, dilations=(1, 3, 9)):
         super().__init__()
         self.residual_units = nn.ModuleList([ResidualUnit(dim // 2, dilation=d) for d in dilations])
-        self.activation = Activation1d(activation=Xcodec2SnakeBeta(dim // 2, logscale=True))
+        self.activation = Activation1d(activation=Xcodec2SnakeBeta(dim // 2))
         self.conv = nn.Conv1d(
             dim // 2,
             dim,
@@ -720,15 +612,15 @@ class EncoderBlock(nn.Module):
             padding=stride // 2 + stride % 2,
         )
 
-    def forward(self, x):
+    def forward(self, hidden_states):
         for residual_unit in self.residual_units:
-            x = residual_unit(x)
-        x = self.activation(x)
-        x = self.conv(x)
-        return x
+            hidden_states = residual_unit(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.conv(hidden_states)
+        return hidden_states
 
 
-class Xcodec2CodecEncoder(nn.Module):
+class Xcodec2AcousticEncoder(nn.Module):
     """
     The encoder component of the Xcodec2 model for audio encoding.
 
@@ -761,19 +653,19 @@ class Xcodec2CodecEncoder(nn.Module):
         self.initial_conv = nn.Conv1d(1, d_model, kernel_size=7, padding=3)
 
         self.encoder_blocks = nn.ModuleList()
-        for i, stride in enumerate(downsampling_ratios):
+        for _, stride in enumerate(downsampling_ratios):
             d_model *= 2
             self.encoder_blocks.append(EncoderBlock(d_model, stride=stride, dilations=dilations))
 
-        self.final_activation = Activation1d(activation=Xcodec2SnakeBeta(d_model, logscale=True))
+        self.final_activation = Activation1d(activation=Xcodec2SnakeBeta(d_model))
         self.final_conv = nn.Conv1d(d_model, hidden_dim, kernel_size=3, padding=1)
 
-    def forward(self, x):
+    def forward(self, hidden_states):
         """
         Forward pass of the Xcodec2 encoder.
 
         Args:
-            x (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
                 Input audio waveform tensor. Expected to be a mono audio signal with shape
                 (batch_size, 1, sequence_length).
 
@@ -785,17 +677,17 @@ class Xcodec2CodecEncoder(nn.Module):
                 with transformer-based models.
         """
         # Initial convolution
-        x = self.initial_conv(x)
+        hidden_states = self.initial_conv(hidden_states)
 
         # Apply all encoder blocks
         for encoder_block in self.encoder_blocks:
-            x = encoder_block(x)
+            hidden_states = encoder_block(hidden_states)
 
         # Final processing
-        x = self.final_activation(x)
-        x = self.final_conv(x)
-        x = x.permute(0, 2, 1)
-        return x
+        hidden_states = self.final_activation(hidden_states)
+        hidden_states = self.final_conv(hidden_states)
+        hidden_states = hidden_states.permute(0, 2, 1)
+        return hidden_states
 
 
 class ResNetBlock(nn.Module):
@@ -827,291 +719,34 @@ class ResNetBlock(nn.Module):
         if self.in_channels != self.out_channels:
             self.nin_shortcut = torch.nn.Conv1d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
 
-    def forward(self, x):
-        h = x
-        h = self.norm1(h)
-        h = h * torch.sigmoid(h)
-        h = self.conv1(h)
-        h = self.norm2(h)
-        h = h * torch.sigmoid(h)
-        h = self.dropout(h)
-        h = self.conv2(h)
+    def forward(self, hidden_states):
+        residual = hidden_states
+        residual = self.norm1(residual)
+        residual = residual * torch.sigmoid(residual)
+        residual = self.conv1(residual)
+        residual = self.norm2(residual)
+        residual = residual * torch.sigmoid(residual)
+        residual = self.dropout(residual)
+        residual = self.conv2(residual)
 
         if self.in_channels != self.out_channels:
-            x = self.nin_shortcut(x)
+            hidden_states = self.nin_shortcut(hidden_states)
 
-        return x + h
-
-
-class Xcodec2VocosBackbone(nn.Module):
-    """
-    Hybrid ResNet-Transformer architecture.
-
-    Architecture overview:
-    - Input embedding: A 1D convolution (kernel size 7, padding 3) projects raw features
-      into the model's hidden dimension.
-    - Prior ResNet blocks: Two ResNet-style residual blocks operate on the hidden states
-      to provide early nonlinear feature processing.
-    - Rotary embeddings: Rotary positional embeddings (RoPE) are initialized to provide
-      position-dependent information to the Transformer layers.
-    - Transformer stack: A sequence of Xcodec2DecoderLayer modules applies self-attention
-      with rotary embeddings, interleaved with MLPs, to model long-range dependencies.
-    - Normalization: A final LayerNorm is applied to stabilize training and outputs.
-    - Post ResNet blocks: Two additional ResNet-style blocks refine the representation
-      after the Transformer stack.
-
-    This design combines convolutional inductive biases (via ResNet-style blocks and the
-    initial Conv1d embedding) with the global sequence modeling capabilities of
-    Transformers, making it suitable for sequence data such as audio or other temporal
-    signals.
-    """
-
-    def __init__(self, config: Xcodec2Config):
-        super().__init__()
-
-        self.embed = nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=7, padding=3)
-        block_in = config.hidden_size
-        dropout = config.resnet_dropout
-
-        self.prior_blocks = nn.ModuleList(
-            [
-                ResNetBlock(in_channels=block_in, out_channels=block_in, dropout=dropout),
-                ResNetBlock(in_channels=block_in, out_channels=block_in, dropout=dropout),
-            ]
-        )
-
-        # Initialize rotary embeddings
-        self.num_attention_heads = config.num_attention_heads
-        self.rotary_emb = Xcodec2RotaryEmbedding(config=config)
-
-        # Create transformer layers
-        self.transformers = nn.ModuleList(
-            [Xcodec2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=1e-6)
-
-        self.post_blocks = nn.ModuleList(
-            [
-                ResNetBlock(
-                    in_channels=config.hidden_size,
-                    out_channels=config.hidden_size,
-                    dropout=dropout,
-                ),
-                ResNetBlock(in_channels=block_in, out_channels=block_in, dropout=dropout),
-            ]
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass for the Xcodec2VocosBackbone.
-
-        The processing flow includes:
-        1. Initial embedding via 1D convolution
-        2. Processing through ResNet blocks
-        3. Transformer processing with rotary position embeddings
-        4. Final ResNet blocks and normalization
-
-        Args:
-            x (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Input tensor containing features to process.
-
-        Returns:
-            `torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`:
-                Processed features with the same shape as the input but transformed
-                through the backbone architecture.
-        """
-        # Handle initial transformations
-        x = x.transpose(1, 2)
-        x = self.embed(x)
-
-        # Process through prior_blocks
-        for block in self.prior_blocks:
-            x = block(x)
-
-        x = x.transpose(1, 2)  # [batch, seq_len, hidden_dim]
-
-        # Generate rotary embeddings
-        position_ids = torch.arange(self.num_attention_heads).unsqueeze(0)
-        position_embeddings = self.rotary_emb(x, position_ids.to(x.device))
-
-        # Apply transformer layers with position embeddings
-        for layer in self.transformers:
-            x = layer(
-                x,
-                position_embeddings=position_embeddings,
-            )
-
-        # Handle final transformations
-        x = x.transpose(1, 2)
-
-        # Process through post_blocks
-        for block in self.post_blocks:
-            x = block(x)
-
-        x = x.transpose(1, 2)
-        x = self.final_layer_norm(x)
-
-        return x
-
-
-class Xcodec2ISTFT(nn.Module):
-    """
-    As in original Vocos code:
-    https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/spectral_ops.py#L7
-
-    Custom ISTFT implementation to support "same" padding as in Vocos.
-    """
-
-    def __init__(self, config: Xcodec2Config):
-        super().__init__()
-        if config.istft_padding not in ["center", "same"]:
-            raise ValueError("Padding must be 'center' or 'same'.")
-        self.padding = config.istft_padding
-        self.n_fft = config.n_fft
-        self.hop_length = config.hop_length
-        self.win_length = getattr(config, "win_length", config.n_fft)
-        window = torch.hann_window(self.win_length)
-        self.register_buffer("window", window)
-
-    def forward(self, spec: torch.Tensor) -> torch.Tensor:
-        """
-        Compute the Inverse Short Time Fourier Transform (ISTFT) of a complex spectrogram.
-
-        Args:
-            spec (Tensor): Input complex spectrogram of shape (B, N, T), where B is the batch size,
-                  is the number of frequency bins, and T is the number of time frames.
-
-        Returns:
-            Tensor: Reconstructed time-domain signal of shape (B, L), where L is the length of the output signal.
-        """
-        if spec.dim() != 3:
-            raise ValueError("Expected a 3D tensor as input")
-
-        if self.padding == "center":
-            # Fallback to pytorch native implementation
-            return torch.istft(spec, self.n_fft, self.hop_length, self.win_length, self.window, center=True)
-
-        elif self.padding == "same":
-            # Custom implementation from Vocos codebase
-            pad = (self.win_length - self.hop_length) // 2
-            n_frames = spec.shape[-1]
-
-            # Inverse FFT
-            ifft = torch.fft.irfft(spec, self.n_fft, dim=1, norm="backward")
-            ifft = ifft * self.window[None, :, None]
-
-            # Overlap and Add
-            output_size = (n_frames - 1) * self.hop_length + self.win_length
-            y = F.fold(
-                ifft,
-                output_size=(1, output_size),
-                kernel_size=(1, self.win_length),
-                stride=(1, self.hop_length),
-            )[:, 0, 0, pad:-pad]
-
-            # Window envelope
-            window_sq = self.window.square().expand(1, n_frames, -1).transpose(1, 2)
-            window_envelope = F.fold(
-                window_sq,
-                output_size=(1, output_size),
-                kernel_size=(1, self.win_length),
-                stride=(1, self.hop_length),
-            ).squeeze()[pad:-pad]
-
-            # Normalize
-            if not (window_envelope > 1e-11).all():
-                raise ValueError("Window envelope values are too small (<=1e-11)")
-            return y / window_envelope
-
-        else:
-            raise ValueError("Padding must be 'center' or 'same'.")
-
-
-class Xcodec2ISTFTHead(nn.Module):
-    """
-    As in original Vocos code:
-    https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/heads.py#L26
-    - Projects the hidden states to STFT coefficients (magnitude and phase)
-    - Applies ISTFT to reconstruct the time-domain audio signal
-    """
-
-    def __init__(self, config: Xcodec2Config):
-        super().__init__()
-        self.out = torch.nn.Linear(config.hidden_size, config.n_fft + 2)
-        self.istft = Xcodec2ISTFT(config)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass of the ISTFTHead module.
-
-        Args:
-            x (Tensor): Input tensor of shape (B, L, H), where B is the batch size,
-                        L is the sequence length, and H denotes the model dimension.
-
-        Returns:
-            Tensor: Reconstructed time-domain audio signal of shape (B, T), where T is the length of the output signal.
-            Tensor: Predicted STFT coefficients of shape (B, L, N+2), where N is the number of frequency bins.
-        """
-        x_pred = self.out(x).transpose(1, 2)
-        mag, p = x_pred.chunk(2, dim=1)
-        mag = torch.exp(mag)
-        mag = torch.clip(mag, max=1e2)  # safeguard to prevent excessively large magnitudes
-        # wrapping happens here. These two lines produce real and imaginary value
-        spectrogram_real = torch.cos(p)
-        spectrogram_imag = torch.sin(p)
-        spectrogram_complex = mag * (spectrogram_real + 1j * spectrogram_imag)
-        audio = self.istft(spectrogram_complex)
-        return audio
-
-
-def round_ste(z):
-    """
-    Round with straight through gradients.
-    Used in `Xcodec2FSQ`.
-    """
-    zhat = z.round()
-    return z + (zhat - z).detach()
-
-
-def maybe(fn):
-    """
-    Used in `Xcodec2FSQ`.
-    """
-
-    @wraps(fn)
-    def inner(x, *args, **kwargs):
-        if x is None:
-            return x
-        return fn(x, *args, **kwargs)
-
-    return inner
+        return hidden_states + residual
 
 
 class Xcodec2FSQ(Module):
     """
-    Copied from https://github.com/lucidrains/vector-quantize-pytorch/blob/fe903ce2ae9c125ace849576aa6d09c5cec21fe4/vector_quantize_pytorch/finite_scalar_quantization.py#L61
-    Simply changed asserts to raise ValueErrors.
+    Finite Scalar Quantization module.
+
+    Based on https://github.com/lucidrains/vector-quantize-pytorch/blob/fe903ce2ae9c125ace849576aa6d09c5cec21fe4/vector_quantize_pytorch/finite_scalar_quantization.py#L61
     """
 
-    def __init__(
-        self,
-        levels: list[int],
-        dim: int | None = None,
-        num_codebooks=1,
-        keep_num_codebooks_dim: bool | None = None,
-        scale: float | None = None,
-        allowed_dtypes: tuple[torch.dtype, ...] = (torch.float32, torch.float64),
-        channel_first: bool = False,
-        projection_has_bias: bool = True,
-        return_indices=True,
-        force_quantization_f32=True,
-        preserve_symmetry: bool = False,
-        noise_dropout=0.0,
-    ):
+    def __init__(self, levels: list[int]):
         super().__init__()
 
         self.levels = levels
+        self.codebook_dim = len(levels)
 
         _levels = torch.tensor(levels, dtype=int32)
         self.register_buffer("_levels", _levels, persistent=False)
@@ -1119,384 +754,242 @@ class Xcodec2FSQ(Module):
         _basis = torch.cumprod(torch.tensor([1] + levels[:-1]), dim=0, dtype=int32)
         self.register_buffer("_basis", _basis, persistent=False)
 
-        self.scale = scale
+        self.codebook_size = math.prod(levels)
+        implicit_codebook = self._indices_to_codes(torch.arange(self.codebook_size))
+        self.register_buffer("implicit_codebook", implicit_codebook, persistent=False)
 
-        self.preserve_symmetry = preserve_symmetry
-        self.noise_dropout = noise_dropout
-
-        codebook_dim = len(levels)
-        self.codebook_dim = codebook_dim
-
-        effective_codebook_dim = codebook_dim * num_codebooks
-        self.num_codebooks = num_codebooks
-        self.effective_codebook_dim = effective_codebook_dim
-
-        keep_num_codebooks_dim = keep_num_codebooks_dim if keep_num_codebooks_dim is not None else num_codebooks > 1
-        if num_codebooks > 1 and not keep_num_codebooks_dim:
-            raise ValueError("When num_codebooks > 1, keep_num_codebooks_dim must be True")
-        self.keep_num_codebooks_dim = keep_num_codebooks_dim
-
-        self.dim = dim if dim is not None else len(_levels) * num_codebooks
-
-        self.channel_first = channel_first
-
-        has_projections = self.dim != effective_codebook_dim
-        self.project_in = (
-            nn.Linear(self.dim, effective_codebook_dim, bias=projection_has_bias) if has_projections else nn.Identity()
-        )
-        self.project_out = (
-            nn.Linear(effective_codebook_dim, self.dim, bias=projection_has_bias) if has_projections else nn.Identity()
-        )
-
-        self.has_projections = has_projections
-
-        self.return_indices = return_indices
-        if return_indices:
-            self.codebook_size = math.prod(levels)
-            implicit_codebook = self._indices_to_codes(torch.arange(self.codebook_size))
-            self.register_buffer("implicit_codebook", implicit_codebook, persistent=False)
-
-        self.allowed_dtypes = allowed_dtypes
-        self.force_quantization_f32 = force_quantization_f32
-
-    def bound(self, z, eps: float = 1e-3):
+    def bound(self, hidden_states, eps: float = 1e-3):
         half_l = (self._levels - 1) * (1 + eps) / 2
         offset = torch.where(self._levels % 2 == 0, 0.5, 0.0)
         shift = (offset / half_l).atanh()
-        return (z + shift).tanh() * half_l - offset
-
-    def quantize(self, z):
-        _, _, noise_dropout, preserve_symmetry, half_width = (
-            z.shape[0],
-            z.device,
-            self.noise_dropout,
-            self.preserve_symmetry,
-            (self._levels // 2),
-        )
-        bound_fn = self.symmetry_preserving_bound if preserve_symmetry else self.bound
-
-        bounded_z = bound_fn(z)
-        if self.training and noise_dropout > 0.0:
-            offset_mask = torch.bernoulli(torch.full_like(bounded_z, noise_dropout)).bool()
-            offset = torch.rand_like(bounded_z) - 0.5
-            bounded_z = torch.where(offset_mask, bounded_z + offset, bounded_z)
-
-        return round_ste(bounded_z) / half_width
-
-    def _scale_and_shift(self, zhat_normalized):
-        half_width = self._levels // 2
-        return (zhat_normalized * half_width) + half_width
-
-    def _scale_and_shift_inverse(self, zhat):
-        half_width = self._levels // 2
-        return (zhat - half_width) / half_width
+        return (hidden_states + shift).tanh() * half_l - offset
 
     def _indices_to_codes(self, indices):
-        level_indices = self.indices_to_level_indices(indices)
-        codes = self._scale_and_shift_inverse(level_indices)
-        return codes
-
-    def codes_to_indices(self, zhat):
-        """Converts a `code` to an index in the codebook."""
-        if zhat.shape[-1] != self.codebook_dim:
-            raise ValueError(f"Expected zhat to have shape [-1, {self.codebook_dim}], but got {zhat.shape}")
-        zhat = self._scale_and_shift(zhat)
-        return (zhat * self._basis).sum(dim=-1).to(int32)
-
-    def indices_to_level_indices(self, indices):
-        """Converts indices to indices at each level, perhaps needed for a transformer with factorized embeddings"""
+        """Convert codebook indices to normalized codes."""
+        # Convert to level indices
         indices = indices.unsqueeze(-1)
-        codes_non_centered = (indices // self._basis) % self._levels
-        return codes_non_centered
-
-    def indices_to_codes(self, indices):
-        """Inverse of `codes_to_indices`."""
-        if indices is None:
-            raise ValueError("indices cannot be None")
-
-        codes = self._indices_to_codes(indices)
-
-        if self.keep_num_codebooks_dim:
-            codes = codes.reshape(*codes.shape[:-2], -1)
-
-        codes = self.project_out(codes)
-
+        level_indices = (indices // self._basis) % self._levels
+        # Scale and shift inverse to get normalized codes
+        half_width = self._levels // 2
+        codes = (level_indices - half_width) / half_width
         return codes
 
-    def forward(self, z):
-        """
-        einstein notation
-        b - batch
-        n - sequence (or flattened spatial dimensions)
-        d - feature dimension
-        c - number of codebook dim
-        """
+    def codes_to_indices(self, codes):
+        """Converts a `code` to an index in the codebook."""
+        if codes.shape[-1] != self.codebook_dim:
+            raise ValueError(f"Expected codes to have shape [-1, {self.codebook_dim}], but got {codes.shape}")
+        # Scale and shift codes
+        half_width = self._levels // 2
+        codes = (codes * half_width) + half_width
+        return (codes * self._basis).sum(dim=-1).to(int32)
 
-        if z.shape[-1] != self.dim:
-            raise ValueError(f"expected dimension of {self.dim} but found dimension of {z.shape[-1]}")
-
-        z = self.project_in(z)
-
-        # z = rearrange(z, 'b n (c d) -> b n c d', c = self.num_codebooks)
-        b, n, cd = z.shape  # (b, n, c·d)
-        c = self.num_codebooks
-        d = cd // c  # infer the per-codebook dimension
-
-        z = z.view(b, n, c, d)  # now (b, n, c, d)
-        # whether to force quantization step to be full precision or not
-
-        force_f32 = self.force_quantization_f32
-        quantization_context = partial(autocast, "cuda", enabled=False) if force_f32 else nullcontext
-        with quantization_context():
-            orig_dtype = z.dtype
-
-            if force_f32 and orig_dtype not in self.allowed_dtypes:
-                z = z.float()
-
-            codes = self.quantize(z)
-
-            # returning indices could be optional
-            indices = None
-
-            if self.return_indices:
-                indices = self.codes_to_indices(codes)
-
-            # codes = rearrange(codes, 'b n c d -> b n (c d)')
-            codes = codes.flatten(start_dim=2)
-            codes = codes.to(orig_dtype)
-
-        # project out
-        out = self.project_out(codes)
-        if not self.keep_num_codebooks_dim and self.return_indices:
-            indices = maybe(lambda t, *_, **__: t.squeeze(-1))(indices)
-
-        # return quantized output and indices
-        return out, indices
-
-
-def get_maybe_sync_seed(device, max_size=10_000):
-    """
-    Used in `Xcodec2ResidualFSQ`.
-    """
-    rand_int = torch.randint(0, max_size, (), device=device)
-
-    if dist.is_initialized() and dist.get_world_size() > 1:
-        dist.all_reduce(rand_int)
-
-    return rand_int.item()
-
-
-class Xcodec2ResidualFSQ(Module):
-    """
-    Copied from https://github.com/lucidrains/vector-quantize-pytorch/blob/fe903ce2ae9c125ace849576aa6d09c5cec21fe4/vector_quantize_pytorch/residual_fsq.py#L49
-    Simply changed asserts to raise ValueErrors.
-    """
-
-    def __init__(
-        self,
-        *,
-        levels: list[int],
-        num_quantizers,
-        dim: int | None = None,
-        is_channel_first=False,
-        quantize_dropout=False,
-        quantize_dropout_cutoff_index=0,
-        quantize_dropout_multiple_of=1,
-        soft_clamp_input_value=None,
-        **kwargs,
-    ):
-        super().__init__()
-        codebook_dim = len(levels)
-
-        dim = codebook_dim if dim is None else dim
-
-        requires_projection = codebook_dim != dim
-        self.project_in = nn.Linear(dim, codebook_dim) if requires_projection else nn.Identity()
-        self.project_out = nn.Linear(codebook_dim, dim) if requires_projection else nn.Identity()
-        self.has_projections = requires_projection
-
-        self.is_channel_first = is_channel_first
-        self.num_quantizers = num_quantizers
-        self.soft_clamp_input_value = soft_clamp_input_value
-        self.levels = levels
-        self.layers = nn.ModuleList([])
-
-        levels_tensor = torch.Tensor(levels)
-
-        scales = []
-
-        for ind in range(num_quantizers):
-            scales.append((levels_tensor - 1) ** -ind)
-
-            fsq = Xcodec2FSQ(levels=levels, dim=codebook_dim, **kwargs)
-
-            self.layers.append(fsq)
-
-        self.codebook_size = self.layers[0].codebook_size
-
-        self.register_buffer("scales", torch.stack(scales), persistent=False)
-
-        self.quantize_dropout = quantize_dropout and num_quantizers > 1
-
-        if quantize_dropout_cutoff_index < 0:
-            raise ValueError("quantize_dropout_cutoff_index must be greater than or equal to 0")
-
-        self.quantize_dropout_cutoff_index = quantize_dropout_cutoff_index
-        self.quantize_dropout_multiple_of = quantize_dropout_multiple_of
-
-    @property
-    def codebooks(self):
-        codebooks = [layer.implicit_codebook for layer in self.layers]
-        codebooks = torch.stack(codebooks, dim=0)
-        return codebooks
-
-    def get_codes_from_indices(self, indices):
-        _, quantize_dim = indices.shape[0], indices.shape[-1]
-        b, *spatial_dims, q = indices.shape
-        indices_packed = indices.reshape(b, -1, q)
-        ps = (tuple(spatial_dims),)
-
-        if quantize_dim < self.num_quantizers:
-            if not self.quantize_dropout > 0.0:
-                raise ValueError(
-                    "quantize dropout must be greater than 0 if you wish to reconstruct from a signal with less fine quantizations"
-                )
-            indices_packed = F.pad(indices_packed, (0, self.num_quantizers - quantize_dim), value=-1)
-
-        mask = indices_packed == -1
-        indices_proc = indices_packed.masked_fill(mask, 0)
-
-        indices_permuted = indices_proc.permute(2, 0, 1)
-
-        selected_codes = [self.codebooks[qi][indices_permuted[qi]] for qi in range(self.num_quantizers)]
-
-        all_codes = torch.stack(selected_codes, dim=0)
-
-        mask_permuted = mask.permute(2, 0, 1).unsqueeze(-1)
-        all_codes = all_codes.masked_fill(mask_permuted, 0.0)
-
-        scales_reshaped = self.scales.view(self.num_quantizers, 1, 1, -1)
-        all_codes = all_codes * scales_reshaped
-
-        spatial_shape = tuple(ps[0])
-        q, b, _, d = all_codes.shape
-
-        all_codes = all_codes.reshape(q, b, *spatial_shape, d)
-        return all_codes
-
-    def get_output_from_indices(self, indices):
-        codes = self.get_codes_from_indices(indices)
-        codes_summed = torch.sum(codes, dim=0)
-        return self.project_out(codes_summed)
-
-    def forward(self, x, return_all_codes=False, rand_quantize_dropout_fixed_seed=None):
-        num_quant, quant_dropout_multiple_of, device = self.num_quantizers, self.quantize_dropout_multiple_of, x.device
-
-        x = self.project_in(x)
-
-        if self.soft_clamp_input_value is not None:
-            clamp_value = self.soft_clamp_input_value
-            x = (x / clamp_value).tanh() * clamp_value
-
-        quantized_out = 0.0
-        residual = self.layers[0].bound(x)
-
-        all_indices = []
-
-        should_quantize_dropout = self.training and self.quantize_dropout and torch.is_grad_enabled()
-
-        if should_quantize_dropout:
-            if rand_quantize_dropout_fixed_seed is None:
-                rand_quantize_dropout_fixed_seed = get_maybe_sync_seed(device)
-
-            rand = random.Random(rand_quantize_dropout_fixed_seed)
-
-            rand_quantize_dropout_index = rand.randrange(self.quantize_dropout_cutoff_index, num_quant)
-
-            if quant_dropout_multiple_of != 1:
-                rand_quantize_dropout_index = ceil((rand_quantize_dropout_index + 1) / quant_dropout_multiple_of) - 1
-
-            null_indices = torch.full(x.shape[:2], -1.0, device=device, dtype=torch.long)
+    def forward(self, hidden_states):
+        if hidden_states.shape[-1] != self.codebook_dim:
+            raise ValueError(
+                f"expected dimension of {self.codebook_dim} but found dimension of {hidden_states.shape[-1]}"
+            )
 
         with autocast("cuda", enabled=False):
-            for quantizer_index, (layer, scale) in enumerate(zip(self.layers, self.scales)):
-                if should_quantize_dropout and quantizer_index > rand_quantize_dropout_index:
-                    all_indices.append(null_indices)
-                    continue
+            orig_dtype = hidden_states.dtype
 
-                quantized, indices = layer(residual / scale)
+            if orig_dtype not in (torch.float32, torch.float64):
+                hidden_states = hidden_states.float()
 
-                quantized = quantized * scale
+            # Quantize: bound and round with straight-through gradient
+            half_width = self._levels // 2
+            bounded = self.bound(hidden_states)
+            rounded = bounded.round()
+            codes = bounded + (rounded - bounded).detach()
+            codes = codes / half_width
 
-                residual = residual - quantized.detach()
-                quantized_out = quantized_out + quantized
+            indices = self.codes_to_indices(codes)
+            codes = codes.to(orig_dtype)
 
-                all_indices.append(indices)
-
-        quantized_out = self.project_out(quantized_out.to(x.dtype))
-
-        all_indices = torch.stack(all_indices, dim=-1)
-
-        ret = (quantized_out, all_indices)
-
-        if not return_all_codes:
-            return ret
-
-        all_codes = self.get_codes_from_indices(all_indices)
-
-        return (*ret, all_codes)
+        return codes, indices
 
 
-class Xcodec2CodecDecoderVocos(nn.Module):
+class Xcodec2ISTFT(nn.Module):
+    """
+    Inverse Short-Time Fourier Transform (ISTFT) module.
+    """
+
+    def __init__(self, n_fft: int, hop_length: int, win_length: int):
+        super().__init__()
+        self.n_fft = n_fft
+        self.hop_length = hop_length
+        self.win_length = win_length
+        window = torch.hann_window(win_length)
+        self.register_buffer("window", window)
+
+    def forward(self, spectrogram_complex):
+        if spectrogram_complex.dim() != 3:
+            raise ValueError("Expected a 3D tensor as input")
+
+        pad = (self.win_length - self.hop_length) // 2
+        n_frames = spectrogram_complex.shape[-1]
+
+        # Inverse FFT
+        ifft = torch.fft.irfft(spectrogram_complex, self.n_fft, dim=1, norm="backward")
+        ifft = ifft * self.window[None, :, None]
+
+        # Overlap and Add
+        output_size = (n_frames - 1) * self.hop_length + self.win_length
+        audio = F.fold(
+            ifft,
+            output_size=(1, output_size),
+            kernel_size=(1, self.win_length),
+            stride=(1, self.hop_length),
+        )[:, 0, 0, pad:-pad]
+
+        # Window envelope
+        window_sq = self.window.square().expand(1, n_frames, -1).transpose(1, 2)
+        window_envelope = F.fold(
+            window_sq,
+            output_size=(1, output_size),
+            kernel_size=(1, self.win_length),
+            stride=(1, self.hop_length),
+        ).squeeze()[pad:-pad]
+
+        # Normalize
+        if not (window_envelope > 1e-11).all():
+            raise ValueError("Window envelope values are too small (<=1e-11)")
+        audio = audio / window_envelope
+
+        return audio.unsqueeze(1)
+
+
+class Xcodec2ISTFTHead(nn.Module):
+    """
+    Head for converting decoder outputs to waveform via STFT projection and ISTFT.
+    """
+
+    def __init__(self, config: Xcodec2Config):
+        super().__init__()
+        self.out = nn.Linear(config.hidden_size, config.n_fft + 2)
+        self.istft = Xcodec2ISTFT(
+            n_fft=config.n_fft,
+            hop_length=config.hop_length,
+            win_length=getattr(config, "win_length", config.n_fft),
+        )
+
+    def forward(self, hidden_states):
+        stft_pred = self.out(hidden_states).transpose(1, 2)
+        mag, phase = stft_pred.chunk(2, dim=1)
+        mag = torch.exp(mag)
+        mag = torch.clip(mag, max=1e2)
+        spectrogram_complex = mag * (torch.cos(phase) + 1j * torch.sin(phase))
+        return self.istft(spectrogram_complex)
+
+
+class Xcodec2Quantizer(Module):
+    """
+    Finite Scalar Quantization wrapper with projection layers.
+
+    This module wraps `Xcodec2FSQ` and provides projection layers when the codebook
+    dimension differs from the model's hidden dimension. Xcodec2 uses only a single codebook.
+
+    Args:
+        levels: List of quantization levels for each dimension (e.g., [4, 4, 4, 4, 4, 4, 4, 4])
+        dim: Model hidden dimension. If None, uses codebook_dim (len(levels))
+
+    Based on https://github.com/lucidrains/vector-quantize-pytorch/blob/fe903ce2ae9c125ace849576aa6d09c5cec21fe4/vector_quantize_pytorch/residual_fsq.py#L49
+    """
+
     def __init__(
         self,
-        config: Xcodec2Config,
+        levels: list[int],
+        dim: int,
     ):
         super().__init__()
-        self.quantizer = Xcodec2ResidualFSQ(
-            dim=config.vq_dim, levels=config.vq_levels, num_quantizers=config.num_quantizers
+        self.project_in = nn.Linear(dim, len(levels))
+        self.project_out = nn.Linear(len(levels), dim)
+        self.fsq = Xcodec2FSQ(levels=levels)
+
+    def get_output_from_indices(self, indices):
+        """Convert codebook indices back to embeddings with projection applied."""
+        indices = indices.squeeze(-1)  # (batch, seq, 1) -> (batch, seq)
+        codes = self.fsq.implicit_codebook[indices]
+        return self.project_out(codes)
+
+    def forward(self, hidden_states):
+        hidden_states = self.project_in(hidden_states)
+        bounded = self.fsq.bound(hidden_states)
+
+        with autocast("cuda", enabled=False):
+            quantized_out, indices = self.fsq(bounded)
+
+        quantized_out = self.project_out(quantized_out.to(hidden_states.dtype))
+
+        # Add trailing dimension for single codebook: (batch, seq) -> (batch, seq, 1)
+        indices = indices.unsqueeze(-1)
+
+        return quantized_out, indices
+
+
+class Xcodec2Decoder(nn.Module):
+    """Vocos-based decoder with ResNet, Transformer, and ISTFT head for audio reconstruction."""
+
+    def __init__(self, config: Xcodec2Config):
+        super().__init__()
+        self.embed = nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=7, padding=3)
+        self.prior_blocks = nn.ModuleList(
+            [
+                ResNetBlock(
+                    in_channels=config.hidden_size, out_channels=config.hidden_size, dropout=config.resnet_dropout
+                ),
+                ResNetBlock(
+                    in_channels=config.hidden_size, out_channels=config.hidden_size, dropout=config.resnet_dropout
+                ),
+            ]
         )
-        self.backbone = Xcodec2VocosBackbone(config=config)
-        self.head = Xcodec2ISTFTHead(config=config)
 
-    def quantize(self, x):
-        """
-        Quantize input features using the vector quantizer.
+        self.num_attention_heads = config.num_attention_heads
+        self.rotary_emb = Xcodec2RotaryEmbedding(config=config)
+        self.transformers = nn.ModuleList(
+            [Xcodec2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=1e-6)
 
-        Args:
-            x (torch.Tensor): Input tensor of shape (B, D, L) where B is batch size,
-                              D is feature dimension, and L is sequence length.
+        self.post_blocks = nn.ModuleList(
+            [
+                ResNetBlock(
+                    in_channels=config.hidden_size, out_channels=config.hidden_size, dropout=config.resnet_dropout
+                ),
+                ResNetBlock(
+                    in_channels=config.hidden_size, out_channels=config.hidden_size, dropout=config.resnet_dropout
+                ),
+            ]
+        )
 
-        Returns:
-            Tuple of (quantized_tensor, quantization_indices)
-            - quantized_tensor: The quantized representation with shape (B, L, D)
-            - quantization_indices: The indices in the codebook with shape (B, L, Q)
-              where Q is the number of quantizers
-        """
-        x = x.permute(0, 2, 1)
-        x, q = self.quantizer(x)
-        x = x.permute(0, 2, 1)
-        q = q.permute(0, 2, 1)
-        return x, q
+        self.head = Xcodec2ISTFTHead(config)
 
-    def forward(self, x):
-        """
-        x (torch.Tensor):
-            Projected audio codes to reconstruct as audio.
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = self.embed(hidden_states)
 
-        Returns:
-            audio_waveform: The reconstructed audio waveform with shape (B, 1, T).
-        """
-        x = self.backbone(x)
-        x = self.head(x).unsqueeze(1)
-        return x
+        for block in self.prior_blocks:
+            hidden_states = block(hidden_states)
+
+        hidden_states = hidden_states.transpose(1, 2)  # [batch, seq_len, hidden_dim]
+
+        position_ids = torch.arange(self.num_attention_heads).unsqueeze(0)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids.to(hidden_states.device))
+
+        for layer in self.transformers:
+            hidden_states = layer(hidden_states, position_embeddings=position_embeddings)
+
+        hidden_states = hidden_states.transpose(1, 2)
+
+        for block in self.post_blocks:
+            hidden_states = block(hidden_states)
+
+        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = self.final_layer_norm(hidden_states)
+
+        return self.head(hidden_states)
 
 
-class Xcodec2SemanticEncoder(nn.Module):
-    """
-    Maps input features of pre-trained semantic model to semantic embedding.
-    """
-
+class Xcodec2SemanticAdapter(nn.Module):
     def __init__(
         self,
         input_channels: int,
@@ -1547,16 +1040,16 @@ class Xcodec2SemanticEncoder(nn.Module):
             bias=False,
         )
 
-    def forward(self, x):
-        x = self.initial_conv(x)
-        residual = x
-        x = self.act1(x)
-        x = self.conv1(x)
-        x = self.act2(x)
-        x = self.conv2(x)
-        x = x + residual
-        x = self.final_conv(x)
-        return x
+    def forward(self, hidden_states):
+        hidden_states = self.initial_conv(hidden_states)
+        residual = hidden_states
+        hidden_states = self.act1(hidden_states)
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = self.act2(hidden_states)
+        hidden_states = self.conv2(hidden_states)
+        hidden_states = hidden_states + residual
+        hidden_states = self.final_conv(hidden_states)
+        return hidden_states
 
 
 class Xcodec2PreTrainedModel(PreTrainedModel):
@@ -1571,22 +1064,13 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Xcodec2SnakeBeta):
-            if module.logscale:
-                init.zeros_(module.alpha)
-                init.zeros_(module.beta)
-            else:
-                init.ones_(module.alpha)
-                init.ones_(module.beta)
+            init.zeros_(module.alpha)
+            init.zeros_(module.beta)
         elif isinstance(module, Xcodec2FSQ):
             levels = module.levels
             init.copy_(module._levels, torch.tensor(levels, dtype=int32))
             init.copy_(module._basis, torch.cumprod(torch.tensor([1] + levels[:-1]), dim=0, dtype=int32))
-            if module.return_indices:
-                init.copy_(module.implicit_codebook, module._indices_to_codes(torch.arange(module.codebook_size)))
-        elif isinstance(module, Xcodec2ResidualFSQ):
-            levels_tensor = torch.tensor(module.levels, dtype=torch.float)
-            scales = torch.stack([(levels_tensor - 1) ** -ind for ind in range(module.num_quantizers)])
-            init.copy_(module.scales, scales)
+            init.copy_(module.implicit_codebook, module._indices_to_codes(torch.arange(module.codebook_size)))
 
 
 XCODEC2_INPUTS_DOCSTRING = r"""
@@ -1613,19 +1097,38 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
 
         self.hop_length = config.hop_length  # needed for padding
         self.semantic_model = AutoModel.from_config(config.semantic_model_config).eval()
-        # Adaptor of semantic model embedding
-        self.semantic_encoder = Xcodec2SemanticEncoder(
+        self.semantic_adapter = Xcodec2SemanticAdapter(
             config.semantic_hidden_size, config.semantic_hidden_size, config.semantic_hidden_size
         )
 
-        self.acoustic_encoder = Xcodec2CodecEncoder(
+        self.acoustic_encoder = Xcodec2AcousticEncoder(
             downsampling_ratios=config.downsampling_ratios, hidden_dim=config.encoder_hidden_size
         )
-        self.decoder = Xcodec2CodecDecoderVocos(config=config)
+        self.decoder = Xcodec2Decoder(config=config)
+        self.quantizer = Xcodec2Quantizer(dim=config.vq_dim, levels=config.vq_levels)
         self.fc_prior = nn.Linear(config.intermediate_size, config.intermediate_size)
         self.fc_post_a = nn.Linear(config.intermediate_size, config.decoder_hidden_size)
 
         self.post_init()
+
+    def quantize(self, hidden_states):
+        """
+        Quantize input features using the vector quantizer.
+
+        Args:
+            hidden_states (torch.Tensor): Input tensor of shape (B, D, L) where B is batch size,
+                              D is feature dimension, and L is sequence length.
+
+        Returns:
+            Tuple of (quantized_tensor, quantization_indices)
+            - quantized_tensor: The quantized representation with shape (B, L, D)
+            - quantization_indices: The codebook indices with shape (B, L, 1)
+        """
+        hidden_states = hidden_states.permute(0, 2, 1)
+        hidden_states, codes = self.quantizer(hidden_states)
+        hidden_states = hidden_states.permute(0, 2, 1)
+        codes = codes.permute(0, 2, 1)
+        return hidden_states, codes
 
     def apply_weight_norm(self, legacy=True):
         weight_norm = nn.utils.weight_norm
@@ -1679,7 +1182,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         audio_spectrogram: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
         return_dict: bool | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor] | Xcodec2EncoderOutput:
+    ) -> tuple | Xcodec2EncoderOutput:
         """
         Encodes the input audio waveform into discrete codes.
 
@@ -1706,7 +1209,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         semantic_output = self.semantic_model(audio_spectrogram, output_hidden_states=True)
         semantic_hidden_16 = semantic_output.hidden_states[16]
         semantic_hidden_16 = semantic_hidden_16.transpose(1, 2)
-        semantic_encoded = self.semantic_encoder(semantic_hidden_16)
+        semantic_encoded = self.semantic_adapter(semantic_hidden_16)
 
         # 2) Get acoustic embedding
         vq_emb = self.acoustic_encoder(audio)
@@ -1721,7 +1224,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         concat_emb = self.fc_prior(concat_emb.transpose(1, 2)).transpose(1, 2)
 
         # 4) Get codes for decoder
-        quantized_representation, audio_codes = self.decoder.quantize(concat_emb)
+        quantized_representation, audio_codes = self.quantize(concat_emb)
 
         # If provided, compute corresponding padding mask for audio codes
         codes_padding_mask = None
@@ -1746,7 +1249,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         self,
         audio_codes,
         return_dict: bool | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor] | Xcodec2DecoderOutput:
+    ) -> tuple | Xcodec2DecoderOutput:
         """
         Decodes the given frames into an output audio waveform.
 
@@ -1764,7 +1267,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        vq_post_emb = self.decoder.quantizer.get_output_from_indices(audio_codes.transpose(1, 2))
+        vq_post_emb = self.quantizer.get_output_from_indices(audio_codes.transpose(1, 2))
         vq_post_emb = self.fc_post_a(vq_post_emb)
         recon_audio = self.decoder(vq_post_emb)
 
@@ -1775,6 +1278,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
             audio_values=recon_audio,
         )
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(XCODEC2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Xcodec2Output, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1782,8 +1286,8 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         audio: torch.Tensor,
         audio_spectrogram: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
-        return_dict: bool | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor] | Xcodec2Output:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Xcodec2Output:
         r"""
         Returns:
             `Xcodec2Output` or `tuple(torch.FloatTensor, torch.LongTensor, torch.FloatTensor)`:
@@ -1815,8 +1319,6 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         >>> audio_codes = outputs.audio_codes
         >>> audio_values = outputs.audio_values
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         # for truncating output audio to original length
         length = audio.shape[-1]
 
@@ -1824,9 +1326,6 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
             audio, audio_spectrogram=audio_spectrogram, padding_mask=padding_mask, return_dict=False
         )
         audio_values = self.decode(audio_codes, return_dict=False)[..., :length]
-
-        if not return_dict:
-            return (audio_values, audio_codes, quantized_representation, codes_padding_mask)
 
         return Xcodec2Output(
             audio_values=audio_values,

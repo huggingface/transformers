@@ -34,15 +34,52 @@ from transformers import (
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.xcodec2")
 
+# Original key names: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L12
+# Mappings are applied sequentially per key; order matters.
+# fmt: off
+STATE_DICT_MAPPING = {
+    # ── Acoustic encoder (CodecEnc -> acoustic_encoder) ──
+    r"^CodecEnc\.conv_blocks\.0\.":                                                 r"acoustic_encoder.initial_conv.",
+    r"^CodecEnc\.conv_final_block\.0\.":                                            r"acoustic_encoder.final_activation.",
+    r"^CodecEnc\.conv_final_block\.1\.":                                            r"acoustic_encoder.final_conv.",
+    r"^CodecEnc\.conv_blocks\.(\d+)\.":                                             r"acoustic_encoder.encoder_blocks.SHIFT_DOWN.\1.",
+    r"^CodecEnc\.":                                                                 r"acoustic_encoder.",
+    # -- ResidualUnit: block.X.block.{0,1,2,3} -> block.X.{activation1,conv1,activation2,conv2}
+    r"(\.block\.\d+)\.block\.0\.":                                                  r"\1.activation1.",
+    r"(\.block\.\d+)\.block\.1\.":                                                  r"\1.conv1.",
+    r"(\.block\.\d+)\.block\.2\.":                                                  r"\1.activation2.",
+    r"(\.block\.\d+)\.block\.3\.":                                                  r"\1.conv2.",
+    # -- EncoderBlock: block.{0,1,2} -> residual_units.{0,1,2}, block.3 -> activation, block.4 -> conv
+    r"(encoder_blocks\.\d+)\.block\.([012])\.":                                     r"\1.residual_units.\2.",
+    r"(encoder_blocks\.\d+)\.block\.3\.":                                           r"\1.activation.",
+    r"(encoder_blocks\.\d+)\.block\.4\.":                                           r"\1.conv.",
+    # -- DownSample1d: lowpass.filter -> filter (LowPassFilter1d inlined)
+    r"\.downsample\.lowpass\.filter":                                               r".downsample.filter",
 
-def assert_param_count(model_1, model_2):
-    count_1 = sum(p[1].numel() for p in model_1.named_parameters() if "final_proj" not in p[0])
-    count_2 = sum(p[1].numel() for p in model_2.named_parameters() if "final_proj" not in p[0])
-    assert count_1 == count_2, f"{model_1.__class__}: {count_1} != {model_2.__class__}: {count_2}"
+    # ── Quantizer: lives on main model, not inside decoder ──
+    r"^generator\.quantizer\.layers\.0\.":                                          r"quantizer.fsq.",
+    r"^generator\.quantizer\.":                                                     r"quantizer.",
 
+    # ── Decoder (generator -> decoder) ──
+    # -- Handle backbone components: now directly in decoder (no backbone. prefix)
+    r"^generator\.backbone\.prior_net\.":                                           r"decoder.prior_blocks.",
+    r"^generator\.backbone\.post_net\.":                                            r"decoder.post_blocks.",
+    r"^generator\.backbone\.":                                                      r"decoder.",
+    # -- General generator mapping
+    r"^generator\.":                                                                r"decoder.",
+    # -- Transformer layers
+    r"\.att\.c_proj\.":                                                             r".self_attn.o_proj.",
+    r"\.att_norm\.":                                                                r".input_layernorm.",
+    r"\.ffn_norm\.":                                                                r".post_attention_layernorm.",
 
-def param_count(model):
-    return sum(p[1].numel() for p in model.named_parameters() if "final_proj" not in p[0])
+    # ── Semantic adapter (SemanticEncoder_module -> semantic_adapter) ──
+    r"^SemanticEncoder_module\.":                                                   r"semantic_adapter.",
+    r"semantic_adapter\.residual_blocks\.0\.":                                      r"semantic_adapter.act1.",
+    r"semantic_adapter\.residual_blocks\.1\.":                                      r"semantic_adapter.conv1.",
+    r"semantic_adapter\.residual_blocks\.2\.":                                      r"semantic_adapter.act2.",
+    r"semantic_adapter\.residual_blocks\.3\.":                                      r"semantic_adapter.conv2.",
+}
+# fmt: on
 
 
 def permute_for_rope(input_tensor, n_heads, dim1, dim2):
@@ -56,126 +93,46 @@ def permute_for_rope(input_tensor, n_heads, dim1, dim2):
     return input_tensor
 
 
+def map_old_key_to_new(old_key):
+    new_key = old_key
+    for pattern, replacement in STATE_DICT_MAPPING.items():
+        match = re.search(pattern, new_key)
+        if match:
+            # Handle index shift: conv_blocks index N (N>=1) -> encoder_blocks index N-1
+            if "SHIFT_DOWN" in replacement and match.groups():
+                layer_idx = int(match.group(1))
+                replacement = replacement.replace(r"SHIFT_DOWN.\1", str(layer_idx - 1))
+            new_key = re.sub(pattern, replacement, new_key)
+    return new_key
+
+
+def convert_state_dict(state_dict, n_heads):
+    new_state_dict = {}
+
+    for old_key, tensor in state_dict.items():
+        # Special case: c_attn is a fused QKV projection that must be split into 3 tensors
+        if ".att.c_attn." in old_key:
+            w_q, w_k, w_v = torch.chunk(tensor, chunks=3, dim=0)
+            w_q = permute_for_rope(w_q, n_heads, w_q.shape[0], w_q.shape[1])
+            w_k = permute_for_rope(w_k, n_heads, w_k.shape[0], w_k.shape[1])
+            base_key = map_old_key_to_new(old_key.replace(".att.c_attn.", ".self_attn.PROJ."))
+            new_state_dict[base_key.replace("PROJ", "q_proj")] = w_q
+            new_state_dict[base_key.replace("PROJ", "k_proj")] = w_k
+            new_state_dict[base_key.replace("PROJ", "v_proj")] = w_v
+            continue
+
+        new_key = map_old_key_to_new(old_key)
+        new_state_dict[new_key] = tensor
+        if old_key != new_key:
+            logger.debug(f"Converted: {old_key} -> {new_key}")
+
+    return new_state_dict
+
+
 def _convert_model(state_dict, hf_model):
-    tensors = {}
+    n_heads = hf_model.config.num_attention_heads
+    state_dict = convert_state_dict(state_dict, n_heads)
 
-    for old_k in state_dict.keys():
-        # update to new names used in `Xcodec2Model` in modeling_xcodec2.py
-        # old names can be found here: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L12
-        if "CodecEnc" in old_k:
-            k = old_k.replace("CodecEnc", "acoustic_encoder")
-
-            # Handle initial convolutional layer (conv_blocks.0 -> initial_conv)
-            if "conv_blocks.0" in k:
-                k = k.replace("conv_blocks.0", "initial_conv")
-
-            # Handle final layers (conv_final_block.0 -> final_activation, conv_final_block.1 -> final_conv)
-            elif "conv_final_block.0" in k:
-                k = k.replace("conv_final_block.0", "final_activation")
-            elif "conv_final_block.1" in k:
-                k = k.replace("conv_final_block.1", "final_conv")
-
-            # Handle encoder blocks (conv_blocks.1, conv_blocks.2, etc. -> encoder_blocks.0, encoder_blocks.1, etc.)
-            elif "conv_blocks." in k:
-                # Extract the block index (subtracting 1 because initial_conv replaced conv_blocks.0)
-                conv_block_pattern = r"acoustic_encoder\.conv_blocks\.(\d+)(.*)"
-                match = re.match(conv_block_pattern, k)
-                if match:
-                    block_idx = int(match.group(1))
-                    suffix = match.group(2)
-                    # Adjust index (subtract 1 because we moved conv_blocks.0 to initial_conv)
-                    k = f"acoustic_encoder.encoder_blocks.{block_idx - 1}{suffix}"
-
-            # Handle the ResidualUnit structure changes (nested blocks)
-            # We're looking for patterns like "block.X.block.Y" where Y is 0-3
-            nested_block_pattern = r"(.*\.block\.\d+)\.block\.(\d+)(.*)"
-            match = re.match(nested_block_pattern, k)
-            if match:
-                prefix = match.group(1)  # Everything before .block.Y
-                subblock_idx = int(match.group(2))  # Y value (0-3)
-                suffix = match.group(3)  # Everything after .block.Y
-
-                # Map to the corresponding component in ResidualUnit
-                if subblock_idx == 0:
-                    k = f"{prefix}.activation1{suffix}"
-                elif subblock_idx == 1:
-                    k = f"{prefix}.conv1{suffix}"
-                elif subblock_idx == 2:
-                    k = f"{prefix}.activation2{suffix}"
-                elif subblock_idx == 3:
-                    k = f"{prefix}.conv2{suffix}"
-
-            # Handle the EncoderBlock structure changes
-            # We're looking for patterns like "encoder_blocks.X.block.Y" where Y is 0-2 (residual units), 3 (activation), or 4 (conv)
-            encoder_block_pattern = r"(acoustic_encoder\.encoder_blocks\.\d+)\.block\.(\d+)(.*)"
-            match = re.match(encoder_block_pattern, k)
-            if match:
-                prefix = match.group(1)  # Everything before .block.Y (conv_blocks.X)
-                block_idx = int(match.group(2))  # Y value (0-4)
-                suffix = match.group(3)  # Everything after .block.Y
-
-                # Map to the corresponding component in EncoderBlock
-                if block_idx < 3:  # First 3 are residual units (typically 0, 1, 2)
-                    k = f"{prefix}.residual_units.{block_idx}{suffix}"
-                elif block_idx == 3:  # This is the activation
-                    k = f"{prefix}.activation{suffix}"
-                elif block_idx == 4:  # This is the final conv
-                    k = f"{prefix}.conv{suffix}"
-        elif "generator" in old_k:
-            k = old_k.replace("generator", "decoder")
-
-            # Handle prior_net -> prior_blocks conversion
-            if "backbone.prior_net.0." in k:
-                k = k.replace("backbone.prior_net.0.", "backbone.prior_blocks.0.")
-            elif "backbone.prior_net.1." in k:
-                k = k.replace("backbone.prior_net.1.", "backbone.prior_blocks.1.")
-
-            # Handle post_net -> post_blocks conversion
-            elif "backbone.post_net.0." in k:
-                k = k.replace("backbone.post_net.0.", "backbone.post_blocks.0.")
-            elif "backbone.post_net.1." in k:
-                k = k.replace("backbone.post_net.1.", "backbone.post_blocks.1.")
-
-            # Handle special cases for decoder.backbone.transformers
-            elif "backbone.transformers" in k:
-                if "c_attn" in k:
-                    # split into 3 tensors
-                    c_attn_weight = state_dict[old_k]
-                    W_q, W_k, W_v = torch.chunk(c_attn_weight, chunks=3, dim=0)
-
-                    n_heads = hf_model.config.num_attention_heads
-                    W_q = permute_for_rope(W_q, n_heads, W_q.shape[0], W_q.shape[1])
-                    W_k = permute_for_rope(W_k, n_heads, W_k.shape[0], W_k.shape[1])
-                    k_mod = k.replace("att.", "self_attn.")
-                    tensors[k_mod.replace("c_attn", "q_proj")] = W_q
-                    tensors[k_mod.replace("c_attn", "k_proj")] = W_k
-                    tensors[k_mod.replace("c_attn", "v_proj")] = W_v
-                    continue  # Skip the rest of the loop for this key
-                elif "c_proj" in k:
-                    k = k.replace(".att.c_proj", ".self_attn.o_proj")
-                elif "att_norm" in k:
-                    k = k.replace("att_norm", "input_layernorm")
-                elif "ffn_norm" in k:
-                    k = k.replace("ffn_norm", "post_attention_layernorm")
-        elif "SemanticEncoder_module" in old_k:
-            k = old_k.replace("SemanticEncoder_module", "semantic_encoder")
-
-            # Handle residual_blocks -> individual modules conversion
-            if "residual_blocks.0." in k:
-                k = k.replace("residual_blocks.0.", "act1.")
-            elif "residual_blocks.1." in k:
-                k = k.replace("residual_blocks.1.", "conv1.")
-            elif "residual_blocks.2." in k:
-                k = k.replace("residual_blocks.2.", "act2.")
-            elif "residual_blocks.3." in k:
-                k = k.replace("residual_blocks.3.", "conv2.")
-        else:
-            k = old_k
-
-        # copy over to new state dict
-        tensors[k] = state_dict[old_k]
-
-    state_dict = tensors
     extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
     missing_keys = set(hf_model.state_dict().keys()) - set(state_dict.keys())
     if len(extra_keys) != 0:
@@ -183,12 +140,11 @@ def _convert_model(state_dict, hf_model):
     if len(missing_keys) != 0:
         raise ValueError(f"{len(missing_keys)} missing keys found: {missing_keys}")
     hf_model.load_state_dict(state_dict, strict=True)
-    n_params = param_count(hf_model)
 
+    n_params = sum(p.numel() for p in hf_model.parameters())
     logger.info(f"model loaded: {round(n_params / 1e6, 1)}M params")
 
     del state_dict
-
     return hf_model
 
 

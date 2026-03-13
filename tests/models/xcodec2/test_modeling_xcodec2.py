@@ -416,6 +416,9 @@ def compute_rmse(arr1, arr2):
 @require_torch
 class Xcodec2IntegrationTest(unittest.TestCase):
     def test_integration(self):
+        """
+        reproducer: https://gist.github.com/ebezzam/3b79481b5d48d8e35c4ecc582aee0cb3#file-reproducer_single-py
+        """
         # load expected results
         results_path = Path(__file__).parent.parent.parent / "fixtures/xcodec2/expected_results_single.json"
         with open(results_path, "r") as f:
@@ -425,7 +428,7 @@ class Xcodec2IntegrationTest(unittest.TestCase):
         exp_codec_error = float(raw_data["codec_error"])
 
         # load model
-        model_id = "hf-audio/xcodec2"
+        model_id = "bezzam/xcodec2"
         model = Xcodec2Model.from_pretrained(model_id).to(torch_device).eval()
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
@@ -440,14 +443,10 @@ class Xcodec2IntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         with torch.no_grad():
-            # compare discrete codes
-            enc_tol = 0  # exact match
+            # compare discrete codes (exact match)
             audio_codes = model.encode(inputs["audio"], inputs["audio_spectrogram"], return_dict=False)[0]
-            torch.testing.assert_close(
-                audio_codes.squeeze().cpu().to(exp_code.dtype),
-                exp_code,
-                rtol=enc_tol,
-                atol=enc_tol,
+            self.assertTrue(
+                torch.equal(audio_codes.squeeze().cpu().to(exp_code.dtype), exp_code),
             )
 
             # compare recon
@@ -463,13 +462,11 @@ class Xcodec2IntegrationTest(unittest.TestCase):
             )
 
             # compare codec error
-            err_tol = 1e-5
             codec_error = compute_rmse(inputs["audio"], dec).item()
-            torch.testing.assert_close(codec_error, exp_codec_error, rtol=err_tol, atol=err_tol)
+            torch.testing.assert_close(codec_error, exp_codec_error, rtol=1e-5, atol=1e-5)
 
-            # make sure forward and decode gives same result
-            round_trip_tol = 0
+            # make sure forward and decode gives same result (exact match)
             enc_dec = model(inputs["audio"], inputs["audio_spectrogram"]).audio_values
-            torch.testing.assert_close(
-                dec[..., : enc_dec.shape[-1]], enc_dec, rtol=round_trip_tol, atol=round_trip_tol
+            self.assertTrue(
+                torch.equal(dec[..., : enc_dec.shape[-1]], enc_dec),
             )

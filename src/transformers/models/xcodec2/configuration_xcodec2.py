@@ -77,8 +77,6 @@ class Xcodec2Config(PretrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        istft_padding (`str`, *optional*, defaults to `"same"`):
-            Padding type for the iSTFT in the decoder. Should be one of `"center"` or `"same"`.
     """
 
     model_type = "xcodec2"
@@ -108,7 +106,6 @@ class Xcodec2Config(PretrainedConfig):
         vq_levels=[4, 4, 4, 4, 4, 4, 4, 4],
         max_position_embeddings=4096,
         rope_parameters=None,
-        istft_padding="same",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -139,7 +136,6 @@ class Xcodec2Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.sampling_rate = sampling_rate
 
-        # decoder parameters, which has hybrid ResNet-Transformer architecture
         self.decoder_hidden_size = decoder_hidden_size
         self.head_dim = head_dim
         self.num_attention_heads = num_attention_heads
@@ -152,11 +148,7 @@ class Xcodec2Config(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.max_position_embeddings = max_position_embeddings
         self.rope_parameters = rope_parameters if rope_parameters is not None else {"rope_theta": 10000.0, "rope_type": "default"}
-        # -- Vocos vocoder parameters
-        self.istft_padding = istft_padding
 
-        # single codebook VQ is main feature of Xcodec2
-        self.num_quantizers = 1
         self.vq_dim = vq_dim
         self.vq_levels = vq_levels
 
