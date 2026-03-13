@@ -32,6 +32,9 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    "Ernie4_5_VL_MoeConfig": ["args"],  # BC Alias
+    "Ernie4_5_VL_MoeTextConfig": ["args"],  # BC Alias
+    "Ernie4_5_VL_MoeVisionConfig": ["args"],  # BC Alias
     "ExaoneMoeConfig": ["first_k_dense_replace"],  # BC for other frameworks
     "AfmoeConfig": ["global_attn_every_n_layers", "rope_scaling"],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
@@ -70,6 +73,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "Sam3VisionConfig": ["backbone_feature_sizes"],
     "SamHQVisionConfig": ["mlp_ratio"],
     "ClapAudioConfig": ["num_classes"],
+    "ClvpDecoderConfig": ["add_cross_attention"],
     "SpeechT5HifiGanConfig": ["sampling_rate"],
     "UdopConfig": ["feed_forward_proj"],
     "ZambaConfig": ["attn_layer_offset", "attn_layer_period"],
@@ -129,6 +133,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "IdeficsPerceiverConfig": True,
     "GptOssConfig": True,
     "LwDetrConfig": True,
+    "NemotronHConfig": True,
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)

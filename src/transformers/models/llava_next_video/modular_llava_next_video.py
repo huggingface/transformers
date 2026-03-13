@@ -41,49 +41,16 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="llava-hf/LLaVA-NeXT-Video-7B-hf")
 class LlavaNextVideoConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LlavaNextVideoForConditionalGeneration`]. It is used to instantiate an
-    Llava-NeXT model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the [llava-hf/LLaVA-NeXT-Video-7B-hf](https://huggingface.co/llava-hf/LLaVA-NeXT-Video-7B-hf)
-    model.
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
-            The config object or dictionary of the text backbone.
-        image_token_index (`int`, *optional*, defaults to 32001):
-            The image token index to encode the image prompt.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
-        multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in the multimodal projector.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
-            If `"full"`, the full vision features are used.
-        vision_feature_layer (`Union[int, list[int]]`, *optional*, defaults to -2):
-            The index of the layer to select the vision feature. If multiple indices are provided,
-            the vision feature of the corresponding indices will be concatenated to form the
-            vision features.
-        image_grid_pinpoints (`List`, *optional*, defaults to `[[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]`):
-            A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
-            of the form `(height, width)`.
-        video_token_index (`int`, *optional*, defaults to 32000):
-            The video token index to encode the image prompt.
-        spatial_pool_mode (`str`, *optional*, defaults to `"average"`):
-            Pooling mode to use for videos. Can be "average", "max" or "conv".
-        spatial_pool_stride (`int`, *optional*, defaults to 2):
-            Stride used in the pooling layer for videos.
-        image_seq_length (`int`, *optional*, defaults to 576):
-            Sequence length of one image embedding.
-        video_seq_length (`int`, *optional*, defaults to 288):
-            Sequence length of one video embedding.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
+    image_grid_pinpoints (`List`, *optional*, defaults to `[[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]`):
+        A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
+        of the form `(height, width)`.
+    spatial_pool_mode (`str`, *optional*, defaults to `"average"`):
+        Pooling mode to use for videos. Can be "average", "max" or "conv".
+    spatial_pool_stride (`int`, *optional*, defaults to 2):
+        Stride used in the pooling layer for videos.
 
     Example:
 
@@ -268,6 +235,10 @@ class LlavaNextVideoMultiModalProjector(LlavaNextMultiModalProjector):
 
 class LlavaNextVideoPreTrainedModel(LlavaNextPreTrainedModel):
     input_modalities = ("image", "video", "text")
+    _can_record_outputs = {
+        "hidden_states": "LlamaDecoderLayer",
+        "attentions": "LlamaAttention",
+    }
 
 
 class LlavaNextVideoModel(LlavaNextModel):
@@ -276,8 +247,8 @@ class LlavaNextVideoModel(LlavaNextModel):
         self.vision_resampler = LlavaNextVideoPooler(config)
         self.post_init()
 
-    @can_return_tuple
     @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -349,8 +320,8 @@ class LlavaNextVideoModel(LlavaNextModel):
 
         return image_outputs
 
-    @can_return_tuple
     @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
     )
@@ -442,6 +413,7 @@ class LlavaNextVideoModel(LlavaNextModel):
             )
         return special_image_mask, special_video_mask
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -457,24 +429,15 @@ class LlavaNextVideoModel(LlavaNextModel):
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | LlavaNextVideoModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
+        image_features = None
         if pixel_values is not None:
             image_features = self.get_image_features(
                 pixel_values,
@@ -489,6 +452,7 @@ class LlavaNextVideoModel(LlavaNextModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
+        video_features = None
         if pixel_values_videos is not None:
             video_features = self.get_video_features(
                 pixel_values_videos,
@@ -513,10 +477,6 @@ class LlavaNextVideoModel(LlavaNextModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -525,12 +485,14 @@ class LlavaNextVideoModel(LlavaNextModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
-            video_hidden_states=video_features if pixel_values_videos is not None else None,
+            image_hidden_states=image_features,
+            video_hidden_states=video_features,
         )
 
 
 class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
+    @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring
     def get_video_features(
         self,
@@ -557,6 +519,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             **kwargs,
         )
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -573,10 +536,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | LlavaNextVideoCausalLMOutputWithPast:
@@ -645,12 +604,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "USER: \nWhat's the content of the image? ASSISTANT: The image shows a red stop sign on a pole, with a traditional Chinese archway (...)"
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -662,10 +615,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-            cache_position=cache_position,
             image_sizes=image_sizes,
             **kwargs,
         )
@@ -700,7 +649,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         pixel_values_videos=None,
         image_sizes=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -712,7 +660,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,

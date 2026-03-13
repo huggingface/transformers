@@ -31,6 +31,7 @@ from ..utils.quantization_config import (
     GPTQConfig,
     HiggsConfig,
     HqqConfig,
+    MetalConfig,
     Mxfp4Config,
     QuantizationConfigMixin,
     QuantizationMethod,
@@ -57,6 +58,7 @@ from .quantizer_fp_quant import FPQuantHfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
+from .quantizer_metal import MetalHfQuantizer
 from .quantizer_mxfp4 import Mxfp4HfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
 from .quantizer_quark import QuarkHfQuantizer
@@ -88,6 +90,7 @@ AUTO_QUANTIZER_MAPPING = {
     "fp8": FineGrainedFP8HfQuantizer,
     "auto-round": AutoRoundQuantizer,
     "mxfp4": Mxfp4HfQuantizer,
+    "metal": MetalHfQuantizer,
     "sinq": SinqHfQuantizer,
 }
 
@@ -113,8 +116,20 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "fp8": FineGrainedFP8Config,
     "auto-round": AutoRoundConfig,
     "mxfp4": Mxfp4Config,
+    "metal": MetalConfig,
     "sinq": SinqConfig,
 }
+
+LOADING_ATTRIBUTES_CONFIG_TYPES = (
+    GPTQConfig,
+    AwqConfig,
+    AutoRoundConfig,
+    FbgemmFp8Config,
+    CompressedTensorsConfig,
+    Mxfp4Config,
+    MetalConfig,
+    FineGrainedFP8Config,
+)
 
 logger = logging.get_logger(__name__)
 
@@ -177,6 +192,10 @@ class AutoHfQuantizer:
         # Again, we need a special care for bnb as we have a single quantization config
         # class for both 4-bit and 8-bit quantization
         if quant_method == QuantizationMethod.BITS_AND_BYTES:
+            if not isinstance(quantization_config, BitsAndBytesConfig):
+                raise TypeError(
+                    "Found `quant_method=bitsandbytes` but `quantization_config` is not a `BitsAndBytesConfig`."
+                )
             if quantization_config.load_in_8bit:
                 quant_method += "_8bit"
             else:
@@ -229,28 +248,17 @@ class AutoHfQuantizer:
                 "Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes."
             )
 
-        if (
-            isinstance(
-                quantization_config,
-                (
-                    GPTQConfig,
-                    AwqConfig,
-                    AutoRoundConfig,
-                    FbgemmFp8Config,
-                    CompressedTensorsConfig,
-                    Mxfp4Config,
-                    FineGrainedFP8Config,
-                ),
-            )
-            and quantization_config_from_args is not None
+        if isinstance(quantization_config, LOADING_ATTRIBUTES_CONFIG_TYPES) and isinstance(
+            quantization_config_from_args, LOADING_ATTRIBUTES_CONFIG_TYPES
         ):
             loading_attr_dict = quantization_config_from_args.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
                 setattr(quantization_config, attr, val)
 
-            warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
+            if loading_attr_dict:
+                warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
 
-        if warning_msg != "" and not isinstance(quantization_config, (Mxfp4Config, FineGrainedFP8Config)):
+        if warning_msg != "" and not isinstance(quantization_config, (Mxfp4Config, MetalConfig, FineGrainedFP8Config)):
             warnings.warn(warning_msg)
         else:
             # in the case of mxfp4, we don't want to print the warning message, bit confusing for users

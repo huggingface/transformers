@@ -59,6 +59,7 @@ if TYPE_CHECKING:
     from .canine import *
     from .chameleon import *
     from .chinese_clip import *
+    from .chmv2 import *
     from .clap import *
     from .clip import *
     from .clipseg import *
@@ -275,6 +276,7 @@ if TYPE_CHECKING:
     from .myt5 import *
     from .nanochat import *
     from .nemotron import *
+    from .nemotron_h import *
     from .nllb import *
     from .nllb_moe import *
     from .nougat import *
@@ -282,6 +284,7 @@ if TYPE_CHECKING:
     from .olmo import *
     from .olmo2 import *
     from .olmo3 import *
+    from .olmo_hybrid import *
     from .olmoe import *
     from .omdet_turbo import *
     from .oneformer import *
@@ -314,7 +317,9 @@ if TYPE_CHECKING:
     from .plbart import *
     from .poolformer import *
     from .pop2piano import *
+    from .pp_doclayout_v2 import *
     from .pp_doclayout_v3 import *
+    from .pp_ocrv5_server_det import *
     from .prompt_depth_anything import *
     from .prophetnet import *
     from .pvt import *
@@ -390,6 +395,7 @@ if TYPE_CHECKING:
     from .textnet import *
     from .time_series_transformer import *
     from .timesfm import *
+    from .timesfm2_5 import *
     from .timesformer import *
     from .timm_backbone import *
     from .timm_wrapper import *
@@ -402,6 +408,7 @@ if TYPE_CHECKING:
     from .univnet import *
     from .upernet import *
     from .vaultgemma import *
+    from .vibevoice_asr import *
     from .video_llama_3 import *
     from .video_llava import *
     from .videomae import *
