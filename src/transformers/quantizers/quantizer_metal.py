@@ -23,6 +23,7 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import MetalConfig
 
 logger = logging.get_logger(__name__)
 
@@ -37,6 +38,7 @@ class MetalHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    quantization_config: "MetalConfig"
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)

@@ -20,7 +20,7 @@ from transformers.utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="ibm/patchtst")
+@auto_docstring(checkpoint="ibm-granite/granite-timeseries-patchtst")
 class PatchTSTConfig(PreTrainedConfig):
     r"""
     context_length (`int`, *optional*, defaults to 32):

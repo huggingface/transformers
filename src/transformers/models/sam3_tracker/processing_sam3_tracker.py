@@ -29,7 +29,7 @@ from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, auto_docstring
 
 
-@auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
+@auto_docstring(checkpoint="facebook/sam3")
 class Sam3TrackerProcessor(ProcessorMixin):
     def __init__(self, image_processor, target_size: int | None = None, point_pad_value: int = -10, **kwargs):
         r"""

@@ -64,14 +64,25 @@ if TYPE_CHECKING:
     from ..modeling_utils import LoadStateDictConfig
 
 
-def _block_diag_3d(*tensors):
+# TODO: remove once PEFT < 0.19 no longer supported
+def _block_diag_3d(tensors: list[torch.Tensor]) -> torch.Tensor:
+    if len(tensors) < 2:
+        raise ValueError(f"_block_diag_3d expects at least 2 tensors, got {len(tensors)}")
+
+    if any(t.dim() != 3 for t in tensors):
+        raise ValueError("_block_diag_3d expects all tensors to be 3d.")
+
+    num_experts = tensors[0].shape[0]
+    if any(t.shape[0] != num_experts for t in tensors):
+        raise ValueError("All tensors passed to _block_diag_3d must have the same number of experts.")
+
     lora_b_block_diag = []
-    for i in range(len(tensors[0])):
-        lora_b_block_diag.append(torch.block_diag(tensors[0][i], tensors[1][i]))
-    out = torch.stack(lora_b_block_diag, dim=0)
-    return out
+    for i in range(num_experts):
+        lora_b_block_diag.append(torch.block_diag(*[tensor[i] for tensor in tensors]))
+    return torch.stack(lora_b_block_diag, dim=0)
 
 
+# TODO: remove once PEFT < 0.19 no longer supported
 class PeftConcatenate(Concatenate):
     """Convert per-expert LoRA weights to merged weights.
 
@@ -81,16 +92,21 @@ class PeftConcatenate(Concatenate):
 
     To illustrate:
 
-    Before
+    Before:
+
     W0' = W0 + A0 @ B0
+
     W1' = W1 + A1 @ B1
 
-    After
+    After:
+
     W01' = W01 + A01 @ B01_bd
-        where
-        A01 = [A0, A1]
-        B01_bd = [[B0,  0],
-                  [0,  B1]]
+
+    where:
+
+    A01 = [A0, A1]
+
+    B01_bd = [[B0, 0], [0, B1]]
 
     This class is responsible for merging LoRA B in this block-diagonal fashion. Assuming that we fuse N weights, it
     should look like this:
@@ -119,12 +135,24 @@ class PeftConcatenate(Concatenate):
                 f"To convert this LoRA adapter, the LoRA weights all need to have either 2 or 3 dims, got {set(dims)}"
             )
 
+        # Keep source order stable (e.g. w1 before w3 for Mixtral) to preserve gate/up semantics.
+        ordered_tensors = [
+            input_dict[source_pattern] for source_pattern in source_patterns if source_pattern in input_dict
+        ]
+        if len(ordered_tensors) != len(input_dict):
+            missing = set(input_dict) - set(source_patterns)
+            raise ValueError(
+                "Collected tensors contain keys not present in source_patterns. "
+                f"Unexpected keys: {sorted(missing)}; source_patterns={source_patterns}"
+            )
+
         if set(dims) == {2}:
-            output_dict = {full_layer_name: torch.block_diag(*input_dict.values())}
+            output_dict = {full_layer_name: torch.block_diag(*ordered_tensors)}
         else:
-            out = _block_diag_3d(*input_dict.values())  # shape = experts, 2*out_feat, 2*r
-            out = torch.permute(out, (2, 0, 1))  # shape = 2*r, experts, 2*out_feat
-            out = out.flatten(0, 1)  # shape = 2*r * experts, 2*out_feat
+            # with r being the LoRA rank and n being the number of fused weights:
+            out = _block_diag_3d(ordered_tensors)  # shape = experts, n*out_feat, 2*r
+            out = torch.permute(out, (2, 0, 1))  # shape = 2*r, experts, n*out_feat
+            out = out.flatten(0, 1)  # shape = 2*r * experts, n*out_feat
             out = out.T
             output_dict = {full_layer_name: out}
         return output_dict
@@ -134,6 +162,7 @@ class PeftConcatenate(Concatenate):
         raise NotImplementedError("Reversing PEFT LoRA MoE conversions is not supported yet.")
 
 
+# TODO: remove once PEFT < 0.19 no longer supported
 class FlattenDims(ConversionOps):
     """
     Flatten the tensors along the given dimensions
@@ -164,6 +193,7 @@ class FlattenDims(ConversionOps):
         return f"{self.__class__.__name__}(dims={self.dims})"
 
 
+# TODO: remove once PEFT < 0.19 no longer supported
 class PermuteDims(ConversionOps):
     """
     Permute the tensors along the given dimensions
@@ -192,11 +222,13 @@ class PermuteDims(ConversionOps):
         return f"{self.__class__.__name__}(dims={self.dims})"
 
 
-def _build_peft_weight_mapping(
+# TODO: remove once PEFT < 0.19 no longer supported
+def build_peft_weight_mapping(
     weight_conversions: list[WeightConverter | WeightRenaming] | None, adapter_name: str, peft_config=None
 ) -> list[WeightConverter | WeightRenaming]:
     # We iterate over all the operations of the original model and simply edit them to apply to the PEFT adapter when
     # appropriate.
+    # Note: This function is used in PEFT, changing it requires coordination.
     if not weight_conversions:
         return []
 
@@ -311,6 +343,8 @@ def _build_peft_weight_mapping(
 # The main reason we have to explicit this is because the conversion mapping
 # has the full layer name, while the config do not. We coould regex match but
 # this is more explicit and less error prone.
+# Note: this is used in PEFT, changing it requires coordiation.
+# TODO: remove once PEFT < 0.19 no longer supported
 _MOE_TARGET_MODULE_MAPPING: dict[str, dict[str, str]] = {
     "mixtral": {
         "gate": "gate.weight",
@@ -326,12 +360,16 @@ _MOE_TARGET_MODULE_MAPPING: dict[str, dict[str, str]] = {
     },
 }
 
+# Note: this is used in PEFT, changing it requires coordiation.
+# TODO: remove once PEFT < 0.19 no longer supported
 _MOE_FUSED_TARGETS: dict[str, dict[str, set[str]]] = {
-    "mixtral": {"gate_up_proj": {"w1", "w3"}},
-    "qwen2_moe": {"gate_up_proj": {"gate_proj", "up_proj"}},
+    # use lists for dict values to ensure stable order
+    "mixtral": {"gate_up_proj": ["w1", "w3"]},
+    "qwen2_moe": {"gate_up_proj": ["gate_proj", "up_proj"]},
 }
 
 
+# TODO: remove once PEFT < 0.19 no longer supported
 def patch_moe_parameter_targeting(model, peft_config):
     """PEFT currently assumes that expert layers are of shape
         (expert, in, out)
@@ -349,11 +387,12 @@ def patch_moe_parameter_targeting(model, peft_config):
 
         @wraps(update_layer)
         def new_update_layer(layer, *args, **kwargs):
-            if not hasattr(layer, "_swapped_in_out") and layer.parameter_name in ("down_proj", "gate_up_proj"):
+            did_swap = getattr(layer, "_did_swap_in_out_features", False)
+            if not did_swap and layer.parameter_name in ("down_proj", "gate_up_proj"):
                 tmp_in_features = layer.in_features
                 layer.in_features = layer.out_features
                 layer.out_features = tmp_in_features
-                layer._swapped_in_out = True
+                layer._did_swap_in_out_features = True
             return update_layer(layer, *args, **kwargs)
 
         peft.tuners.lora.layer.ParamWrapper.update_layer = new_update_layer
@@ -520,12 +559,14 @@ class PeftAdapterMixin:
             )
 
         weight_conversions = get_model_conversion_mapping(self)
+
+        # TODO: remove once PEFT < 0.19 is dropped, use peft.utils.transformers_weight_conversion
         peft_config = convert_peft_config_for_transformers(peft_config, model=self, conversions=weight_conversions)
 
         if hasattr(peft_config, "inference_mode"):
             peft_config.inference_mode = not is_trainable
 
-        peft_weight_conversions = _build_peft_weight_mapping(weight_conversions, adapter_name, peft_config=peft_config)
+        peft_weight_conversions = build_peft_weight_mapping(weight_conversions, adapter_name, peft_config=peft_config)
 
         patch_moe_parameter_targeting(model=self, peft_config=peft_config)
 
@@ -566,18 +607,31 @@ class PeftAdapterMixin:
         else:
             checkpoint_files, sharded_metadata = [], {}
 
+        device_map = getattr(self, "hf_device_map", {"": self.device})
         load_config = replace(
             load_config,
             pretrained_model_name_or_path=peft_model_id,
             sharded_metadata=sharded_metadata,
             weight_mapping=peft_weight_conversions,
+            device_map=device_map,
         )
         loading_info, _ = self._load_pretrained_model(
             model=self,
             state_dict=adapter_state_dict,
             checkpoint_files=checkpoint_files,
             load_config=load_config,
+            # pass expected keys explicitly, otherwise they are determined from the state_dict, which can contain
+            # unexpected entries, like "layer.SCB" from a bnb layer.
+            expected_keys=[n for n, _ in self.named_parameters()],
         )
+
+        if peft_config.inference_mode:
+            from peft.tuners.tuners_utils import BaseTunerLayer
+
+            self.eval()
+            for module in self.modules():
+                if isinstance(module, BaseTunerLayer):
+                    module.requires_grad_(False)
 
         adapter_key_markers = {adapter_name}
         if peft_config is not None and getattr(peft_config, "peft_type", None) is not None:
@@ -974,10 +1028,8 @@ def maybe_load_adapters(
 # PEFT adapters for these models, they also need to be updated. This may require updating the PEFT config too. The
 # logic for this is found below. Right now, only LoRA is supported.
 
-# TODO: These functions will be added to PEFT in release 0.19.0. Drop them here once 0.19.0 becomes the min PEFT
-# version.
 
-
+# TODO: remove once PEFT < 0.19 no longer supported
 def _convert_peft_config_moe(peft_config, model_type: str):
     base_model_type = _MODEL_TO_CONVERSION_PATTERN.get(model_type, None)
     if base_model_type is None:
@@ -990,6 +1042,8 @@ def _convert_peft_config_moe(peft_config, model_type: str):
     peft_config.target_modules = set(peft_config.target_modules or [])
     if not hasattr(peft_config, "rank_pattern") or peft_config.rank_pattern is None:
         peft_config.rank_pattern = {}
+    if not hasattr(peft_config, "alpha_pattern") or peft_config.alpha_pattern is None:
+        peft_config.alpha_pattern = {}
 
     new_target_parameters = peft_config.target_parameters.copy()
     remaining_target_modules = set()
@@ -1023,6 +1077,11 @@ def _convert_peft_config_moe(peft_config, model_type: str):
 
         if len(present_targets) == len(required_old_targets) and len(required_old_targets) > 1:
             peft_config.rank_pattern[rf".*\.{re.escape(new_name)}"] = peft_config.r * len(required_old_targets)
+            # Preserve per-branch LoRA scaling after fusion.
+            # Example: w1 + w3 => r doubles, so alpha must also double to keep alpha/r unchanged.
+            peft_config.alpha_pattern[rf".*\.{re.escape(new_name)}"] = peft_config.lora_alpha * len(
+                required_old_targets
+            )
 
     peft_config.target_parameters = new_target_parameters
     peft_config.target_modules = remaining_target_modules
@@ -1030,8 +1089,13 @@ def _convert_peft_config_moe(peft_config, model_type: str):
     return peft_config
 
 
+# TODO: remove once PEFT < 0.19 no longer supported
 def convert_peft_config_for_transformers(peft_config, model: torch.nn.Module, conversions: list[Any] | None):
-    # FIXME document this properly
+    """
+    Convert the PEFT config of models whose architecture changed from transformers v4 to v5.
+
+    For most models, this requires no changes, this mostly affects some MoE models like Mixtral.
+    """
     # If, for any reason, we cannot apply conversion, we just return the PEFT config as is.
     from peft import PeftType  # avoid circular import
 
