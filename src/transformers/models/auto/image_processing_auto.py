@@ -596,6 +596,14 @@ class AutoImageProcessor:
                     )
 
         has_remote_code = image_processor_auto_map is not None
+        # If we don't have an image_processor_class yet and config wasn't provided, try to load config
+        # to check if there's a local implementation registered in IMAGE_PROCESSOR_MAPPING
+        if image_processor_class is None and config is None:
+            config = AutoConfig.from_pretrained(
+                pretrained_model_name_or_path,
+                trust_remote_code=trust_remote_code,
+                **kwargs,
+            )
         has_local_code = image_processor_class is not None or type(config) in IMAGE_PROCESSOR_MAPPING
         if has_remote_code:
             if image_processor_auto_map is not None and not isinstance(image_processor_auto_map, tuple):
