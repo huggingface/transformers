@@ -461,12 +461,13 @@ class KyutaiSpeechToTextAttention(nn.Module):
         past_key_values: Cache | None = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        codebook_idx: torch.LongTensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states)  # Ignore copy
-        key_states = self.k_proj(hidden_states)  # Ignore copy
-        value_states = self.v_proj(hidden_states)  # Ignore copy
+        query_states = self.q_proj(hidden_states, codebook_idx)  # Ignore copy
+        key_states = self.k_proj(hidden_states, codebook_idx)  # Ignore copy
+        value_states = self.v_proj(hidden_states, codebook_idx)  # Ignore copy
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -501,7 +502,7 @@ class KyutaiSpeechToTextAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2).contiguous()
 
         attn_output = attn_output.view(bsz, q_len, -1)
-        attn_output = self.o_proj(attn_output)  # Ignore copy
+        attn_output = self.o_proj(attn_output, codebook_idx)  # Ignore copy
 
         if not output_attentions:
             attn_weights = None
@@ -534,6 +535,7 @@ class KyutaiSpeechToTextFlashAttention2(KyutaiSpeechToTextAttention):
         past_key_values: Cache | None = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        codebook_idx: torch.LongTensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         if isinstance(past_key_values, StaticCache):
             raise ValueError(
@@ -545,9 +547,9 @@ class KyutaiSpeechToTextFlashAttention2(KyutaiSpeechToTextAttention):
 
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states)  # Ignore copy
-        key_states = self.k_proj(hidden_states)  # Ignore copy
-        value_states = self.v_proj(hidden_states)  # Ignore copy
+        query_states = self.q_proj(hidden_states, codebook_idx)  # Ignore copy
+        key_states = self.k_proj(hidden_states, codebook_idx)  # Ignore copy
+        value_states = self.v_proj(hidden_states, codebook_idx)  # Ignore copy
 
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
@@ -612,7 +614,7 @@ class KyutaiSpeechToTextFlashAttention2(KyutaiSpeechToTextAttention):
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
-        attn_output = self.o_proj(attn_output)  # Ignore copy
+        attn_output = self.o_proj(attn_output, codebook_idx)  # Ignore copy
 
         if not output_attentions:
             attn_weights = None
@@ -636,6 +638,7 @@ class KyutaiSpeechToTextSdpaAttention(KyutaiSpeechToTextAttention):
         past_key_values: Cache | None = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        codebook_idx: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         if output_attentions:
@@ -645,9 +648,9 @@ class KyutaiSpeechToTextSdpaAttention(KyutaiSpeechToTextAttention):
             )
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states)  # Ignore copy
-        key_states = self.k_proj(hidden_states)  # Ignore copy
-        value_states = self.v_proj(hidden_states)  # Ignore copy
+        query_states = self.q_proj(hidden_states, codebook_idx)  # Ignore copy
+        key_states = self.k_proj(hidden_states, codebook_idx)  # Ignore copy
+        value_states = self.v_proj(hidden_states, codebook_idx)  # Ignore copy
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -683,7 +686,7 @@ class KyutaiSpeechToTextSdpaAttention(KyutaiSpeechToTextAttention):
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(bsz, q_len, -1)
 
-        attn_output = self.o_proj(attn_output)  # Ignore copy
+        attn_output = self.o_proj(attn_output, codebook_idx)  # Ignore copy
 
         return attn_output, None
 
@@ -720,25 +723,9 @@ class KyutaiSpeechToTextDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         output_attentions: bool | None = False,
         use_cache: bool | None = False,
+        codebook_idx: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*):
-                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
-                query_sequence_length, key_sequence_length)` if default attention is used.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_values (`Cache`, *optional*): cached past key and value projection states
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
-        """
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -751,6 +738,7 @@ class KyutaiSpeechToTextDecoderLayer(GradientCheckpointingLayer):
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
+            codebook_idx=codebook_idx,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -758,7 +746,9 @@ class KyutaiSpeechToTextDecoderLayer(GradientCheckpointingLayer):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
+        hidden_states = (
+            self.mlp(hidden_states) if not self.use_flexible_linear else self.mlp(hidden_states, codebook_idx)
+        )
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -1077,11 +1067,10 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
         if input_values is not None:
+            cache_position = model_inputs["cache_position"]
             start, end = current_window[0]
 
             # first cache position is for bos token, so we need to offset by -1
-            past_length = encoder_past_key_values.get_seq_length() if encoder_past_key_values is not None else 0
-            cache_position = torch.arange(past_length, past_length + input_values.shape[1])
             if cache_position[-1] - 1 >= end:
                 # we need to encode the new audio tokens
                 with torch.no_grad():

@@ -464,7 +464,7 @@ class T5Block(GradientCheckpointingLayer):
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
                 past_key_values=past_key_values,
-                use_cache=use_cache,
+                output_attentions=output_attentions,
             )
             hidden_states = cross_attention_outputs[0]
 

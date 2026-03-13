@@ -459,12 +459,13 @@ class MoshiAttention(nn.Module):
         past_key_values: Cache | None = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        codebook_idx: torch.LongTensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states)  # Ignore copy
-        key_states = self.k_proj(hidden_states)  # Ignore copy
-        value_states = self.v_proj(hidden_states)  # Ignore copy
+        query_states = self.q_proj(hidden_states, codebook_idx)  # Ignore copy
+        key_states = self.k_proj(hidden_states, codebook_idx)  # Ignore copy
+        value_states = self.v_proj(hidden_states, codebook_idx)  # Ignore copy
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -499,7 +500,7 @@ class MoshiAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2).contiguous()
 
         attn_output = attn_output.view(bsz, q_len, -1)
-        attn_output = self.o_proj(attn_output)  # Ignore copy
+        attn_output = self.o_proj(attn_output, codebook_idx)  # Ignore copy
 
         if not output_attentions:
             attn_weights = None
@@ -532,6 +533,7 @@ class MoshiFlashAttention2(MoshiAttention):
         past_key_values: Cache | None = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        codebook_idx: torch.LongTensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         if isinstance(past_key_values, StaticCache):
             raise ValueError(
@@ -543,9 +545,9 @@ class MoshiFlashAttention2(MoshiAttention):
 
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states)  # Ignore copy
-        key_states = self.k_proj(hidden_states)  # Ignore copy
-        value_states = self.v_proj(hidden_states)  # Ignore copy
+        query_states = self.q_proj(hidden_states, codebook_idx)  # Ignore copy
+        key_states = self.k_proj(hidden_states, codebook_idx)  # Ignore copy
+        value_states = self.v_proj(hidden_states, codebook_idx)  # Ignore copy
 
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
@@ -610,7 +612,7 @@ class MoshiFlashAttention2(MoshiAttention):
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
-        attn_output = self.o_proj(attn_output)  # Ignore copy
+        attn_output = self.o_proj(attn_output, codebook_idx)  # Ignore copy
 
         if not output_attentions:
             attn_weights = None
@@ -635,6 +637,7 @@ class MoshiSdpaAttention(MoshiAttention):
         past_key_values: Cache | None = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        codebook_idx: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         if output_attentions:
@@ -644,9 +647,9 @@ class MoshiSdpaAttention(MoshiAttention):
             )
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states)  # Ignore copy
-        key_states = self.k_proj(hidden_states)  # Ignore copy
-        value_states = self.v_proj(hidden_states)  # Ignore copy
+        query_states = self.q_proj(hidden_states, codebook_idx)  # Ignore copy
+        key_states = self.k_proj(hidden_states, codebook_idx)  # Ignore copy
+        value_states = self.v_proj(hidden_states, codebook_idx)  # Ignore copy
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -682,7 +685,7 @@ class MoshiSdpaAttention(MoshiAttention):
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(bsz, q_len, -1)
 
-        attn_output = self.o_proj(attn_output)  # Ignore copy
+        attn_output = self.o_proj(attn_output, codebook_idx)  # Ignore copy
 
         return attn_output, None
 
@@ -719,25 +722,9 @@ class MoshiDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         output_attentions: bool | None = False,
         use_cache: bool | None = False,
+        codebook_idx: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*):
-                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
-                query_sequence_length, key_sequence_length)` if default attention is used.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_values (`Cache`, *optional*): cached past key and value projection state
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
-        """
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -750,6 +737,7 @@ class MoshiDecoderLayer(GradientCheckpointingLayer):
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
+            codebook_idx=codebook_idx,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -757,7 +745,9 @@ class MoshiDecoderLayer(GradientCheckpointingLayer):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states) if not self.use_flexible_linear else self.mlp(hidden_states)
+        hidden_states = (
+            self.mlp(hidden_states) if not self.use_flexible_linear else self.mlp(hidden_states, codebook_idx)
+        )
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -836,6 +826,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         return_dict: bool | None = None,
         position_ids: torch.LongTensor | None = None,
         labels: torch.LongTensor | None = None,
+        codebook_idx: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPast:
         """
@@ -914,25 +905,30 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
             past_key_values = DynamicCache(config=self.config)
 
         past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
+        seq_length = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        if codebook_idx is None:
+            codebook_idx = torch.arange(seq_length, device=device) + past_seen_tokens
+
         if position_ids is None:
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            position_ids = position_ids.unsqueeze(0)
+            position_ids = codebook_idx.unsqueeze(0)
 
         # If inputs_embeds is provided, it has the priority over input_ids, which won't be used
         if inputs_embeds is None:
             inputs_embeds = []
-            for position_idx in position_ids:
-                position_idx = position_idx.item()
-                if position_idx == 0:
-                    inputs_embeds.append(self.text_embed_tokens(input_ids[:, [position_idx]]))
+            for idx in codebook_idx:
+                idx = idx.item()
+                if idx == 0:
+                    inputs_embeds.append(self.text_embed_tokens(input_ids[:, [idx]]))
                 else:
                     inputs_embeds.append(
-                        self.embed_tokens[(position_idx - 1)](input_ids[:, [position_idx - past_seen_tokens]])
+                        self.embed_tokens[(idx - 1)](input_ids[:, [idx - idx]])
                     )
 
             inputs_embeds = torch.cat(inputs_embeds, dim=1)
 
-        inputs_embeds += self.input_projections(last_hidden_state)
+        inputs_embeds += self.input_projections(last_hidden_state, codebook_idx)
 
         causal_mask = None
         if attention_mask is not None:
@@ -959,6 +955,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
+                codebook_idx=codebook_idx,
             )
 
             hidden_states = layer_outputs[0]
@@ -995,6 +992,16 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
             attentions=all_self_attns,
         )
 
+    # Keep track of current `codebook_idx` as we generate
+    def _prepare_model_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        inputs, input_name, model_kwargs = super()._prepare_model_inputs(*args, **kwargs)
+        model_kwargs["codebook_idx"] = torch.tensor([0], device=inputs.device, dtype=torch.int)
+        return inputs, input_name, model_kwargs
+
+    def _update_model_kwargs_for_generation(self, *args, **kwargs) -> dict[str, Any]:
+        model_kwargs = super()._update_model_kwargs_for_generation(*args, **kwargs)
+        model_kwargs["codebook_idx"].add_(1)
+        return model_kwargs
 
 @auto_docstring
 class MoshiModel(MoshiPreTrainedModel):
@@ -1662,6 +1669,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
                 "min_length": self.num_codebooks + 1,
                 "max_length": self.num_codebooks + 1,
                 "cache_implementation": "static",
+                "disable_compile": True,
             }
         # update kwargs_depth_decoder: kwargs_depth_decoder have priority over depth_decoder_generation_config
         depth_decoder_generation_config.update(kwargs_depth_decoder)

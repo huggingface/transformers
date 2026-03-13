@@ -1308,7 +1308,8 @@ class FalconH1Model(FalconH1PreTrainedModel):
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
-        mamba_mask = self._update_mamba_mask(attention_mask, is_cached_forward=past_key_values.has_previous_state[0])
+        has_previous_state = past_key_values.has_previous_state[0] if past_key_values is not None else past_key_values
+        mamba_mask = self._update_mamba_mask(attention_mask, has_previous_state=has_previous_state)
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers:
@@ -1336,14 +1337,14 @@ class FalconH1Model(FalconH1PreTrainedModel):
             past_key_values=next_cache,
         )
 
-    def _update_mamba_mask(self, attention_mask, is_cached_forward: bool):
+    def _update_mamba_mask(self, attention_mask, has_previous_state: bool):
         """
         No need for zeroing states when
             1. Cached forward
             2. Attending to all inputs
         """
         mamba_mask = attention_mask
-        if is_cached_forward or (attention_mask is not None and torch.all(attention_mask == 1)):
+        if has_previous_state or (attention_mask is not None and torch.all(attention_mask == 1)):
             mamba_mask = None
         return mamba_mask
 

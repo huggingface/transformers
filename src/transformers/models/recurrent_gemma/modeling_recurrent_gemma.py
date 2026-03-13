@@ -485,6 +485,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
                 x_branch = x_branch.unsqueeze(-1)
                 self.conv1d_state = conv_state[:, :, 1:]
             self.has_previous_state = True
+            self.cumulative_cache_length.add_(seq_len)
         else:
             self.conv1d_state = None
             self.rg_lru.recurrent_states = None
@@ -501,6 +502,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         self.rg_lru.recurrent_states = torch.zeros((batch, self.lru_width), device=device, dtype=torch.float32)
         self.conv1d_state = torch.zeros((batch, self.hidden_size, self.conv1d_width - 1), device=device, dtype=dtype)
         self.has_previous_state = torch.tensor(False, device=device, dtype=bool)
+        self.cumulative_cache_length = torch.tensor([0], device=device, dtype=int)
 
 
 TEMPORAL_BLOCK_CLASSES = {"recurrent": RecurrentGemmaRecurrentBlock, "attention": RecurrentGemmaSdpaAttention}
@@ -680,11 +682,8 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         if position_ids is None:
             position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
 
-        # Same way as we have to slice sliding vs full attn, we need to find attn block cache
-        # TODO: create cache as class and new mask API
-        is_attention_block = [block == "attention" for block in self.config.layers_block_type]
-        layer_idx = is_attention_block.index(True)
-        past_seq_length = self.layers[layer_idx].temporal_block.cumulative_cache_length
+        # TODO: create cache as class and then use new mask API
+        past_seq_length = self.layers[0].temporal_block.cumulative_cache_length if use_cache else 0
         cache_position = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seq_length
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
 
