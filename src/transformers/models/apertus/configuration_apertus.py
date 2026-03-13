@@ -23,7 +23,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="swiss-ai/Apertus-8B")
+@auto_docstring(checkpoint="swiss-ai/Apertus-8B-Instruct-2509")
 class ApertusConfig(PreTrainedConfig):
     r"""
     ```python

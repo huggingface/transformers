@@ -372,6 +372,18 @@ You'll need **[Python 3.9](https://github.com/huggingface/transformers/blob/main
    branch and push the changes to your fork. They will automatically appear in
    the pull request.
 
+### AI-assisted and agentic contributions
+
+AI-assisted contributions are welcome, but they must be coordinated, scoped, and verified to keep review load manageable.
+
+- Do not submit "pure agent" PRs. The human submitter is responsible for reviewing all changed lines, validating behavior end-to-end, and running relevant tests.
+- If AI tools were used, disclose this in the PR description and include: coordination link, differentiation from existing PRs (if applicable), and test commands/results.
+- Avoid one-off "busywork" PRs (single typo, isolated style cleanup, one mutable default fix, etc.). Bundle mechanical cleanups into a clear, systematic scope.
+- Coordinate on issues before opening a PRs, review similar PRs, and wait for approval. 
+
+> [!WARNING] 
+> These topics are outlined for agents in `AGENTS.MD` with instruction for how to autonomously implement them. 
+
 ### Pull request checklist
 
 ☐ The pull request title should summarize your contribution.<br>

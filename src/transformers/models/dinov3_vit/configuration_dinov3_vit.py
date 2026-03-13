@@ -53,6 +53,10 @@ class DINOv3ViTConfig(BackboneConfigMixin, PreTrainedConfig):
         Whether to apply layer normalization to the feature maps when used as backbone.
     reshape_hidden_states (`bool`, *optional*, defaults to `True`):
         Whether to reshape the hidden states to spatial dimensions when used as backbone.
+    return_class_token (`bool`, *optional*, defaults to `False`):
+        Whether the backbone should also return the CLS token for each selected feature stage alongside
+        the spatial feature maps. When `True`, [`DINOv3ViTBackboneOutput`] will have a non-`None`
+        `cls_tokens` field.
 
     Example:
 
@@ -102,6 +106,7 @@ class DINOv3ViTConfig(BackboneConfigMixin, PreTrainedConfig):
         out_indices: list[int] | None = None,
         apply_layernorm: bool = True,
         reshape_hidden_states: bool = True,
+        return_class_token: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -135,6 +140,7 @@ class DINOv3ViTConfig(BackboneConfigMixin, PreTrainedConfig):
         # Initialize backbone-specific configuration
         self.apply_layernorm = apply_layernorm
         self.reshape_hidden_states = reshape_hidden_states
+        self.return_class_token = return_class_token
 
         # Initialize backbone stage names
         stage_names = ["stem"] + [f"stage{i}" for i in range(1, num_hidden_layers + 1)]
