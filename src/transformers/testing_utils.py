@@ -2675,6 +2675,7 @@ class _NetworkDebugProfiler:
         self._output_path = None
         self._original_client_send = None
         self._original_async_client_send = None
+        self._shared_dir = None
 
     @property
     def enabled(self) -> bool:
@@ -2710,6 +2711,55 @@ class _NetworkDebugProfiler:
         httpx.Client.send = patched_client_send
         httpx.AsyncClient.send = patched_async_client_send
         self._enabled = True
+
+    def setup_shared_dir(self) -> str | None:
+        """Create a shared temp directory for xdist workers to dump records into."""
+        if self._shared_dir is None:
+            import tempfile
+
+            self._shared_dir = tempfile.mkdtemp(prefix="network_debug_")
+        return self._shared_dir
+
+    def set_shared_dir(self, shared_dir: str) -> None:
+        """Set the shared directory (called in xdist workers)."""
+        self._shared_dir = shared_dir
+
+    def dump_worker_records(self, worker_id: str | None = None) -> None:
+        """Write this process's records to a file in the shared directory (called in workers)."""
+        if not self._shared_dir or not self._records:
+            return
+        worker_id = worker_id or f"pid{os.getpid()}"
+        dump_path = os.path.join(self._shared_dir, f"records_{worker_id}.json")
+        with self._lock:
+            records = [
+                {**record, "phases_ms": dict(record["phases_ms"])}
+                for record in self._records
+            ]
+        Path(dump_path).write_text(json.dumps(records), encoding="utf-8")
+
+    def load_worker_records(self) -> None:
+        """Load all worker record files from the shared directory (called in controller)."""
+        if not self._shared_dir or not os.path.isdir(self._shared_dir):
+            return
+        import glob as glob_module
+
+        for record_file in glob_module.glob(os.path.join(self._shared_dir, "records_*.json")):
+            try:
+                records = json.loads(Path(record_file).read_text(encoding="utf-8"))
+                with self._lock:
+                    for record in records:
+                        record["phases_ms"] = defaultdict(float, record.get("phases_ms", {}))
+                        self._records.append(record)
+            except (OSError, json.JSONDecodeError):
+                pass
+
+    def cleanup_shared_dir(self) -> None:
+        """Remove the shared temp directory."""
+        if self._shared_dir and os.path.isdir(self._shared_dir):
+            import shutil
+
+            shutil.rmtree(self._shared_dir, ignore_errors=True)
+            self._shared_dir = None
 
     def disable(self) -> None:
         if not self._enabled:
@@ -2939,9 +2989,43 @@ def format_network_debug_report(max_requests: int = 20, max_routes: int = 10) ->
     return "\n".join(lines)
 
 
+def network_debug_setup_shared_dir() -> str | None:
+    """Create a shared temp directory for xdist workers. Returns the path or None if not enabled."""
+    if not _NETWORK_DEBUG_PROFILER.enabled:
+        return None
+    return _NETWORK_DEBUG_PROFILER.setup_shared_dir()
+
+
+def network_debug_set_shared_dir(shared_dir: str) -> None:
+    """Set the shared directory path (called in xdist workers receiving controller config)."""
+    _NETWORK_DEBUG_PROFILER.set_shared_dir(shared_dir)
+
+
+def network_debug_dump_worker_records(worker_id: str | None = None) -> None:
+    """Dump this worker's collected records to the shared directory."""
+    _NETWORK_DEBUG_PROFILER.dump_worker_records(worker_id=worker_id)
+
+
+def network_debug_load_worker_records() -> None:
+    """Load all worker record dumps into the controller's profiler."""
+    _NETWORK_DEBUG_PROFILER.load_worker_records()
+
+
+def network_debug_cleanup_shared_dir() -> None:
+    """Remove the shared temp directory."""
+    _NETWORK_DEBUG_PROFILER.cleanup_shared_dir()
+
+
 def write_network_debug_report_terminal_summary(terminalreporter) -> None:
     if not _NETWORK_DEBUG_PROFILER.enabled:
         return
+
+    # Skip report generation in xdist worker processes — only the controller should aggregate and report
+    if hasattr(terminalreporter.config, "workerinput"):
+        return
+
+    # Aggregate worker records if running under xdist
+    network_debug_load_worker_records()
 
     report_path = None
     try:
@@ -2954,6 +3038,8 @@ def write_network_debug_report_terminal_summary(terminalreporter) -> None:
         terminalreporter.write_line(line)
     if report_path is not None:
         terminalreporter.write_line(f"JSON report: {report_path}")
+
+    network_debug_cleanup_shared_dir()
 
 
 def is_flaky(max_attempts: int = 5, wait_before_retry: float | None = None, description: str | None = None):

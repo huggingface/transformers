@@ -29,6 +29,9 @@ from transformers.testing_utils import (
     HfDocTestParser,
     enable_network_debug_report_from_env,
     is_torch_available,
+    network_debug_dump_worker_records,
+    network_debug_set_shared_dir,
+    network_debug_setup_shared_dir,
     patch_testing_methods_to_collect_info,
     patch_torch_compile_force_graph,
     write_network_debug_report_terminal_summary,
@@ -102,6 +105,24 @@ def pytest_configure(config):
     os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "true"
     enable_network_debug_report_from_env()
 
+    # xdist controller: create shared dir for workers to dump network records
+    if not hasattr(config, "workerinput"):
+        shared_dir = network_debug_setup_shared_dir()
+        if shared_dir:
+            config._network_debug_shared_dir = shared_dir
+    else:
+        # xdist worker: receive shared dir from controller
+        shared_dir = config.workerinput.get("network_debug_shared_dir")
+        if shared_dir:
+            network_debug_set_shared_dir(shared_dir)
+
+
+def pytest_configure_node(node):
+    """xdist hook: called on the controller to configure each worker node."""
+    shared_dir = getattr(node.config, "_network_debug_shared_dir", None)
+    if shared_dir:
+        node.workerinput["network_debug_shared_dir"] = shared_dir
+
 
 def pytest_collection_modifyitems(items):
     for item in items:
@@ -121,6 +142,7 @@ def pytest_terminal_summary(terminalreporter):
     make_reports = terminalreporter.config.getoption("--make-reports")
     if make_reports:
         pytest_terminal_summary_main(terminalreporter, id=make_reports)
+
     write_network_debug_report_terminal_summary(terminalreporter)
 
 
@@ -128,6 +150,11 @@ def pytest_sessionfinish(session, exitstatus):
     # If no tests are collected, pytest exists with code 5, which makes the CI fail.
     if exitstatus == 5:
         session.exitstatus = 0
+
+    # xdist worker: dump network debug records for the controller to aggregate
+    if hasattr(session.config, "workerinput"):
+        worker_id = session.config.workerinput.get("workerid", f"pid{os.getpid()}")
+        network_debug_dump_worker_records(worker_id=worker_id)
 
 
 # Doctest custom flag to ignore output.
