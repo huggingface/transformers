@@ -21,7 +21,6 @@ from enum import IntEnum
 from typing import Any
 
 from ... import initialization as init
-from ...cache_utils import DynamicCache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...feature_extraction_utils import BatchFeature
 from ...generation.utils import GenerationMixin
@@ -35,15 +34,12 @@ from ...image_processing_utils_fast import (
 from ...image_utils import (
     PILImageResampling,
 )
-from ...masking_utils import create_bidirectional_mask, create_masks_for_generate
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.qwen3.configuration_qwen3 import Qwen3Config
 from ...models.qwen3.modeling_qwen3 import (
-    Qwen3Attention,
-    Qwen3DecoderLayer,
     Qwen3ForCausalLM,
-    Qwen3Model,
     Qwen3PreTrainedModel,
 )
 from ...processing_utils import ProcessorMixin, Unpack
@@ -58,7 +54,12 @@ from ...utils.import_utils import (
     is_vision_available,
 )
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..qwen3_vl.modeling_qwen3_vl import Qwen3VLTextRotaryEmbedding
+from ..qwen3_vl.modeling_qwen3_vl import (
+    Qwen3VLTextAttention,
+    Qwen3VLTextDecoderLayer,
+    Qwen3VLTextModel,
+    Qwen3VLTextRotaryEmbedding,
+)
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ..siglip2.modeling_siglip2 import (
     Siglip2Attention,
@@ -981,7 +982,7 @@ class IsaacProcessor(ProcessorMixin):
 
 
 class IsaacRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
-    def __init__(self, config: IsaacConfig, device=None):
+    def __init__(self, config: IsaacConfig | IsaacTextConfig, device=None):
         rope_source_cfg = config.get_text_config() if hasattr(config, "get_text_config") else config
         config_for_rope = copy.copy(rope_source_cfg)
         rope_scaling = getattr(rope_source_cfg, "rope_scaling", None) or {}
@@ -1011,23 +1012,35 @@ class IsaacRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
         return torch.cat([chunk[i % 3] for i, chunk in enumerate(chunks)], dim=-1)
 
 
+class IsaacTextAttention(Qwen3VLTextAttention):
+    pass
+
+
+class IsaacTextDecoderLayer(Qwen3VLTextDecoderLayer):
+    pass
+
+
+class IsaacTextModel(Qwen3VLTextModel):
+    def __init__(self, config: IsaacTextConfig):
+        super().__init__(config)
+        self.rotary_emb = IsaacRotaryEmbedding(config=config, device=self.device)
+
+
 @auto_docstring
 class IsaacModel(Qwen3PreTrainedModel):
     supports_gradient_checkpointing = True
     _can_compile_fullgraph = False
     _supports_flex_attn = False
     _can_record_outputs = {
-        "hidden_states": OutputRecorder(Qwen3DecoderLayer),
-        "attentions": Qwen3Attention,
+        "hidden_states": OutputRecorder(IsaacTextDecoderLayer),
+        "attentions": IsaacTextAttention,
         "vision_attentions": IsaacVisionAttention,
     }
     _tied_weights_keys = {}
 
     def __init__(self, config: IsaacConfig):
         Qwen3PreTrainedModel.__init__(self, config)
-        self.text_model = Qwen3Model._from_config(config.text_config)
-
-        self.rotary_emb = IsaacRotaryEmbedding(config, device=self.device)
+        self.text_model = IsaacTextModel._from_config(config.text_config)
 
         self.vision_embedding = IsaacVisionEmbedding(config)
         self.max_sequence_length = config.max_sequence_length
@@ -1378,9 +1391,6 @@ class IsaacModel(Qwen3PreTrainedModel):
         device = inputs_embeds.device
         batch_size, seq_len = inputs_embeds.shape[:2]
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config.get_text_config())
-
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
         if cache_position is None:
             cache_position = torch.arange(past_seen_tokens, past_seen_tokens + seq_len, device=device)
@@ -1397,43 +1407,26 @@ class IsaacModel(Qwen3PreTrainedModel):
         self.rope_deltas = rope_deltas
 
         rope_position_ids = self.prepare_multimodal_rope_position_ids(position_ids, modality_tensor)
-        cos, sin = self.rotary_emb(inputs_embeds, rope_position_ids)
+        text_position_ids = torch.cat((position_ids[..., 0].unsqueeze(0), rope_position_ids), dim=0)
 
-        decoder_position_ids = position_ids[..., 0] if position_ids.ndim == 3 else position_ids
+        if isinstance(attention_mask, dict):
+            attention_mask = attention_mask.get("full_attention", next(iter(attention_mask.values())))
 
-        if not isinstance(attention_mask, dict):
-            attention_mask = create_masks_for_generate(
-                config=self.config,
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                cache_position=cache_position,
-                past_key_values=past_key_values,
-                position_ids=decoder_position_ids,
-            )
-
-        is_mask_dict = isinstance(attention_mask, dict)
-        hidden_states = inputs_embeds
-
-        for layer in self.text_model.layers:
-            layer_mask = attention_mask[layer.attention_type] if is_mask_dict else attention_mask
-            layer_outputs = layer(
-                hidden_states,
-                attention_mask=layer_mask,
-                position_ids=decoder_position_ids,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                cache_position=cache_position,
-                position_embeddings=(cos, sin),
-                **kwargs,
-            )
-
-            hidden_states = layer_outputs[0] if isinstance(layer_outputs, tuple) else layer_outputs
-
-        hidden_states = self.text_model.norm(hidden_states)
+        text_model_outputs = self.text_model(
+            attention_mask=attention_mask,
+            position_ids=text_position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            **kwargs,
+        )
 
         return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
+            last_hidden_state=text_model_outputs.last_hidden_state,
+            past_key_values=text_model_outputs.past_key_values,
+            hidden_states=text_model_outputs.hidden_states,
+            attentions=text_model_outputs.attentions,
         )
 
 
@@ -1603,6 +1596,7 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
 __all__ = [
     "IsaacConfig",
     "IsaacTextConfig",
+    "IsaacTextModel",
     "IsaacVisionConfig",
     "IsaacModel",
     "IsaacPreTrainedModel",  # noqa: F822
