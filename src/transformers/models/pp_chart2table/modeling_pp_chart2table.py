@@ -13,99 +13,22 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformers.cache_utils import Cache
-from transformers.generation import GenerationMixin
-from transformers.modeling_outputs import BaseModelOutputWithPast
-from transformers.modeling_utils import PreTrainedModel
-from transformers.utils import auto_docstring, can_return_tuple
-
+from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import DynamicCache
+from ...cache_utils import Cache, DynamicCache
+from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_pp_chart2table import PPChart2TableConfig, PPChart2TableTextConfig, PPChart2TableVisionConfig
-
-
-class PPChart2TableVisionPatchEmbed(nn.Module):
-    """
-    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
-    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
-    Transformer.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.embed_dim
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_patches = num_patches
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
-
-    def forward(self, pixel_values):
-        batch_size, num_channels, height, width = pixel_values.shape
-        if num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-            )
-        if height != self.image_size[0] or width != self.image_size[1]:
-            raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
-            )
-        embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
-        return embeddings
-
-
-class PPChart2TableVisionMLPBlock(nn.Module):
-    def __init__(self, config) -> None:
-        super().__init__()
-        self.lin1 = nn.Linear(config.embed_dim, int(config.embed_dim * config.mlp_ratio))
-        self.lin2 = nn.Linear(int(config.embed_dim * config.mlp_ratio), config.embed_dim)
-        self.act = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.lin1(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.lin2(hidden_states)
-        return hidden_states
-
-
-class PPChart2TableVisionLayerNorm(nn.LayerNorm):
-    r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
-    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
-    width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
-    """
-
-    def __init__(self, normalized_shape, *, eps=1e-6, data_format="channels_last", **kwargs):
-        super().__init__(normalized_shape, eps=eps, **kwargs)
-        if data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError(f"Unsupported data format: {data_format}")
-        self.data_format = data_format
-
-    def forward(self, features: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            features: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
-        """
-        if self.data_format == "channels_first":
-            features = features.permute(0, 2, 3, 1)
-            features = super().forward(features)
-            features = features.permute(0, 3, 1, 2)
-        else:
-            features = super().forward(features)
-        return features
 
 
 class PPChart2TableVisionAttention(nn.Module):
@@ -120,11 +43,12 @@ class PPChart2TableVisionAttention(nn.Module):
         )
 
         self.num_attention_heads = config.num_attention_heads
-        head_dim = config.embed_dim // config.num_attention_heads
+        head_dim = config.hidden_size // config.num_attention_heads
         self.scale = head_dim**-0.5
         self.dropout = config.attention_dropout
-        self.qkv = nn.Linear(config.embed_dim, config.embed_dim * 3, bias=config.qkv_bias)
-        self.proj = nn.Linear(config.embed_dim, config.embed_dim)
+
+        self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.qkv_bias)
+        self.proj = nn.Linear(config.hidden_size, config.hidden_size)
 
         self.use_rel_pos = config.use_rel_pos
         if self.use_rel_pos:
@@ -240,14 +164,53 @@ class PPChart2TableVisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class PPChart2TableVisionDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config, window_size) -> None:
-        super().__init__()
-        self.layer_norm1 = nn.LayerNorm(config.embed_dim)
-        self.attn = PPChart2TableVisionAttention(config, window_size=window_size)
+@auto_docstring
+class PPChart2TableVisionPreTrainedModel(PreTrainedModel):
+    config: PPChart2TableConfig
+    base_model_prefix = "model"
+    input_modalities = ("image", "text")
+    supports_gradient_checkpointing = True
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn = False
+    _supports_sdpa = False
 
-        self.layer_norm2 = nn.LayerNorm(config.embed_dim)
-        self.mlp = PPChart2TableVisionMLPBlock(config)
+    _can_compile_fullgraph = True
+    _supports_flex_attn = False
+    _supports_attention_backend = True
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, PPChart2TableVisionAttention):
+            if module.use_rel_pos:
+                init.zeros_(module.rel_pos_h)
+                init.zeros_(module.rel_pos_w)
+        elif isinstance(module, PPChart2TableVisionEncoder):
+            if module.pos_embed is not None:
+                init.zeros_(module.pos_embed)
+
+
+class PPChart2TableMLPBlock(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.lin1 = nn.Linear(config.hidden_size, config.mlp_dim)
+        self.lin2 = nn.Linear(config.mlp_dim, config.hidden_size)
+        self.act = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.lin1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.lin2(hidden_states)
+        return hidden_states
+
+
+class PPChart2TableVisionLayer(GradientCheckpointingLayer):
+    def __init__(self, config, window_size):
+        super().__init__()
+        self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.attn = PPChart2TableVisionAttention(config, window_size)
+        self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.mlp = PPChart2TableMLPBlock(config)
         self.window_size = window_size
 
     def window_partition(self, hidden_states: torch.Tensor, window_size: int) -> tuple[torch.Tensor, tuple[int, int]]:
@@ -325,15 +288,95 @@ class PPChart2TableVisionDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for pp_chart2table vision model's outputs that also contains image embeddings obtained by applying the projection
+    layer to the pooler_output.
+    """
+)
+class PPChart2TableVisionEncoderOutput(ModelOutput):
+    r"""
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        The image embeddings obtained by applying the projection layer to the pooler_output.
+    """
+
+    image_embeds: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+
+
+class PPChart2TablePatchEmbeddings(nn.Module):
+    """
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.num_patches = num_patches
+
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+
+    def forward(self, pixel_values):
+        batch_size, num_channels, height, width = pixel_values.shape
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        if height != self.image_size[0] or width != self.image_size[1]:
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+            )
+        embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
+        return embeddings
+
+
+class PPChart2TableLayerNorm(nn.LayerNorm):
+    r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
+    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
+    width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
+    """
+
+    def __init__(self, normalized_shape, *, eps=1e-6, data_format="channels_last", **kwargs):
+        super().__init__(normalized_shape, eps=eps, **kwargs)
+        if data_format not in ["channels_last", "channels_first"]:
+            raise NotImplementedError(f"Unsupported data format: {data_format}")
+        self.data_format = data_format
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            features: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
+        """
+        if self.data_format == "channels_first":
+            features = features.permute(0, 2, 3, 1)
+            features = super().forward(features)
+            features = features.permute(0, 3, 1, 2)
+        else:
+            features = super().forward(features)
+        return features
+
+
 class PPChart2TableVisionNeck(nn.Module):
     def __init__(self, config: PPChart2TableVisionConfig):
         super().__init__()
         self.config = config
 
-        self.conv1 = nn.Conv2d(config.embed_dim, config.output_channels, kernel_size=1, bias=False)
-        self.layer_norm1 = PPChart2TableVisionLayerNorm(config.output_channels, data_format="channels_first")
+        self.conv1 = nn.Conv2d(config.hidden_size, config.output_channels, kernel_size=1, bias=False)
+        self.layer_norm1 = PPChart2TableLayerNorm(config.output_channels, data_format="channels_first")
         self.conv2 = nn.Conv2d(config.output_channels, config.output_channels, kernel_size=3, padding=1, bias=False)
-        self.layer_norm2 = PPChart2TableVisionLayerNorm(config.output_channels, data_format="channels_first")
+        self.layer_norm2 = PPChart2TableLayerNorm(config.output_channels, data_format="channels_first")
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.permute(0, 3, 1, 2)
@@ -345,108 +388,77 @@ class PPChart2TableVisionNeck(nn.Module):
         return hidden_states
 
 
-@auto_docstring(
-    custom_intro="""
-    
-    """
-)
-class PPChart2TableVisionPreTrainedModel(PreTrainedModel):
-    r"""
-    Base class for all PP-Chart2Table vision models, inheriting from Hugging Face `PreTrainedModel`.
+class PPChart2TableVisionEncoder(PPChart2TableVisionPreTrainedModel):
+    _can_record_outputs = {"hidden_states": PPChart2TableVisionLayer, "attentions": PPChart2TableVisionAttention}
+    input_modalities = ("image",)
 
-    This class sets up core configurations and compatibility flags for the vision encoder, including:
-    - Support for gradient checkpointing, attention backends (FlashAttention/SDPA), and model compilation
-    - Definition of non-splittable modules (for tensor parallelism)
-    - Output recording for hidden states/attentions (for debugging/analysis)
-
-    Class Attributes:
-        config (`PPChart2TableVisionConfig`):
-            Typed config class for PP-Chart2Table vision encoder (enforces type checking).
-        base_model_prefix (`str`, defaults to `"model"`):
-            Prefix for base model parameters (used in weight loading/saving).
-        supports_gradient_checkpointing (`bool`, defaults to `True`):
-            Whether the model supports gradient checkpointing to save memory.
-        _no_split_modules (`list[str]`):
-            Modules that should not be split across devices (tensor parallelism compatibility).
-        _skip_keys_device_placement (`list[str]`):
-            Keys to skip when placing tensors on devices (e.g., past key values for generation).
-        _supports_flash_attn / _supports_sdpa / _supports_flex_attn (`bool`):
-            Compatibility with optimized attention implementations (FlashAttention, SDPA, FlexAttention).
-        _can_compile_fullgraph (`bool`, defaults to `True`):
-            Whether the model supports TorchScript/TorchCompile full graph compilation.
-        _supports_attention_backend (`bool`, defaults to `True`):
-            Whether the model supports switching attention backends (e.g., PyTorch vs FlashAttention).
-        _can_record_outputs (`dict`):
-            Mapping of output types to modules for recording intermediate outputs (hidden_states/attentions).
-    """
-
-    config: PPChart2TableVisionConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["PPChart2TableVisionDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": PPChart2TableVisionDecoderLayer,
-        "attentions": PPChart2TableVisionAttention,
-    }
-
-
-@auto_docstring(
-    custom_intro="""
-    
-    """
-)
-class PPChart2TableVisionModel(PPChart2TableVisionPreTrainedModel):
-    main_input_name = "pixel_values"
-    input_modalities = "image"
-
-    def __init__(
-        self,
-        config: PPChart2TableVisionConfig,
-    ) -> None:
+    def __init__(self, config: PPChart2TableVisionConfig):
         super().__init__(config)
+        self.config = config
         self.image_size = config.image_size
+        self.patch_embed = PPChart2TablePatchEmbeddings(config)
 
-        self.patch_embed = PPChart2TableVisionPatchEmbed(config)
-
-        self.pos_embed = nn.Parameter(
-            torch.zeros(
-                1, config.image_size // config.patch_size, config.image_size // config.patch_size, config.embed_dim
+        self.pos_embed = None
+        if config.use_abs_pos:
+            # Initialize absolute positional embedding with pretrain image size.
+            self.pos_embed = nn.Parameter(
+                torch.zeros(
+                    1,
+                    config.image_size // config.patch_size,
+                    config.image_size // config.patch_size,
+                    config.hidden_size,
+                )
             )
-        )
 
-        self.blocks = nn.ModuleList()
-        for i in range(config.depth):
-            block = PPChart2TableVisionDecoderLayer(
+        self.layers = nn.ModuleList()
+        for i in range(config.num_hidden_layers):
+            layer = PPChart2TableVisionLayer(
                 config,
                 window_size=config.window_size if i not in config.global_attn_indexes else 0,
             )
-            self.blocks.append(block)
+            self.layers.append(layer)
 
         self.neck = PPChart2TableVisionNeck(config)
 
-        self.net_2 = nn.Conv2d(
-            config.output_channels, config.net_channels, kernel_size=3, stride=2, padding=1, bias=False
-        )
-        self.net_3 = nn.Conv2d(config.net_channels, config.hidden_size, kernel_size=3, stride=2, padding=1, bias=False)
-
+        self.gradient_checkpointing = False
         self.post_init()
 
-    def forward(self, hidden_states: torch.Tensor, **kwargs) -> torch.Tensor:
-        hidden_states = self.patch_embed(hidden_states)
-        hidden_states = hidden_states + self.pos_embed
-        for block in self.blocks:
-            hidden_states = block(hidden_states)
+    def get_input_embeddings(self):
+        return self.patch_embed
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(
+        self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | PPChart2TableVisionEncoderOutput:
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        hidden_states = self.patch_embed(pixel_values)
+        if self.pos_embed is not None:
+            hidden_states = hidden_states + self.pos_embed
+        for layer_module in self.layers:
+            hidden_states = layer_module(hidden_states)
         hidden_states = self.neck(hidden_states)
-        hidden_states = self.net_2(hidden_states)
-        hidden_states = self.net_3(hidden_states)
-        return hidden_states
+        return PPChart2TableVisionEncoderOutput(
+            last_hidden_state=hidden_states,
+        )
+
+
+class PPChart2TableTextMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 def rotate_half(x):
@@ -581,22 +593,6 @@ class PPChart2TableTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class PPChart2TableTextMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
 @use_kernel_forward_from_hub("RMSNorm")
 class PPChart2TableTextRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
@@ -662,11 +658,7 @@ class PPChart2TableTextDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-@auto_docstring(
-    custom_intro="""
-    
-    """
-)
+@auto_docstring
 class PPChart2TableTextPreTrainedModel(PreTrainedModel):
     config: PPChart2TableTextConfig
     base_model_prefix = "model"
@@ -838,148 +830,62 @@ class PPChart2TableTextModel(PPChart2TableTextPreTrainedModel):
 @dataclass
 class PPChart2TableModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    Output class for PPChart2Table multimodal model's forward pass, extending Hugging Face `ModelOutput`.
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
-    This dataclass encapsulates the core outputs of the PP-Chart2Table base model, including hidden states,
-    attention weights, and cached key/value pairs for efficient generation.
-
-    Attributes:
-        past_key_values (`Optional[Cache]`, defaults to `None`):
-            Cached attention key/value pairs from the text decoder (for fast autoregressive generation).
-        last_hidden_state (`Optional[torch.FloatTensor]`, defaults to `None`):
-            Final hidden states from the text decoder (shape: `[B, seq_len, hidden_size]`), after multimodal fusion.
-        hidden_states (`Optional[tuple[torch.FloatTensor]]`, defaults to `None`):
-            Tuple of hidden states from each layer of the text decoder (for debugging/analysis).
-        attentions (`Optional[tuple[torch.FloatTensor]]`, defaults to `None`):
-            Tuple of attention weights from each layer of the text decoder (for debugging/analysis).
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
-class PPChart2TableCausalLMOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    Output class for PP-Chart2Table conditional generation model's forward pass.
-
-    Extends `PPChart2TableModelOutputWithPast` with language modeling logits (for token prediction),
-    tailored for autoregressive table generation tasks.
-
-    Attributes:
-        logits (`Optional[torch.FloatTensor]`, defaults to `None`):
-            Language modeling logits (shape: `[B, seq_len, vocab_size]`), output from the LM head.
-    """
-
-    logits: torch.FloatTensor | None = None
-    loss: torch.FloatTensor | None = None
-    image_hidden_states: torch.FloatTensor | None = None
-
-
-@auto_docstring(
-    custom_intro="""
-    
-    """
-)
+@auto_docstring
 class PPChart2TablePreTrainedModel(PreTrainedModel):
-    r"""
-    Base class for all PP-Chart2Table multimodal models, inheriting from Hugging Face `PreTrainedModel`.
-
-    This class defines core configurations and compatibility flags for the multimodal model (vision + text),
-    including support for gradient checkpointing, optimized attention backends, and model compilation.
-
-    Class Attributes:
-        config (`PPChart2TableConfig`):
-            Typed config class for PP-Chart2Table (combines vision + text sub-configs).
-        base_model_prefix (`str`, defaults to `"model"`):
-            Prefix for base model parameters (used in weight loading/saving).
-        supports_gradient_checkpointing (`bool`, defaults to `True`):
-            Whether the model supports gradient checkpointing to save memory during training.
-        _no_split_modules (`list[str]`):
-            Modules that should not be split across devices (tensor parallelism compatibility).
-        _skip_keys_device_placement (`list[str]`):
-            Keys to skip when placing tensors on devices (e.g., past key values for generation).
-        _supports_flash_attn / _supports_sdpa / _supports_flex_attn (`bool`):
-            Compatibility with optimized attention implementations (FlashAttention, SDPA, FlexAttention).
-        _can_compile_fullgraph (`bool`, defaults to `True`):
-            Whether the model supports TorchScript/TorchCompile full graph compilation.
-        _supports_attention_backend (`bool`, defaults to `True`):
-            Whether the model supports switching attention backends (e.g., PyTorch vs FlashAttention).
-        _can_record_outputs (`dict`):
-            Mapping of output types to modules for recording intermediate outputs (hidden_states/attentions).
-    """
-
     config: PPChart2TableConfig
     base_model_prefix = "model"
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["PPChart2TableTextDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn = False
+    _supports_sdpa = False
 
     _can_compile_fullgraph = True
+    _supports_flex_attn = False
     _supports_attention_backend = True
 
-    _can_record_outputs = {
-        "hidden_states": PPChart2TableTextDecoderLayer,
-        "attentions": PPChart2TableTextAttention,
-    }
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, PPChart2TableVisionAttention):
+            if module.use_rel_pos:
+                init.zeros_(module.rel_pos_h)
+                init.zeros_(module.rel_pos_w)
+        elif isinstance(module, PPChart2TableVisionEncoder):
+            if module.pos_embed is not None:
+                init.zeros_(module.pos_embed)
 
 
-@auto_docstring(
-    custom_intro="""
-    Core PP-Chart2Table multimodal model (vision encoder + text decoder) for chart-to-table parsing.
-    """
-)
+@auto_docstring
 class PPChart2TableModel(PPChart2TablePreTrainedModel):
-    r"""
-    Core PP-Chart2Table multimodal model (vision encoder + text decoder) for chart-to-table parsing.
-
-    This model integrates a vision encoder (for chart image feature extraction) and a text decoder (for table generation),
-    with a multimodal projection layer to align vision features with text embedding space. The core logic is:
-    1. Extract chart features via vision encoder
-    2. Project vision features to text embedding dimension
-    3. Inject vision features into text decoder inputs (replace image placeholder tokens)
-    4. Forward pass through text decoder to generate table text
-
-    Args:
-        config (`PPChart2TableConfig`):
-            Combined configuration class (includes vision_config and text_config sub-configs).
-
-    Inputs (forward method):
-        input_ids (`torch.LongTensor`, optional):
-            Tokenized input text (including image placeholder tokens) with shape `[B, seq_len]`.
-        attention_mask (`torch.Tensor`, optional):
-            Attention mask to avoid padding tokens (shape: `[B, seq_len]`).
-        position_ids (`torch.Tensor`, optional):
-            Positional indices for input tokens (shape: `[B, seq_len]`).
-        past_key_values (`list[torch.Tensor]`, optional):
-            Cached key/value pairs for fast autoregressive generation.
-        inputs_embeds (`torch.Tensor`, optional):
-            Precomputed input embeddings (shape: `[B, seq_len, hidden_size]`; overrides `input_ids`).
-        use_cache (`bool`, optional):
-            Whether to cache key/value pairs for generation.
-        pixel_values (`torch.Tensor`, optional):
-            Preprocessed chart images (shape: `[B, 3, H, W]`; required for multimodal input).
-        cache_position (`torch.LongTensor`, optional):
-            Position indices for cached key/value pairs (for generation).
-        **kwargs:
-            Additional arguments passed to the text decoder.
-
-    Outputs:
-        `PPChart2TableModelOutputWithPast`:
-            Contains the text decoder's final hidden states, cached key/values, and optional intermediate outputs.
-    """
-
-    config_class = PPChart2TableConfig
+    _checkpoint_conversion_mapping = {
+        r"^language_model.model": "language_model",
+    }
 
     def __init__(self, config: PPChart2TableConfig):
         super().__init__(config)
-        self.vision_tower_high = PPChart2TableVisionModel._from_config(config.vision_config)
+        self.vision_tower = PPChart2TableVisionEncoder(config.vision_config)
+        self.multi_modal_projector = nn.Linear(config.output_channels, config.text_config.hidden_size)
         self.language_model = PPChart2TableTextModel._from_config(config.text_config)
-        self.mm_projector_vary = nn.Linear(config.vision_config.hidden_size, config.text_config.hidden_size)
-
-        # Initialize weights and apply final processing
+        self.vision_downsample1 = nn.Conv2d(
+            config.vision_config.output_channels, config.net_channels, kernel_size=3, stride=2, padding=1, bias=False
+        )
+        self.vision_downsample2 = nn.Conv2d(
+            config.net_channels, config.output_channels, kernel_size=3, stride=2, padding=1, bias=False
+        )
         self.post_init()
 
     def get_input_embeddings(self):
@@ -990,33 +896,22 @@ class PPChart2TableModel(PPChart2TablePreTrainedModel):
         """Set input embeddings for the text decoder (for weight tying/loading)."""
         self.language_model.embed_tokens = value
 
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-    ) -> list[torch.Tensor]:
-        r"""
-        Extract and project chart image features to text embedding space.
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        image_output = self.vision_tower(pixel_values)
+        last_hidden_state = image_output.last_hidden_state
+        last_hidden_state = self.vision_downsample1(last_hidden_state)
+        last_hidden_state = self.vision_downsample2(last_hidden_state)
+        image_output.pooler_output = self.multi_modal_projector(last_hidden_state.flatten(2).transpose(2, 1))
 
-        Args:
-            images (`torch.Tensor`):
-                Preprocessed chart images (shape: `[B, 3, H, W]`).
-
-        Returns:
-            `list[torch.Tensor]`:
-                List of projected image features (one per image), each with shape `[1, num_patches, text_hidden_size]`.
-        """
-        image_features = []
-        for pixel_value in pixel_values:
-            pixel_value = pixel_value.unsqueeze(0)
-            with torch.no_grad():
-                cnn_feature = self.vision_tower_high(pixel_value)
-                cnn_feature = cnn_feature.flatten(2).transpose(2, 1)
-            image_feature = self.mm_projector_vary(cnn_feature)
-            image_features.append(image_feature)
-
-        image_features = torch.stack(image_features, dim=0)
-
-        return image_features
+        return image_output
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -1034,35 +929,47 @@ class PPChart2TableModel(PPChart2TablePreTrainedModel):
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        torch_compilable_check(
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+        )
         return special_image_mask
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
-        past_key_values: list[torch.Tensor] | None = None,
-        inputs_embeds: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        pixel_values: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         cache_position: torch.LongTensor | None = None,
-        **kwargs,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | PPChart2TableModelOutputWithPast:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.language_model.embed_tokens(input_ids)
+            inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values=pixel_values.to(inputs_embeds.dtype))
+            image_features = self.get_image_features(
+                pixel_values=pixel_values.to(inputs_embeds.dtype), return_dict=True
+            ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -1075,6 +982,9 @@ class PPChart2TableModel(PPChart2TablePreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )
@@ -1088,6 +998,36 @@ class PPChart2TableModel(PPChart2TablePreTrainedModel):
         )
 
 
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for PPChart2Table causal language model (or autoregressive) outputs.
+    """
+)
+class PPChart2TableCausalLMOutputWithPast(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    """
+
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: torch.FloatTensor | None = None
+
+
 @auto_docstring(
     custom_intro="""
     PP-Chart2Table model for conditional generation (table text generation from chart images),
@@ -1095,35 +1035,12 @@ class PPChart2TableModel(PPChart2TablePreTrainedModel):
     """
 )
 class PPChart2TableForConditionalGeneration(PPChart2TablePreTrainedModel, GenerationMixin):
-    r"""
-    PP-Chart2Table model for conditional generation (table text generation from chart images),
-    extending the core model with a language modeling (LM) head and generation utilities.
-
-    This class integrates Hugging Face `GenerationMixin` to support standard generation methods (greedy, beam search, etc.),
-    and adds an LM head to predict token probabilities for autoregressive table generation.
-
-    Key Features:
-    - LM head for token prediction (weight tied to input embeddings)
-    - Optimized generation input preparation (avoids reprocessing images in subsequent steps)
-    - Inference-only mode (training not supported by default)
-
-    Args:
-        config (`PPChart2TableConfig`):
-            Combined configuration class (vision + text sub-configs).
-
-    Inputs (forward method):
-        Inherits all inputs from `PPChart2TableModel`, plus:
-        labels (`list[dict]`, optional):
-            Training labels (not supported; raises ValueError if provided).
-        logits_to_keep (`Union[int, torch.Tensor]`, defaults to 0):
-            Slice index to keep only the last N logits (optimizes generation efficiency).
-
-    Outputs:
-        `PPChart2TableCausalLMOutputWithPast`:
-            Contains LM logits, decoder hidden states, and cached key/value pairs.
-    """
-
-    _keys_to_ignore_on_load_missing = ["num_batches_tracked"]
+    _checkpoint_conversion_mapping = {
+        r"^language_model.model": "model.language_model",
+        r"^vision_tower": "model.vision_tower",
+        r"^multi_modal_projector": "model.multi_modal_projector",
+        r"^language_model.lm_head": "lm_head",
+    }
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: PPChart2TableConfig):
@@ -1141,49 +1058,91 @@ class PPChart2TableForConditionalGeneration(PPChart2TablePreTrainedModel, Genera
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
+    @auto_docstring
     def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        vision_feature_layer: int | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
-        **kwargs,
-    ):
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
-            **kwargs,
-        )
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        pixel_values: torch.Tensor | None = None,
-        inputs_embeds: torch.Tensor | None = None,
-        labels: list[dict] | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        cache_position: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor] | PPChart2TableCausalLMOutputWithPast:
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | PPChart2TableCausalLMOutputWithPast:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example:
+
+        ```python
+        >>> from PIL import Image
+        >>> import httpx
+        >>> from io import BytesIO
+        >>> from transformers import AutoProcessor, PPChart2TableForConditionalGeneration, TextStreamer
+
+        >>> model = PPChart2TableForConditionalGeneration.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf").to("cuda")
+        >>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf")
+
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
+
+        >>> inputs = processor(image, return_tensors="pt", color="green").to("cuda")
+
+        >>> # Generate
+        >>> streamer = TextStreamer(processor.tokenizer, skip_prompt=True, skip_special_tokens=True)
+        >>> generate_ids = model.generate(
+        ...     **inputs,
+        ...     do_sample=False,
+        ...     tokenizer = processor.tokenizer,
+        ...     stop_strings='<|im_end|>',
+        ...     streamer=streamer,
+        ...     max_new_tokens=4096,
+        ... )
+        "You should keep in mind what features from the module should be used, especially
+        when you're planning to sell a template."
+        ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         outputs = self.model(
             input_ids=input_ids,
+            pixel_values=pixel_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            pixel_values=pixel_values,
+            past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            past_key_values=past_key_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )
-        hidden_states = outputs.last_hidden_state
 
+        hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
@@ -1196,10 +1155,10 @@ class PPChart2TableForConditionalGeneration(PPChart2TablePreTrainedModel, Genera
         return PPChart2TableCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_hidden_states=outputs.image_hidden_states,
         )
 
     def prepare_inputs_for_generation(
@@ -1229,7 +1188,7 @@ class PPChart2TableForConditionalGeneration(PPChart2TablePreTrainedModel, Genera
 
         if is_first_iteration or not kwargs.get("use_cache", True):
             # Pixel values are used only in the first iteration if available
-            # In subsquent iterations, they are already merged with text and cached
+            # In subsequent iterations, they are already merged with text and cached
             # NOTE: first iteration doesn't have to be prefill, it can be the first
             # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values

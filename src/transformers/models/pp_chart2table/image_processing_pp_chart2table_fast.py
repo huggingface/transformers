@@ -9,48 +9,15 @@ from typing import Optional
 import torch
 import torchvision.transforms.v2.functional as tvF
 
-from transformers.feature_extraction_utils import BatchFeature
-from transformers.image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
-from transformers.image_utils import SizeDict
-from transformers.processing_utils import TensorType
-from transformers.utils import auto_docstring
+from ...feature_extraction_utils import BatchFeature
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
+from ...image_utils import SizeDict
+from ...processing_utils import TensorType
+from ...utils import auto_docstring
 
 
-@auto_docstring(
-    custom_intro="""
-
-    """
-)
+@auto_docstring
 class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
-    r"""
-    Fast image processor for the PP-Chart2Table multimodal model, optimized for GPU-accelerated chart image preprocessing.
-
-    This high-performance processor implements a streamlined preprocessing pipeline for chart images (resizing, rescaling,
-    normalization, channel reordering) using PyTorch tensor operations, designed for efficient batch processing on GPUs.
-    It inherits from [`BaseImageProcessorFast`] and is optimized for inference/training pipelines requiring low-latency
-    image preprocessing.
-
-    Class Attributes (Default Configuration):
-        resample (`int`, defaults to 3):
-            Integer identifier for the resampling filter (3 = BICUBIC, compatible with `InterpolationMode.BICUBIC`).
-        image_mean (`list[float]`, defaults to `[0.40821073, 0.4578275, 0.48145466]`):
-            Per-channel mean values for image normalization (RGB order).
-        image_std (`list[float]`, defaults to `[0.27577711, 0.26130258, 0.26862954]`):
-            Per-channel standard deviation values for image normalization (RGB order).
-        size (`dict[str, int]`, defaults to `{"height": 1024, "width": 1024}`):
-            Default target size for image resizing (1024x1024, optimized for PP-Chart2Table vision encoder).
-        patch_size (`int`, defaults to 16):
-            Size of image patches used by the PP-Chart2Table vision encoder (for alignment with model input).
-        merge_size (`int`, defaults to 4):
-            Size factor for merging image patches (specific to PP-Chart2Table's vision processing pipeline).
-        do_resize (`bool`, defaults to `True`):
-            Default flag to enable image resizing.
-        do_rescale (`bool`, defaults to `True`):
-            Default flag to enable pixel value rescaling (from [0,255] to [0,1]).
-        do_normalize (`bool`, defaults to `True`):
-            Default flag to enable image normalization.
-    """
-
     resample = 3
     image_mean = [0.40821073, 0.4578275, 0.48145466]
     image_std = [0.27577711, 0.26130258, 0.26862954]
@@ -60,9 +27,6 @@ class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
     do_rescale = True
     do_normalize = True
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
 
     def _preprocess(
         self,

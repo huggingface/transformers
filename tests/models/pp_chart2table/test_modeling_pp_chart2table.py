@@ -16,6 +16,8 @@
 import gc
 import unittest
 
+import requests
+
 import pytest
 from parameterized import parameterized
 from PIL import Image
@@ -71,8 +73,8 @@ class PPChart2TableVisionText2TextModelTester:
         is_training=False,
         vision_config={
             "depth": 2,
-            "embed_dim": 768,
             "hidden_size": 144,
+            "output_channels": 192,
             "hidden_act": "gelu",
             "image_size": 64,
             "num_channels": 3,
@@ -84,8 +86,8 @@ class PPChart2TableVisionText2TextModelTester:
             "use_rel_pos": True,
             "global_attn_indexes": [2, 5, 8, 11],
             "window_size": 14,
-            "output_channels": 256,
-            "net_channels": 512,
+            "neck_channels": 48,
+            "net_channels": 96,
             "attention_dropout": 0.0,
         },
         bos_token_id=151643,
@@ -260,9 +262,8 @@ class PPChart2TableIntegrationTest(unittest.TestCase):
             "/workspace/model_weight_torch/PP-Chart2Table", dtype="float32"
         ).to("cuda")
 
-        image = Image.open(
-            "/workspace/PaddleX/paddlex/inference/models/doc_vlm/modeling/chart_parsing_02.png"
-        ).convert("RGB")
+        image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", stream=True).raw)
+
         inputs = self.processor(images=image).to(model.device)
         breakpoint()
         expected_input_ids_length = 286

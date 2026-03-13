@@ -7,35 +7,13 @@
 
 import torch
 
-from transformers.feature_extraction_utils import BatchFeature
-from transformers.processing_utils import ProcessorMixin
-from transformers.utils import auto_docstring
+from ...feature_extraction_utils import BatchFeature
+from ...processing_utils import ProcessorMixin
+from ...utils import auto_docstring
 
 
-@auto_docstring(
-    custom_intro="""
-    A multi-modal processor for the PPChart2Table model, combining image preprocessing and text tokenization
-    capabilities to handle chart-to-table conversion tasks.
-    
-    This processor integrates `PPChart2TableImageProcessorFast` for chart image preprocessing (e.g., patch-based 
-    resizing) and `Qwen2Tokenizer` for text prompt construction/tokenization. It encapsulates the end-to-end 
-    processing pipeline from raw chart images + text instructions to model-ready input tensors, and also provides 
-    postprocessing logic to decode model outputs back to human-readable table text.
-    """
-)
+@auto_docstring
 class PPChart2TableProcessor(ProcessorMixin):
-    r"""
-    [`PPChart2TableProcessor`] offers all the functionalities of [`PPChart2TableImageProcessorFast`] and [`Qwen2Tokenizer`]. See the
-    [`~PPChart2TableProcessor.__call__`] and [`~PPChart2TableProcessor.decode`] for more information.
-    Args:
-        image_processor ([`PPChart2TableImageProcessorFast`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`Qwen2Tokenizer`], *optional*):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-    """
-
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
