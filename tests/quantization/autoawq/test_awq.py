@@ -128,9 +128,7 @@ class AwqTest(unittest.TestCase):
         Setup quantized model
         """
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        cls.quantized_model = AutoModelForCausalLM.from_pretrained(
-            cls.model_name, device_map=cls.device_map
-        )
+        cls.quantized_model = AutoModelForCausalLM.from_pretrained(cls.model_name, device_map=cls.device_map)
 
     def tearDown(self):
         gc.collect()
