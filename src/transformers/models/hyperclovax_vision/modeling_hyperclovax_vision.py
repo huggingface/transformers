@@ -20,8 +20,6 @@
 # was manually edited and we will ask you to revert the changes.
 # 🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Optional
 
 import torch
 from torch import nn
@@ -35,7 +33,7 @@ from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hu
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.auto import AutoModel
 from ...models.qwen2_5_vl.modeling_qwen2_5_vl import (
@@ -574,7 +572,6 @@ class HyperClovaXForCausalLM(HCXVisionPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
         logits = logits * self.config.logits_scaling  # mup
@@ -643,28 +640,6 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.FloatTensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        """
-        # Always use return_dict=True for the vision model so we can reliably access pooler_output.
-        # The @can_return_tuple decorator above handles the outer return_dict=False case.
-        video_output = self.vision_model(pixel_values_videos, grid_thw=video_grid_thw, return_dict=True, **kwargs)
-        # Use pooler_output (post-merger features) so the merger receives gradients.
-        projected = self.multi_modal_projector(video_output.pooler_output)
-        video_output.pooler_output = projected
-        return video_output
-
-    @can_return_tuple
-    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -677,13 +652,29 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        # Always use return_dict=True for the vision model so we can reliably access pooler_output.
-        # The @can_return_tuple decorator above handles the outer return_dict=False case.
         image_output = self.vision_model(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
-        # Use pooler_output (post-merger features) so the merger receives gradients.
         projected = self.multi_modal_projector(image_output.pooler_output)
         image_output.pooler_output = projected
         return image_output
+
+    @can_return_tuple
+    @auto_docstring
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        """
+        video_output = self.vision_model(pixel_values_videos, grid_thw=video_grid_thw, return_dict=True, **kwargs)
+        projected = self.multi_modal_projector(video_output.pooler_output)
+        video_output.pooler_output = projected
+        return video_output
 
     def get_placeholder_mask(
         self,
@@ -790,27 +781,19 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
             cache_position=cache_position,
             **kwargs,
         )
-        output = Qwen2VLModelOutputWithPast(
+        output = Qwen2_5_VLModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
+            rope_deltas=None,
         )
-        return output if return_dict else output.to_tuple()
+        return output
 
 
 @auto_docstring
 class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixin):
     accepts_loss_kwargs = False
-    _checkpoint_conversion_mapping = {
-        # Handle old checkpoints that stored mm_projector at the top level
-        "^model.mm_projector": "model.multi_modal_projector.proj",
-        # Handle old checkpoints that used HyperClovaXForCausalLM (with nested .model) as language_model
-        "^model.language_model.model": "model.language_model",
-        # Handle old checkpoints that had a separate lm_head inside the language_model
-        "^model.language_model.lm_head": "lm_head",
-    }
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: HCXVisionConfig):
@@ -834,9 +817,10 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width dimensions of the feature grid for each image.
-            Each row contains `[temporal, height, width]` grid counts.
+            The temporal, height and width of feature shape of each image in LLM.
         """
         return self.model.get_image_features(pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
@@ -848,9 +832,10 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width dimensions of the feature grid for each video.
-            Each row contains `[temporal, height, width]` grid counts.
+            The temporal, height and width of feature shape of each video in LLM.
         """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs)
 
@@ -998,11 +983,6 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
 
 class HCXVisionForSequenceClassification(HCXVisionPreTrainedModel, GenericForSequenceClassification):
     accepts_loss_kwargs = False
-    _checkpoint_conversion_mapping = {
-        "^model.mm_projector": "model.multi_modal_projector.proj",
-        "^model.language_model.model": "model.language_model",
-        "^model.language_model.lm_head": "lm_head",
-    }
 
 
 __all__ = [
