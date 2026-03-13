@@ -51,7 +51,15 @@ if is_vision_available():
 
 class PPOCRV5ServerDetModelTester:
     def __init__(
-        self, parent, batch_size=3, image_size=128, num_channels=3, num_stages=5, is_training=False, scale=1.0, divisor=16
+        self,
+        parent,
+        batch_size=3,
+        image_size=128,
+        num_channels=3,
+        num_stages=5,
+        is_training=False,
+        scale=1.0,
+        divisor=16,
     ):
         self.parent = parent
         self.batch_size = batch_size
