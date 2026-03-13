@@ -87,13 +87,10 @@ from transformers.testing_utils import (
     require_accelerate,
     require_bitsandbytes,
     require_deepspeed,
-    require_executorch,
     require_flash_attn,
     require_flash_attn_3,
     require_kernels,
     require_non_hpu,
-    require_onnxruntime,
-    require_onnxscript,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -117,6 +114,7 @@ from transformers.utils import (
 )
 from transformers.utils.output_capturing import CompileableContextVar
 
+from .exporters.test_utils import ExportTesterMixin
 from .generation.test_utils import GenerationTesterMixin
 
 
@@ -682,7 +680,7 @@ def sdpa_kernel(enable_flash, enable_math, enable_mem_efficient):
 
 
 @require_torch
-class ModelTesterMixin:
+class ModelTesterMixin(ExportTesterMixin):
     model_tester = None
     all_model_classes = ()
     test_resize_embeddings = True
@@ -4067,232 +4065,6 @@ class ModelTesterMixin:
         # check grad matches
         for name, param in model._orig_mod.named_parameters():
             torch.testing.assert_close(param.grad.detach().cpu(), params[name], rtol=1e-4, atol=1e-4)
-
-    @slow
-    @pytest.mark.torch_export_test
-    def test_torch_export(self, atol=1e-4, rtol=1e-4):
-        """
-        Test if model can be exported with torch.export.export()
-
-        Args:
-            atol (`float`, *optional*, defaults to 1e-4): absolute tolerance for output comparison
-            rtol (`float`, *optional*, defaults to 1e-4): relative tolerance for output comparison
-        """
-        from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
-        from transformers.exporters.utils import get_leaf_tensors, prepare_for_export
-
-        if not self.test_torch_exportable:
-            self.skipTest(reason="Model architecture is not TorchDynamo exportable/traceable")
-
-        with open(inspect.getfile(self.all_model_classes[0]), "r") as f:
-            source_code = f.read()
-            # Skip model if it uses a chunked attention implementation which is not torch exportable
-            if "for q, k, v in zip(*splits)" in source_code:
-                self.skipTest(reason="Model architecture uses chunked attention which is not torch exportable")
-            # Skip MoEs that don't support batched_mm experts implementation
-            if "for expert" in source_code and "use_experts_implementation" not in source_code:
-                self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
-            # Skip models that use get_rope_index which is not torch exportable
-            if "get_rope_index" in source_code:
-                self.skipTest(reason="Model architecture uses get_rope_index which is not torch exportable")
-
-        exporter = DynamoExporter(export_config=DynamoConfig())
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                if model_class.__name__ in ["VideoMAEForPreTraining", "MllamaForConditionalGeneration"]:
-                    continue
-
-                if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
-                    config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
-                else:
-                    config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-                inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                inputs_dict = {k: v for k, v in inputs_dict.items() if v is not None}
-                for input_name in ("labels", "future_values"):
-                    if input_name in inputs_dict:
-                        inputs_dict.pop(input_name)
-
-                set_config_for_less_flaky_test(config)
-                model = model_class(config).eval().to(torch_device)
-                set_model_for_less_flaky_test(model)
-
-                # prepare cache inputs for auto-regressive models and include it for computing eager outputs
-                # process output flags (e.g. use_cache, output_attentions, etc) to avoid passing them as inputs
-                model, inputs_dict = prepare_for_export(model, inputs_dict)
-
-                with torch.no_grad():
-                    # Running the eager inference before the export to catch model/inputs comatibility issues, also sometimes after
-                    # the export, the model used for export will return FakeTensors instead of real ones (torch cuda/inductor issue)
-                    # This happens on cuda with (codegen, clvp, esm, gptj, levit, wav2vec2_bert and wav2vec2_conformer)
-                    set_seed(1234)
-                    eager_outputs = model(**copy.deepcopy(inputs_dict))
-                    self.assertTrue(eager_outputs, "Eager model's outputs are empty.")
-
-                exported_program = exporter.export(model, inputs_dict)
-
-                with torch.no_grad():
-                    set_seed(1234)
-                    exported_outputs = exported_program.module()(**copy.deepcopy(inputs_dict))
-                    exported_outputs = get_leaf_tensors(exported_outputs)
-                    self.assertTrue(exported_outputs, "Exported model's outputs are empty.")
-
-                try:
-                    # Check if outputs are close
-                    torch.testing.assert_close(exported_outputs, eager_outputs, atol=atol, rtol=rtol)
-                except AssertionError as e:
-                    mismatched_percentage = re.findall(r"Mismatched elements: (\d+) / (\d+)", str(e))
-                    if mismatched_percentage:
-                        mismatched, total = map(int, mismatched_percentage[0])
-                        if mismatched / total < 0.05:
-                            continue  # allow up to 5%
-
-                    raise e
-
-    @slow
-    @require_onnxscript
-    @require_onnxruntime
-    @pytest.mark.onnx_export_test
-    def test_onnx_export(self, atol=1e-2, rtol=1e-2):
-        """
-        Test if model can be exported with torch.onnx.export()
-
-        Args:
-            atol (`float`, *optional*, defaults to 1e-2): absolute tolerance for output comparison
-            rtol (`float`, *optional*, defaults to 1e-2): relative tolerance for output comparison
-        """
-        from transformers.exporters.exporter_onnx import (
-            ONNX_EXTREMELY_INACCURATE_MODEL_TYPES,
-            OnnxConfig,
-            OnnxExporter,
-        )
-        from transformers.exporters.utils import prepare_for_export
-
-        if not self.test_torch_exportable:
-            self.skipTest(reason="Model architecture is not TorchDynamo exportable/traceable")
-
-        with open(inspect.getfile(self.all_model_classes[0]), "r") as f:
-            source_code = f.read()
-            # Skip model if it uses a chunked attention implementation which is not torch exportable
-            if "for q, k, v in zip(*splits)" in source_code:
-                self.skipTest(reason="Model architecture uses chunked attention which is not torch exportable")
-            # Skip MoEs that don't support batched_mm experts implementation
-            if "for expert" in source_code and "use_experts_implementation" not in source_code:
-                self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
-            # Skip models that use get_rope_index which is not torch exportable
-            if "get_rope_index" in source_code:
-                self.skipTest(reason="Model architecture uses get_rope_index which is not torch exportable")
-
-        exporter = OnnxExporter(export_config=OnnxConfig())
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                if model_class.__name__ in [
-                    "FlavaForPreTraining",
-                    "VideoMAEForPreTraining",
-                    "MllamaForConditionalGeneration",
-                ]:
-                    continue
-
-                if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
-                    config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
-                else:
-                    config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-                inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                inputs_dict = {k: v for k, v in inputs_dict.items() if v is not None}
-                for input_name in ("labels", "future_values"):
-                    if input_name in inputs_dict:
-                        inputs_dict.pop(input_name)
-
-                set_config_for_less_flaky_test(config)
-                model = model_class(config).eval().to(torch_device)
-                set_model_for_less_flaky_test(model)
-
-                # prepare cache inputs for auto-regressive models and include it for computing eager outputs
-                # process output flags (e.g. use_cache, output_attentions, etc) to avoid passing them as inputs
-                model, inputs_dict = prepare_for_export(model, inputs_dict)
-
-                with torch.no_grad():
-                    # Running the eager inference before the export to catch model/inputs comatibility issues, also sometimes after
-                    # the export, the model used for export will return FakeTensors instead of real ones (torch cuda/inductor issue)
-                    # This happens on cuda with (codegen, clvp, esm, gptj, levit, wav2vec2_bert and wav2vec2_conformer)
-                    set_seed(1234)
-                    eager_outputs = model(**copy.deepcopy(inputs_dict))
-                    self.assertTrue(eager_outputs, "Eager outputs is empty.")
-
-                onnx_program = exporter.export(model, inputs_dict)
-
-                # Filter out non-tensor inputs for ONNX Runtime, which does not support them.
-                onnx_inputs = {k: v for k, v in inputs_dict.items() if not isinstance(v, (bool, int, float, str))}
-
-                set_seed(1234)
-                onnx_outputs = onnx_program(**onnx_inputs)
-                onnx_names = (re.sub(r"^output\.", "", node.name) for node in onnx_program.model_proto.graph.output)
-                onnx_outputs = dict(zip(onnx_names, onnx_outputs))
-                self.assertTrue(onnx_outputs, "ONNX outputs is empty.")
-
-                if model.config.model_type in ONNX_EXTREMELY_INACCURATE_MODEL_TYPES:
-                    continue  # skip accuracy check for models known to be extremely inaccurate when exported to ONNX
-
-                try:
-                    # Check if outputs are close
-                    torch.testing.assert_close(onnx_outputs, eager_outputs, atol=atol, rtol=rtol, check_device=False)
-                except AssertionError as e:
-                    mismatched_percentage = re.findall(r"Mismatched elements: (\d+) / (\d+)", str(e))
-                    if mismatched_percentage:
-                        mismatched, total = map(int, mismatched_percentage[0])
-                        if mismatched / total < 0.05:
-                            continue  # allow up to 5%
-
-                    raise e
-
-    @slow
-    @require_executorch
-    @pytest.mark.executorch_export_test
-    def test_executorch_export(self):
-        """
-        Test if model can be exported with ExecuTorchExporter.
-        """
-        from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
-
-        if not self.test_torch_exportable:
-            self.skipTest(reason="Model architecture is not TorchDynamo exportable/traceable")
-
-        with open(inspect.getfile(self.all_model_classes[0]), "r") as f:
-            source_code = f.read()
-            if "for q, k, v in zip(*splits)" in source_code:
-                self.skipTest(reason="Model architecture uses chunked attention which is not torch exportable")
-            if "for expert" in source_code and "use_experts_implementation" not in source_code:
-                self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
-            if "get_rope_index" in source_code:
-                self.skipTest(reason="Model architecture uses get_rope_index which is not torch exportable")
-
-        backend = "cuda" if torch_device == "cuda" else "xnnpack"
-        exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend=backend))
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                if model_class.__name__ in [
-                    "FlavaForPreTraining",
-                    "VideoMAEForPreTraining",
-                    "MllamaForConditionalGeneration",
-                ]:
-                    continue
-
-                if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
-                    config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
-                else:
-                    config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-                inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                inputs_dict = {k: v for k, v in inputs_dict.items() if v is not None}
-                for input_name in ("labels", "future_values"):
-                    if input_name in inputs_dict:
-                        inputs_dict.pop(input_name)
-
-                set_config_for_less_flaky_test(config)
-                model = model_class(config).eval().to(torch_device)
-                set_model_for_less_flaky_test(model)
-                exporter.export(model, inputs_dict)
 
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):

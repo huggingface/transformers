@@ -108,12 +108,14 @@ if is_torch_available():
 
 from unittest.mock import patch
 
+from tests.exporters.test_utils import ExportGenerateTesterMixin
+
 
 def is_moe_model(config):
     return getattr(config, "_experts_implementation", None) is not None
 
 
-class GenerationTesterMixin:
+class GenerationTesterMixin(ExportGenerateTesterMixin):
     input_name = "input_ids"
     model_tester = None
     max_new_tokens = 3

@@ -33,6 +33,7 @@ The export pipeline has four stages, each with its own set of patches/fixes:
 """
 
 import copy
+import functools
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
@@ -40,7 +41,7 @@ from ..utils import logging
 from ..utils.export_config import OnnxConfig
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
 from .exporter_dynamo import DynamoExporter
-from .utils import get_inputs_outputs_names, prepare_for_export
+from .utils import dedup_output_tensors, get_inputs_outputs_names, get_leaf_tensors, prepare_for_export
 
 
 if is_torch_available():
@@ -79,9 +80,9 @@ class OnnxExporter(DynamoExporter):
         """Export a model to ONNX using TorchDynamo."""
         inputs = copy.deepcopy(sample_inputs)
         model, inputs = prepare_for_export(model, inputs)
-        inputs_names, outputs_names = get_inputs_outputs_names(model, inputs)
 
-        with patch_torch_ops():
+        with patch_model(model), patch_torch_ops():
+            inputs_names, outputs_names = get_inputs_outputs_names(model, inputs)
             exported_program: ExportedProgram = super().export(model, inputs)
             patch_fx_graph(exported_program.graph_module)
             onnx_program: ONNXProgram = torch.onnx.export(
@@ -100,6 +101,24 @@ class OnnxExporter(DynamoExporter):
 
         patch_onnx_ir(onnx_program)
         return onnx_program
+
+
+@contextmanager
+def patch_model(model):
+    """Temporarily wrap model.forward to return flat dict[str, Tensor] with deduped outputs."""
+
+    original_forward = model.forward
+
+    @functools.wraps(original_forward)
+    def patched_forward(*args, **kwargs):
+        outputs = original_forward(*args, **kwargs)
+        return get_leaf_tensors(dedup_output_tensors(outputs), default="output")
+
+    try:
+        model.forward = patched_forward
+        yield
+    finally:
+        model.forward = original_forward
 
 
 # ── Stage 1: Torch patches ─────────────────────────────────────────────────────

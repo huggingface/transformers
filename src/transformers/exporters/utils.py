@@ -16,10 +16,9 @@ import copy
 import functools
 import importlib
 import inspect
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
-from ..cache_utils import Cache
-from ..generation.utils import ALL_CACHE_NAMES
 from ..utils.import_utils import is_torch_available
 from ..utils.logging import get_logger
 
@@ -29,6 +28,8 @@ logger = get_logger(__name__)
 
 if is_torch_available():
     import torch
+
+    from ..cache_utils import Cache
 
 
 if TYPE_CHECKING:
@@ -224,12 +225,48 @@ def register_pytrees_for_model(model: "PreTrainedModel"):
             register_for_export(obj)
 
 
-def prepare_model_for_export(
+def _exportable_update_mask(attention_mask, past_key_values_or_cache_position=None, *args, **kwargs):
+    """Export-safe replacement for `_update_mamba_mask` / `_update_linear_attn_mask`.
+
+    The original functions return ``None`` in two cases:
+      1. Decode step — ``past_key_values.has_previous_state`` is True, or ``cache_position[0] > 0``
+      2. No padding — ``torch.all(attention_mask == 1)``
+
+    Both cases are problematic for ``torch.export``: case 2 uses ``torch.all`` (data-dependent),
+    and case 1 with ``cache_position`` (falcon_h1) indexes a tensor value.
+    This replacement keeps only the ``has_previous_state`` check (a Python bool, constant at
+    trace time). Models that pass ``cache_position`` instead (falcon_h1) fall through to
+    returning the attention_mask as-is.
+    """
+    if getattr(past_key_values_or_cache_position, "has_previous_state", False):
+        return None
+    return attention_mask
+
+
+def prepare_for_export(
     model: "PreTrainedModel",
     inputs: dict[str, Any],
 ) -> tuple["PreTrainedModel", dict[str, Any]]:
     """Configure the model for export (no inference). Moves output flags from inputs to model.config,
     sets optimal attention/experts implementations, and patches non-exportable module behaviours."""
+    # Validate inputs: loss computation is not supported during export
+    for label_key in ("labels", "future_values"):
+        if label_key in inputs:
+            raise ValueError(
+                f"Found '{label_key}' in inputs. Loss computation is not supported during export. "
+                f"Please remove '{label_key}' from your inputs before calling export()."
+            )
+    if model.config.return_loss:
+        raise ValueError(
+            "Found 'model.config.return_loss=True'. Loss computation is not supported during export. "
+            "Please set 'model.config.return_loss=False' before calling export()."
+        )
+    if inputs.get("return_loss", False):
+        raise ValueError(
+            "Found 'return_loss=True' in inputs. Loss computation is not supported during export. "
+            "Please remove 'return_loss' from your inputs or set it to False."
+        )
+
     # handle output flags passed in inputs
     for output_flag in ("use_cache", "output_attentions", "output_hidden_states", "return_dict", "return_loss"):
         if output_flag in inputs:
@@ -260,79 +297,56 @@ def prepare_model_for_export(
         # disable classifier cast for nllb-moe
         if hasattr(module, "_cast_classifier"):
             module._cast_classifier = lambda *args, **kwargs: None
-        # disable mamba mask update for ssms
+        # Replace mamba/linear-attn mask update: remove the data-dependent `torch.all(mask == 1)` check
+        # but keep the `has_previous_state` check (a Python bool, safe for tracing).
         if hasattr(module, "_update_mamba_mask"):
-            module._update_mamba_mask = lambda attention_mask, *args, **kwargs: attention_mask
+            module._update_mamba_mask = _exportable_update_mask
         if hasattr(module, "_update_linear_attn_mask"):
-            module._update_linear_attn_mask = lambda attention_mask, *args, **kwargs: attention_mask
-
-    # Cast floating-point inputs to match the model's dtype and device
-    try:
-        model_param = next(iter(model.parameters()))
-        inputs = _cast_inputs(inputs, model_param.device, model_param.dtype)
-    except StopIteration:
-        pass  # model has no parameters (e.g. pure embedding model)
+            module._update_linear_attn_mask = _exportable_update_mask
+        # Reset internal caches that are not part of past_key_values (e.g. DSA indexer in glm_moe_dsa)
+        if hasattr(module, "_cached_keys"):
+            module._cached_keys = None
 
     return model, inputs
 
 
-def inject_cache_into_inputs(
-    model: "PreTrainedModel",
-    inputs: dict[str, Any],
-) -> dict[str, Any]:
-    """Run one prefill forward pass and inject the resulting KV cache back into inputs.
+def simulate_generation(model: "PreTrainedModel", inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Run generate() for 2 tokens and capture the prefill and decode inputs.
 
-    Mirrors what the generation loop does between prefill and the first decode step: the
-    attention mask is widened to cover all cached positions via
-    ``_update_model_kwargs_for_generation``.  Keys that are tied to the *prefill* sequence
-    length (``cache_position``, ``position_ids``, ``token_type_ids``) are temporarily removed
-    during that call so they are not incorrectly extended, then restored.
+    This reuses the full generation machinery so every model (hybrid, SSM,
+    encoder-decoder, …) gets correct inputs without reimplementing the
+    generation loop.
+
+    Returns:
+        ``(prefill_inputs, decode_inputs)`` — the kwargs the forward received
+        on the first (prefill) and second (decode) iterations.
     """
-    with torch.no_grad():
-        outputs = model(**copy.deepcopy(inputs))
+    captured = []
 
-    is_encoder_decoder = getattr(model.config, "is_encoder_decoder", False)
-    cache_in_inputs = next((inputs[n] for n in ALL_CACHE_NAMES if inputs.get(n) is not None), None)
-    cache_in_outputs = (
-        next((outputs[n] for n in ALL_CACHE_NAMES if outputs.get(n) is not None), None)
-        if isinstance(outputs, dict)
-        else None
-    )
-    seq_len_tied_keys = (
-        "cache_position",
-        "token_type_ids",
-        "decoder_position_ids" if is_encoder_decoder else "position_ids",
-    )
-    if (
-        cache_in_inputs is None
-        and cache_in_outputs is not None
-        and getattr(model.config, "use_cache", False)
-        and hasattr(model, "_update_model_kwargs_for_generation")
-    ):
-        if isinstance(cache_in_outputs, Cache):
-            num_new_tokens = cache_in_outputs.get_seq_length()
-        elif isinstance(cache_in_outputs, (list, tuple)) and isinstance(cache_in_outputs[0], (list, tuple)):
-            num_new_tokens = cache_in_outputs[0][0].shape[2]  # legacy tuple-of-tuples
-        else:
-            logger.warning(
-                f"Unexpected cache structure in model outputs: {type(cache_in_outputs)}. "
-                "Expected a Cache or a tuple of tuples of tensors. Skipping cache injection into inputs."
-            )
-            num_new_tokens = None
+    @contextmanager
+    def capture_forward(model):
+        original_forward = model.forward
 
-        if num_new_tokens is not None:
-            saved = {k: inputs.pop(k) for k in seq_len_tied_keys if k in inputs}
-            inputs = (
-                model._update_model_kwargs_for_generation(
-                    outputs,
-                    inputs,
-                    is_encoder_decoder=is_encoder_decoder,
-                    num_new_tokens=num_new_tokens,
-                )
-                | saved
-            )
+        @functools.wraps(original_forward)
+        def capturing_forward(*args, **kwargs):
+            captured.append(copy.deepcopy(kwargs))
+            return original_forward(*args, **kwargs)
 
-    return inputs
+        model.forward = capturing_forward
+        yield
+        model.forward = original_forward
+
+    try:
+        with capture_forward(model), torch.no_grad():
+            model.generate(**copy.deepcopy(inputs), max_new_tokens=2, min_new_tokens=2)
+    except Exception as e:
+        raise RuntimeError(
+            f"simulate_generation failed for {type(model).__name__}. "
+            f"Inputs passed: {list(inputs.keys())}. "
+            f"Make sure the inputs are compatible with model.generate()."
+        ) from e
+
+    return captured[0], captured[1]
 
 
 def get_inputs_outputs_names(model: "PreTrainedModel", inputs: dict[str, Any]) -> tuple[list[str], list[str]]:
@@ -348,78 +362,6 @@ def get_inputs_outputs_names(model: "PreTrainedModel", inputs: dict[str, Any]) -
         outputs_names[outputs_names.index(name)] = f"output.{name}"
 
     return inputs_names, outputs_names
-
-
-def dedup_output_tensors(obj: Any, seen: dict | None = None) -> Any:
-    """Clone tensors that appear more than once in an output structure.
-
-    When a model returns the same tensor under two output names (e.g. ``last_hidden_state``
-    and ``hidden_states[0]``), the ONNX optimizer deduplicates the two output nodes and
-    renames one, breaking the expected name mapping. Cloning duplicates gives each output
-    leaf a distinct identity so the optimizer has nothing to merge.
-    """
-    if seen is None:
-        seen = {}
-    if isinstance(obj, type):  # class objects: not tensors, can't be reconstructed generically
-        return obj
-    if isinstance(obj, torch.Tensor):
-        if id(obj) in seen:
-            return obj.clone()
-        seen[id(obj)] = True
-        return obj
-    if isinstance(obj, dict):
-        return type(obj)({k: dedup_output_tensors(v, seen) for k, v in obj.items()})
-    if isinstance(obj, (list, tuple)):
-        items = [dedup_output_tensors(v, seen) for v in obj]
-        try:
-            return type(obj)(items)
-        except TypeError:
-            return type(obj)(*items)  # NamedTuple
-    if hasattr(obj, "__dict__"):
-        cls = type(obj)
-        instance = cls.__new__(cls)
-        instance.__dict__.update({k: dedup_output_tensors(v, seen) for k, v in vars(obj).items()})
-        return instance
-    return obj
-
-
-def _cast_inputs(obj: Any, device: "torch.device", dtype: "torch.dtype") -> Any:
-    """Recursively move tensors to `device`, casting floating-point tensors to `dtype`."""
-    if isinstance(obj, torch.Tensor):
-        return obj.to(device=device, dtype=dtype) if obj.is_floating_point() else obj.to(device=device)
-    if isinstance(obj, dict):
-        return {k: _cast_inputs(v, device, dtype) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        cast = [_cast_inputs(v, device, dtype) for v in obj]
-        return type(obj)(cast)
-    return obj
-
-
-def wrap_forward_for_export(model: "PreTrainedModel") -> None:
-    """Wrap model.forward to always return a flat dict[str, Tensor] with deduped outputs."""
-
-    def patch_model_forward(original_forward):
-        @functools.wraps(original_forward)
-        def patched_forward(*args, **kwargs):
-            outputs = original_forward(*args, **kwargs)
-            dedupped = dedup_output_tensors(outputs)
-            dictified = get_leaf_tensors(dedupped, default="output")
-            return dictified
-
-        return patched_forward
-
-    model.forward = patch_model_forward(model.forward)
-    return model
-
-
-def prepare_for_export(
-    model: "PreTrainedModel",
-    inputs: dict[str, torch.Tensor | Cache],
-) -> tuple["PreTrainedModel", dict[str, torch.Tensor | Cache]]:
-    model, inputs = prepare_model_for_export(model, inputs)
-    inputs = inject_cache_into_inputs(model, inputs)
-    model = wrap_forward_for_export(model)
-    return model, inputs
 
 
 # Dynamic shapes utilities
@@ -466,3 +408,36 @@ def get_auto_dynamic_shapes(inputs: dict[str, Any]) -> dict[str, Any]:
             )
 
     return dynamic_shapes
+
+
+def dedup_output_tensors(obj: Any, seen: dict | None = None) -> Any:
+    """Clone tensors that appear more than once in an output structure.
+
+    When a model returns the same tensor under two output names (e.g. ``last_hidden_state``
+    and ``hidden_states[0]``), the ONNX optimizer deduplicates the two output nodes and
+    renames one, breaking the expected name mapping. Cloning duplicates gives each output
+    leaf a distinct identity so the optimizer has nothing to merge.
+    """
+    if seen is None:
+        seen = {}
+    if isinstance(obj, type):  # class objects: not tensors, can't be reconstructed generically
+        return obj
+    if isinstance(obj, torch.Tensor):
+        if id(obj) in seen:
+            return obj.clone()
+        seen[id(obj)] = True
+        return obj
+    if isinstance(obj, dict):
+        return type(obj)({k: dedup_output_tensors(v, seen) for k, v in obj.items()})
+    if isinstance(obj, (list, tuple)):
+        items = [dedup_output_tensors(v, seen) for v in obj]
+        try:
+            return type(obj)(items)
+        except TypeError:
+            return type(obj)(*items)  # NamedTuple
+    if hasattr(obj, "__dict__"):
+        cls = type(obj)
+        instance = cls.__new__(cls)
+        instance.__dict__.update({k: dedup_output_tensors(v, seen) for k, v in vars(obj).items()})
+        return instance
+    return obj

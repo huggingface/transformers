@@ -27,7 +27,7 @@ from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, auto_docstring, logging, torch_compilable_check
 from .configuration_prophetnet import ProphetNetConfig
 
 
@@ -777,8 +777,9 @@ class ProphetNetNgramSelfAttention(nn.Module):
 
         if predict_relative_position_buckets is None:
             key_sequence_length = attn_weights.shape[-1]
-            assert position_ids[0][0] == key_sequence_length - 1, (
-                "`position_ids` are incorrect. They should be of the format 1 2 3 4 5 ... (key_sequence_length - 1)"
+            torch_compilable_check(
+                position_ids[0][0] == key_sequence_length - 1,
+                "`position_ids` are incorrect. They should be of the format 1 2 3 4 5 ... (key_sequence_length - 1)",
             )
             relative_positions = (
                 torch.arange(0, key_sequence_length)
