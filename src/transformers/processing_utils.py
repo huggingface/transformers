@@ -830,8 +830,17 @@ class ProcessorMixin(PushToHubMixin):
                 else:
                     # if a model has multiple tokenizers, save the additional tokenizers in their own folders.
                     attribute.save_pretrained(os.path.join(save_directory, attribute_name))
-            elif attribute._auto_class is not None:
-                custom_object_save(attribute, save_directory, config=attribute)
+            else:
+                # Save non-tokenizer components (image_processor, feature_extractor, etc.)
+                # in their own config files for backward compatibility
+                if hasattr(attribute, "_set_processor_class"):
+                    attribute._set_processor_class(self.__class__.__name__)
+                if is_primary:
+                    attribute.save_pretrained(save_directory)
+                else:
+                    attribute.save_pretrained(os.path.join(save_directory, attribute_name))
+                if attribute._auto_class is not None:
+                    custom_object_save(attribute, save_directory, config=attribute)
 
         if self._auto_class is not None:
             # We added an attribute to the init_kwargs of the tokenizers, which needs to be cleaned up.
@@ -1740,208 +1749,4 @@ class ProcessorMixin(PushToHubMixin):
         # Normalize OpenAI-style "image_url" content blocks to HuggingFace-style "image" blocks
         # OpenAI format: {"type": "image_url", "image_url": {"url": "..."}}
         # HuggingFace format: {"type": "image", "url": "..."}
-        for conversation_idx, conversation in enumerate(conversations):
-            for message in conversation:
-                if not isinstance(message.get("content"), list):
-                    continue
-                new_content = []
-                for content in message["content"]:
-                    if isinstance(content, dict) and content.get("type") == "image_url" and "image_url" in content:
-                        image_url_info = content["image_url"]
-                        url = image_url_info.get("url", "") if isinstance(image_url_info, dict) else image_url_info
-                        new_content.append({"type": "image", "url": url})
-                    else:
-                        new_content.append(content)
-                message["content"] = new_content
-
-        tokenize = template_kwargs.pop("tokenize", False)
-        return_dict = template_kwargs.pop("return_dict", True)
-
-        if tokenize:
-            batch_images, batch_videos = [], []
-            batch_audios = []
-            for conversation in conversations:
-                images, videos = [], []
-                for message in conversation:
-                    visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
-                    audio_fnames = [
-                        content[key]
-                        for content in message["content"]
-                        for key in ["audio", "url", "path"]
-                        if key in content and content["type"] == "audio"
-                    ]
-                    image_fnames = [
-                        vision_info[key]
-                        for vision_info in visuals
-                        for key in ["image", "url", "path", "base64"]
-                        if key in vision_info and vision_info["type"] == "image"
-                    ]
-                    images.extend(image_fnames)
-                    video_fnames = [
-                        vision_info[key]
-                        for vision_info in visuals
-                        for key in ["video", "url", "path"]
-                        if key in vision_info and vision_info["type"] == "video"
-                    ]
-                    videos.extend(video_fnames)
-
-                    # Audio models do not accept nested list of audios (yet!) so we construct a flat input audio list
-                    if not template_kwargs["load_audio_from_video"]:
-                        for fname in audio_fnames:
-                            batch_audios.append(load_audio(fname, sampling_rate=template_kwargs["sampling_rate"]))
-                    else:
-                        for fname in video_fnames:
-                            batch_audios.append(load_audio(fname, sampling_rate=template_kwargs["sampling_rate"]))
-
-                # Currently all processors can accept nested list of batches, but not flat list of visuals
-                # So we'll make a batched list of images and let the processor handle it
-                batch_images.append(images)
-                batch_videos.append(videos)
-
-        special_tokens_map = {}
-        if hasattr(self, "tokenizer") and hasattr(self.tokenizer, "special_tokens_map"):
-            special_tokens = self.tokenizer.special_tokens_map
-            # Filter out tokens that conflict with template kwargs
-            special_tokens_map = {k: v for k, v in special_tokens.items() if k not in template_kwargs}
-
-        prompt, generation_indices = render_jinja_template(
-            conversations=conversations,
-            chat_template=chat_template,
-            **template_kwargs,  # different flags such as `return_assistant_mask`
-            **special_tokens_map,  # tokenizer special tokens are used by some templates
-        )
-
-        if not is_batched:
-            prompt = prompt[0]
-
-        if tokenize:
-            # Tokenizer's `apply_chat_template` never adds special tokens when tokenizing
-            # But processor's `apply_chat_template` didn't have an option to tokenize, so users had to format the prompt
-            # and pass it to the processor. Users thus never worried about special tokens relying on processor handling
-            # everything internally. The below line is to keep BC for that and be able to work with model that have
-            # special tokens in the template (consistent with tokenizers). We dont want to raise warning, it will flood command line
-            # without actionable solution for users
-            single_prompt = prompt[0] if is_batched else prompt
-            if self.tokenizer.bos_token is not None and single_prompt.startswith(self.tokenizer.bos_token):
-                kwargs["add_special_tokens"] = False
-
-            # Always sample frames by default unless explicitly set to `False` by users. If users do not pass `num_frames`/`fps`
-            # sampling should not done for BC.
-            if "do_sample_frames" not in kwargs and (
-                kwargs.get("fps") is not None or kwargs.get("num_frames") is not None
-            ):
-                kwargs["do_sample_frames"] = True
-
-            images_exist = any((im is not None) for im_list in batch_images for im in im_list)
-            videos_exist = any((vid is not None) for vid_list in batch_videos for vid in vid_list)
-            out = self(
-                text=prompt,
-                images=batch_images if images_exist else None,
-                videos=batch_videos if videos_exist else None,
-                audio=batch_audios if batch_audios else None,
-                **kwargs,
-            )
-
-            if return_dict:
-                if template_kwargs.get("return_assistant_tokens_mask", False):
-                    assistant_masks = []
-                    offset_mapping = out.pop("offset_mapping")
-                    input_ids = out["input_ids"]
-                    for i in range(len(input_ids)):
-                        current_mask = [0] * len(input_ids[i])
-                        offsets = offset_mapping[i]
-                        offset_starts = [start for start, end in offsets]
-                        for assistant_start_char, assistant_end_char in generation_indices[i]:
-                            start_pos = bisect.bisect_left(offset_starts, assistant_start_char)
-                            end_pos = bisect.bisect_left(offset_starts, assistant_end_char)
-
-                            if not (
-                                start_pos >= 0
-                                and start_pos < len(offsets)
-                                and offsets[start_pos][0] <= assistant_start_char < offsets[start_pos][1]
-                            ):
-                                # start_token is out of bounds maybe due to truncation.
-                                continue
-                            # Ensure end_pos is also within bounds
-                            if end_pos > len(input_ids[i]):
-                                end_pos = len(input_ids[i])
-                            for token_id in range(start_pos, end_pos if end_pos else len(input_ids[i])):
-                                current_mask[token_id] = 1
-                        assistant_masks.append(current_mask)
-                    out["assistant_masks"] = assistant_masks
-                    out.convert_to_tensors(tensor_type=kwargs.get("return_tensors"))
-                return out
-            else:
-                return out["input_ids"]
-        return prompt
-
-    def post_process_multimodal_output(
-        self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
-    ):
-        """
-        Post-process the output of a multimodal model to return the requested modality output.
-        If the model cannot generated the requested modality, an error will be raised.
-
-        Args:
-            generated_outputs (`torch.Tensor` or `np.ndarray`):
-                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
-                or `(sequence_length,)`.
-            skip_special_tokens (`bool`, *optional*, defaults to `True`):
-                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
-            generation_mode (`str`, *optional*):
-                Generation mode indicated which modality to output and can be one of `["text", "image", "audio"]`.
-            **kwargs:
-                Additional arguments to be passed to the tokenizer's `batch_decode method`.
-
-        Returns:
-            `list[str]`: The decoded text.
-        """
-        if generation_mode is not None and generation_mode != "text":
-            raise ValueError(
-                f"{self.__class__.__name__} got an unexpected generation_mode={generation_mode}. Supported options are only [`text`]"
-            )
-        return self.post_process_image_text_to_text(
-            generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs
-        )
-
-    def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
-        """
-        Post-process the output of a vlm to decode the text.
-
-        Args:
-            generated_outputs (`torch.Tensor` or `np.ndarray`):
-                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
-                or `(sequence_length,)`.
-            skip_special_tokens (`bool`, *optional*, defaults to `True`):
-                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `decode` method.
-            **kwargs:
-                Additional arguments to be passed to the tokenizer's `decode` method.
-
-        Returns:
-            `list[str]`: The decoded text.
-        """
-        return self.tokenizer.decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
-
-    def _check_special_mm_tokens(self, text: list[str], text_inputs: "BatchFeature", modalities: list[str]):
-        """
-        Checks that number of special tokens in text and processed text is same. The count can be different
-        if tokenized text was truncated, leading to issues in model code.
-        """
-        for modality in modalities:
-            token_str = getattr(self, f"{modality}_token")
-            token_id = getattr(self, f"{modality}_token_id")
-            ids_count = [list(ids).count(token_id) for ids in text_inputs["input_ids"]]
-            text_count = [sample.count(token_str) for sample in text]
-
-            if ids_count != text_count:
-                raise ValueError(
-                    f"Mismatch in `{modality}` token count between text and `input_ids`. Got ids={ids_count} and text={text_count}. "
-                    "Likely due to `truncation='max_length'`. Please disable truncation or increase `max_length`."
-                )
-
-
-ProcessorMixin.push_to_hub = copy_func(ProcessorMixin.push_to_hub)
-if ProcessorMixin.push_to_hub.__doc__ is not None:
-    ProcessorMixin.push_to_hub.__doc__ = ProcessorMixin.push_to_hub.__doc__.format(
-        object="processor", object_class="AutoProcessor", object_files="processor files"
-    )
+        for
