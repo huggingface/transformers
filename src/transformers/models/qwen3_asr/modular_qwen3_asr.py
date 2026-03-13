@@ -1,5 +1,4 @@
 import re
-from dataclasses import dataclass
 
 import torch
 from torch import nn
@@ -13,7 +12,7 @@ from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
 from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
-    MoeCausalLMOutputWithPast,
+    CausalLMOutputWithPast,
 )
 from transformers.modeling_utils import PreTrainedModel
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -487,18 +486,6 @@ class Qwen3ASRPreTrainedModel(PreTrainedModel):
     }
 
 
-# TODO def rename and probably change because generated depends on MoeCausalLMOutputWithPast
-@dataclass
-class Qwen3ASRThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
-    r"""
-    Args:
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-
-
 class Qwen3ASRAudioEncoder(Qwen3OmniMoeAudioEncoder):
     pass
 
@@ -629,12 +616,12 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
         self.vocab_size = config.text_config.vocab_size
         # TODO use AutoModel? at least for audio encoder
         self.audio_tower = Qwen3ASRAudioEncoder(config.audio_config)
+        # TODO possible to use Qwen3ForCausalLM via AutoModelForCausalLM? for both text model and LM head
         self.model = Qwen3ASRThinkerTextModel(config.text_config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.pad_token_id = (
             self.config.text_config.pad_token_id if self.config.text_config.pad_token_id is not None else -1
         )
-        self.rope_deltas = None    # TODO remove
         self.post_init()
 
     def get_input_embeddings(self):
@@ -744,12 +731,11 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
         position_ids=None,
         past_key_values=None,
         inputs_embeds=None,
-        rope_deltas=None,
         labels=None,
         use_cache=None,
         cache_position=None,
         **kwargs,
-    ) -> tuple | Qwen3ASRThinkerCausalLMOutputWithPast:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
             Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
@@ -757,8 +743,6 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
             - 0 for tokens that are **masked**.
         audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
             The length of feature shape of each audio in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -797,13 +781,12 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
                 logits=logits, labels=labels, vocab_size=self.config.get_text_config().vocab_size
             )
 
-        return Qwen3ASRThinkerCausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             past_key_values=outputs.past_key_values,
-            rope_deltas=self.rope_deltas,
         )
 
     def prepare_inputs_for_generation(self, *args, is_first_iteration=False, **kwargs):
