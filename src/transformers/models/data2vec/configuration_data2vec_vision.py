@@ -81,8 +81,8 @@ class Data2VecVisionConfig(PreTrainedConfig):
         layer_scale_init_value=0.1,
         drop_path_rate=0.1,
         use_mean_pooling=True,
-        out_indices=[3, 5, 7, 11],
-        pool_scales=[1, 2, 3, 6],
+        out_indices=None,
+        pool_scales=None,
         use_auxiliary_head=True,
         auxiliary_loss_weight=0.4,
         auxiliary_channels=256,
@@ -91,6 +91,10 @@ class Data2VecVisionConfig(PreTrainedConfig):
         semantic_loss_ignore_index=255,
         **kwargs,
     ):
+        if out_indices is None:
+            out_indices = []
+        if pool_scales is None:
+            pool_scales = []
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size

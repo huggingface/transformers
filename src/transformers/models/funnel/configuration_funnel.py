@@ -52,7 +52,7 @@ class FunnelConfig(PreTrainedConfig):
     def __init__(
         self,
         vocab_size=30522,
-        block_sizes=[4, 4, 4],
+        block_sizes=None,
         block_repeats=None,
         num_decoder_layers=2,
         d_model=768,
@@ -75,6 +75,8 @@ class FunnelConfig(PreTrainedConfig):
         tie_word_embeddings=True,
         **kwargs,
     ):
+        if block_sizes is None:
+            block_sizes = []
         self.pad_token_id = pad_token_id
         self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size

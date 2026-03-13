@@ -87,7 +87,7 @@ class EncodecConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        target_bandwidths=[1.5, 3.0, 6.0, 12.0, 24.0],
+        target_bandwidths=None,
         sampling_rate=24_000,
         audio_channels=1,
         normalize=False,
@@ -96,7 +96,7 @@ class EncodecConfig(PreTrainedConfig):
         hidden_size=128,
         num_filters=32,
         num_residual_layers=1,
-        upsampling_ratios=[8, 5, 4, 2],
+        upsampling_ratios=None,
         norm_type="weight_norm",
         kernel_size=7,
         last_kernel_size=7,
@@ -112,6 +112,10 @@ class EncodecConfig(PreTrainedConfig):
         use_conv_shortcut=True,
         **kwargs,
     ):
+        if target_bandwidths is None:
+            target_bandwidths = []
+        if upsampling_ratios is None:
+            upsampling_ratios = []
         self.target_bandwidths = target_bandwidths
         self.sampling_rate = sampling_rate
         self.audio_channels = audio_channels

@@ -177,15 +177,21 @@ class LayoutLMv3Tokenizer(TokenizersBackend):
         pad_token="<pad>",
         mask_token="<mask>",
         add_prefix_space=True,
-        cls_token_box=[0, 0, 0, 0],
-        sep_token_box=[0, 0, 0, 0],
-        pad_token_box=[0, 0, 0, 0],
+        cls_token_box=None,
+        sep_token_box=None,
+        pad_token_box=None,
         pad_token_label=-100,
         only_label_first_subword=True,
         vocab: str | dict[str, int] | None = None,
         merges: str | list[str] | None = None,
         **kwargs,
     ):
+        if cls_token_box is None:
+            cls_token_box = []
+        if sep_token_box is None:
+            sep_token_box = []
+        if pad_token_box is None:
+            pad_token_box = []
         self.add_prefix_space = add_prefix_space
         self._vocab = vocab or {}
         self._merges = merges or []

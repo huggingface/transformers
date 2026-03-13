@@ -215,15 +215,21 @@ class LayoutXLMTokenizer(TokenizersBackend):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        cls_token_box=[0, 0, 0, 0],
-        sep_token_box=[1000, 1000, 1000, 1000],
-        pad_token_box=[0, 0, 0, 0],
+        cls_token_box=None,
+        sep_token_box=None,
+        pad_token_box=None,
         pad_token_label=-100,
         only_label_first_subword=True,
         add_prefix_space=True,
         **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
+        if cls_token_box is None:
+            cls_token_box = []
+        if sep_token_box is None:
+            sep_token_box = []
+        if pad_token_box is None:
+            pad_token_box = []
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
         self.add_prefix_space = add_prefix_space
 

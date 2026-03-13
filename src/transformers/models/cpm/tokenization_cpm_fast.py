@@ -42,7 +42,7 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
         pad_token="<pad>",
         cls_token="<cls>",
         mask_token="<mask>",
-        additional_special_tokens=["<eop>", "<eod>"],
+        additional_special_tokens=None,
         **kwargs,
     ):
         """
@@ -106,6 +106,8 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
             sp_model (`SentencePieceProcessor`):
                 The *SentencePiece* processor that is used for every conversion (string, tokens and IDs).
         """
+        if additional_special_tokens is None:
+            additional_special_tokens = []
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 

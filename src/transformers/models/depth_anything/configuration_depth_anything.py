@@ -67,8 +67,8 @@ class DepthAnythingConfig(PreTrainedConfig):
         patch_size=14,
         initializer_range=0.02,
         reassemble_hidden_size=384,
-        reassemble_factors=[4, 2, 1, 0.5],
-        neck_hidden_sizes=[48, 96, 192, 384],
+        reassemble_factors=None,
+        neck_hidden_sizes=None,
         fusion_hidden_size=64,
         head_in_index=-1,
         head_hidden_size=32,
@@ -76,6 +76,10 @@ class DepthAnythingConfig(PreTrainedConfig):
         max_depth=None,
         **kwargs,
     ):
+        if reassemble_factors is None:
+            reassemble_factors = []
+        if neck_hidden_sizes is None:
+            neck_hidden_sizes = []
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
             default_config_type="dinov2",

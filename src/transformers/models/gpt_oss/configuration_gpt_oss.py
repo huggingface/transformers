@@ -52,14 +52,7 @@ class GptOssConfig(PreTrainedConfig):
         initializer_range: float | None = 0.02,
         max_position_embeddings: int | None = 131072,
         rms_norm_eps: float | None = 1e-5,
-        rope_parameters: RopeParameters | None = {
-            "rope_type": "yarn",
-            "factor": 32.0,
-            "beta_fast": 32.0,
-            "beta_slow": 1.0,
-            "truncate": False,
-            "original_max_position_embeddings": 4096,
-        },
+        rope_parameters: RopeParameters | None = None,
         attention_dropout: float | None = 0.0,
         num_experts_per_tok: int | None = 4,
         router_aux_loss_coef: float | None = 0.9,
@@ -71,6 +64,8 @@ class GptOssConfig(PreTrainedConfig):
         eos_token_id: int | None = None,
         **kwargs,
     ):
+        if rope_parameters is None:
+            rope_parameters = {}
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size

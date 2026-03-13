@@ -101,7 +101,7 @@ class LayoutXLMConfig(PreTrainedConfig):
         max_rel_2d_pos=256,
         rel_2d_pos_bins=64,
         convert_sync_batchnorm=True,
-        image_feature_pool_shape=[7, 7, 256],
+        image_feature_pool_shape=None,
         coordinate_size=128,
         shape_size=128,
         has_relative_attention_bias=True,
@@ -110,6 +110,8 @@ class LayoutXLMConfig(PreTrainedConfig):
         detectron2_config_args=None,
         **kwargs,
     ):
+        if image_feature_pool_shape is None:
+            image_feature_pool_shape = []
         super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size

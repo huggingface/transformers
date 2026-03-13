@@ -70,10 +70,10 @@ class FocalNetConfig(BackboneConfigMixin, PreTrainedConfig):
         num_channels=3,
         embed_dim=96,
         use_conv_embed=False,
-        hidden_sizes=[192, 384, 768, 768],
-        depths=[2, 2, 6, 2],
-        focal_levels=[2, 2, 2, 2],
-        focal_windows=[3, 3, 3, 3],
+        hidden_sizes=None,
+        depths=None,
+        focal_levels=None,
+        focal_windows=None,
         hidden_act="gelu",
         mlp_ratio=4.0,
         hidden_dropout_prob=0.0,
@@ -90,6 +90,14 @@ class FocalNetConfig(BackboneConfigMixin, PreTrainedConfig):
         out_indices=None,
         **kwargs,
     ):
+        if hidden_sizes is None:
+            hidden_sizes = []
+        if depths is None:
+            depths = []
+        if focal_levels is None:
+            focal_levels = []
+        if focal_windows is None:
+            focal_windows = []
         super().__init__(**kwargs)
 
         self.image_size = image_size

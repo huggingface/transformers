@@ -176,7 +176,7 @@ class CLIPSegConfig(PreTrainedConfig):
         vision_config=None,
         projection_dim=512,
         logit_scale_init_value=2.6592,
-        extract_layers=[3, 6, 9],
+        extract_layers=None,
         reduce_dim=64,
         decoder_num_attention_heads=4,
         decoder_attention_dropout=0.0,
@@ -189,6 +189,8 @@ class CLIPSegConfig(PreTrainedConfig):
         # If `_config_dict` exist, we use them for the backward compatibility.
         # We pop out these 2 attributes before calling `super().__init__` to avoid them being saved (which causes a lot
         # of confusion!).
+        if extract_layers is None:
+            extract_layers = []
         text_config_dict = kwargs.pop("text_config_dict", None)
         vision_config_dict = kwargs.pop("vision_config_dict", None)
 

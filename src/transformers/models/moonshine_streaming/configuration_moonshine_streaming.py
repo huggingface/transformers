@@ -58,10 +58,12 @@ class MoonshineStreamingEncoderConfig(PreTrainedConfig):
         attention_bias: bool | None = False,
         sample_rate: int = 16000,
         frame_ms: float = 5.0,
-        sliding_windows: list[tuple[int, int]] = [(16, 4), (16, 4), (16, 0), (16, 0), (16, 4), (16, 4)],
+        sliding_windows: list[tuple[int, int]] = None,
         head_dim: int | None = None,
         **kwargs,
     ):
+        if sliding_windows is None:
+            sliding_windows = []
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
@@ -116,11 +118,7 @@ class MoonshineStreamingConfig(PreTrainedConfig):
         pad_token_id: int = 0,
         bos_token_id: int = 1,
         eos_token_id: int = 2,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = {
-            "rope_type": "default",
-            "rope_theta": 10000.0,
-            "partial_rotary_factor": 0.8,
-        },
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
         decoder_start_token_id: int | None = None,
@@ -130,6 +128,8 @@ class MoonshineStreamingConfig(PreTrainedConfig):
         is_encoder_decoder: bool = True,
         **kwargs,
     ):
+        if rope_parameters is None:
+            rope_parameters = {}
         if isinstance(encoder_config, dict):
             encoder_config["model_type"] = encoder_config.get("model_type", "moonshine_streaming_encoder")
             encoder_config = CONFIG_MAPPING[encoder_config["model_type"]](**encoder_config)

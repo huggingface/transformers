@@ -106,10 +106,12 @@ class Mask2FormerConfig(PreTrainedConfig):
         init_std: float = 0.02,
         init_xavier_std: float = 1.0,
         use_auxiliary_loss: bool = True,
-        feature_strides: list[int] = [4, 8, 16, 32],
+        feature_strides: list[int] = None,
         output_auxiliary_logits: bool | None = None,
         **kwargs,
     ):
+        if feature_strides is None:
+            feature_strides = []
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
             default_config_type="swin",

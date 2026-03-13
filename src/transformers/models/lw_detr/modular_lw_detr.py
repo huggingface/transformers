@@ -102,7 +102,7 @@ class LwDetrViTConfig(VitDetConfig):
         patch_size=16,
         num_channels=3,
         qkv_bias=True,
-        window_block_indices=[],
+        window_block_indices=None,
         use_absolute_position_embeddings=True,
         out_features=None,
         out_indices=None,
@@ -110,6 +110,8 @@ class LwDetrViTConfig(VitDetConfig):
         num_windows=16,
         **kwargs,
     ):
+        if window_block_indices is None:
+            window_block_indices = []
         super().__init__(
             hidden_size=hidden_size,
             num_hidden_layers=num_hidden_layers,
@@ -206,7 +208,7 @@ class LwDetrConfig(PreTrainedConfig):
         # backbone
         backbone_config=None,
         # projector
-        projector_scale_factors: list[float] = [],
+        projector_scale_factors: list[float] = None,
         hidden_expansion=0.5,
         c2f_num_blocks=3,
         activation_function="silu",
@@ -241,6 +243,8 @@ class LwDetrConfig(PreTrainedConfig):
         auxiliary_loss=True,
         **kwargs,
     ):
+        if projector_scale_factors is None:
+            projector_scale_factors = []
         self.batch_norm_eps = batch_norm_eps
 
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(

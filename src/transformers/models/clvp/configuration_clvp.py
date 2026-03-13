@@ -200,10 +200,12 @@ class ClvpDecoderConfig(PreTrainedConfig):
         feature_size=80,
         use_attention_bias=True,
         initializer_factor=1.0,
-        decoder_fixing_codes=[83, 45, 45, 248],
+        decoder_fixing_codes=None,
         add_cross_attention=False,
         **kwargs,
     ):
+        if decoder_fixing_codes is None:
+            decoder_fixing_codes = []
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.max_text_tokens = max_text_tokens

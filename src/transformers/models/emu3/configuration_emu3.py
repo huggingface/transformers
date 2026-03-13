@@ -63,14 +63,18 @@ class Emu3VQVAEConfig(PreTrainedConfig):
         out_channels: int = 3,
         temporal_downsample_factor: int = 4,
         base_channels: int = 256,
-        channel_multiplier: list[int] = [1, 2, 2, 4],
+        channel_multiplier: list[int] = None,
         num_res_blocks: int = 2,
-        attn_resolutions: list[int] = [3],
+        attn_resolutions: list[int] = None,
         hidden_size: int = 1024,
         num_attention_heads: int = 1,
         attention_dropout: float = 0.0,
         **kwargs,
     ):
+        if channel_multiplier is None:
+            channel_multiplier = []
+        if attn_resolutions is None:
+            attn_resolutions = []
         super().__init__(**kwargs)
 
         self.codebook_size = codebook_size

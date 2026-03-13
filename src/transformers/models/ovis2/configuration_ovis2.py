@@ -101,12 +101,14 @@ class Ovis2Config(PreTrainedConfig):
         vision_config=None,
         text_config=None,
         image_token_id=151665,
-        visual_indicator_token_ids=[151666, 151667, 151668, 151669, 151670],
+        visual_indicator_token_ids=None,
         vocab_size=151643,
         hidden_size=1536,
         tie_word_embeddings=True,
         **kwargs,
     ):
+        if visual_indicator_token_ids is None:
+            visual_indicator_token_ids = []
         if isinstance(vision_config, dict):
             self.vision_config = Ovis2VisionConfig(**vision_config)
         elif isinstance(vision_config, Ovis2VisionConfig):

@@ -58,8 +58,8 @@ class BitConfig(BackboneConfigMixin, PreTrainedConfig):
         self,
         num_channels=3,
         embedding_size=64,
-        hidden_sizes=[256, 512, 1024, 2048],
-        depths=[3, 4, 6, 3],
+        hidden_sizes=None,
+        depths=None,
         layer_type="preactivation",
         hidden_act="relu",
         global_padding=None,
@@ -72,6 +72,10 @@ class BitConfig(BackboneConfigMixin, PreTrainedConfig):
         out_indices=None,
         **kwargs,
     ):
+        if hidden_sizes is None:
+            hidden_sizes = []
+        if depths is None:
+            depths = []
         super().__init__(**kwargs)
         if layer_type not in self.layer_types:
             raise ValueError(f"layer_type={layer_type} is not one of {','.join(self.layer_types)}")

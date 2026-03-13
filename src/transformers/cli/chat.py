@@ -276,7 +276,7 @@ class Chat:
     def check_health(url):
         health_url = urljoin(url + "/", "health")
         try:
-            output = httpx.get(health_url)
+            output = httpx.get(health_url, timeout=10.0)
             if output.status_code != 200:
                 raise ValueError(
                     f"The server running on {url} returned status code {output.status_code} on health check (/health)."

@@ -168,9 +168,9 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
         pad_token="[PAD]",
         cls_token="[CLS]",
         mask_token="[MASK]",
-        cls_token_box=[0, 0, 0, 0],
-        sep_token_box=[1000, 1000, 1000, 1000],
-        pad_token_box=[0, 0, 0, 0],
+        cls_token_box=None,
+        sep_token_box=None,
+        pad_token_box=None,
         pad_token_label=-100,
         only_label_first_subword=True,
         tokenize_chinese_chars=True,
@@ -178,6 +178,12 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
         model_max_length=512,
         **kwargs,
     ):
+        if cls_token_box is None:
+            cls_token_box = []
+        if sep_token_box is None:
+            sep_token_box = []
+        if pad_token_box is None:
+            pad_token_box = []
         self.do_lower_case = do_lower_case
 
         if vocab is not None:

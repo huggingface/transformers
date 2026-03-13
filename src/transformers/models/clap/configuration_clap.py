@@ -138,12 +138,12 @@ class ClapAudioConfig(PreTrainedConfig):
         spec_size=256,
         hidden_act="gelu",
         patch_size=4,
-        patch_stride=[4, 4],
+        patch_stride=None,
         num_classes=527,
         hidden_size=768,
         projection_dim=512,
-        depths=[2, 2, 6, 2],
-        num_attention_heads=[4, 8, 16, 32],
+        depths=None,
+        num_attention_heads=None,
         enable_fusion=False,
         hidden_dropout_prob=0.1,
         fusion_type=None,
@@ -162,6 +162,12 @@ class ClapAudioConfig(PreTrainedConfig):
         initializer_factor=1.0,
         **kwargs,
     ):
+        if patch_stride is None:
+            patch_stride = []
+        if depths is None:
+            depths = []
+        if num_attention_heads is None:
+            num_attention_heads = []
         super().__init__(**kwargs)
         self.window_size = window_size
         self.num_mel_bins = num_mel_bins

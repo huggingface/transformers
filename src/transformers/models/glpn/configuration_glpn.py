@@ -68,13 +68,13 @@ class GLPNConfig(PreTrainedConfig):
         self,
         num_channels=3,
         num_encoder_blocks=4,
-        depths=[2, 2, 2, 2],
-        sr_ratios=[8, 4, 2, 1],
-        hidden_sizes=[32, 64, 160, 256],
-        patch_sizes=[7, 3, 3, 3],
-        strides=[4, 2, 2, 2],
-        num_attention_heads=[1, 2, 5, 8],
-        mlp_ratios=[4, 4, 4, 4],
+        depths=None,
+        sr_ratios=None,
+        hidden_sizes=None,
+        patch_sizes=None,
+        strides=None,
+        num_attention_heads=None,
+        mlp_ratios=None,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
@@ -86,6 +86,20 @@ class GLPNConfig(PreTrainedConfig):
         head_in_index=-1,
         **kwargs,
     ):
+        if depths is None:
+            depths = []
+        if sr_ratios is None:
+            sr_ratios = []
+        if hidden_sizes is None:
+            hidden_sizes = []
+        if patch_sizes is None:
+            patch_sizes = []
+        if strides is None:
+            strides = []
+        if num_attention_heads is None:
+            num_attention_heads = []
+        if mlp_ratios is None:
+            mlp_ratios = []
         super().__init__(**kwargs)
 
         self.num_channels = num_channels

@@ -80,7 +80,7 @@ class FSMTConfig(PreTrainedConfig):
     # update the defaults from config file
     def __init__(
         self,
-        langs=["en", "de"],
+        langs=None,
         src_vocab_size=42024,
         tgt_vocab_size=42024,
         activation_function="relu",
@@ -113,6 +113,8 @@ class FSMTConfig(PreTrainedConfig):
         forced_eos_token_id=2,
         **common_kwargs,
     ):
+        if langs is None:
+            langs = []
         self.langs = langs
         self.src_vocab_size = src_vocab_size
         self.tgt_vocab_size = tgt_vocab_size

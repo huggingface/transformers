@@ -59,10 +59,12 @@ class GotOcr2VisionConfig(PreTrainedConfig):
         use_abs_pos=True,
         use_rel_pos=True,
         window_size=14,
-        global_attn_indexes=[2, 5, 8, 11],
+        global_attn_indexes=None,
         mlp_dim=3072,
         **kwargs,
     ):
+        if global_attn_indexes is None:
+            global_attn_indexes = []
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size

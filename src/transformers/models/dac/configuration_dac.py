@@ -56,7 +56,7 @@ class DacConfig(PreTrainedConfig):
     def __init__(
         self,
         encoder_hidden_size=64,
-        downsampling_ratios=[2, 4, 8, 8],
+        downsampling_ratios=None,
         decoder_hidden_size=1536,
         n_codebooks=9,
         codebook_size=1024,
@@ -67,6 +67,8 @@ class DacConfig(PreTrainedConfig):
         sampling_rate=16000,
         **kwargs,
     ):
+        if downsampling_ratios is None:
+            downsampling_ratios = []
         self.encoder_hidden_size = encoder_hidden_size
         self.downsampling_ratios = downsampling_ratios
         self.decoder_hidden_size = decoder_hidden_size

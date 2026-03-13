@@ -69,28 +69,64 @@ class CvtConfig(PreTrainedConfig):
     def __init__(
         self,
         num_channels=3,
-        patch_sizes=[7, 3, 3],
-        patch_stride=[4, 2, 2],
-        patch_padding=[2, 1, 1],
-        embed_dim=[64, 192, 384],
-        num_heads=[1, 3, 6],
-        depth=[1, 2, 10],
-        mlp_ratio=[4.0, 4.0, 4.0],
-        attention_drop_rate=[0.0, 0.0, 0.0],
-        drop_rate=[0.0, 0.0, 0.0],
-        drop_path_rate=[0.0, 0.0, 0.1],
-        qkv_bias=[True, True, True],
-        cls_token=[False, False, True],
-        qkv_projection_method=["dw_bn", "dw_bn", "dw_bn"],
-        kernel_qkv=[3, 3, 3],
-        padding_kv=[1, 1, 1],
-        stride_kv=[2, 2, 2],
-        padding_q=[1, 1, 1],
-        stride_q=[1, 1, 1],
+        patch_sizes=None,
+        patch_stride=None,
+        patch_padding=None,
+        embed_dim=None,
+        num_heads=None,
+        depth=None,
+        mlp_ratio=None,
+        attention_drop_rate=None,
+        drop_rate=None,
+        drop_path_rate=None,
+        qkv_bias=None,
+        cls_token=None,
+        qkv_projection_method=None,
+        kernel_qkv=None,
+        padding_kv=None,
+        stride_kv=None,
+        padding_q=None,
+        stride_q=None,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         **kwargs,
     ):
+        if patch_sizes is None:
+            patch_sizes = []
+        if patch_stride is None:
+            patch_stride = []
+        if patch_padding is None:
+            patch_padding = []
+        if embed_dim is None:
+            embed_dim = []
+        if num_heads is None:
+            num_heads = []
+        if depth is None:
+            depth = []
+        if mlp_ratio is None:
+            mlp_ratio = []
+        if attention_drop_rate is None:
+            attention_drop_rate = []
+        if drop_rate is None:
+            drop_rate = []
+        if drop_path_rate is None:
+            drop_path_rate = []
+        if qkv_bias is None:
+            qkv_bias = []
+        if cls_token is None:
+            cls_token = []
+        if qkv_projection_method is None:
+            qkv_projection_method = []
+        if kernel_qkv is None:
+            kernel_qkv = []
+        if padding_kv is None:
+            padding_kv = []
+        if stride_kv is None:
+            stride_kv = []
+        if padding_q is None:
+            padding_q = []
+        if stride_q is None:
+            stride_q = []
         super().__init__(**kwargs)
         self.num_channels = num_channels
         self.patch_sizes = patch_sizes

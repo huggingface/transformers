@@ -68,12 +68,12 @@ class HiggsAudioV2TokenizerConfig(XcodecConfig):
 
     def __init__(
         self,
-        target_bandwidths=[0.5, 1, 1.5, 2],
+        target_bandwidths=None,
         sample_rate=24000,
         kernel_size=3,
-        channel_ratios=[1, 1],
-        strides=[1, 1],
-        block_dilations=[1, 1],
+        channel_ratios=None,
+        strides=None,
+        block_dilations=None,
         unit_kernel_size=3,
         codebook_size=1024,
         codebook_dim=64,
@@ -84,6 +84,14 @@ class HiggsAudioV2TokenizerConfig(XcodecConfig):
         downsample_factor=320,
         **kwargs,
     ):
+        if target_bandwidths is None:
+            target_bandwidths = []
+        if channel_ratios is None:
+            channel_ratios = []
+        if strides is None:
+            strides = []
+        if block_dilations is None:
+            block_dilations = []
         super().__init__(
             target_bandwidths=target_bandwidths,
             sample_rate=sample_rate,

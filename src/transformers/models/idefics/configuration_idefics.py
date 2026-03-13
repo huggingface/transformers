@@ -170,15 +170,19 @@ class IdeficsConfig(PreTrainedConfig):
         cross_layer_interval=1,
         qk_layer_norms=False,
         freeze_text_layers=True,
-        freeze_text_module_exceptions=[],
+        freeze_text_module_exceptions=None,
         freeze_lm_head=False,
         freeze_vision_layers=True,
-        freeze_vision_module_exceptions=[],
+        freeze_vision_module_exceptions=None,
         use_resampler=False,
         vision_config=None,
         perceiver_config=None,
         **kwargs,
     ):
+        if freeze_text_module_exceptions is None:
+            freeze_text_module_exceptions = []
+        if freeze_vision_module_exceptions is None:
+            freeze_vision_module_exceptions = []
         self.vocab_size = vocab_size
         self.additional_vocab_size = additional_vocab_size
         self.hidden_size = hidden_size

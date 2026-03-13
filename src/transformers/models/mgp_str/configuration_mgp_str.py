@@ -59,7 +59,7 @@ class MgpstrConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        image_size=[32, 128],
+        image_size=None,
         patch_size=4,
         num_channels=3,
         max_token_length=27,
@@ -80,6 +80,8 @@ class MgpstrConfig(PreTrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
+        if image_size is None:
+            image_size = []
         super().__init__(**kwargs)
 
         self.image_size = image_size

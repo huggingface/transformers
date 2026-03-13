@@ -54,8 +54,8 @@ class MobileViTConfig(PreTrainedConfig):
         num_channels=3,
         image_size=256,
         patch_size=2,
-        hidden_sizes=[144, 192, 240],
-        neck_hidden_sizes=[16, 32, 64, 96, 128, 160, 640],
+        hidden_sizes=None,
+        neck_hidden_sizes=None,
         num_attention_heads=4,
         mlp_ratio=2.0,
         expand_ratio=4.0,
@@ -69,11 +69,17 @@ class MobileViTConfig(PreTrainedConfig):
         layer_norm_eps=1e-5,
         qkv_bias=True,
         aspp_out_channels=256,
-        atrous_rates=[6, 12, 18],
+        atrous_rates=None,
         aspp_dropout_prob=0.1,
         semantic_loss_ignore_index=255,
         **kwargs,
     ):
+        if hidden_sizes is None:
+            hidden_sizes = []
+        if neck_hidden_sizes is None:
+            neck_hidden_sizes = []
+        if atrous_rates is None:
+            atrous_rates = []
         super().__init__(**kwargs)
 
         self.num_channels = num_channels

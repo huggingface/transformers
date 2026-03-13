@@ -90,9 +90,11 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         num_chroma=12,
         padding_value=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
-        stem_indices=[3, 2],
+        stem_indices=None,
         **kwargs,
     ):
+        if stem_indices is None:
+            stem_indices = []
         super().__init__(
             feature_size=feature_size,
             sampling_rate=sampling_rate,

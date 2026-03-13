@@ -609,9 +609,11 @@ class SquadExample:
         answer_text,
         start_position_character,
         title,
-        answers=[],
+        answers=None,
         is_impossible=False,
     ):
+        if answers is None:
+            answers = []
         self.qas_id = qas_id
         self.question_text = question_text
         self.context_text = context_text
