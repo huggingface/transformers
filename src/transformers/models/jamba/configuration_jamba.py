@@ -22,7 +22,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="inceptionai/Jais-2-8B-Chat")
+@auto_docstring(checkpoint="ai21labs/Jamba-v0.1")
 class JambaConfig(PreTrainedConfig):
     r"""
     expert_layer_period (`int`, *optional*, defaults to 2):

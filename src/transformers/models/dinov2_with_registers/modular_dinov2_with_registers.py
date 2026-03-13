@@ -222,10 +222,6 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         return embeddings
 
 
-class Dinov2WithRegistersEncoder(Dinov2Encoder):
-    pass
-
-
 class Dinov2WithRegistersPreTrainedModel(Dinov2PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
@@ -244,6 +240,10 @@ class Dinov2WithRegistersPreTrainedModel(Dinov2PreTrainedModel):
             init.zeros_(module.register_tokens)
         elif isinstance(module, Dinov2WithRegistersLayerScale):  # noqa: F821
             init.constant_(module.lambda1, self.config.layerscale_value)
+
+
+class Dinov2WithRegistersEncoder(Dinov2Encoder):
+    pass
 
 
 class Dinov2WithRegistersModel(Dinov2Model):
@@ -306,8 +306,7 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        output_hidden_states: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -335,11 +334,10 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
 
         embedding_output = self.embeddings(pixel_values)
-        output: BaseModelOutput = self.encoder(embedding_output, output_hidden_states=True)
+        output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
         hidden_states = output.hidden_states
 
         feature_maps = []
@@ -359,7 +357,8 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
 
         return BackboneOutput(
             feature_maps=tuple(feature_maps),
-            hidden_states=hidden_states if output_hidden_states else None,
+            hidden_states=hidden_states,
+            attentions=output.attentions,
         )
 
 
