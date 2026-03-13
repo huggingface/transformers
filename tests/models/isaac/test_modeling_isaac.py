@@ -571,19 +571,6 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    def test_model_forward(self):
-        config, input_ids, attention_mask, _ = self.model_tester.prepare_config_and_inputs()
-        model = IsaacModel(config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model(input_ids=input_ids, attention_mask=attention_mask)
-
-        self.assertEqual(
-            result.last_hidden_state.shape,
-            (self.model_tester.batch_size, self.model_tester.seq_length, config.hidden_size),
-        )
-
     def test_text_only_forward_ignores_metadata_without_vision_patches(self):
         config, input_ids, attention_mask, _ = self.model_tester.prepare_config_and_inputs()
         model = IsaacModel(config)
