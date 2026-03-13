@@ -77,6 +77,8 @@ class VideomtPatchEmbeddings(nn.Module):
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
                 f" Expected {self.num_channels} but got {num_channels}."
             )
+
+        pixel_values = pixel_values.to(dtype=self.projection.weight.dtype)
         embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return embeddings
 
@@ -94,7 +96,6 @@ class VideomtEmbeddings(nn.Module):
 
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
-
         self.patch_embeddings = VideomtPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -114,8 +115,7 @@ class VideomtEmbeddings(nn.Module):
             bool_masked_pos = bool_masked_pos.reshape(bool_masked_pos.shape[0], -1)
 
         batch_size = pixel_values.shape[0]
-        target_dtype = self.patch_embeddings.projection.weight.dtype
-        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+        embeddings = self.patch_embeddings(pixel_values)
 
         if bool_masked_pos is not None:
             mask = bool_masked_pos.to(device=embeddings.device, dtype=torch.bool).unsqueeze(-1)

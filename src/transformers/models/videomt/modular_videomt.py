@@ -28,6 +28,7 @@ from ..eomt.modeling_eomt import (
     EomtLayerNorm2d,
     EomtLayerScale,
     EomtMLP,
+    EomtPatchEmbeddings,
     EomtPreTrainedModel,
     EomtScaleBlock,
     EomtScaleLayer,
@@ -39,9 +40,24 @@ class VideomtConfig(EomtConfig):
     model_type = "videomt"
 
 
+class VideomtPatchEmbeddings(EomtPatchEmbeddings):
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        num_channels = pixel_values.shape[1]
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+                f" Expected {self.num_channels} but got {num_channels}."
+            )
+
+        pixel_values = pixel_values.to(dtype=self.projection.weight.dtype)
+        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
+        return embeddings
+
+
 class VideomtEmbeddings(EomtEmbeddings):
     def __init__(self, config: VideomtConfig):
         super().__init__(config)
+        self.patch_embeddings = VideomtPatchEmbeddings(config)
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
@@ -55,8 +71,7 @@ class VideomtEmbeddings(EomtEmbeddings):
             bool_masked_pos = bool_masked_pos.reshape(bool_masked_pos.shape[0], -1)
 
         batch_size = pixel_values.shape[0]
-        target_dtype = self.patch_embeddings.projection.weight.dtype
-        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+        embeddings = self.patch_embeddings(pixel_values)
 
         if bool_masked_pos is not None:
             mask = bool_masked_pos.to(device=embeddings.device, dtype=torch.bool).unsqueeze(-1)
