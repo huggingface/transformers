@@ -19,6 +19,14 @@ class PPChart2TableProcessor(ProcessorMixin):
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        self.message_start_token = "<|im_start|>"
+        self.message_end_token = "<|im_end|>"
+        self.img_start_token = "<img>"
+        self.img_end_token = "</img>"
+        self.img_pad_token = "<imgpad>"
+        self.image_token = "<imgpad>"  # keep the above for BC, but we need to call it `image_token`
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.system_query = "system\nYou should follow the instructions carefully and explain your answers in detail."
 
     def __call__(
         self,
@@ -30,18 +38,31 @@ class PPChart2TableProcessor(ProcessorMixin):
             image_inputs = self.image_processor(images=images, return_tensors="pt")
         else:
             image_inputs = {}
-        img_cnt = len(image_inputs)
+        image_count = len(image_inputs)
         _, _, height, _ = image_inputs["pixel_values"].shape
         num_patches = height // self.image_processor.patch_size // self.image_processor.merge_size
-        prompt = (
-            "<|im_start|>system\n"
-            "You should follow the instructions carefully and explain your answers in detail.<|im_end|><|im_start|>user\n"
-            "<img>" + "<imgpad>" * (num_patches * num_patches) + "</img>\n"
-            "Chart to table<|im_end|><|im_start|>assistant\n"
-        )
-        input_ids = torch.tensor(self.tokenizer([prompt]).input_ids)
-        input_ids = input_ids.repeat(img_cnt, 1)
-        input_ids = {"input_ids": input_ids}
+
+        input_ids = {"input_ids": None}
+        if text == None:
+            query = "Chart to table"
+            prompt = (
+                self.message_start_token
+                + self.system_query
+                + self.message_end_token
+                + self.message_start_token
+                + "user\n"
+                + self.img_start_token
+                + self.img_pad_token * num_patches * num_patches
+                + self.img_end_token
+                + "\n"
+                + query
+                + self.message_end_token
+                + self.message_start_token
+                + "assistant\n"
+            )
+            input_ids = torch.tensor(self.tokenizer([prompt]).input_ids)
+            input_ids = input_ids.repeat(image_count, 1)
+            input_ids = {"input_ids": input_ids}
         return BatchFeature(data={**input_ids, **image_inputs})
 
     def postprocess(self, model_pred, **kwargs):
