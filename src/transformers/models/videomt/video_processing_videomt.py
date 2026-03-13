@@ -13,6 +13,8 @@
 # limitations under the License.
 """Video processor class for Videomt."""
 
+from collections.abc import Collection
+
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
 from ...utils import is_torch_available, requires_backends
 from ...video_processing_utils import BaseVideoProcessor
@@ -23,8 +25,32 @@ if is_torch_available():
     import torch.nn.functional as F
 
 
-def check_segment_validity(mask_labels, mask_probs, query_idx, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
-    """Checks whether a predicted query produces a valid panoptic segment."""
+def check_segment_validity(
+    mask_labels: "torch.Tensor",
+    mask_probs: "torch.Tensor",
+    query_idx: int,
+    mask_threshold: float = 0.5,
+    overlap_mask_area_threshold: float = 0.8,
+) -> tuple[bool, "torch.Tensor"]:
+    """
+    Checks whether a predicted query produces a valid panoptic segment.
+
+    Args:
+        mask_labels (`torch.Tensor`):
+            Tensor of shape `(height, width)` containing the winning query index for each pixel.
+        mask_probs (`torch.Tensor`):
+            Tensor of shape `(num_queries, height, width)` containing per-query mask probabilities.
+        query_idx (`int`):
+            Index of the query to validate.
+        mask_threshold (`float`, *optional*, defaults to 0.5):
+            Threshold used to binarize the query mask probabilities.
+        overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
+            Minimum overlap ratio required between the assigned query area and the original query mask area.
+
+    Returns:
+        `tuple[bool, torch.Tensor]`: A tuple containing whether the segment is valid and the final boolean mask for
+        that segment.
+    """
     query_mask = mask_labels == query_idx
     query_mask_area = query_mask.sum()
 
@@ -45,15 +71,37 @@ def check_segment_validity(mask_labels, mask_probs, query_idx, mask_threshold=0.
 
 
 def compute_segments(
-    mask_probs,
-    pred_scores,
-    pred_labels,
-    stuff_classes,
+    mask_probs: "torch.Tensor",
+    pred_scores: "torch.Tensor",
+    pred_labels: "torch.Tensor",
+    stuff_classes: Collection[int] | None,
     mask_threshold: float = 0.5,
     overlap_mask_area_threshold: float = 0.8,
     target_size: tuple[int, int] | None = None,
-):
-    """Converts per-query mask predictions into a panoptic segmentation map."""
+) -> tuple["torch.Tensor", list[dict[str, int | float]]]:
+    """
+    Converts per-query mask predictions into a panoptic segmentation map.
+
+    Args:
+        mask_probs (`torch.Tensor`):
+            Tensor of shape `(num_queries, height, width)` containing per-query mask logits.
+        pred_scores (`torch.Tensor`):
+            Tensor of shape `(num_queries,)` containing the confidence score of each predicted query.
+        pred_labels (`torch.Tensor`):
+            Tensor of shape `(num_queries,)` containing the predicted class ID of each query.
+        stuff_classes (`Collection[int]`, *optional*):
+            Collection of class IDs that should be fused across connected regions.
+        mask_threshold (`float`, *optional*, defaults to 0.5):
+            Threshold used to binarize the query mask probabilities.
+        overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
+            Minimum overlap ratio required to keep a predicted segment.
+        target_size (`tuple[int, int]`, *optional*):
+            Final `(height, width)` of the segmentation map. If unset, uses the spatial size of `mask_probs`.
+
+    Returns:
+        `tuple[torch.Tensor, list[dict[str, int | float]]]`: The panoptic segmentation map and the metadata for each
+        predicted segment.
+    """
     height = mask_probs.shape[1] if target_size is None else target_size[0]
     width = mask_probs.shape[2] if target_size is None else target_size[1]
 
