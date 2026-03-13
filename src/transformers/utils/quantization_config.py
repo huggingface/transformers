@@ -1462,10 +1462,10 @@ class TorchAoConfig(QuantizationConfigMixin):
         modules_to_not_convert (`list`, *optional*, default to `None`):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
-        include_input_output_embeddings (`bool`, default to `False`):
+        include_input_output_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to include embedding in quantization or not, input embedding will be removed from
             the module_not_to_convert list as well if this flag is set.
-        untie_embedding_weights (`bool`, default to `False`):
+        untie_embedding_weights (`bool`, *optional*, defaults to `False`):
             Whether to untie the weights when we are quantizing input embedding weights that is tied
             to other weights.
 
