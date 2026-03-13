@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
 from collections.abc import Callable
 
 import torch
@@ -24,6 +23,7 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
     BaseModelOutput,
 )
+from ...modeling_pos_embed_utils import encode_sinusoidal_position_embedding
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import (
@@ -200,20 +200,6 @@ class ConditionalDetrModelOutput(DetrModelOutput):
     reference_points: tuple[torch.FloatTensor] | None = None
 
 
-# function to generate sine positional embedding for 2d coordinates
-def gen_sine_position_embeddings(pos_tensor, d_model):
-    scale = 2 * math.pi
-    dim = d_model // 2
-    dim_t = torch.arange(dim, dtype=torch.float32, device=pos_tensor.device)
-    dim_t = 10000 ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / dim)
-    x_embed = pos_tensor[:, :, 0] * scale
-    y_embed = pos_tensor[:, :, 1] * scale
-    pos_x = x_embed[:, :, None] / dim_t
-    pos_y = y_embed[:, :, None] / dim_t
-    pos_x = torch.stack((pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3).flatten(2)
-    pos_y = torch.stack((pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3).flatten(2)
-    pos = torch.cat((pos_y, pos_x), dim=2)
-    return pos.to(pos_tensor.dtype)
 
 
 class ConditionalDetrObjectDetectionOutput(DetrObjectDetectionOutput):
@@ -658,7 +644,7 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
         reference_points = reference_points_before_sigmoid.sigmoid().transpose(0, 1)
         obj_center = reference_points[..., :2].transpose(0, 1)
         # get sine embedding for the query vector
-        query_sine_embed_before_transformation = gen_sine_position_embeddings(obj_center, self.config.d_model)
+        query_sine_embed_before_transformation = encode_sinusoidal_position_embedding(obj_center, num_pos_feats=self.config.d_model // 2)
 
         for idx, decoder_layer in enumerate(self.layers):
             if self.training:

@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 _MODEL_TO_CONVERSION_PATTERN = {
     # ViT-style vision models (old HuggingFace checkpoint format → new modular format)
     "deit": "vit",
+    "vit_mae": "vit",
     # Mixtral-style MoE
     "mixtral": "mixtral",
     "minimax": "mixtral",
@@ -97,6 +98,25 @@ def _build_checkpoint_conversion_mapping():
             # LayerNorm renames
             WeightRenaming("layer_norm_1", "layernorm_before"),
             WeightRenaming("layer_norm_2", "layernorm_after"),
+        ],
+        "swin": [
+            # Attention projection renames (SwinSelfAttention.{query,key,value} → SwinAttention.{q,k,v}_proj)
+            WeightRenaming("attention.self.query", "attention.q_proj"),
+            WeightRenaming("attention.self.key", "attention.k_proj"),
+            WeightRenaming("attention.self.value", "attention.v_proj"),
+            # Relative position bias: SwinSelfAttention → dedicated SwinRelativePositionBias submodule
+            WeightRenaming(
+                "attention.self.relative_position_bias_table",
+                "attention.relative_position_bias.relative_position_bias_table",
+            ),
+            WeightRenaming(
+                "attention.self.relative_position_index", "attention.relative_position_bias.relative_position_index"
+            ),
+            # Output projection rename (SwinSelfOutput.dense → SwinAttention.o_proj)
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            # MLP renames (SwinIntermediate.dense → SwinMLP.fc1, SwinOutput.dense → SwinMLP.fc2)
+            WeightRenaming("intermediate.dense", "mlp.fc1"),
+            WeightRenaming("output.dense", "mlp.fc2"),
         ],
         "timesfm2_5": [
             WeightRenaming("ff0", "fc1"),

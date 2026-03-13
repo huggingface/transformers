@@ -25,6 +25,7 @@ from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
+from ...modeling_pos_embed_utils import encode_sinusoidal_position_embedding
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
@@ -32,7 +33,6 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
 from ..convnext.modeling_convnext import ConvNextLayerNorm
-from ..dab_detr.modeling_dab_detr import gen_sine_position_embeddings
 from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrDecoderOutput,
     DeformableDetrForObjectDetection,
@@ -996,7 +996,9 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
         reference_points_inputs = obj_center[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
 
         # batch_size, num_queries, d_model * 2
-        query_sine_embed = gen_sine_position_embeddings(reference_points_inputs[:, :, 0, :], self.config.d_model)
+        query_sine_embed = encode_sinusoidal_position_embedding(
+            reference_points_inputs[:, :, 0, :], num_pos_feats=self.config.d_model // 2
+        )
 
         # batch_size, num_queries, d_model
         query_pos = self.ref_point_head(query_sine_embed)

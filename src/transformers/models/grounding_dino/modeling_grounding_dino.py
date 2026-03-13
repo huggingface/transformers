@@ -26,6 +26,7 @@ from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
 from ...file_utils import ModelOutput
 from ...integrations import use_kernel_forward_from_hub
+from ...modeling_pos_embed_utils import encode_sinusoidal_position_embedding
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging, torch_compilable_check
 from ..auto import AutoModel
@@ -1001,42 +1002,6 @@ class GroundingDinoDeformableLayer(nn.Module):
         return hidden_states, attn_weights
 
 
-# Based on https://github.com/IDEA-Research/GroundingDINO/blob/2b62f419c292ca9c518daae55512fabc3fead4a4/groundingdino/models/GroundingDINO/utils.py#L24
-def get_sine_pos_embed(
-    pos_tensor: torch.Tensor, num_pos_feats: int = 128, temperature: int = 10000, exchange_xy: bool = True
-) -> Tensor:
-    """
-    Generate sine position embeddings from a position tensor.
-
-    Args:
-        pos_tensor (torch.Tensor):
-            Tensor containing positions. Shape: [..., n].
-        num_pos_feats (`int`, *optional*, defaults to 128):
-            Projected shape for each float in the tensor.
-        temperature (`int`, *optional*, defaults to 10000):
-            Temperature in the sine/cosine function.
-        exchange_xy (`bool`, *optional*, defaults to `True`):
-            Exchange pos x and pos y. For example, input tensor is [x,y], the results will be [pos(y), pos(x)].
-
-    Returns:
-        position_embeddings (torch.Tensor): shape: [..., n * hidden_size].
-    """
-    scale = 2 * math.pi
-    dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=pos_tensor.device)
-    dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
-
-    def sine_func(x: torch.Tensor):
-        sin_x = x * scale / dim_t
-        sin_x = torch.stack((sin_x[..., 0::2].sin(), sin_x[..., 1::2].cos()), dim=3).flatten(2)
-        return sin_x
-
-    pos_tensor = pos_tensor.split([1] * pos_tensor.shape[-1], dim=-1)
-    position_embeddings = [sine_func(x) for x in pos_tensor]
-    if exchange_xy:
-        position_embeddings[0], position_embeddings[1] = position_embeddings[1], position_embeddings[0]
-    position_embeddings = torch.cat(position_embeddings, dim=-1)
-    return position_embeddings
-
 
 class GroundingDinoEncoderLayer(nn.Module):
     def __init__(self, config) -> None:
@@ -1060,11 +1025,11 @@ class GroundingDinoEncoderLayer(nn.Module):
             text_position_embedding = text_position_embedding.float()
             text_position_embedding = text_position_embedding.unsqueeze(0).unsqueeze(-1)
             text_position_embedding = text_position_embedding.repeat(batch_size, 1, 1)
-            text_position_embedding = get_sine_pos_embed(
+            text_position_embedding = encode_sinusoidal_position_embedding(
                 text_position_embedding, num_pos_feats=self.d_model, exchange_xy=False
             )
         if text_position_ids is not None:
-            text_position_embedding = get_sine_pos_embed(
+            text_position_embedding = encode_sinusoidal_position_embedding(
                 text_position_ids[..., None], num_pos_feats=self.d_model, exchange_xy=False
             )
 
@@ -1710,7 +1675,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
                 reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
             else:
                 raise ValueError("Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
-            query_pos = get_sine_pos_embed(reference_points_input[:, :, 0, :], num_pos_feats=self.config.d_model // 2)
+            query_pos = encode_sinusoidal_position_embedding(reference_points_input[:, :, 0, :], num_pos_feats=self.config.d_model // 2)
             query_pos = self.reference_points_head(query_pos)
 
             # In original implementation they apply layer norm before outputting intermediate hidden states

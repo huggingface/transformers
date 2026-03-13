@@ -113,15 +113,26 @@ class Chunk(ConversionOps):
     ) -> dict[str, torch.Tensor]:
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
-        targets = self.get_target_patterns(input_dict, target_patterns)
+        targets = self.get_target_patterns(input_dict, target_patterns, **kwargs)
         sizes = len(targets)
         chunks = torch.chunk(tensor, sizes, dim=self.dim)
-        return dict(zip(targets, chunks))
+        # Clone to ensure contiguous tensors (chunk returns views that may be non-contiguous)
+        return dict(zip(targets, [c.contiguous().clone() for c in chunks]))
 
-    def get_target_patterns(self, input_dict: dict, target_patterns: list[str]) -> list[str]:
+    def get_target_patterns(
+        self, input_dict: dict, target_patterns: list[str], **kwargs
+    ) -> list[str]:
         # Here we always return the target patterns
         if len(input_dict) > 1 or len(target_patterns) == 1:
             raise ValueError("Undefined Operation encountered!")
+        # Substitute \1 in target patterns when full_layer_name is provided (e.g. for per-layer conversions)
+        full_layer_name = kwargs.get("full_layer_name")
+        if full_layer_name and target_patterns and r"\1" in target_patterns[0]:
+            # Extract layer index from full_layer_name (e.g. "transformer.h.5.self_attn.q_proj.weight" -> "5")
+            match = re.search(r"\.(\d+)\.", full_layer_name)
+            if match:
+                layer_idx = match.group(1)
+                return [p.replace(r"\1", layer_idx) for p in target_patterns]
         return target_patterns
 
     @property
