@@ -161,6 +161,7 @@ class OmDetTurboConfig(PreTrainedConfig):
             **kwargs,
         )
 
+        # Extract timm.create_model kwargs; TimmBackbone doesn't forward arbitrary config attrs to timm
         timm_kwargs = {}
         if getattr(backbone_config, "model_type", None) == "timm_backbone":
             for attr in ("img_size", "always_partition"):
