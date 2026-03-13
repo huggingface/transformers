@@ -3446,7 +3446,11 @@ class Trainer:
 
                         if os.path.exists(best_adapter_model_path) or os.path.exists(best_safe_adapter_model_path):
                             try:
-                                model.load_adapter(self.state.best_model_checkpoint, active_adapter, torch_device="cpu")
+                                model.load_adapter(
+                                    self.state.best_model_checkpoint,
+                                    active_adapter,
+                                    torch_device="cpu",
+                                )
                             except RuntimeError as exc:
                                 if model.peft_config[active_adapter].is_prompt_learning:
                                     # for context: https://github.com/huggingface/peft/issues/2256
