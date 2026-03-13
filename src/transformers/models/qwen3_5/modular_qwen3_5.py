@@ -30,6 +30,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..auto import AutoConfig
 from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
 from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
 from ..qwen3_next.modeling_qwen3_next import (
@@ -713,7 +714,7 @@ class Qwen3_5ForCausalLM(Qwen3ForCausalLM):
 
 
 class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
-    config: Qwen3_5TextConfig
+    config_class = AutoConfig
 
 
 class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
