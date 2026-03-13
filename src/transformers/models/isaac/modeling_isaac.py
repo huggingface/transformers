@@ -565,7 +565,7 @@ class IsaacRotaryEmbedding(nn.Module):
 
     def __init__(self, config: IsaacConfig | IsaacTextConfig, device=None):
         super().__init__()
-        rope_source_cfg = config.get_text_config() if hasattr(config, "get_text_config") else config
+        rope_source_cfg = config.get_text_config()
         config_for_rope = copy.copy(rope_source_cfg)
         rope_scaling = getattr(rope_source_cfg, "rope_scaling", None) or {}
         config_for_rope.rope_scaling = rope_scaling
@@ -584,7 +584,7 @@ class IsaacRotaryEmbedding(nn.Module):
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
         self.mrope_section = self._resolve_mrope_section(rope_scaling.get("mrope_section"), self.inv_freq.shape[0])
-        self.hidden_size = getattr(rope_source_cfg, "hidden_size", None) or config.hidden_size
+        self.hidden_size = getattr(rope_source_cfg, "hidden_size", None)
 
     @staticmethod
     def compute_default_rope_parameters(

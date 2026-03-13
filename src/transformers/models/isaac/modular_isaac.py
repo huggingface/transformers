@@ -654,7 +654,6 @@ class IsaacConfig(PretrainedConfig):
 
         # Mirror frequently accessed composite-level attributes.
         self.vocab_size = self.text_config.vocab_size
-        self.hidden_size = self.text_config.hidden_size
         self.use_cache = self.text_config.use_cache
         self.rope_theta = self.text_config.rope_parameters["rope_theta"]
         self.max_position_embeddings = getattr(self.text_config, "max_position_embeddings", max_sequence_length)
@@ -970,7 +969,7 @@ class IsaacProcessor(ProcessorMixin):
 
 class IsaacRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
     def __init__(self, config: IsaacConfig | IsaacTextConfig, device=None):
-        rope_source_cfg = config.get_text_config() if hasattr(config, "get_text_config") else config
+        rope_source_cfg = config.get_text_config()
         config_for_rope = copy.copy(rope_source_cfg)
         rope_scaling = getattr(rope_source_cfg, "rope_scaling", None) or {}
         config_for_rope.rope_scaling = rope_scaling
@@ -981,7 +980,7 @@ class IsaacRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
         )
 
         self.mrope_section = self._resolve_mrope_section(rope_scaling.get("mrope_section"), self.inv_freq.shape[0])
-        self.hidden_size = getattr(rope_source_cfg, "hidden_size", None) or config.hidden_size
+        self.hidden_size = getattr(rope_source_cfg, "hidden_size", None)
 
     @staticmethod
     def _resolve_mrope_section(section: list[int] | None, rotary_half_dim: int) -> list[int]:
