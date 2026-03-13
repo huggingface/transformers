@@ -236,8 +236,12 @@ class AwqTest(unittest.TestCase):
         """
         Simple test that checks if the quantized model is working properly after being saved and loaded
         """
+        # Load a fresh model for saving — the shared self.quantized_model may have
+        # already been in-place transformed by a prior generate() call, and saving
+        # those transformed buffers then re-transforming on reload would corrupt data.
+        fresh_model = AutoModelForCausalLM.from_pretrained(self.model_name)
         with tempfile.TemporaryDirectory() as tmpdirname:
-            self.quantized_model.save_pretrained(tmpdirname)
+            fresh_model.save_pretrained(tmpdirname)
             model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
