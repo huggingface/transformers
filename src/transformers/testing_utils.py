@@ -2731,10 +2731,7 @@ class _NetworkDebugProfiler:
         worker_id = worker_id or f"pid{os.getpid()}"
         dump_path = os.path.join(self._shared_dir, f"records_{worker_id}.json")
         with self._lock:
-            records = [
-                {**record, "phases_ms": dict(record["phases_ms"])}
-                for record in self._records
-            ]
+            records = [{**record, "phases_ms": dict(record["phases_ms"])} for record in self._records]
         Path(dump_path).write_text(json.dumps(records), encoding="utf-8")
 
     def load_worker_records(self) -> None:
