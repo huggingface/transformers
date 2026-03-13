@@ -334,6 +334,11 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns=r"timm_model.\1",
             )
         ],
+        "hyperclovax_vision": [
+            WeightRenaming("^model.mm_projector", "model.multi_modal_projector.proj"),
+            WeightRenaming("^model.language_model.model", "model.language_model"),
+            WeightRenaming("^model.language_model.lm_head", "lm_head"),
+        ],
         "legacy": [
             WeightRenaming(
                 source_patterns="LayerNorm.gamma",
