@@ -489,6 +489,9 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
                 )
                 use_cache = False
 
+        if inputs_embeds is None:
+            inputs_embeds = self.wte(input_ids)
+
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
 
@@ -531,8 +534,6 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         else:
             encoder_attention_mask = None
 
-        if inputs_embeds is None:
-            inputs_embeds = self.wte(input_ids)
         position_embeds = self.wpe(position_ids)
         hidden_states = inputs_embeds + position_embeds.to(inputs_embeds.device)
 

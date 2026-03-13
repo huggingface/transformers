@@ -274,6 +274,11 @@ class MambaMixer(nn.Module):
         cache_params: MambaCache | None = None,
         attention_mask: torch.LongTensor | None = None,
     ):
+        # Save before updating conv states
+        cache_has_previous_state = (
+            cache_params.has_previous_state[self.layer_idx].clone() if cache_params is not None else False
+        )
+
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
@@ -302,7 +307,7 @@ class MambaMixer(nn.Module):
 
             # 2. Convolution sequence transformation
             conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
-            if cache_params is not None and cache_params.has_previous_state[self.layer_idx]:
+            if cache_params is not None and cache_has_previous_state:
                 hidden_states = causal_conv1d_update(
                     hidden_states.squeeze(-1),
                     cache_params.conv_states[self.layer_idx],
@@ -335,7 +340,7 @@ class MambaMixer(nn.Module):
             A = -torch.exp(self.A_log.float())
             # 3.c perform the recurrence y ← SSM(A, B, C)(x)
             time_proj_bias = self.dt_proj.bias.float() if hasattr(self.dt_proj, "bias") else None
-            if cache_params is not None and cache_params.has_previous_state[self.layer_idx]:
+            if cache_params is not None and cache_has_previous_state:
                 scan_outputs = selective_state_update(
                     cache_params.ssm_states[self.layer_idx],
                     hidden_states[..., 0],

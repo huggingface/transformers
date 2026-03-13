@@ -484,6 +484,9 @@ class Mamba2Mixer(nn.Module):
         batch_size, seq_len, _ = hidden_states.shape
         dtype = hidden_states.dtype
 
+        # Save before updating conv states
+        cache_has_previous_state = cache_params.has_previous_state[self.layer_idx].clone() if cache_params is not None else False
+
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         projected_states = self.in_proj(hidden_states)
@@ -493,7 +496,7 @@ class Mamba2Mixer(nn.Module):
         )
 
         # 2. Convolution sequence transformation
-        if cache_params is not None and cache_params.has_previous_state[self.layer_idx]:
+        if cache_params is not None and cache_has_previous_state:
             cache_params.update_conv_state(layer_idx=self.layer_idx, new_conv_state=hidden_states_B_C, cache_init=False)
 
             # We need to guarantee that anything regarding the cache is on the same device
@@ -525,7 +528,7 @@ class Mamba2Mixer(nn.Module):
 
         # 3. SSM transformation
         A = -torch.exp(self.A_log.float())                            # [num_heads]
-        if cache_params is not None and cache_params.has_previous_state[self.layer_idx]:
+        if cache_params is not None and cache_has_previous_state:
             # We need to guarantee that anything regarding the cache is on the same device
             cache_device = cache_params.ssm_states.device
 
@@ -630,7 +633,7 @@ class Mamba2Mixer(nn.Module):
 
             # 3. Compute the inter-chunk SSM recurrence; produces correct SSM states at chunk boundaries
             # (middle term of factorization of off-diag blocks; A terms)
-            if cache_params is not None and cache_params.has_previous_state[self.layer_idx]:
+            if cache_params is not None and cache_has_previous_state:
                 previous_states = cache_params.ssm_states[self.layer_idx][:, None, ...].to(device=states.device)
             else:
                 previous_states = torch.zeros_like(states[:, :1])

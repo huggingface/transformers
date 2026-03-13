@@ -86,7 +86,6 @@ class FalconHybridMambaAttentionDynamicCache(HybridMambaAttentionDynamicCache):
     ):
         self.seqlen_offset = 0
         self.dtype = dtype
-        self.has_previous_state = False
         self.conv_kernel_size = config.mamba_d_conv
 
         self.intermediate_size = (
@@ -406,7 +405,6 @@ class FalconH1Mixer(nn.Module):
 
         use_precomputed_states = (
             cache_params is not None
-            and cache_params.has_previous_state
             and seq_len == 1
             and cache_params.conv_states[self.layer_idx].shape[0]
             == cache_params.ssm_states[self.layer_idx].shape[0]
@@ -600,7 +598,6 @@ class FalconH1Mixer(nn.Module):
 
         use_precomputed_states = (
             cache_params is not None
-            and cache_params.has_previous_state
             and seq_len == 1
             and cache_params.conv_states[self.layer_idx].shape[0]
             == cache_params.ssm_states[self.layer_idx].shape[0]
@@ -1055,9 +1052,6 @@ class FalconH1Model(FalconH1PreTrainedModel):
             hidden_states = layer_outputs[0]
 
         hidden_states = self.final_layernorm(hidden_states)
-
-        if past_key_values and not past_key_values.has_previous_state:
-            past_key_values.has_previous_state = True
 
         next_cache = None if not use_cache else past_key_values
 
