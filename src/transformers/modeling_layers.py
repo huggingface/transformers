@@ -157,9 +157,7 @@ class GenericForSequenceClassification:
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(
-                logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config.get_text_config()
-            )
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
 
         return SequenceClassifierOutputWithPast(
             loss=loss,
