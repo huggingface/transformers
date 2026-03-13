@@ -180,7 +180,7 @@ else:
             ("whisper", "WhisperProcessor"),
             ("xclip", "XCLIPProcessor"),
         ]
-    ) 
+    )
 
 PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, PROCESSOR_MAPPING_NAMES)
 
