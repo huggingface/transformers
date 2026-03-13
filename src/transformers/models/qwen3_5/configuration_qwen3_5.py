@@ -236,5 +236,10 @@ class Qwen3_5Config(PreTrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
+        # Propagate num_labels to text_config so that sequence classification
+        # models that rely on text_config.num_labels get the correct value.
+        if self.text_config.num_labels != self.num_labels:
+            self.text_config.num_labels = self.num_labels
+
 
 __all__ = ["Qwen3_5Config", "Qwen3_5TextConfig"]
