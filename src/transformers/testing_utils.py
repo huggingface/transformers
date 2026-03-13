@@ -1095,6 +1095,16 @@ def require_fp8(test_case):
     )
 
 
+def require_cuda_capability_at_least(major, minor):
+    """Decorator to skip tests when CUDA capability is below the given version."""
+    import torch
+
+    if not torch.cuda.is_available():
+        return unittest.skip("CUDA not available")
+    capability = torch.cuda.get_device_capability()
+    return unittest.skipIf(capability < (major, minor), f"Requires CUDA capability >= {major}.{minor}")
+
+
 def require_torch_bf16(test_case):
     """Decorator marking a test that requires a device that supports bf16"""
     return unittest.skipUnless(

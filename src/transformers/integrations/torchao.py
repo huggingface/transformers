@@ -58,6 +58,23 @@ class TorchAoQuantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
+    def _quantize(self, module, config, *args, **kwargs):
+        """Run quantize_, moving to CUDA first if CPU offloading is active.
+
+        Some torchao quantization ops (e.g. int4 packing) only have CUDA kernels.
+        When a layer is destined for CPU (e.g. CPU offloading), we temporarily move
+        it to CUDA for quantization, then move the result back to CPU.
+        """
+        from torchao.quantization import quantize_
+
+        target_device = next(module.parameters()).device
+        if self.hf_quantizer.offload_to_cpu and target_device.type == "cpu":
+            module.to("cuda")
+            quantize_(module, config, *args, **kwargs)
+            module.to("cpu")
+        else:
+            quantize_(module, config, *args, **kwargs)
+
     def convert(
         self,
         input_dict: dict[str, torch.Tensor],
@@ -66,8 +83,6 @@ class TorchAoQuantize(ConversionOps):
         missing_keys=None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        from torchao.quantization import quantize_
-
         _, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
 
@@ -124,7 +139,7 @@ class TorchAoQuantize(ConversionOps):
                     if is_embedding_param and untie_embedding_weights:
                         lm_head = module.weight.clone()
                     # we can apply the module config directly
-                    quantize_(module, c, (lambda x, fqn: True))
+                    self._quantize(module, c, (lambda x, fqn: True))
                     missing_keys.discard(full_layer_name)
                     module._is_hf_initialized = True
                     # torchao quantizes weights into a module but some models access the weight directly
@@ -137,7 +152,7 @@ class TorchAoQuantize(ConversionOps):
                 else:
                     # need to apply to custom param name
                     custom_param_fqn_config = FqnToConfig({top_level_param_name: c})
-                    quantize_(module, custom_param_fqn_config, filter_fn=None)
+                    self._quantize(module, custom_param_fqn_config, filter_fn=None)
                     missing_keys.discard(full_layer_name)
                     module._is_hf_initialized = True
                     for param in module.parameters(recurse=False):
@@ -147,7 +162,7 @@ class TorchAoQuantize(ConversionOps):
 
         if is_embedding_param and untie_embedding_weights:
             lm_head = module.weight.clone()
-        quantize_(module, self.hf_quantizer.quantization_config.get_apply_tensor_subclass())
+        self._quantize(module, self.hf_quantizer.quantization_config.get_apply_tensor_subclass())
         missing_keys.discard(full_layer_name)
         module._is_hf_initialized = True
         for param in module.parameters(recurse=False):

@@ -22,6 +22,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
 from transformers.testing_utils import (
     Expectations,
     backend_empty_cache,
+    require_cuda_capability_at_least,
     require_torch_accelerator,
     require_torch_multi_accelerator,
     require_torchao,
@@ -394,6 +395,7 @@ class TorchAoTestBase:
         EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
         self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
 
+    @require_cuda_capability_at_least(8, 9)
     def test_fqn_to_config_non_weight_param(self):
         linear1_config = Int8WeightOnlyConfig()
         linear2_config = Float8WeightOnlyConfig()
@@ -482,7 +484,6 @@ class TorchAoCPUTest(TorchAoTestBase, unittest.TestCase):
 class TorchAoAcceleratorTest(TorchAoTestBase, unittest.TestCase):
     device = torch_device
 
-    @unittest.skip("Int4 CPU offload not supported with torchao 0.16.0 (Int4Tensor incompatible with accelerate)")
     def test_int4wo_offload(self):
         """
         Test Int4 weight-only quantization with CPU offload.
@@ -516,7 +517,7 @@ class TorchAoAcceleratorTest(TorchAoTestBase, unittest.TestCase):
             "lm_head": 0,
         }
 
-        config = Int4WeightOnlyConfig()
+        config = Int4WeightOnlyConfig(int4_packing_format="tile_packed_to_4d")
         quant_config = TorchAoConfig(config)
 
         quantized_model = AutoModelForCausalLM.from_pretrained(
@@ -529,16 +530,16 @@ class TorchAoAcceleratorTest(TorchAoTestBase, unittest.TestCase):
 
         input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
 
-        EXPECTED_OUTPUTS = Expectations(
+        output = quantized_model.generate(**input_ids, max_new_tokens=10)
+        # fmt: off
+        EXPECTED_OUTPUT = Expectations(
             {
-                ("xpu", 3): ["What are we having for dinner?\n\nJessica: (smiling)"],
-                ("cuda", 7): ["What are we having for dinner?\n- 1. What is the temperature outside"],
+                ("cuda", None): "What are we having for dinner?\nRed, white, and green beans,",
+                ("xpu", None): "What are we having for dinner?\n\nJessica: (smiling)",
             }
         )
-        output = quantized_model.generate(**input_ids, max_new_tokens=10)
-        generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
-
-        self.assertIn(generated_text, EXPECTED_OUTPUTS.get_expectation())
+        # fmt: on
+        self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUT.get_expectation())
 
     @require_torch_multi_accelerator
     def test_int4wo_quant_multi_accelerator(self):
@@ -591,7 +592,7 @@ class TorchAoSerializationTest(unittest.TestCase):
             (Float8DynamicActivationFloat8WeightConfig(), Expectations({("cuda", None): "What are we having for dinner?\n\nJess: (smiling) I", ("xpu", None): "What are we having for dinner?\n\nJess: (smiling) I"})),
             (Float8WeightOnlyConfig(), Expectations({("cuda", None): COMMON_OUTPUT, ("xpu", None): COMMON_OUTPUT})),
             (Int4WeightOnlyConfig(int4_packing_format="tile_packed_to_4d"), Expectations({("cuda", None): "What are we having for dinner?\nRed, white, and green beans,", ("xpu", None): COMMON_OUTPUT})),
-            (Int8DynamicActivationIntxWeightConfig(), ALL_DEVICES_COMMON),
+            (Int8DynamicActivationIntxWeightConfig(), Expectations({("cpu", None): COMMON_OUTPUT, ("cuda", 9): COMMON_OUTPUT, ("cuda", 8): "What are we having for dinner?\n\nJEN: (smiling) I", ("xpu", None): COMMON_OUTPUT})),
             (IntxWeightOnlyConfig(), ALL_DEVICES_COMMON),
         ]
         if is_torchao_available()
@@ -607,7 +608,7 @@ class TorchAoSerializationTest(unittest.TestCase):
     def _check_serialization(self, device, config, expected_output):
         if isinstance(config, (Float8DynamicActivationFloat8WeightConfig, Float8WeightOnlyConfig)):
             if torch.cuda.is_available() and torch.cuda.get_device_capability() < (8, 9):
-                self.skipTest(f"{type(config).__name__} requires CUDA capability >= 8.9 (SM89+)")
+                self.skipTest(f"{type(config).__name__} requires CUDA capability >= (8, 9)")
         quant_config = TorchAoConfig(config)
         dtype = torch.bfloat16 if isinstance(config, Int4WeightOnlyConfig) else "auto"
         quantized_model = AutoModelForCausalLM.from_pretrained(
