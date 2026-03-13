@@ -113,8 +113,6 @@ from .utils import (
     is_accelerate_available,
     is_bitsandbytes_available,
     is_env_variable_true,
-    is_flash_attn_2_available,
-    is_flash_attn_3_available,
     is_kernels_available,
     is_torch_flex_attn_available,
     is_torch_npu_available,
@@ -1598,7 +1596,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Can the package be seen in the import structure
             if not pkg_availability_check():
                 raise ImportError(
-                    f"{preface} the package for FlashAttention{flash_attn_version} doesn't seem to be not installed."
+                    f"{preface} the package for FlashAttention{flash_attn_version} doesn't seem to be installed."
                 )
             # Minimum version (FA2 only)
             elif flash_attn_version == 2 and not is_flash_attn_greater_or_equal("2.3.3"):
@@ -1806,18 +1804,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 attn_implementation = default_flash_implementation
 
         applicable_attn_implementation = attn_implementation
-
         is_paged = attn_implementation is not None and attn_implementation.startswith("paged|")
 
-        # If FA not installed, do not fail but use kernels instead
-        requested_original_flash_attn = attn_implementation is not None and (
-            attn_implementation.removeprefix("paged|") == "flash_attention_2"
-            or attn_implementation.removeprefix("paged|") == "flash_attention_3"
-        )
+        requested_original_flash_attn = False
+        if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
+            # If FA not installed, do not fail but use kernels instead if possible
+            for fa_version in FLASH_ATTENTION_COMPATIBILITY_MATRIX.keys():
+                # No kernels support for FA4 for now
+                if fa_version == 4:
+                    continue
+
+                # Check whether we have an original FA requested but not available in the env
+                if requested_original_flash_attn := (
+                    attn_implementation.removeprefix("paged|") == f"flash_attention_{fa_version}"
+                    and not FLASH_ATTENTION_COMPATIBILITY_MATRIX[fa_version]["general_availability_check"]()
+                ):
+                    break
+
         if (
-            requested_original_flash_attn
-            and self._supports_flash_attn
-            and not (is_flash_attn_2_available() or is_flash_attn_3_available())
+            self._supports_flash_attn
+            and requested_original_flash_attn
             and is_kernels_available()
             and not is_torch_npu_available()
         ):
@@ -1850,10 +1856,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             except Exception as e:
                 # raise the proper exception for requested flash attention
                 if requested_original_flash_attn:
-                    if attn_implementation.endswith("2"):
-                        self._flash_attn_can_dispatch(flash_attn_version=2, is_init_check=is_init_check)
-                    else:
-                        self._flash_attn_can_dispatch(flash_attn_version=3, is_init_check=is_init_check)
+                    fa_version = int(attn_implementation[-1])  # "flash_attention_(2|3|...)"
+                    self._flash_attn_can_dispatch(flash_attn_version=fa_version, is_init_check=is_init_check)
 
                 # error properly out if a kernel was specifically requested
                 raise e
