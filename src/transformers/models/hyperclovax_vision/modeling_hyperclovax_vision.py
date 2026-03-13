@@ -404,12 +404,8 @@ class HCXVisionPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=std)
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                try:
-                    init.zeros_(module.weight[module.padding_idx])
-                except Exception:
-                    breakpoint()
-                    pass
+            if module.padding_idx is not None:
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, (nn.LayerNorm, HyperCLOVAXRMSNorm)):
             init.ones_(module.weight)
             if hasattr(module, "bias"):
