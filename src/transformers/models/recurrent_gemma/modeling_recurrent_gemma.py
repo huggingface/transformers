@@ -24,7 +24,6 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithNoAttention, CausalLMOutput
 from ...modeling_rope_utils import dynamic_rope_update

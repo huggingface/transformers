@@ -688,10 +688,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
             past_key_values = None
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-<<<<<<< HEAD
-
-=======
->>>>>>> upstream/main
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past cache
             mask_seq_length = past_key_values_length + seq_length
