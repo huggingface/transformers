@@ -223,12 +223,11 @@ class VideomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
                 self.assertIn("score", info)
                 self.assertTrue(0.0 <= info["score"] <= 1.0)
 
-    def test_video_post_processing_variants(self):
+    def test_semantic_segmentation_inference(self):
         _, processor, video_frames, outputs = self.run_inference(self.instance_model_id)
 
         target_sizes = [frame.shape[:2] for frame in video_frames]
         semantic_results = processor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
-        panoptic_results = processor.post_process_panoptic_segmentation(outputs, target_sizes=target_sizes)
 
         self.assertEqual(len(semantic_results), len(video_frames))
         for frame, seg_map in zip(video_frames, semantic_results):
@@ -236,6 +235,12 @@ class VideomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
             self.assertFalse(torch.is_floating_point(seg_map))
             self.assertGreaterEqual(seg_map.min().item(), 0)
             self.assertLess(seg_map.max().item(), outputs.class_queries_logits.shape[-1] - 1)
+
+    def test_panoptic_segmentation_inference(self):
+        _, processor, video_frames, outputs = self.run_inference(self.instance_model_id)
+
+        target_sizes = [frame.shape[:2] for frame in video_frames]
+        panoptic_results = processor.post_process_panoptic_segmentation(outputs, target_sizes=target_sizes)
 
         self.assertEqual(len(panoptic_results), len(video_frames))
         for frame, result in zip(video_frames, panoptic_results):
