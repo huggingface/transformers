@@ -429,6 +429,8 @@ class GenerationConfig(PushToHubMixin):
         self.compile_config = kwargs.pop("compile_config", None)
         self.disable_compile = kwargs.pop("disable_compile", None)
 
+        self.continuous_batching_config = kwargs.pop("continuous_batching_config", None)
+
         # Deprecated (moved to the Hub). TODO remove for v5
         self.low_memory = kwargs.pop("low_memory", None)
         self.penalty_alpha = kwargs.pop("penalty_alpha", None)
@@ -1538,3 +1540,181 @@ class CompileConfig:
     def to_dict(self) -> dict[str, Any]:
         """Serializes this instance to a Python dictionary."""
         return copy.deepcopy({key: value for key, value in self.__dict__.items() if key != "_compile_all_devices"})
+
+
+# TODO: add the @strict decorator to prevent attributes passed as args rather than kwargs
+@dataclass
+class ContinuousBatchingConfig:
+    """
+    Class that holds arguments relative to continuous batching, when using continuous batching through the
+    `generate_batch` method or the `continuous_batching_context_manager` context manager.
+
+    Attributes (see inline comments for more details):
+        block_size: Size of each KV cache block in tokens. Default is 256
+        num_blocks: Number of blocks in the KV cache. Default is None (auto-inferred)
+        max_batch_tokens: Maximum tokens per batch. Default is None (auto-inferred)
+        max_memory_percent: Max percentage of free GPU memory to use for KV cache. Default is 0.8
+        max_blocks_per_request: Max blocks per request for fast decode path. Default is 0 (disables it)
+        allow_block_sharing: Whether to allow block sharing for prefix caching. Default is True
+        use_async_batching: Enable async double-buffering. Default is None (auto-inferred)
+        use_cuda_graph: Enable CUDA graphs. Default is None (auto-inferred)
+        q_padding_interval_size: Query padding granularity in tokens. Default is 0 (uses a preset in continuous_api.py)
+        kv_padding_interval_size: KV padding granularity in tokens. Default is 0 (uses a preset in continuous_api.py)
+        max_cached_graphs: Maximum number of cached CUDA graphs. Default is 0 (uses a preset in continuous_api.py)
+        scheduler: Scheduler type to use. Default is "fifo".
+        max_queue_size: Maximum request queue size for serving. Default is 0 (unlimited).
+    """
+
+    # Size of each KV cache block
+    block_size: int = 256
+
+    # The number of blocks used in the KV cache and the maximum number of tokens in a batch. Once the block size is set,
+    # these can be auto inferred using GPU size.
+    num_blocks: int | None = None
+    max_batch_tokens: int | None = None
+
+    # The max percentage of free GPU memory (after the model is loaded) to use for the KV cache.
+    max_memory_percent: float = 0.8
+
+    # This is only used in the flash_attn_with_kvcache fast decode path to dimension the block table. If it is set to 0,
+    # the fast decode path will not be used. Currently turned off by default.
+    max_blocks_per_request: int | None = 0
+
+    # Block sharing can only be allowed, but never forced: some model just do not support it. If you only have a few
+    # short prompts, but long generation lengths, you might want to disable block sharing.
+    allow_block_sharing: bool = True
+
+    # Enables asynchronous batching. This removes the CPU overhead from the continuous batching loop, at the cost of
+    # doubling the VRAM usage. If None, will be automatically detected.
+    use_async_batching: bool | None = None
+
+    # If any of these parameters are set to a non-default, CUDA graphs will be used. Otherwise we automatically infer
+    # if they should be turned on. Padding interval sizes are in tokens and further explained in the docstring at the
+    # top of the continuous_batching/continuous_api.py file.
+    use_cuda_graph: bool | None = None
+    q_padding_interval_size: int = 0
+    kv_padding_interval_size: int = 0
+    max_cached_graphs: int = 0
+
+    # Scheduler type used
+    scheduler: str = "fifo"
+
+    # The parameters below are mostly useful in the context of serving
+    max_queue_size: int = 0
+
+    def account_for_cb_deprecated_arguments(
+        self,
+        max_queue_size: int = 0,
+        q_padding_interval_size: int = 0,
+        kv_padding_interval_size: int = 0,
+        allow_block_sharing: bool = True,
+        use_async_batching: bool | None = None,
+        max_cached_graphs: int = 0,
+    ) -> None:
+        """Some arguments given to `generate_batch`, `init_continuous_batching` or `continuous_batching_context_manager`
+        are now deprecated and are expected inside the continuous batching config. This method checks if any were
+        passed and accounts for them in the continuous batching config. It raises a deprecation warning if any were
+        passed.
+        """
+        kwargs_to_warn = []
+        if max_queue_size > 0:
+            kwargs_to_warn.append("max_queue_size")
+            self.max_queue_size = max_queue_size
+        if q_padding_interval_size > 0:
+            kwargs_to_warn.append("q_padding_interval_size")
+            self.q_padding_interval_size = q_padding_interval_size
+        if kv_padding_interval_size > 0:
+            kwargs_to_warn.append("kv_padding_interval_size")
+            self.kv_padding_interval_size = kv_padding_interval_size
+        if not allow_block_sharing:  # config default is True, so False means the user explicitly set it to False
+            kwargs_to_warn.append("allow_block_sharing")
+            self.allow_block_sharing = allow_block_sharing
+        if use_async_batching is not None:
+            kwargs_to_warn.append("use_async_batching")
+            self.use_async_batching = use_async_batching
+        if max_cached_graphs > 0:
+            kwargs_to_warn.append("max_cached_graphs")
+            self.max_cached_graphs = max_cached_graphs
+        if kwargs_to_warn:
+            logger.warning(
+                "The following arguments were provided to a continuous batching entry point instead of being passed "
+                "through the continuous_batching_config: " + ", ".join(kwargs_to_warn)
+            )
+
+    def decide_use_cuda_graphs(self, compile_config: CompileConfig | None, is_attn_mask_needed: bool) -> bool:
+        """Returns whether or not to use cuda graphs for continuous batching. If the user specified this in the config
+        or if they specified a parameter related to cuda graphs, they are turned on. Otherwise, we use a heuristic
+        based on the attention implementation: we turn on cuda graphs if and only if no attention mask is needed.
+
+        This function modifies the `use_cuda_graph` attribute of the config in place.
+        """
+        # If cuda is not available, we cannot use cuda graphs
+        import torch
+
+        if not torch.cuda.is_available():
+            if self.use_cuda_graph:  # throw a warning only if the user intended to use cuda graphs
+                logger.warning(f"use_cuda_graph is True but {torch.cuda.is_available() = }: turning off cuda graphs.")
+            self.use_cuda_graph = False
+
+        # Else if use_cuda_graph is specified, we follow the user's choice
+        elif self.use_cuda_graph is not None:
+            pass  # nothing to do but catch this case and wait for the function to return later
+
+        # Else if the user specified a parameter related to cuda graphs, we activate cuda graphs
+        elif self.q_padding_interval_size or self.kv_padding_interval_size or self.max_cached_graphs:
+            self.use_cuda_graph = True
+
+        # Else if a compile config was found, turn off cuda graphs if the compile config already uses them
+        elif compile_config is not None:
+            options = torch._inductor.list_mode_options().get(compile_config.mode, compile_config.options)
+            compile_uses_cudagraphs = options.get("triton.cudagraphs", False)
+            if compile_uses_cudagraphs:
+                logger.warning(
+                    f"Compile config {compile_config.mode = } uses cudagraphs, which usually does not work well with "
+                    "continuous batching. We recommend using mode 'default' or 'max-autotune-no-cudagraphs' instead."
+                )
+            self.use_cuda_graph = not compile_uses_cudagraphs  # TODO: should this also match the dynamic shapes?
+
+        # Otherwise we have a default heuristic based on the attention implementation:
+        # attention implementations where an attention mask is needed suffer a lot more from the padding associated
+        # with cuda graphs, so default is to turn cuda graphs off for those implementations
+        else:
+            self.use_cuda_graph = not is_attn_mask_needed
+            logger.warning(
+                f"No behavior specified for use_cuda_graph, defaulting to {self.use_cuda_graph = } because "
+                f"{is_attn_mask_needed = }. If you want to save memory, turn off cuda graphs, but they tend to improve "
+                "performances by a lot."
+            )
+
+        # Return the decision
+        return self.use_cuda_graph
+
+    def decide_use_async_batching(self, is_attn_mask_needed: bool) -> bool:
+        """Returns whether or not to use asynchronous batching for continuous batching. If the user specified this in
+        the config, we follow their choice. Otherwise, we turn on asynchronous batching if and only if CUDA graphs are
+        turned on and no attention mask is needed.
+
+        This function modifies the `use_async_batching` attribute of the config in place.
+        """
+        # If the user specifies to use async or not, no need to decide ourselves
+        if self.use_async_batching is None:
+            self.use_async_batching = self.use_cuda_graph and not is_attn_mask_needed
+            logger.info(
+                f"No behavior specified for use_async_batching, choosing {self.use_async_batching = } because "
+                f"{self.use_cuda_graph = } and {not is_attn_mask_needed = }. If you want to save memory, you can "
+                "disable asynchronous batching but it will degrade performance."
+            )
+        return self.use_async_batching
+
+    def resolve_sentinel_values(self) -> None:
+        """For some parameters (padding intervals and max cached graphs), the default is a sentinel value of 0: that
+        way, if the user specifies a value for those parameters, we know they want it used, ie. we turn on cuda graphs.
+        But in the case the user does not specify those values, we still need them to resolve to a non-zero value.
+        This function takes care of that."""
+        # Interval sizes are in tokens for both Q and KV
+        if self.q_padding_interval_size == 0:
+            self.q_padding_interval_size = 64
+        if self.kv_padding_interval_size == 0:
+            self.kv_padding_interval_size = 64 * 256  # 64 blocks of 256 tokens ie. 16384 tokens
+        if self.max_cached_graphs == 0:
+            self.max_cached_graphs = 32
