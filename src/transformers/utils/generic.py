@@ -237,8 +237,8 @@ def is_flash_attention_requested(
 
     if config is not None:
         checked_attention_implementation = config._attn_implementation
-    else:
-        checked_attention_implementation = requested_attention_implementation
+    elif (checked_attention_implementation := requested_attention_implementation) is None:
+        return False
 
     # If a specific version is requested, look for a pattern of type "flash...{version}"
     if version is not None:
