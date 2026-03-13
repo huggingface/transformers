@@ -27,11 +27,10 @@ can be appended to the chat. For a concrete example, let's say we ask [GPT-OSS](
 what the weather is like, and it thinks and decides to call a tool. Here's what the raw model output might look like:
 
 ```txt
-<|start|>analysis<|message|>The user asks: "What is the weather like in SF?" We need to get the location of the user? The user explicitly asks about SF (San Francisco).
-So we need to get the current weather in San Francisco, CA. We need to call get_current_weather function. But we need to call function to get weather data.
+<|start|>analysis<|message|>The user asks: "What is the weather like in SF?" The user explicitly asks about SF (San Francisco).
+So we need to get the current weather in San Francisco, CA. We need to call get_current_weather function.
 So we should call get_current_weather with location "San Francisco, CA". Let's do that.
 We will call function get_current_weather.<|end|><|start|>commentary to=functions.get_current_weather<|channel|>commentary <|constrain|>json<|message|>{"location":"San Francisco, CA"}<|call|>
-}
 ```
 
 But if you want to append this to a chat, you'll need to format it as a chat message dict, like this:
@@ -163,7 +162,7 @@ explanatory comments:
         "content": {"type": "string", "x-regex": r"<\|channel\|>final<\|message\|>(.*?)(?:<\|end\|>|$)"},
         "thinking": {"type": "string", "x-regex": r"<\|channel\|>analysis<\|message\|>(.*?)<\|end\|>"},
         "tool_calls": {
-            # "x-regex-iterator" uses re.findall to find multiple possible manages, and returns them as an
+            # "x-regex-iterator" uses re.finditer to find multiple possible manages, and returns them as an
             # array/list. You don't need to worry about array handling, though - each item in the array will be
             # parsed by the `items` schema, so just write the schema for a single item.
             "x-regex-iterator": r"<\|channel\|>commentary (to=functions\..*?<\|message\|>.*?)(?:<\|call\|>|$)",
@@ -184,7 +183,9 @@ explanatory comments:
                                 # The "x-parser" field indicates that the extracted string should be parsed as JSON.
                                 # The output is then passed to the schema nodes below and recursive parsing continues.
                                 "x-parser": "json",
-                                "additionalProperties": {"type": "any"},
+                                # additionalProperties: True allows the parser to accept arbitrary keys 
+                                # that are not specified in the schema.
+                                "additionalProperties": True,
                             },
                         },
                     },
@@ -210,7 +211,7 @@ The parser follows a few simple rules:
 There is a small set of allowable `x-` keys that indicate how parsing should be done at each node:
 - `x-regex`: A regex string to apply to the input. If the regex has named groups, the output is a dict of group names to values. Named groups should only be used in `object` nodes.
   Otherwise, the regex must have exactly one unnamed capturing group, and the output is the value of that group as a string.
-- `x-regex-iterator`: A regex string to apply to the input using `re.findall()`. The output is a list of all matches.
+- `x-regex-iterator`: A regex string to apply to the input using `re.finditer()`. The output is a list of all matches.
   This should only be used in `array` nodes, and the regex must have exactly one unnamed capturing group. The output is distributed to
   the node's `items` schema.
 - `x-parser`: Calls a built-in parser to apply to the input. Currently, the only supported parser is `json`, which parses the input string as JSON.
@@ -225,7 +226,8 @@ There is a small set of allowable `x-` keys that indicate how parsing should be 
   `key` and `value`, and the output is a dict mapping keys to values. This should only be used in `object` nodes.
 
 In general, multiple regexes/parsers cannot be combined at the same level. The exception is that `x-regex`, returning a single string, can be combined with the other parsers. In this case,
-`x-regex` is applied first, and then the output is passed to the other parser, either `x-regex-iterator`, `x-parser`, or `x-regex-key-value`.
+`x-regex` is applied first, and then the output is passed to the other parser, either `x-regex-iterator`, `x-parser`, or `x-regex-key-value`. 
+All regexes are applied with the `DOTALL` flag, since model outputs often contain newlines. This means that `.` matches all characters, including newlines.
 
 Putting these ideas together, you can see that the input flows through the schema, being parsed at each level and then distributed to child nodes. Each level
 only needs to extract the input content that is relevant for that part of the schema, and can then let its child nodes handle the rest. Internally, this is handled
