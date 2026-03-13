@@ -488,8 +488,9 @@ class IsaacMultiModalProjector(nn.Module):
 
     def __init__(self, config: IsaacConfig):
         super().__init__()
+        text_config = config.get_text_config()
         vision_hidden_size = config.vision_config.hidden_size * (config.vision_config.pixel_shuffle_scale_factor**2)
-        backbone_hidden_size = config.hidden_size
+        backbone_hidden_size = text_config.hidden_size
         self.linear_1 = nn.Linear(vision_hidden_size, 4 * vision_hidden_size, bias=False)
         self.silu = nn.SiLU()
         self.linear_2 = nn.Linear(4 * vision_hidden_size, backbone_hidden_size, bias=False)
@@ -1085,7 +1086,7 @@ class IsaacModel(Qwen3PreTrainedModel):
         )
 
         batch_size, max_images = pixel_values.shape[:2]
-        hidden_size = self.config.hidden_size
+        hidden_size = self.config.get_text_config().hidden_size
 
         if image_attention_mask.any():
             vision_kwargs = {
@@ -1422,7 +1423,7 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         super().__init__(config)
         self.model = IsaacModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.get_text_config().hidden_size, config.get_text_config().vocab_size, bias=False)
 
     @auto_docstring
     @can_return_tuple
