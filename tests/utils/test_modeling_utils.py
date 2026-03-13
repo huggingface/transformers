@@ -2316,6 +2316,9 @@ class ModelUtilsTest(TestCasePlus):
 
         config = LlamaConfig(
             num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=16,
             hidden_size=32,
             intermediate_size=64,
             vocab_size=100,
