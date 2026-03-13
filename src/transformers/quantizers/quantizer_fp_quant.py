@@ -19,6 +19,7 @@ from .quantizers_utils import get_module_from_name
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import FPQuantConfig
 
 from ..utils import is_fp_quant_available, is_qutlass_available, is_torch_available, is_torch_xpu_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin
@@ -37,6 +38,7 @@ class FPQuantHfQuantizer(HfQuantizer):
 
     requires_calibration = False
     is_qat_trainable = True
+    quantization_config: "FPQuantConfig"
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)

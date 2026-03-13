@@ -34,28 +34,6 @@ You can find all the original checkpoints under the [VinAI](https://huggingface.
 The example below demonstrates how to summarize text with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```python
-import torch
-from transformers import pipeline
-
-pipeline = pipeline(
-   task="summarization",
-   model="vinai/bartpho-word",
-   dtype=torch.float16,
-   device=0
-)
-
-text = """
-Quang tổng hợp hay gọi tắt là quang hợp là quá trình thu nhận và chuyển hóa năng lượng ánh sáng Mặt trời của thực vật,
-tảo và một số vi khuẩn để tạo ra hợp chất hữu cơ phục vụ bản thân cũng như làm nguồn thức ăn cho hầu hết các sinh vật
-trên Trái Đất. Quang hợp trong thực vật thường liên quan đến chất tố diệp lục màu xanh lá cây và tạo ra oxy như một sản phẩm phụ
-"""
-pipeline(text)
-```
-
-</hfoption>
 <hfoption id="AutoModel">
 
 ```python
@@ -80,16 +58,6 @@ inputs = tokenizer(text, return_tensors="pt").to(model.device)
 
 outputs = model.generate(inputs["input_ids"], num_beams=2, min_length=0, max_length=20)
 tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Quang tổng hợp hay gọi tắt là quang hợp là quá trình thu nhận và chuyển hóa năng lượng ánh sáng Mặt trời của thực vật,
-tảo và một số vi khuẩn để tạo ra hợp chất hữu cơ phục vụ bản thân cũng như làm nguồn thức ăn cho hầu hết các sinh vật
-trên Trái Đất. Quang hợp trong thực vật thường liên quan đến chất tố diệp lục màu xanh lá cây và tạo ra oxy như một sản phẩm phụ" | \
-transformers run --task summarization --model vinai/bartpho-word --device 0
 ```
 
 </hfoption>

@@ -23,7 +23,8 @@ from transformers import AutoModelForImageTextToText
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from .configuration_colpali import ColPaliConfig
 
 
@@ -130,27 +131,19 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> ColPaliForRetrievalOutput:
         if pixel_values is not None:
             pixel_values = pixel_values.to(dtype=self.dtype)
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = kwargs.pop("output_hidden_states", None)
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
 
         vlm_output = self.vlm.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             pixel_values=pixel_values,
             output_hidden_states=True,
-            return_dict=True,
-            output_attentions=output_attentions,
             **kwargs,
         )
         vlm_hidden_states = vlm_output.hidden_states if output_hidden_states else None

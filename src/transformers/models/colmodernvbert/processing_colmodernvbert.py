@@ -30,6 +30,7 @@ from ...image_utils import ImageInput, is_valid_image, load_image
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
 from ...utils import auto_docstring
+from ...utils.import_utils import requires
 
 
 if TYPE_CHECKING:
@@ -102,6 +103,7 @@ def get_image_prompt_string(
     )
 
 
+@requires(backends=("torch",))
 @auto_docstring
 class ColModernVBertProcessor(ProcessorMixin):
     r"""

@@ -153,7 +153,7 @@ class BarkSelfAttention(nn.Module):
         past_key_values=None,
         use_cache=False,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
         query, key, value = self.att_proj(hidden_states).split(self.embed_dim, dim=2)
@@ -163,7 +163,7 @@ class BarkSelfAttention(nn.Module):
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
         if past_key_values is not None:
-            key, value = past_key_values.update(key, value, self.layer_idx, {"cache_position": cache_position})
+            key, value = past_key_values.update(key, value, self.layer_idx)
 
         attn_output, attn_weights = self._attn(query, key, value, attention_mask)
 
@@ -215,7 +215,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         past_key_values=None,
         use_cache=False,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         batch_size, query_len, _ = hidden_states.size()
 
@@ -227,7 +227,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
         if past_key_values is not None:
-            key, value = past_key_values.update(key, value, self.layer_idx, {"cache_position": cache_position})
+            key, value = past_key_values.update(key, value, self.layer_idx)
 
         target_dtype = get_target_dtype(query, self)  # if the query is in float32, this is the dtype to cast to for FA
 
@@ -298,7 +298,7 @@ class BarkBlock(GradientCheckpointingLayer):
         attention_mask=None,
         use_cache=False,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         intermediary_hidden_states = self.layernorm_1(hidden_states)
 
@@ -308,7 +308,6 @@ class BarkBlock(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
 
         attn_output = attn_outputs[0]  # output_attn: output, present_key_values, (attn_weights)
@@ -407,7 +406,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | CausalLMOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -488,7 +486,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
                 attention_mask=attention_mask,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
 
             hidden_states = outputs[0]

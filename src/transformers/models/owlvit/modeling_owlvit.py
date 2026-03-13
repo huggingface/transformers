@@ -35,7 +35,7 @@ from ...utils import (
     logging,
     torch_int,
 )
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_owlvit import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
 
@@ -433,8 +433,50 @@ class OwlViTAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
+        """Input shape: Batch x Time x Channel"""
+
+        bsz, tgt_len, embed_dim = hidden_states.size()
+
+        # get query proj
+        query_states = self.q_proj(hidden_states) * self.scale
+        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+
+        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
+        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
+        key_states = key_states.view(*proj_shape)
+        value_states = value_states.view(*proj_shape)
+
+        src_len = key_states.size(1)
+        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
+
+        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
+            raise ValueError(
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f" {attn_weights.size()}"
+            )
+
+        if attention_mask is not None:
+            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+                raise ValueError(
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+                )
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+        # this operation is a bit awkward, but it's required to
+        # make sure that attn_weights keeps its gradient.
+        # In order to do so, attn_weights have to reshaped
+        # twice and have to be reused in the following
+        attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+        attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+
+        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+
+        # For int8 compatibility, sometimes the `attn_probs` are in `fp32`
+        attn_probs = attn_probs.to(value_states.dtype)
 
         queries = self.q_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
         keys = self.k_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
@@ -492,7 +534,7 @@ class OwlViTEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> tuple[torch.FloatTensor, torch.Tensor | None]:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -526,6 +568,10 @@ class OwlViTPreTrainedModel(PreTrainedModel):
         "attentions": OwlViTAttention,
     }
     _no_split_modules = ["OwlViTEncoderLayer"]
+    _can_record_outputs = {
+        "hidden_states": OwlViTEncoderLayer,
+        "attentions": OwlViTAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -594,7 +640,7 @@ class OwlViTEncoder(nn.Module):
         inputs_embeds,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
+    ) -> tuple | BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -643,14 +689,13 @@ class OwlViTTextTransformer(OwlViTPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids)
         """
-
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
@@ -709,7 +754,7 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         input_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
@@ -756,10 +801,10 @@ class OwlViTVisionTransformer(OwlViTPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPooling:
         # Cast the input to the expected `dtype`
         expected_input_dtype = self.embeddings.patch_embedding.weight.dtype
         pixel_values = pixel_values.to(expected_input_dtype)
@@ -885,7 +930,6 @@ class OwlViTModel(OwlViTPreTrainedModel):
         text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            return_dict=True,
             **kwargs,
         )
         pooled_output = text_outputs.pooler_output
@@ -921,7 +965,6 @@ class OwlViTModel(OwlViTPreTrainedModel):
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=True,
             **kwargs,
         )
         vision_outputs.pooler_output = self.visual_projection(vision_outputs.pooler_output)
@@ -939,7 +982,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         interpolate_pos_encoding: bool = False,
         return_base_image_embeds: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> OwlViTOutput:
+    ) -> tuple | OwlViTOutput:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
@@ -963,13 +1006,13 @@ class OwlViTModel(OwlViTPreTrainedModel):
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
-
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
             **kwargs,
         )
 
+        # Get embeddings for all text queries in all batch samples
         text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1238,10 +1281,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor]:
         # Get OwlViTModel vision embeddings (same as CLIP)
-        vision_outputs = self.owlvit.vision_model(
-            pixel_values=pixel_values,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            **kwargs,
+        vision_outputs: BaseModelOutputWithPooling = self.owlvit.vision_model(
+            pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
         )
 
         if interpolate_pos_encoding:
@@ -1318,6 +1359,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         return query_embeds, box_indices, pred_boxes
 
+    @can_return_tuple
     @auto_docstring
     def image_guided_detection(
         self,
@@ -1363,7 +1405,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         Detected similar object with confidence 0.856 at location [10.94, 50.4, 315.8, 471.39]
         Detected similar object with confidence 1.0 at location [334.84, 25.33, 636.16, 374.71]
         ```"""
-
         # Compute feature maps for the input and query images
         query_feature_map = self.image_embedder(
             pixel_values=query_pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
@@ -1453,7 +1494,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         Detected a photo of a cat with confidence 0.707 at location [324.97, 20.44, 640.58, 373.29]
         Detected a photo of a cat with confidence 0.717 at location [1.46, 55.26, 315.55, 472.17]
         ```"""
-
+        # Embed images and text queries
         query_embeds, feature_map, outputs = self.image_text_embedder(
             input_ids=input_ids,
             pixel_values=pixel_values,

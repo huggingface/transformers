@@ -394,11 +394,7 @@ class Pix2StructModelTester:
 @require_torch
 class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Pix2StructForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {"image-to-text": Pix2StructForConditionalGeneration, "image-text-to-text": Pix2StructForConditionalGeneration}
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"image-text-to-text": Pix2StructForConditionalGeneration} if is_torch_available() else {}
 
     test_resize_embeddings = True
     test_attention_outputs = False

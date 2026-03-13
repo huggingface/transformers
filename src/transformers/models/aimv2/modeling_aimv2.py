@@ -73,10 +73,7 @@ class Aimv2Output(ModelOutput):
     vision_model_output: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> tuple[Any]:
-        return tuple(
-            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
-            for k in self.keys()
-        )
+        return tuple(v.to_tuple() if isinstance(v, ModelOutput) else v for v in self.values())
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -540,15 +537,14 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
         hidden_states = self.embeddings(input_ids)
         batch_size, seq_len, _ = hidden_states.shape
 
-        cache_position = torch.arange(seq_len, dtype=torch.long, device=hidden_states.device)
-        position_ids = cache_position.unsqueeze(0).expand(batch_size, -1)
+        position_ids = torch.arange(seq_len, dtype=torch.long, device=hidden_states.device)
+        position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
         if attention_mask is not None:
             attention_mask = create_causal_mask(
                 config=self.config,
                 inputs_embeds=hidden_states,
                 position_ids=position_ids,
                 attention_mask=attention_mask,
-                cache_position=cache_position,
                 past_key_values=None,
             )
 

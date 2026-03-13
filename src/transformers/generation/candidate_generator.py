@@ -14,7 +14,7 @@
 
 import copy
 import weakref
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import numpy as np
 import torch
@@ -178,14 +178,13 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # avoid unnecessary warnings that min_length is larger than max_new_tokens
         # remove the `MinLengthLogitsProcessor` if exists (NOTE: no need to check for `MinNewTokensLogitsProcessor`)
         self.main_model_min_length = self.generation_config.min_length
-        self.generation_config.min_length = 0
+        self.generation_config.min_length = None
         self.generation_config.min_new_tokens = None
-        for processor in self.logits_processor:
-            if isinstance(processor, MinLengthLogitsProcessor):
-                raise ValueError(
-                    "Passing `MinLengthLogitsProcessor` when using `assisted_generation is disabled. "
-                    "Please pass in `min_length` into `.generate()` instead"
-                )
+        self.main_model_max_length = self.generation_config.max_length
+        self.generation_config.max_length = None
+        self.logits_processor = [
+            processor for processor in self.logits_processor if not isinstance(processor, MinLengthLogitsProcessor)
+        ]
 
         # We need to roll back the cache in assisted generation, only DynamicCache is supported
         self.generation_config.cache_implementation = "dynamic_full"
@@ -245,9 +244,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
         }:
             # len(scores[0])-1 is the number of candidates according to the target tokenizer.
             if num_matches == len(scores[0]) - 1:
-                self.num_assistant_tokens += 2.0
+                self.num_assistant_tokens += 2
             else:
-                self.num_assistant_tokens = max(1.0, self.num_assistant_tokens - 1.0)
+                self.num_assistant_tokens = max(1, self.num_assistant_tokens - 1)
 
         # The assistant's confidence threshold is adjusted throughout the speculative iterations to reduce the number of unnecessary draft and target forward passes. The costs are estimated based on the ROC curve, which considers the probability of the draft token and its match with the target. A cost of 25% is assigned to false positives and 75% to false negatives.
         # This adaptation is not compatible with UAG, as it relies on the number of matched tokens based on the draft vocabulary, which is unavailable in UAG.
@@ -284,7 +283,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
     def _calculate_new_tokens(self, input_ids: torch.LongTensor) -> tuple[int, int]:
         """Calculate the minimum and maximum number of new tokens to generate."""
         new_cur_len = input_ids.shape[-1]
-        max_new_tokens = min(int(self.num_assistant_tokens), self.generation_config.max_length - new_cur_len - 1)
+        max_new_tokens = min(int(self.num_assistant_tokens), self.main_model_max_length - new_cur_len - 1)
         min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - new_cur_len), 0)
         return min_new_tokens, max_new_tokens
 
@@ -388,7 +387,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self.target_tokenizer = target_tokenizer
         self.assistant_tokenizer = assistant_tokenizer
         self.prev_target_ids_len: int | None = None
-        self.prev_assistant_ids = None
+        self.prev_assistant_ids: torch.LongTensor | None = None
         self.target_lookbehind = self.assistant_generation_config.target_lookbehind
         self.assistant_lookbehind = self.assistant_generation_config.assistant_lookbehind
 
@@ -592,7 +591,8 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self, input_ids: torch.LongTensor, assistant_sequences: torch.LongTensor
     ) -> torch.LongTensor:
         """Processes assistant outputs to obtain target input IDs."""
-        num_prev_assistant = self.prev_assistant_ids.shape[1]
+        prev_assistant_ids = cast(torch.LongTensor, self.prev_assistant_ids)
+        num_prev_assistant = prev_assistant_ids.shape[1]
         start_assistant_look_index = num_prev_assistant - self.assistant_lookbehind
 
         new_target_ids_from_window = self.convert_source_tokens_to_target_tokens(
@@ -615,8 +615,8 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             # edge case: in case of no intersection between prompt and new_target_ids
             new_target_ids = torch.cat([new_target_ids, new_target_ids_from_window], dim=-1)
 
-        if hasattr(self.generation_config, "max_length"):
-            new_target_ids = new_target_ids[:, : self.generation_config.max_length]
+        if self.main_model_max_length is not None:
+            new_target_ids = new_target_ids[:, : self.main_model_max_length]
 
         return new_target_ids
 
@@ -722,7 +722,7 @@ class AssistantToTargetTranslator:
         self.assistant_prune_lm_head = assistant_prune_lm_head and assistant_model is not None
         if len(self._suppress_input_ids) > 0:
             # the assistant vocab is not a subset of the target vocab
-            if self.assistant_prune_lm_head:
+            if self.assistant_prune_lm_head and assistant_model is not None:
                 self.assistant_overlap_token_ids = torch.tensor(
                     list(self.target_to_assistant_input_ids.values()),
                     dtype=torch.long,
@@ -1139,7 +1139,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
                 break
 
         # In case we didn't find a match return the input sequence unchanged, reverts back to autoregressive decoding
-        if not match_found or len(chosen_ids) == 0:
+        if not match_found or chosen_ids is None or len(chosen_ids) == 0:
             return input_ids, None
 
         # Now need extend input_ids with chosen_ids

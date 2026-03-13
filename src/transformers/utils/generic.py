@@ -20,6 +20,7 @@ from __future__ import annotations
 import inspect
 import json
 import os
+import re
 import warnings
 from collections import OrderedDict, UserDict
 from collections.abc import Callable, Iterable, MutableMapping
@@ -60,7 +61,7 @@ if is_mlx_available():
 
 
 # vendored from distutils.util
-def strtobool(val):
+def strtobool(val) -> int:
     """Convert a string representation of truth to true (1) or false (0).
 
     True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values are 'n', 'no', 'f', 'false', 'off', and '0'.
@@ -74,7 +75,7 @@ def strtobool(val):
     raise ValueError(f"invalid truth value {val!r}")
 
 
-def infer_framework_from_repr(x):
+def infer_framework_from_repr(x) -> str | None:
     """
     Tries to guess the framework of an object `x` from its repr (brittle but will help in `is_tensor` to try the
     frameworks in a smart order, without the need to import the frameworks).
@@ -107,7 +108,7 @@ def _get_frameworks_and_test_func(x):
     return {f: framework_to_test[f] for f in frameworks}
 
 
-def is_tensor(x):
+def is_tensor(x) -> bool:
     """
     Tests if `x` is a `torch.Tensor`, `np.ndarray` or `mlx.array` in the order defined by `infer_framework_from_repr`
     """
@@ -124,28 +125,28 @@ def is_tensor(x):
     return False
 
 
-def is_numpy_array(x):
+def is_numpy_array(x) -> bool:
     """
     Tests if `x` is a numpy array or not.
     """
     return isinstance(x, np.ndarray)
 
 
-def is_torch_tensor(x):
+def is_torch_tensor(x) -> bool:
     """
     Tests if `x` is a torch tensor or not. Safe to call even if torch is not installed.
     """
     return _is_torch_available and isinstance(x, torch.Tensor)
 
 
-def is_torch_device(x):
+def is_torch_device(x) -> bool:
     """
     Tests if `x` is a torch device or not. Safe to call even if torch is not installed.
     """
     return _is_torch_available and isinstance(x, torch.device)
 
 
-def is_torch_dtype(x):
+def is_torch_dtype(x) -> bool:
     """
     Tests if `x` is a torch dtype or not. Safe to call even if torch is not installed.
     """
@@ -207,16 +208,19 @@ def _is_mlx(x):
     return isinstance(x, mx.array)
 
 
-def is_mlx_array(x):
+def is_mlx_array(x) -> bool:
     """
     Tests if `x` is a mlx array or not. Safe to call even when mlx is not installed.
     """
     return False if not _is_mlx_available else _is_mlx(x)
 
 
-def is_flash_attention_requested(config=None, requested_attention_implementation: str | None = None):
+def is_flash_attention_requested(
+    config=None, requested_attention_implementation: str | None = None, version: int | None = None
+) -> bool:
     """
-    Checks whether some flavor of flash attention is requested or not.
+    Checks whether some flavor of flash attention is requested or not. Optionally, checks for a specific version of
+    flash attention.
 
     This is checked against one of the two arguments, i.e. either the `config` or the directly passed value
     `requested_attention_implementation`. Otherwise, an error will be raised (ambiguity).
@@ -236,6 +240,10 @@ def is_flash_attention_requested(config=None, requested_attention_implementation
     else:
         checked_attention_implementation = requested_attention_implementation
 
+    # If a specific version is requested, look for a pattern of type "flash...{version}"
+    if version is not None:
+        return re.match(r".*flash.*" + str(version), checked_attention_implementation) is not None
+    # Otherwise, just check "flash" is in the attention implementation
     return "flash" in checked_attention_implementation
 
 
@@ -931,7 +939,7 @@ def merge_with_config_defaults(func):
 class GeneralInterface(MutableMapping):
     """
     Dict-like object keeping track of a class-wide mapping, as well as a local one. Allows to have library-wide
-    modifications though the class mapping, as well as local modifications in a single file with the local mapping.
+    modifications through the class mapping, as well as local modifications in a single file with the local mapping.
     """
 
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if

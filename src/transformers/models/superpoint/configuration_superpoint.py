@@ -13,38 +13,27 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="magic-leap-community/superpoint")
 class SuperPointConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SuperPointForKeypointDetection`]. It is used to instantiate a
-    SuperPoint model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the SuperPoint
-    [magic-leap-community/superpoint](https://huggingface.co/magic-leap-community/superpoint) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        encoder_hidden_sizes (`List`, *optional*, defaults to `[64, 64, 128, 128]`):
-            The number of channels in each convolutional layer in the encoder.
-        decoder_hidden_size (`int`, *optional*, defaults to 256): The hidden size of the decoder.
-        keypoint_decoder_dim (`int`, *optional*, defaults to 65): The output dimension of the keypoint decoder.
-        descriptor_decoder_dim (`int`, *optional*, defaults to 256): The output dimension of the descriptor decoder.
-        keypoint_threshold (`float`, *optional*, defaults to 0.005):
-            The threshold to use for extracting keypoints.
-        max_keypoints (`int`, *optional*, defaults to -1):
-            The maximum number of keypoints to extract. If `-1`, will extract all keypoints.
-        nms_radius (`int`, *optional*, defaults to 4):
-            The radius for non-maximum suppression.
-        border_removal_distance (`int`, *optional*, defaults to 4):
-            The distance from the border to remove keypoints.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+    encoder_hidden_sizes (`List`, *optional*, defaults to `[64, 64, 128, 128]`):
+        The number of channels in each convolutional layer in the encoder.
+    keypoint_decoder_dim (`int`, *optional*, defaults to 65): The output dimension of the keypoint decoder.
+    descriptor_decoder_dim (`int`, *optional*, defaults to 256): The output dimension of the descriptor decoder.
+    keypoint_threshold (`float`, *optional*, defaults to 0.005):
+        The threshold to use for extracting keypoints.
+    max_keypoints (`int`, *optional*, defaults to -1):
+        The maximum number of keypoints to extract. If `-1`, will extract all keypoints.
+    nms_radius (`int`, *optional*, defaults to 4):
+        The radius for non-maximum suppression.
+    border_removal_distance (`int`, *optional*, defaults to 4):
+        The distance from the border to remove keypoints.
 
     Example:
     ```python
