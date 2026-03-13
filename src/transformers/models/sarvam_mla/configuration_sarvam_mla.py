@@ -31,7 +31,7 @@ class SarvamMLAConfig(DeepseekV3Config):
     Example:
 
     ```python
-    >>> from transformers import SarvamMLAModel, SarvamMLAConfig
+    >>> from transformers import SarvamMLAConfig
 
     >>> # Initializing a SarvamMLA style configuration
     >>> configuration = SarvamMLAConfig()
@@ -89,22 +89,9 @@ class SarvamMLAConfig(DeepseekV3Config):
 
         # head_dim in the Hub config.json is set to kv_lora_rank + qk_rope_head_dim
         # for vLLM MLA compatibility, but internally the model uses qk_rope_head_dim
-        # for rotary embeddings. Remove it from kwargs to prevent overriding.
+        # for rotary embeddings.
         kwargs.pop("head_dim", None)
         kwargs.pop("q_head_dim", None)
-
-        # The Hub config uses "deepseek_yarn" as rope type; normalize to "yarn"
-        # which is the standard type in ROPE_INIT_FUNCTIONS.
-        if rope_parameters is not None and rope_parameters.get("type") == "deepseek_yarn":
-            rope_parameters = dict(rope_parameters)
-            rope_parameters["type"] = "yarn"
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        if rope_scaling is not None:
-            if rope_scaling.get("type") == "deepseek_yarn":
-                rope_scaling = dict(rope_scaling)
-                rope_scaling["type"] = "yarn"
-            if rope_parameters is None:
-                rope_parameters = rope_scaling
 
         super().__init__(
             vocab_size=vocab_size,
@@ -142,6 +129,17 @@ class SarvamMLAConfig(DeepseekV3Config):
             attention_dropout=attention_dropout,
             **kwargs,
         )
+
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
+        # The Hub config uses "deepseek_yarn" as rope type; normalize to "yarn"
+        # which is the standard type in ROPE_INIT_FUNCTIONS.
+        rope_scaling = kwargs.get("rope_scaling", None)
+        if rope_scaling is not None and rope_scaling.get("type") == "deepseek_yarn":
+            kwargs["rope_scaling"] = dict(rope_scaling)
+            kwargs["rope_scaling"]["type"] = "yarn"
+        if self.rope_parameters and self.rope_parameters.get("type") == "deepseek_yarn":
+            self.rope_parameters["type"] = "yarn"
+        return super().convert_rope_params_to_dict(ignore_keys_at_rope_validation=ignore_keys_at_rope_validation, **kwargs)
 
 
 __all__ = ["SarvamMLAConfig"]

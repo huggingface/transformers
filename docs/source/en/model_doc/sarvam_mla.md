@@ -15,7 +15,7 @@ See the License for the specific language governing permissions and limitations 
 
 ## Overview
 
-SarvamMLA is a 105B parameter Mixture of Experts (MoE) language model developed by [Sarvam AI](https://www.sarvam.ai/). It uses Multi-head Latent Attention (MLA) combined with sparse MoE routing, architecturally similar to DeepSeek-V3.
+SarvamMLA is a 105B parameter Mixture of Experts (MoE) language model developed by [Sarvam AI](https://www.sarvam.ai/). It uses Multi-head Latent Attention (MLA) combined with sparse MoE routing, architecturally identical to DeepSeek-V3.
 
 Key architectural features:
 
@@ -23,6 +23,8 @@ Key architectural features:
 - **Sparse Mixture of Experts**: 128 routed experts with 8 active per token, plus 1 shared expert. The first layer uses a dense MLP.
 - **DeepSeek YaRN RoPE**: Extended context support up to 131K tokens via YaRN rotary position embeddings.
 - **Sigmoid routing with group-based top-k**: Token-choice routing using sigmoid scores with expert bias correction and group-aware selection.
+
+This model uses the DeepSeek-V3 architecture with a custom configuration. See the [DeepSeek-V3 documentation](deepseek_v3) for model and forward reference.
 
 ## Usage
 
@@ -41,39 +43,6 @@ outputs = model.generate(**inputs, max_new_tokens=50)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
-For running on limited GPU memory, use quantization:
-
-```python
-from transformers import AutoModelForCausalLM, BitsAndBytesConfig
-
-quantization_config = BitsAndBytesConfig(load_in_4bit=True)
-model = AutoModelForCausalLM.from_pretrained(
-    "sarvamai/sarvam-105b",
-    quantization_config=quantization_config,
-    device_map="auto",
-)
-```
-
 ## SarvamMLAConfig
 
 [[autodoc]] SarvamMLAConfig
-
-## SarvamMLAModel
-
-[[autodoc]] SarvamMLAModel
-    - forward
-
-## SarvamMLAForCausalLM
-
-[[autodoc]] SarvamMLAForCausalLM
-    - forward
-
-## SarvamMLAForSequenceClassification
-
-[[autodoc]] SarvamMLAForSequenceClassification
-    - forward
-
-## SarvamMLAForTokenClassification
-
-[[autodoc]] SarvamMLAForTokenClassification
-    - forward

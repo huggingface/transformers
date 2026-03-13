@@ -19,7 +19,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_sarvam_mla import *
-    from .modeling_sarvam_mla import *
 else:
     import sys
 
