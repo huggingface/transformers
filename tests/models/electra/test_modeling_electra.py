@@ -126,6 +126,7 @@ class ElectraModelTester:
     def get_config(self):
         return ElectraConfig(
             vocab_size=self.vocab_size,
+            embedding_size=self.hidden_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
