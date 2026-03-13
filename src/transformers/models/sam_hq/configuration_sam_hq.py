@@ -22,7 +22,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
 class SamHQPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -55,7 +55,7 @@ class SamHQPromptEncoderConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
 class SamHQVisionConfig(PreTrainedConfig):
     r"""
     output_channels (`int`, *optional*, defaults to 256):
@@ -140,7 +140,7 @@ class SamHQVisionConfig(PreTrainedConfig):
         self.scale = self.hidden_size // 2
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
 class SamHQMaskDecoderConfig(PreTrainedConfig):
     r"""
     vit_dim (`int`, *optional*, defaults to 768):
@@ -188,7 +188,7 @@ class SamHQMaskDecoderConfig(PreTrainedConfig):
         self.vit_dim = vit_dim
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
 class SamHQConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `SamHQPromptEncoderConfig`], *optional*):

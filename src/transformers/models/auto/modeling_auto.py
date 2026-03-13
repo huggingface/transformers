@@ -1081,6 +1081,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
         ("lw_detr", "LwDetrForObjectDetection"),
         ("pp_doclayout_v2", "PPDocLayoutV2ForObjectDetection"),
         ("pp_doclayout_v3", "PPDocLayoutV3ForObjectDetection"),
+        ("pp_ocrv5_server_det", "PPOCRV5ServerDetForObjectDetection"),
         ("rt_detr", "RTDetrForObjectDetection"),
         ("rt_detr_v2", "RTDetrV2ForObjectDetection"),
         ("table-transformer", "TableTransformerForObjectDetection"),
@@ -1102,6 +1103,7 @@ MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for depth estimation mapping
+        ("chmv2", "CHMv2ForDepthEstimation"),
         ("depth_anything", "DepthAnythingForDepthEstimation"),
         ("depth_pro", "DepthProForDepthEstimation"),
         ("dpt", "DPTForDepthEstimation"),

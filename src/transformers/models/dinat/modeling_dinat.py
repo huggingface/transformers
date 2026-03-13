@@ -20,7 +20,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -31,6 +31,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ...utils.generic import can_return_tuple
 from .configuration_dinat import DinatConfig
 
 
@@ -732,6 +733,8 @@ class DinatBackbone(BackboneMixin, DinatPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,

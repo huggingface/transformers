@@ -1454,6 +1454,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if isinstance(dtype, str):
             dtype = getattr(torch, dtype)
 
+        # Set the same `dtype` on all subconfigs to avoid dtype mismatch. When "auto" dtype
+        # with nested models, we can't dispatch different dtype per backbone module
+        for sub_config_key in config.sub_configs:
+            if (sub_config := getattr(config, sub_config_key)) is not None:
+                sub_config.dtype = dtype
+
         # If passing `attn_implementation` as kwargs, respect it (it will be applied recursively on subconfigs)
         if "attn_implementation" in kwargs:
             config._attn_implementation = kwargs.pop("attn_implementation")
@@ -4185,6 +4191,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         state_dict: dict | None,
         checkpoint_files: list[str] | None,
         load_config: LoadStateDictConfig,
+        expected_keys: list[str] | None = None,
     ) -> tuple[LoadStateDictInfo, dict]:
         """Perform the actual loading of some checkpoints into a `model`, by reading them from disk and dispatching them accordingly."""
         is_quantized = load_config.is_quantized
@@ -4194,7 +4201,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         }
 
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
-        expected_keys = list(model.state_dict().keys())
+        expected_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys
 
         if logger.level >= logging.WARNING:
             verify_tp_plan(expected_keys, getattr(model, "_tp_plan", None))
