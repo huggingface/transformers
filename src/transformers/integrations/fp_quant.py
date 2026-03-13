@@ -28,6 +28,7 @@ from transformers.utils.quantization_config import FPQuantConfig
 
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name
+from .mxfp4 import on_device
 
 
 class FpQuantQuantize(ConversionOps):
@@ -50,7 +51,7 @@ class FpQuantQuantize(ConversionOps):
 
         # Let pre-forward handle the quantization and set None where necessary
         # This operation will quantize the weights internally
-        with torch.cuda.device(value.device):
+        with on_device(value.device):
             module.pre_forward()
 
         prefix_target_key = target_key.rsplit(".", 1)[0]
