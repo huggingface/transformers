@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,155 +13,124 @@
 # limitations under the License.
 """Testing suite for the PPChart2Table model."""
 
-import gc
 import unittest
-
-import requests
-
-import pytest
-from parameterized import parameterized
-from PIL import Image
 
 from transformers import (
     AutoProcessor,
     PPChart2TableConfig,
-    PPChart2TableForConditionalGeneration,
     is_torch_available,
+    is_vision_available,
 )
-from transformers.testing_utils import (
-    backend_empty_cache,
-    require_torch,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-)
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
+    from transformers import (
+        PPChart2TableForConditionalGeneration,
+        PPChart2TableModel,
+    )
+
+
+if is_vision_available():
+    from transformers.image_utils import load_image
+
 
 class PPChart2TableVisionText2TextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=1,
-        seq_length=31,
+        batch_size=3,
+        seq_length=7,
         num_channels=3,
-        image_height=64,
-        image_width=64,
+        ignore_index=-100,
+        image_size=64,
+        image_token_index=1,
+        model_type="pp_chart2table",
+        is_training=False,
+        output_channels=1024,
+        vision_hidden_channels=1024,
         text_config={
-            "hidden_size": 32,
-            "hidden_act": "silu",
+            "model_type": "qwen2",
+            "vocab_size": 99,
+            "hidden_size": 128,
+            "intermediate_size": 37,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
             "num_key_value_heads": 2,
-            "intermediate_size": 32,
-            "attention_dropout": 0.0,
-            "sliding_window": 32768,
-            "rms_norm_eps": 1e-06,
-            "vocab_size": 151860,
-            "max_position_embeddings": 32768,
-            "rope_parameters": {"rope_theta": 1000000.0, "rope_type": "default"},
+            "output_channels": 64,
+            "hidden_act": "silu",
+            "max_position_embeddings": 512,
+            "rope_theta": 10000,
+            "mlp_ratio": 4,
+            "tie_word_embeddings": True,
+            "bos_token_id": 2,
+            "eos_token_id": 3,
+            "pad_token_id": 4,
         },
-        is_training=False,
         vision_config={
-            "depth": 2,
-            "hidden_size": 144,
-            "output_channels": 192,
-            "hidden_act": "gelu",
-            "image_size": 64,
-            "num_channels": 3,
-            "mlp_ratio": 4.0,
-            "norm_layer_eps": 1e-6,
+            "num_hidden_layers": 2,
+            "output_channels": 64,
+            "hidden_act": "quick_gelu",
+            "hidden_size": 32,
+            "mlp_dim": 128,
             "num_attention_heads": 4,
-            "patch_size": 16,
-            "qkv_bias": True,
-            "use_rel_pos": True,
-            "global_attn_indexes": [2, 5, 8, 11],
-            "window_size": 14,
-            "neck_channels": 48,
-            "net_channels": 96,
-            "attention_dropout": 0.0,
+            "patch_size": 2,
+            "image_size": 64,
         },
-        bos_token_id=151643,
-        eos_token_id=151643,
-        im_start_token=151857,
-        im_end_token=151858,
-        im_patch_token=151859,
     ):
         self.parent = parent
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.hidden_size = text_config["hidden_size"]
-        self.im_start_token = im_start_token
-        self.im_end_token = im_end_token
-        self.im_patch_token = im_patch_token
+        self.ignore_index = ignore_index
+        self.bos_token_id = text_config["bos_token_id"]
+        self.eos_token_id = text_config["eos_token_id"]
+        self.pad_token_id = text_config["pad_token_id"]
+        self.image_token_index = image_token_index
+        self.model_type = model_type
         self.text_config = text_config
         self.vision_config = vision_config
         self.batch_size = batch_size
-        self.seq_length = seq_length
         self.num_channels = num_channels
-        self.image_height = image_height
-        self.image_width = image_width
+        self.image_size = image_size
         self.is_training = is_training
+        self.num_image_tokens = 64
+        self.seq_length = seq_length + self.num_image_tokens
+        self.output_channels = output_channels
+        self.vision_hidden_channels = vision_hidden_channels
+
+        self.num_hidden_layers = text_config["num_hidden_layers"]
         self.vocab_size = text_config["vocab_size"]
+        self.hidden_size = text_config["hidden_size"]
+        self.num_attention_heads = text_config["num_attention_heads"]
 
     def get_config(self):
         return PPChart2TableConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
+            model_type=self.model_type,
+            image_token_index=self.image_token_index,
         )
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
-        pixel_values = torch.randn((1, 3, self.image_height, self.image_width)).to(torch_device)
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-        num_patch = self.image_height // 16 // 4
-        input = (
-            [
-                151644,
-                8948,
-                198,
-                2610,
-                1265,
-                1795,
-                279,
-                11221,
-                15516,
-                323,
-                10339,
-                697,
-                11253,
-                304,
-                7716,
-                13,
-                151645,
-                151644,
-                872,
-                198,
-                151857,
-            ]
-            + [151859] * (num_patch * num_patch)
-            + [151858, 198, 14488, 311, 1965, 151645, 151644, 77091, 198]
-        )
-
-        input_ids = torch.tensor(input).unsqueeze(0).to(torch_device)
-
-        return config, pixel_values, input_ids
+        return config, pixel_values
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values, input_ids = config_and_inputs
+        config, pixel_values = config_and_inputs
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
+
+        input_ids[input_ids == self.image_token_index] = self.pad_token_id
+        input_ids[:, : self.num_image_tokens] = self.image_token_index
+
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
@@ -172,11 +141,21 @@ class PPChart2TableVisionText2TextModelTester:
 
 @require_torch
 class PPChart2TableModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (PPChart2TableForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-text-to-text": PPChart2TableForConditionalGeneration}
-
-    _is_composite = True
-    test_resize_embeddings = False
+    all_model_classes = (
+        (
+            PPChart2TableModel,
+            PPChart2TableForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "image-text-to-text": PPChart2TableForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = PPChart2TableVisionText2TextModelTester(self)
@@ -185,214 +164,132 @@ class PPChart2TableModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="PPChart2Table does not support.")
-    def test_sliding_window_mask(self):
+    @unittest.skip(reason="PPChart2Table does not support")
+    def test_get_image_features_attentions(self):
         pass
 
-    @unittest.skip(reason="PPChart2Table does not support.")
-    def test_generate_compile_model_forward_fullgraph(self):
+    @unittest.skip(reason="PPChart2Table does not support")
+    def test_get_image_features_hidden_states(self):
         pass
 
-    @unittest.skip(reason="PPChart2Table does not support.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="PPChart2Table does not support beam search.")
-    def test_beam_sample_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="PPChart2Table does not support beam search.")
-    def test_beam_search_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="PPChart2Table does not support beam search.")
-    def test_beam_search_generate_dict_output(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="PPChart2Table does not support beam search.")
-    def test_beam_search_generate_dict_outputs_use_cache(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="PPChart2Table does not support beam search.")
-    def test_beam_sample_generate_dict_output(self):
-        pass
-
-    @unittest.skip(reason="PPChart2Table needs to apply weight conversions.")
-    def test_can_load_from_already_mapped_keys(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="PPChart2Table does not support beam search.")
-    def test_generate_from_inputs_embeds_1_beam_search(self, _, num_beams):
-        pass
-
-    @parameterized.expand([("random",), ("same",)])
-    @pytest.mark.generate
-    @unittest.skip(reason="PPChart2Table does not support assisted decoding.")
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="PPChart2Table does not support assisted decoding.")
-    def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("PPChart2Table does not support this test.")
+    @unittest.skip(reason="PPChart2Table does not support this test.")
     def test_model_is_small(self):
         pass
 
 
 @require_torch
-@slow
 class PPChart2TableIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("/workspace/model_weight_torch/PP-Chart2Table")
+        self.processor = AutoProcessor.from_pretrained("PaddlePaddle/PPChart2Table_safetensors")
 
     def tearDown(self):
-        gc.collect()
-        backend_empty_cache(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
-    def test_small_model_integration_test(self):
-        model = PPChart2TableForConditionalGeneration.from_pretrained(
-            "/workspace/model_weight_torch/PP-Chart2Table", dtype="float32"
-        ).to("cuda")
-
-        image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", stream=True).raw)
-
-        inputs = self.processor(images=image).to(model.device)
-        breakpoint()
-        expected_input_ids_length = 286
-        assert expected_input_ids_length == len(inputs.input_ids[0])
-
-        expected_input_ids = [151644, 8948, 198, 2610, 1265, 1795, 279, 11221, 15516, 323]
-
-        assert expected_input_ids == inputs.input_ids[0].tolist()[:10]
-
-        expected_pixel_slice = torch.tensor(
-            [
-                [1.0000, 1.0000, 1.0000],
-                [1.0000, 1.0000, 1.0000],
-                [0.9922, 0.9922, 0.9922],
-                [1.0000, 1.0000, 1.0000],
-                [1.0000, 1.0000, 1.0000],
-            ],
-            dtype=torch.float32,
-            device="cpu",
+    @slow
+    def test_small_model_integration_test_got_ocr_stop_strings(self):
+        model_id = "stepfun-ai/GOT-OCR-2.0-hf"
+        model = PPChart2TableForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
+        image = load_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_ocr/resolve/main/iam_picture.jpeg"
         )
 
-        assert torch.allclose(expected_pixel_slice, inputs.pixel_values[:5, :, 0, 0], atol=3e-3)
+        inputs = self.processor(image, return_tensors="pt").to(torch_device)
+        generate_ids = model.generate(
+            **inputs,
+            do_sample=False,
+            num_beams=1,
+            tokenizer=self.processor.tokenizer,
+            stop_strings="<|im_end|>",
+            max_new_tokens=4096,
+        )
+        decoded_output = self.processor.decode(
+            generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
+        )
+        expected_output = "industre"
+        self.assertEqual(decoded_output, expected_output)
 
-        # verify generation
-        inputs = inputs.to(torch_device)
-        output = model.generate(**inputs, max_new_tokens=30)
-        result = self.processor.decode(output[0][inputs["input_ids"].shape[-1] : -1])
-
-        EXPECTED_DECODED_TEXT = "生甘草"
-
-        self.assertEqual(
-            result,
-            EXPECTED_DECODED_TEXT,
+    @slow
+    def test_small_model_integration_test_got_ocr_format(self):
+        model_id = "PaddlePaddle/PPChart2Table_safetensors"
+        model = PPChart2TableForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
+        image = load_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
         )
 
-    # def test_small_model_integration_test_batch(self):
-    #     model = (
-    #         PPChart2TableForConditionalGeneration.from_pretrained("/workspace/model_weight_torch/PP-Chart2Table", dtype="bfloat16")
-    #         .to(torch_device)
-    #         .eval()
-    #     )
+        inputs = self.processor(image, return_tensors="pt", format=True).to(torch_device)
+        generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
+        decoded_output = self.processor.decode(
+            generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
+        )
+        expected_output = "\\title{\nR"
+        self.assertEqual(decoded_output, expected_output)
 
-    #     image = Image.open("/workspace/PaddleX/paddlex/inference/models/doc_vlm/modeling/chart_parsing_02.png").convert("RGB")
-    #     inputs = self.processor(images=image).to(model.device)
+    @slow
+    def test_small_model_integration_test_got_ocr_fine_grained(self):
+        model_id = "PaddlePaddle/PPChart2Table_safetensors"
+        model = PPChart2TableForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
+        image = load_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
+        )
 
-    #     output = model.generate(**inputs, max_new_tokens=256)
-    #     generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, output)]
-    #     result = self.processor.batch_decode(
-    #         generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-    #     )
+        inputs = self.processor(image, return_tensors="pt", color="green").to(torch_device)
+        generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
+        decoded_output = self.processor.decode(
+            generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
+        )
+        expected_output = "You should keep in"
+        self.assertEqual(decoded_output, expected_output)
 
-    #     EXPECTED_DECODED_TEXT = ["生甘草", "生甘草"]
+    @slow
+    def test_small_model_integration_test_got_ocr_crop_to_patches(self):
+        model_id = "PaddlePaddle/PPChart2Table_safetensors"
+        model = PPChart2TableForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
+        image = load_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/one_column.png"
+        )
 
-    #     self.assertEqual(
-    #         result,
-    #         EXPECTED_DECODED_TEXT,
-    #     )
+        inputs = self.processor(image, return_tensors="pt", crop_to_patches=True).to(torch_device)
+        generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
+        decoded_output = self.processor.decode(
+            generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
+        )
+        expected_output = "on developing architectural improvements"
+        self.assertEqual(decoded_output, expected_output)
 
-    # @require_flash_attn
-    # @require_torch_accelerator
-    # @pytest.mark.flash_attn_test
-    # def test_small_model_integration_test_flashatt2(self):
-    #     model = (
-    #         PPChart2TableForConditionalGeneration.from_pretrained(
-    #             "/workspace/model_weight_torch/PP-Chart2Table", dtype="bfloat16", attn_implementation="flash_attention_2"
-    #         )
-    #         .to(torch_device)
-    #         .eval()
-    #     )
+    @slow
+    def test_small_model_integration_test_got_ocr_multi_pages(self):
+        model_id = "PaddlePaddle/PPChart2Table_safetensors"
+        model = PPChart2TableForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
+        image1 = load_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/one_column.png"
+        )
+        image2 = load_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
+        )
 
-    #     image = Image.open("/workspace/PaddleX/paddlex/inference/models/doc_vlm/modeling/chart_parsing_02.png").convert("RGB")
-    #     inputs = self.processor(images=image).to(model.device)
+        inputs = self.processor([image1, image2], return_tensors="pt", multi_page=True).to(torch_device)
+        generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
+        decoded_output = self.processor.decode(
+            generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
+        )
+        expected_output = "on developing architectural improvements"
+        self.assertEqual(decoded_output, expected_output)
 
-    #     expected_input_ids_length = 211
-    #     assert expected_input_ids_length == len(inputs.input_ids[0])
+    @slow
+    def test_small_model_integration_test_got_ocr_batched(self):
+        model_id = "PaddlePaddle/PPChart2Table_safetensors"
+        model = PPChart2TableForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
+        image1 = load_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
+        )
+        image2 = load_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
+        )
 
-    #     expected_input_ids = [100273, 2969, 93963, 93919, 101305, 100295, 100295, 100295, 100295, 100295]  # fmt: skip
-    #     assert expected_input_ids == inputs.input_ids[0].tolist()[:10]
-
-    #     expected_pixel_slice = torch.tensor(
-    #         [
-    #             [1.0000, 1.0000, 1.0000],
-    #             [1.0000, 1.0000, 1.0000],
-    #             [0.9922, 0.9922, 0.9922],
-    #             [1.0000, 1.0000, 1.0000],
-    #             [1.0000, 1.0000, 1.0000],
-    #         ],
-    #         dtype=torch.float32,
-    #         device="cpu",
-    #     )
-    #     assert torch.allclose(expected_pixel_slice, inputs.pixel_values[:5, :, 0, 0], atol=3e-3)
-
-    #     # verify generation
-    #     inputs = inputs.to(torch_device)
-    #     output = model.generate(**inputs, max_new_tokens=30)
-    #     result = self.processor.decode(output[0][inputs["input_ids"].shape[-1] : -1])
-
-    #     EXPECTED_DECODED_TEXT = "生甘草"
-
-    #     self.assertEqual(
-    #         result,
-    #         EXPECTED_DECODED_TEXT,
-    #     )
-
-    # @require_flash_attn
-    # @require_torch_accelerator
-    # @pytest.mark.flash_attn_test
-    # def test_small_model_integration_test_batch_flashatt2(self):
-    #     model = (
-    #         PPChart2TableForConditionalGeneration.from_pretrained(
-    #             "/workspace/model_weight_torch/PP-Chart2Table", dtype="bfloat16", attn_implementation="flash_attention_2"
-    #         )
-    #         .to(torch_device)
-    #         .eval()
-    #     )
-
-    #     image = Image.open("/workspace/PaddleX/paddlex/inference/models/doc_vlm/modeling/chart_parsing_02.png").convert("RGB")
-    #     inputs = self.processor(images=image).to(model.device)
-
-    #     # it should not matter whether two images are the same size or not
-    #     output = model.generate(**inputs, max_new_tokens=30)
-    #     generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, output)]
-    #     result = self.processor.batch_decode(
-    #         generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-    #     )
-
-    #     EXPECTED_DECODED_TEXT = ["生甘草", "生甘草"]
-
-    #     self.assertEqual(
-    #         result,
-    #         EXPECTED_DECODED_TEXT,
-    #     )
+        inputs = self.processor([image1, image2], return_tensors="pt").to(torch_device)
+        generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
+        decoded_output = self.processor.batch_decode(
+            generate_ids[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
+        )
+        expected_output = ["Reducing the number", "R&D QUALITY"]
+        self.assertEqual(decoded_output, expected_output)

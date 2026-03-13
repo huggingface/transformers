@@ -1,9 +1,22 @@
-from dataclasses import dataclass
-from typing import Optional
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
+from dataclasses import dataclass
+
+from typing import Optional
 import torch
 import torch.nn as nn
-import torchvision.transforms.v2.functional as tvF
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
@@ -19,16 +32,36 @@ from ..got_ocr2.modeling_got_ocr2 import (
 
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...processing_utils import ProcessorMixin, TensorType, Unpack
+from ...processing_utils import ProcessorMixin, TensorType, Unpack, ProcessingKwargs
 
-from ...image_utils import SizeDict
+from ...image_utils import SizeDict, ImageInput
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring
+@auto_docstring(
+    checkpoint="PaddlePaddle/PP-Chart2Table_safetensors",
+    custom_args=r"""
+    output_channels (`int`, *optional*, defaults to 1024):
+        Dimensionality of the output channels from the vision encoder. This is the final channel count
+        after the vision downsample layers, which is then projected to the text model hidden size.
+    vision_hidden_channels (`int`, *optional*, defaults to 512):
+        Dimensionality of the intermediate hidden channels in the vision encoder. This is the channel
+        count between the first and second downsample layers.
+    """
+)
 class PPChart2TableConfig(GotOcr2Config):
-    pass
+    def __init__(
+        self,
+        output_channels: int = 1024,
+        vision_hidden_channels: int = 512,
+        **super_kwargs,
+    ):
+
+        self.output_channels = output_channels
+        self.vision_hidden_channels = vision_hidden_channels
+        super().__init__()
 
 
 @auto_docstring
@@ -58,7 +91,6 @@ class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -92,31 +124,31 @@ class PPChart2TableProcessor(ProcessorMixin):
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
-        self.message_start_token = "<|im_start|>"
-        self.message_end_token = "<|im_end|>"
-        self.img_start_token = "<img>"
-        self.img_end_token = "</img>"
-        self.img_pad_token = "<imgpad>"
-        self.image_token = "<imgpad>"  # keep the above for BC, but we need to call it `image_token`
-        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+
+        self.message_start_token = tokenizer.message_start_token
+        self.message_end_token = tokenizer.message_end_token
+        self.img_start_token = tokenizer.img_start_token
+        self.img_end_token = tokenizer.img_end_token
+        self.img_pad_token = tokenizer.img_pad_token
+        self.image_token = tokenizer.image_token
         self.system_query = "system\nYou should follow the instructions carefully and explain your answers in detail."
 
     def __call__(
         self,
-        images,
-        text=None,
-        **kwargs,
+        images: ImageInput = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         if images is not None:
             image_inputs = self.image_processor(images=images, return_tensors="pt")
         else:
             image_inputs = {}
-        image_count = len(image_inputs)
-        _, _, height, _ = image_inputs["pixel_values"].shape
+
+        batch_size, _, height, _ = image_inputs["pixel_values"].shape
         num_patches = height // self.image_processor.patch_size // self.image_processor.merge_size
         
         input_ids = {"input_ids": None}
-        if text == None:
+        if text is None:
             query = "Chart to table"
             prompt = (
                 self.message_start_token
@@ -134,20 +166,16 @@ class PPChart2TableProcessor(ProcessorMixin):
                 + "assistant\n"
             )
             input_ids = torch.tensor(self.tokenizer([prompt]).input_ids)
-            input_ids = input_ids.repeat(image_count, 1)
+            input_ids = input_ids.repeat(batch_size, 1)
             input_ids = {"input_ids": input_ids}
-        return BatchFeature(data={**input_ids, **image_inputs})
+        else:
+            raise ValueError("PPChart2Table processor does not support text inputs")
 
-    def postprocess(self, model_pred, **kwargs):
-        return self.tokenizer.batch_decode(
-            model_pred[0],
-            skip_special_tokens=kwargs.get("skip_special_tokens", True),
-            clean_up_tokenization_spaces=False,
-        )
+        return BatchFeature(data={**input_ids, **image_inputs})
 
 
 class PPChart2TableVisionPreTrainedModel(GotOcr2PreTrainedModel):
-    input_modalities = ("image", "text")
+    pass
 
 
 class PPChart2TableVisionEncoder(GotOcr2VisionEncoder, PPChart2TableVisionPreTrainedModel):
@@ -176,7 +204,7 @@ class PPChart2TableModel(GotOcr2Model):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        
+
         image_output = self.vision_tower(pixel_values)
         last_hidden_state = image_output.last_hidden_state
         last_hidden_state = self.vision_downsample1(last_hidden_state)
@@ -199,11 +227,8 @@ class PPChart2TableForConditionalGeneration(GotOcr2ForConditionalGeneration):
 __all__ = [
     "PPChart2TableForConditionalGeneration",
     "PPChart2TableModel",
-    "PPChart2TablePreTrainedModel",
     "PPChart2TableConfig",
-    "PPChart2TableTextPreTrainedModel",
     "PPChart2TableVisionPreTrainedModel",
-    "PPChart2TableVisionModel",
     "PPChart2TableImageProcessorFast",
     "PPChart2TableProcessor",
 ]

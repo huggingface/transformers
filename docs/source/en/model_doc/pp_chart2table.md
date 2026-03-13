@@ -1,4 +1,4 @@
-<!--Copyright 2025 The HuggingFace Team. All rights reserved.
+<!--Copyright 2026 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -42,7 +42,11 @@ import requests
 from PIL import Image
 from transformers import pipeline
 model_path = "PaddlePaddle/PP-Chart2Table_safetensors"
-pipe = pipeline("image-text-to-text", model=model_path)
+pipe = pipeline(
+    task="image-text-to-text", 
+    model=model_path,
+    device_map="auto",
+)
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", stream=True).raw)
 result = pipe(
     images=image, 
@@ -64,14 +68,19 @@ from PIL import Image
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
 model_path = "PaddlePaddle/PP-Chart2Table_safetensors"
-model = AutoModelForImageTextToText.from_pretrained(model_path, dtype="float32").to("cuda")
-processor = AutoProcessor.from_pretrained(model_path)
+model = AutoModelForImageTextToText.from_pretrained(
+    model_path, 
+    dtype="float32",
+    device_map="auto",
+)
+processor = AutoProcessor.from_pretrained(model_path, use_fast=True)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", stream=True).raw)
 inputs = processor(images=image).to(model.device)
 
-outputs = model.generate(**inputs, do_sample=False, max_new_tokens=256)
-result = processor.postprocess(outputs)
+generated_ids = model.generate(**inputs, use_cache=True, do_sample=False, max_new_tokens=256)
+generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
+result = processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 print(result)
 
 ```
@@ -91,7 +100,11 @@ import requests
 from transformers import pipeline
 from PIL import Image
 model_path = "PaddlePaddle/PP-Chart2Table_safetensors"
-pipe = pipeline("image-text-to-text", model=model_path)
+pipe = pipeline(
+    task="image-text-to-text", 
+    model=model_path,
+    device_map="auto",
+)
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", stream=True).raw)
 result = pipe(
     images=[image, image],
@@ -112,14 +125,19 @@ from PIL import Image
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
 model_path = "PaddlePaddle/PP-Chart2Table_safetensors"
-model = AutoModelForImageTextToText.from_pretrained(model_path, dtype="float32").to("cuda")
+model = AutoModelForImageTextToText.from_pretrained(
+    model_path, 
+    dtype="float32",
+    device_map="auto",
+)
 processor = AutoProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", stream=True).raw)
 inputs = processor(images=[image, image]).to(model.device)
 
-outputs = model.generate(**inputs, do_sample=False, max_new_tokens=256)
-result = processor.postprocess(outputs)
+generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=256)
+generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
+result = processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 print(result)
 ```
 
@@ -129,32 +147,10 @@ print(result)
 ## PPChart2TableForConditionalGeneration
 
 [[autodoc]] PPChart2TableForConditionalGeneration
-    - forward
 
 ## PPChart2TableConfig
 
 [[autodoc]] PPChart2TableConfig
-
-## PPChart2TableVisionConfig
-
-[[autodoc]] PPChart2TableVisionConfig
-
-## PPChart2TableTextConfig
-
-[[autodoc]] PPChart2TableTextConfig
-
-## PPChart2TableTextModel
-
-[[autodoc]] PPChart2TableTextModel
-    - forward
-
-## PPChart2TableVisionModel
-
-[[autodoc]] PPChart2TableVisionModel
-
-## PPChart2TableImageProcessor
-
-[[autodoc]] PPChart2TableImageProcessor
 
 ## PPChart2TableImageProcessorFast
 
@@ -168,6 +164,3 @@ print(result)
 
 [[autodoc]] PPChart2TableProcessor
 
-## PPChart2TableVisionTransformer
-
-[[autodoc]] PPChart2TableVisionTransformer

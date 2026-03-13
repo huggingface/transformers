@@ -4,6 +4,20 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_pp_chart2table.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
@@ -71,7 +85,17 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
         self.mlp_dim = mlp_dim
 
 
-@auto_docstring
+@auto_docstring(
+    checkpoint="PaddlePaddle/PP-Chart2Table_safetensors",
+    custom_args=r"""
+    output_channels (`int`, *optional*, defaults to 1024):
+        Dimensionality of the output channels from the vision encoder. This is the final channel count
+        after the vision downsample layers, which is then projected to the text model hidden size.
+    vision_hidden_channels (`int`, *optional*, defaults to 512):
+        Dimensionality of the intermediate hidden channels in the vision encoder. This is the channel
+        count between the first and second downsample layers.
+    """,
+)
 class PPChart2TableConfig(PreTrainedConfig):
     r"""
     Example:
@@ -102,8 +126,12 @@ class PPChart2TableConfig(PreTrainedConfig):
         image_token_index: int | None = 151859,
         image_seq_length: int | None = 576,
         tie_word_embeddings: bool | None = True,
+        output_channels: int = 1024,
+        vision_hidden_channels: int = 512,
         **kwargs,
     ):
+        self.output_channels = output_channels
+        self.vision_hidden_channels = vision_hidden_channels
         self.image_token_index = image_token_index
         self.image_seq_length = image_seq_length
 

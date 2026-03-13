@@ -4,11 +4,26 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_pp_chart2table.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import torch
 
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessorMixin
+from ...image_utils import ImageInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
 
 
@@ -19,31 +34,31 @@ class PPChart2TableProcessor(ProcessorMixin):
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
-        self.message_start_token = "<|im_start|>"
-        self.message_end_token = "<|im_end|>"
-        self.img_start_token = "<img>"
-        self.img_end_token = "</img>"
-        self.img_pad_token = "<imgpad>"
-        self.image_token = "<imgpad>"  # keep the above for BC, but we need to call it `image_token`
-        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+
+        self.message_start_token = tokenizer.message_start_token
+        self.message_end_token = tokenizer.message_end_token
+        self.img_start_token = tokenizer.img_start_token
+        self.img_end_token = tokenizer.img_end_token
+        self.img_pad_token = tokenizer.img_pad_token
+        self.image_token = tokenizer.image_token
         self.system_query = "system\nYou should follow the instructions carefully and explain your answers in detail."
 
     def __call__(
         self,
-        images,
-        text=None,
-        **kwargs,
+        images: ImageInput = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         if images is not None:
             image_inputs = self.image_processor(images=images, return_tensors="pt")
         else:
             image_inputs = {}
-        image_count = len(image_inputs)
-        _, _, height, _ = image_inputs["pixel_values"].shape
+
+        batch_size, _, height, _ = image_inputs["pixel_values"].shape
         num_patches = height // self.image_processor.patch_size // self.image_processor.merge_size
 
         input_ids = {"input_ids": None}
-        if text == None:
+        if text is None:
             query = "Chart to table"
             prompt = (
                 self.message_start_token
@@ -61,16 +76,12 @@ class PPChart2TableProcessor(ProcessorMixin):
                 + "assistant\n"
             )
             input_ids = torch.tensor(self.tokenizer([prompt]).input_ids)
-            input_ids = input_ids.repeat(image_count, 1)
+            input_ids = input_ids.repeat(batch_size, 1)
             input_ids = {"input_ids": input_ids}
-        return BatchFeature(data={**input_ids, **image_inputs})
+        else:
+            raise ValueError("PPChart2Table processor does not support text inputs")
 
-    def postprocess(self, model_pred, **kwargs):
-        return self.tokenizer.batch_decode(
-            model_pred[0],
-            skip_special_tokens=kwargs.get("skip_special_tokens", True),
-            clean_up_tokenization_spaces=False,
-        )
+        return BatchFeature(data={**input_ids, **image_inputs})
 
 
 __all__ = ["PPChart2TableProcessor"]
