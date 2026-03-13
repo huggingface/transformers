@@ -135,7 +135,6 @@ class PenguinVLVisionConfig(PreTrainedConfig):
         rms_norm_eps=1e-6,
         attention_dropout=0.0,
         attention_bias=False,
-        rope_scaling=None,
         rope_theta=1000000.0,
         initializer_range=0.02,
         **kwargs,
@@ -153,7 +152,6 @@ class PenguinVLVisionConfig(PreTrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.attention_dropout = attention_dropout
         self.attention_bias = attention_bias
-        self.rope_scaling = rope_scaling
         self.rope_theta = rope_theta
         self.initializer_range = initializer_range
         if rope_parameters is None:
@@ -1254,30 +1252,32 @@ class PenguinVLImageProcessor(Qwen2VLImageProcessor):
     token compression for video frames.
 
     Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-            Resampling filter to use when resizing.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by `rescale_factor`.
-        rescale_factor (`float`, *optional*, defaults to `1/255`):
-            Scale factor for rescaling.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image.
-        image_mean (`list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
-            Mean for normalization.
-        image_std (`list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
-            Standard deviation for normalization.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
-        min_pixels (`int`, *optional*, defaults to 3136):
-            Minimum pixels for resizing (equivalent to ``min_tokens * patch_size ** 2``).
-        max_pixels (`int`, *optional*, defaults to 3211264):
-            Maximum pixels for resizing (equivalent to ``max_tokens * patch_size ** 2``).
-        patch_size (`int`, *optional*, defaults to 14):
-            Spatial patch size of the vision encoder.
-        merge_size (`int`, *optional*, defaults to 1):
-            Default spatial merge size for token compression (1 for images, 2 for video).
+            do_resize (`bool`, *optional*, defaults to `True`):
+                Whether to resize the image.
+            size (`dict[str, int] | None`, *optional*): <fill_docstring>
+            resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
+                Resampling filter to use when resizing.
+            do_rescale (`bool`, *optional*, defaults to `True`):
+                Whether to rescale the image by `rescale_factor`.
+            rescale_factor (`float`, *optional*, defaults to `1/255`):
+                Scale factor for rescaling.
+            do_normalize (`bool`, *optional*, defaults to `True`):
+                Whether to normalize the image.
+            image_mean (`list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
+                Mean for normalization.
+            image_std (`list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
+                Standard deviation for normalization.
+            do_convert_rgb (`bool`, *optional*, defaults to `True`):
+                Whether to convert the image to RGB.
+            min_pixels (`int`, *optional*, defaults to 3136):
+                Minimum pixels for resizing (equivalent to ``min_tokens * patch_size ** 2``).
+            max_pixels (`int`, *optional*, defaults to 3211264):
+                Maximum pixels for resizing (equivalent to ``max_tokens * patch_size ** 2``).
+            patch_size (`int`, *optional*, defaults to 14):
+                Spatial patch size of the vision encoder.
+            temporal_patch_size (`int`, *optional*, defaults to 1): <fill_docstring>
+            merge_size (`int`, *optional*, defaults to 1):
+                Default spatial merge size for token compression (1 for images, 2 for video).
     """
 
     model_input_names = ["pixel_values", "image_grid_thw", "image_merge_sizes"]
@@ -1659,18 +1659,18 @@ class PenguinVLProcessor(ProcessorMixin):
     Processor for PenguinVL that wraps an image processor and a tokenizer.
 
     Args:
-        image_processor (`PenguinVLImageProcessor`):
-            The image processor.
-        tokenizer (`PreTrainedTokenizer`):
-            The tokenizer.
-        image_token (`str`, *optional*, defaults to `" "`):
-            The image placeholder token.
-        image_merge_size (`int`, *optional*, defaults to 1):
-            Spatial merge size for images.
-        video_merge_size (`int`, *optional*, defaults to 2):
-            Spatial merge size for video frames.
-        chat_template (`str`, *optional*):
-            A Jinja template for formatting conversations.
+            image_processor (`PenguinVLImageProcessor`, *optional*):
+                The image processor.
+            tokenizer (`PreTrainedTokenizer`, *optional*):
+                The tokenizer.
+            image_token (`str`, *optional*, defaults to `"<image>"`):
+                The image placeholder token.
+            image_merge_size (`int`, *optional*, defaults to 1):
+                Spatial merge size for images.
+            video_merge_size (`int`, *optional*, defaults to 2):
+                Spatial merge size for video frames.
+            chat_template (`str`, *optional*):
+                A Jinja template for formatting conversations.
     """
 
     attributes = ["image_processor", "tokenizer"]

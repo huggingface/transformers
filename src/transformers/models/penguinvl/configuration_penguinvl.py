@@ -79,7 +79,6 @@ class PenguinVLVisionConfig(PreTrainedConfig):
         rms_norm_eps=1e-6,
         attention_dropout=0.0,
         attention_bias=False,
-        rope_scaling=None,
         rope_theta=1000000.0,
         initializer_range=0.02,
         **kwargs,
@@ -97,7 +96,6 @@ class PenguinVLVisionConfig(PreTrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.attention_dropout = attention_dropout
         self.attention_bias = attention_bias
-        self.rope_scaling = rope_scaling
         self.rope_theta = rope_theta
         self.initializer_range = initializer_range
         if rope_parameters is None:
