@@ -18,6 +18,7 @@ import re
 
 import pytest
 import torch
+from parameterized import parameterized
 
 from transformers import set_seed
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
@@ -42,6 +43,10 @@ _EXPORT_SKIP_MODEL_CLASSES = {
     # VideoMAE computes loss even when return_loss=False, hitting a data-dependent guard in mse_loss.
     # TODO: fix VideoMAE to skip loss computation when labels are not provided.
     "VideoMAEForPreTraining",
+    # CHMv2 hits two torch.export bugs: detach_ nodes surviving into run_decompositions, and
+    # constant tensors (lifted_tensor) missing from the constants dictionary (SpecViolationError).
+    # TODO: fix upstream in PyTorch.
+    "CHMv2ForDepthEstimation",
 }
 
 
@@ -58,6 +63,10 @@ _EXPORT_GENERATE_SKIP_MODEL_CLASSES = {
     # which is incompatible with torch.export (state captured at trace time can't flow between calls).
     # TODO: refactor RecurrentGemma to use a cache-based SSM pattern (like Mamba/Mamba2).
     "RecurrentGemmaForCausalLM",
+    # Moshi creates blank_user_audio_codes inside generate() and passes it as a forward kwarg.
+    # The resulting ONNX input has mismatched rank (scalar vs 3D) because the tensor is created
+    # outside the traced forward graph. TODO: refactor to make blank_user_audio_codes part of the model state.
+    "MoshiForConditionalGeneration",
 }
 
 
@@ -65,6 +74,7 @@ _EXPORT_GENERATE_SKIP_MODEL_CLASSES = {
 # TODO: investigate and fix each of these at the model level.
 _ONNX_EXTREMELY_INACCURATE_MODEL_TYPES: set[str] = {
     "blt",  # 94.3% mismatch in last_hidden_state
+    "flava",  # non-deterministic masking produces variable output shapes (mmm_image_logits)
     "flaubert",  # 40% mismatch in end_top_index (top-k beam search non-determinism)
     "parakeet_ctc",  # 100% NaN in logits
     "parakeet_encoder",  # 100% NaN in last_hidden_state
@@ -80,6 +90,12 @@ _ONNX_EXTREMELY_INACCURATE_MODEL_TYPES: set[str] = {
     "vit_mae",  # 99.3% mismatch in ids_restore (random masking)
     "xlm",  # 6.2% mismatch in end_top_index
 }
+
+_DYNAMIC_EXPORT_PARAMS = parameterized.expand(
+    [(False,)],
+    name_func=lambda f, _, p: f"{f.__name__}_{'dynamic' if p.args[0] else 'static'}",
+)
+
 
 # ──────────────────────────── helpers ────────────────────────────
 
@@ -158,7 +174,7 @@ class ExportTesterMixin:
     def _skip_if_not_exportable(self):
         """Skip the test if the model architecture is not exportable."""
         if not self.test_torch_exportable:
-            self.skipTest(reason="Model architecture is not TorchDynamo exportable/traceable")
+            self.skipTest(reason="Model architecture is not Dynamo exportable/traceable")
 
         # TODO: these source-code greps silently hide unexportable models. Each pattern should be
         # fixed at the model level and the affected models moved to _EXPORT_SKIP_MODEL_CLASSES.
@@ -237,13 +253,14 @@ class ExportTesterMixin:
 
     # ──────────────────── torch.export tests ─────────────────────
 
+    @_DYNAMIC_EXPORT_PARAMS
     @slow
     @pytest.mark.torch_export_test
-    def test_torch_export(self, atol=1e-4, rtol=1e-4):
+    def test_torch_export(self, dynamic, atol=1e-4, rtol=1e-4):
         """Test if model can be exported with torch.export.export()"""
         self._skip_if_not_exportable()
 
-        exporter = DynamoExporter(export_config=DynamoConfig())
+        exporter = DynamoExporter(export_config=DynamoConfig(dynamic=dynamic))
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
@@ -390,13 +407,14 @@ class ExportGenerateTesterMixin:
 
     # ──────────────────── torch.export tests ─────────────────────
 
+    @_DYNAMIC_EXPORT_PARAMS
     @slow
     @pytest.mark.torch_export_test
-    def test_torch_export_generate(self, atol=1e-4, rtol=1e-4):
+    def test_torch_export_generate(self, dynamic, atol=1e-4, rtol=1e-4):
         """Test if generative model can be exported for prefill and decode."""
         self._skip_if_not_exportable()
 
-        exporter = DynamoExporter(export_config=DynamoConfig())
+        exporter = DynamoExporter(export_config=DynamoConfig(dynamic=dynamic))
 
         for model_class in self.all_generative_model_classes:
             with self.subTest(model_class.__name__):
