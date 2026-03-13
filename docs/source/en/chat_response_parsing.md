@@ -89,7 +89,7 @@ print(parsed.keys())
 And you should get:
 
 ```text
-dict_keys(['thinking', 'content'])
+dict_keys(['role', 'thinking', 'content'])
 ```
 
 And that's all you need to start using response parsing! `parse_response` should return a complete message dict that is ready to be appended to the chat history. 
