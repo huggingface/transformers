@@ -692,7 +692,7 @@ def require_all_flash_attn(test_case):
         kernels_available = False
 
     return unittest.skipUnless(
-        all(flash_attn_available | kernels_available, is_flash_attn_3_available(), is_flash_attn_4_available()),
+        all((flash_attn_available | kernels_available, is_flash_attn_3_available(), is_flash_attn_4_available(),)),
         "test requires all mainline Flash Attention packages",
     )(test_case)
 
