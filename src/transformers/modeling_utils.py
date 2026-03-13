@@ -1807,7 +1807,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         is_paged = attn_implementation is not None and attn_implementation.startswith("paged|")
 
         requested_original_flash_attn = False
-        if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
+        if attn_implementation is not None and is_flash_attention_requested(
+            requested_attention_implementation=attn_implementation
+        ):
             # If FA not installed, do not fail but use kernels instead if possible
             for fa_version in FLASH_ATTENTION_COMPATIBILITY_MATRIX.keys():
                 # No kernels support for FA4 for now
