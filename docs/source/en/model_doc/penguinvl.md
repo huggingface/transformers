@@ -25,9 +25,9 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-**Penguin-VL** is a compact vision-language model family built to study how far multimodal efficiency can be pushed by redesigning the **vision encoder**, rather than only scaling data or model size.
+[Penguin-VL](https://huggingface.co/papers/2603.06569) is a compact vision-language model family built to study how far multimodal efficiency can be pushed by redesigning the vision encoder, rather than only scaling data or model size.
 
-Most modern VLMs rely on vision encoders pretrained with large-scale **contrastive objectives** such as CLIP or SigLIP. Penguin-VL argues that this setup can be suboptimal for multimodal reasoning because contrastive learning favors coarse category-level invariances over the fine-grained signals needed for **OCR, document understanding, dense captioning, and complex reasoning**. Instead, Penguin-VL introduces **Penguin-Encoder**, a vision encoder **initialized from a text-only LLM**, so the visual backbone starts closer to the language model representation space and learns more data-efficiently.
+Most modern VLMs rely on vision encoders pretrained with large-scale contrastive objectives such as CLIP or SigLIP. Penguin-VL argues that this setup can be suboptimal for multimodal reasoning because contrastive learning favors coarse category-level invariances over the fine-grained signals needed for OCR, document understanding, dense captioning, and complex reasoning. Instead, Penguin-VL introduces Penguin-Encoder, a vision encoder initialized from a text-only LLM, so the visual backbone starts closer to the language model representation space and learns more data-efficiently.
 
 <img src="https://github.com/tencent-ailab/Penguin-VL/blob/master/assets/framework.png?raw=true"
 alt="drawing" width="600"/>
@@ -39,7 +39,7 @@ This model was contributed by [Cyril666](https://huggingface.co/Cyril666).
 
 ### Single media inference
 
-PenguinVL accepts both images and videos as input. Use `processor.process_vision_info` to extract visual inputs from messages **before** calling `apply_chat_template`.
+PenguinVL accepts both images and videos as input. Use `processor.process_vision_info` to extract visual inputs from messages*before** calling `apply_chat_template`.
 
 ```python
 import torch
@@ -194,7 +194,8 @@ print(output_text)
 
 `process_vision_info` extracts and loads visual inputs (images and video frames) from Qwen2-VL style conversation messages. It walks through the messages, collects images/video frames in order, and for video clips samples frames at the given `fps` (capped at `max_frames`). Video content items in `messages` are enriched in-place with `num_frames` and `timestamps` so that `apply_chat_template` can emit per-frame timestamp prefixes.
 
-**Important:** You must call `process_vision_info` **before** `apply_chat_template`, because it modifies the `messages` in-place when processing videos.
+> [!IMPORTANT]
+> You must call `process_vision_info` *before* `apply_chat_template`, because it modifies the `messages` in-place when processing videos.
 
 Supported content block formats:
 
@@ -251,7 +252,7 @@ model = PenguinVLForConditionalGeneration.from_pretrained(
     )
     ```
 
-- For video inputs, `process_vision_info` must be called **before** `apply_chat_template`. It samples frames at the given `fps`, caps total frames at `max_frames`, and annotates each video entry in `messages` with `num_frames` and `timestamps` so the chat template can emit per-frame timestamp prefixes.
+- For video inputs, `process_vision_info` must be called *before* `apply_chat_template`. It samples frames at the given `fps`, caps total frames at `max_frames`, and annotates each video entry in `messages` with `num_frames` and `timestamps` so the chat template can emit per-frame timestamp prefixes.
 
 - Video frames are automatically classified as **keyframes (K)** or **intermediate frames (I)** via the TRA mechanism. Keyframes receive a smaller spatial merge factor (better quality) and intermediate frames receive a larger one (higher compression). This is handled automatically when you pass `frame_types` to the processor.
 
