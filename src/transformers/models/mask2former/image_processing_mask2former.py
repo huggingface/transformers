@@ -321,6 +321,113 @@ def convert_segmentation_map_to_binary_masks(
     return binary_masks.astype(np.float32), labels.astype(np.int64)
 
 
+def convert_segmentation_map_to_binary_masks_sorted(
+    segmentation_map: "np.ndarray",
+    instance_id_to_semantic_id: Optional[dict[int, int]] = None,
+    ignore_index: Optional[int] = None,
+    do_reduce_labels: bool = False,
+    sort_by_area: bool = True,
+):
+    """
+    Converts a segmentation map into binary masks with optional area-based sorting.
+
+    This function extends the base `convert_segmentation_map_to_binary_masks` by adding
+    area-based sorting capability. When `sort_by_area=True`, masks are sorted by area
+    in descending order (largest first), which is particularly useful for handling
+    overlapping annotations in segmentation tasks.
+
+    Args:
+        segmentation_map (`np.ndarray`):
+            A 2D numpy array representing the segmentation map where each unique value
+            corresponds to a different object instance or class.
+        instance_id_to_semantic_id (`Dict[int, int]`, *optional*):
+            A dictionary mapping instance IDs to semantic class IDs. If provided,
+            the returned labels will be the semantic class IDs instead of instance IDs.
+        ignore_index (`int`, *optional*):
+            The index to ignore when creating binary masks. Pixels with this value
+            will not be included in any mask.
+        do_reduce_labels (`bool`, *optional*, defaults to `False`):
+            Whether to reduce labels by subtracting 1 from all non-zero labels.
+            If `True`, `ignore_index` must be provided.
+        sort_by_area (`bool`, *optional*, defaults to `True`):
+            Whether to sort the binary masks by area in descending order.
+    Returns:
+        `Tuple[np.ndarray, np.ndarray]`:
+            - **binary_masks** (`np.ndarray` of shape `(num_masks, height, width)`):
+              Binary masks for each object, optionally sorted by area.
+            - **labels** (`np.ndarray` of shape `(num_masks,)`):
+              Class or instance labels corresponding to each mask, in the same order as the masks.
+    Example:
+        ```python
+        import numpy as np
+        from transformers.models.mask2former.image_processing_mask2former import convert_segmentation_map_to_binary_masks_sorted
+
+        # Create a simple segmentation map with overlapping objects
+        segmentation_map = np.array([
+            [0, 1, 1, 2],
+            [0, 1, 2, 2],
+            [0, 0, 2, 2],
+        ])
+
+        # Convert to binary masks sorted by area
+        masks, labels = convert_segmentation_map_to_binary_masks_sorted(
+            segmentation_map,
+            ignore_index=0,
+            sort_by_area=True
+        )
+
+        # Object 2 has larger area (6 pixels) so it comes first
+        # Object 1 has smaller area (3 pixels) so it comes second
+        print(labels)  # [2, 1] - sorted by area (largest first)
+        ```
+    """
+    if do_reduce_labels and ignore_index is None:
+        raise ValueError("If `do_reduce_labels` is True, `ignore_index` must be provided.")
+
+    if do_reduce_labels:
+        segmentation_map = np.where(segmentation_map == 0, ignore_index, segmentation_map - 1)
+
+    # Get unique ids (class or instance ids based on input)
+    all_labels = np.unique(segmentation_map)
+
+    # Drop background label if applicable
+    if ignore_index is not None:
+        all_labels = all_labels[all_labels != ignore_index]
+
+    # Generate a binary mask for each object instance
+    binary_masks = [(segmentation_map == i) for i in all_labels]
+
+    # Stack the binary masks
+    if binary_masks:
+        binary_masks = np.stack(binary_masks, axis=0)
+    else:
+        binary_masks = np.zeros((0, *segmentation_map.shape))
+
+    # Convert instance ids to class ids
+    if instance_id_to_semantic_id is not None:
+        labels = np.zeros(all_labels.shape[0])
+
+        for label in all_labels:
+            class_id = instance_id_to_semantic_id[label + 1 if do_reduce_labels else label]
+            labels[all_labels == label] = class_id - 1 if do_reduce_labels else class_id
+    else:
+        labels = all_labels
+
+    # Sort by area if requested
+    if sort_by_area and len(binary_masks) > 0:
+        # Calculate areas for each mask
+        areas = np.sum(binary_masks, axis=(1, 2))
+
+        # Sort indices by area in descending order (largest first)
+        sort_indices = np.argsort(areas)[::-1]
+
+        # Reorder masks and labels
+        binary_masks = binary_masks[sort_indices]
+        labels = labels[sort_indices]
+
+    return binary_masks.astype(np.float32), labels.astype(np.int64)
+
+
 # Copied from transformers.models.maskformer.image_processing_maskformer.get_maskformer_resize_output_image_size with maskformer->mask2former
 def get_mask2former_resize_output_image_size(
     image: np.ndarray,
