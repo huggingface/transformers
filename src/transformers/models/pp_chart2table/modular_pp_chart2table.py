@@ -13,29 +13,28 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-
 from typing import Optional
+
 import torch
 import torch.nn as nn
+import torchvision.transforms.v2.functional as tvF
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
-
+from ...image_utils import ImageInput, SizeDict
+from ...modeling_outputs import BaseModelOutputWithPooling
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, TensorType, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2Config
 from ..got_ocr2.modeling_got_ocr2 import (
-    GotOcr2ModelOutputWithPast,
-    GotOcr2Model,
-    GotOcr2PreTrainedModel,
     GotOcr2ForConditionalGeneration,
+    GotOcr2Model,
+    GotOcr2ModelOutputWithPast,
+    GotOcr2PreTrainedModel,
     GotOcr2VisionEncoder,
 )
 
-from ...utils import TransformersKwargs, auto_docstring, logging
-from ...modeling_outputs import BaseModelOutputWithPooling
-from ...processing_utils import ProcessorMixin, TensorType, Unpack, ProcessingKwargs
-
-from ...image_utils import SizeDict, ImageInput
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 logger = logging.get_logger(__name__)
 
@@ -49,7 +48,7 @@ logger = logging.get_logger(__name__)
     vision_hidden_channels (`int`, *optional*, defaults to 512):
         Dimensionality of the intermediate hidden channels in the vision encoder. This is the channel
         count between the first and second downsample layers.
-    """
+    """,
 )
 class PPChart2TableConfig(GotOcr2Config):
     def __init__(
@@ -58,7 +57,6 @@ class PPChart2TableConfig(GotOcr2Config):
         vision_hidden_channels: int = 512,
         **super_kwargs,
     ):
-
         self.output_channels = output_channels
         self.vision_hidden_channels = vision_hidden_channels
         super().__init__()
@@ -146,7 +144,7 @@ class PPChart2TableProcessor(ProcessorMixin):
 
         batch_size, _, height, _ = image_inputs["pixel_values"].shape
         num_patches = height // self.image_processor.patch_size // self.image_processor.merge_size
-        
+
         input_ids = {"input_ids": None}
         if text is None:
             query = "Chart to table"
@@ -189,11 +187,19 @@ class PPChart2TableModelOutputWithPast(GotOcr2ModelOutputWithPast):
 
 @auto_docstring
 class PPChart2TableModel(GotOcr2Model):
-
     def __init__(self, config: PPChart2TableConfig):
         super().__init__(config)
-        self.vision_downsample1 = nn.Conv2d(config.vision_config.output_channels, config.vision_hidden_channels, kernel_size=3, stride=2, padding=1, bias=False)
-        self.vision_downsample2 = nn.Conv2d(config.vision_hidden_channels, config.output_channels, kernel_size=3, stride=2, padding=1, bias=False)
+        self.vision_downsample1 = nn.Conv2d(
+            config.vision_config.output_channels,
+            config.vision_hidden_channels,
+            kernel_size=3,
+            stride=2,
+            padding=1,
+            bias=False,
+        )
+        self.vision_downsample2 = nn.Conv2d(
+            config.vision_hidden_channels, config.output_channels, kernel_size=3, stride=2, padding=1, bias=False
+        )
         self.multi_modal_projector = nn.Linear(config.output_channels, config.text_config.hidden_size)
 
         # Initialize weights and apply final processing
@@ -204,7 +210,6 @@ class PPChart2TableModel(GotOcr2Model):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-
         image_output = self.vision_tower(pixel_values)
         last_hidden_state = image_output.last_hidden_state
         last_hidden_state = self.vision_downsample1(last_hidden_state)
