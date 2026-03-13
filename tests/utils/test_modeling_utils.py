@@ -652,6 +652,15 @@ class ModelUtilsTest(TestCasePlus):
                 TINY_LLAVA, dtype={"text_config": "float32", "vision_config": "int64", "": "float16"}
             )
 
+        # Check that `from_config` also works and uses the same dtype for all modules
+        config = AutoConfig.from_pretrained(TINY_LLAVA)
+        config.text_config.dtype = torch.float16
+        config.dtype = torch.float32
+        model = LlavaForConditionalGeneration._from_config(config)
+        self.assertEqual(model.model.language_model.dtype, torch.float32)
+        self.assertEqual(model.model.vision_tower.dtype, torch.float32)
+        self.assertEqual(model.dtype, torch.float32)
+
     def test_model_from_pretrained_dtype(self):
         # test that the model can be instantiated with dtype of either
         # 1. explicit from_pretrained's dtype argument

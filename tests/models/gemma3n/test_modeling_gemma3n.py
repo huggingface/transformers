@@ -109,6 +109,9 @@ class Gemma3nAudioModelTester:
             conf_attention_context_left=5,
         )
 
+    def get_config(self):
+        return self.get_audio_encoder_config()
+
     def prepare_config_and_inputs_for_common(self):
         # Prepare inputs for the audio encoder
         feature_extractor_config = self.get_feature_extractor_config()
