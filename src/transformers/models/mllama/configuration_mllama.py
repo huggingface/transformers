@@ -13,59 +13,28 @@
 """Mllama model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="meta-llama/Llama-3.2-11B-Vision")
 class MllamaVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MllamaVisionModel`]. It is used to instantiate an
-    Mllama vision model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Mllama-11B.
-
-    e.g. [meta-llama/Llama-3.2-11B-Vision](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1280):
-            Dimensionality of the encoder layers and the pooler layer.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer encoder.
-        num_global_layers (`int`, *optional*, defaults to 8):
-            Number of global layers in the Transformer encoder.
-            Vision model has a second transformer encoder, called global.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels in the input image.
-        intermediate_size (`int`, *optional*, defaults to 5120):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        vision_output_dim (`int`, *optional*, defaults to 7680):
-            Dimensionality of the vision model output. Includes output of transformer
-            encoder with intermediate layers and global transformer encoder.
-        image_size (`int`, *optional*, defaults to 448):
-            The size (resolution) of each image *tile*.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        max_num_tiles (`int`, *optional*, defaults to 4):
-            Maximum number of tiles for image splitting.
-        intermediate_layers_indices (`list[int]`, *optional*, defaults to [3, 7, 15, 23, 30]):
-            Indices of intermediate layers of transformer encoder from which to extract and output features.
-            These output features are concatenated with final hidden state of transformer encoder.
-        supported_aspect_ratios (`list[list[int]]`, *optional*):
-            List of supported aspect ratios for image splitting. If not specified, the default supported aspect ratios
-            are [[1, 1], [1, 2], [1, 3], [1, 4], [2, 1], [2, 2], [3, 1], [4, 1]] for `max_num_tiles=4`.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+    num_global_layers (`int`, *optional*, defaults to 8):
+        Number of global layers in the Transformer encoder. Vision model has a second transformer encoder, called global.
+    vision_output_dim (`int`, *optional*, defaults to 7680):
+        Dimensionality of the vision model output. Includes output of transformer
+        encoder with intermediate layers and global transformer encoder.
+    max_num_tiles (`int`, *optional*, defaults to 4):
+        Maximum number of tiles for image splitting.
+    intermediate_layers_indices (`list[int]`, *optional*, defaults to [3, 7, 15, 23, 30]):
+        Indices of intermediate layers of transformer encoder from which to extract and output features.
+        These output features are concatenated with final hidden state of transformer encoder.
+    supported_aspect_ratios (`list[list[int]]`, *optional*):
+        List of supported aspect ratios for image splitting. If not specified, the default supported aspect ratios
+        are [[1, 1], [1, 2], [1, 3], [1, 4], [2, 1], [2, 2], [3, 1], [4, 1]] for `max_num_tiles=4`.
 
     Example:
 
@@ -134,58 +103,11 @@ class MllamaVisionConfig(PreTrainedConfig):
         return len(self.supported_aspect_ratios)
 
 
+@auto_docstring(checkpoint="meta-llama/Llama-3.2-11B-Vision")
 class MllamaTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MllamaTextModel`]. It is used to instantiate an
-    Mllama text model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Mllama-11B.
-
-    e.g. [meta-llama/Llama-3.2-11B-Vision](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 128256):
-            Vocabulary size of the Mllama text model. Defines the maximum number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`MllamaTextModel`].
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimensionality of the embeddings and hidden states.
-        hidden_act (`str` or `Callable`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-        num_hidden_layers (`int`, *optional*, defaults to 40):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 8):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If not
-            specified, will default to `num_attention_heads`.
-        intermediate_size (`int`, *optional*, defaults to 14336):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        max_position_embeddings (`int`, *optional*, defaults to 131072):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
-        cross_attention_layers (`list[int]`, *optional*):
-            Indices of the cross attention layers. If not specified, will default to [3, 8, 13, 18, 23, 28, 33, 38].
-        dropout (`float`, *optional*, defaults to 0):
-            The dropout probability for self- and cross-attention layers.
-        bos_token_id (`int`, *optional*, defaults to 128000):
-            The id of the beginning of sentence token.
-        eos_token_id (`int`, *optional*, defaults to 128001):
-            The id of the end of sentence token.
-        pad_token_id (`int`, *optional*, defaults to 128004):
-            The id of the padding token.
+    cross_attention_layers (`list[int]`, *optional*):
+        Indices of the cross attention layers. If not specified, will default to [3, 8, 13, 18, 23, 28, 33, 38].
 
     Example:
 
@@ -253,25 +175,9 @@ class MllamaTextConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="meta-llama/Llama-3.2-11B-Vision")
 class MllamaConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MllamaForConditionalGeneration`]. It is used to instantiate an
-    Mllama model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Mllama-9B.
-
-    e.g. [meta-llama/Llama-3.2-11B-Vision](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vision_config (`Union[AutoConfig, dict]`, *optional*, defaults to `MllamaVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `MllamaTextConfig`):
-            The config object or dictionary of the text backbone.
-        image_token_index (`int`, *optional*, defaults to 128256):
-            The image token index to encode the image prompt.
-
     Example:
 
     ```python

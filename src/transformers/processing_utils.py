@@ -1521,6 +1521,14 @@ class ProcessorMixin(PushToHubMixin):
             elif is_primary:
                 # Primary non-tokenizer sub-processor: load via Auto class
                 auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[sub_processor_type]
+                # For backward compatibility, check if sub-processor class name is hardcoded as an attribute of the processor class.
+                if hasattr(cls, sub_processor_type + "_class"):
+                    sub_processor_class_name = getattr(cls, sub_processor_type + "_class")
+                    logger.warning_once(
+                        f"`{cls.__name__}` defines `{sub_processor_type}_class = '{sub_processor_class_name}'`, "
+                        f"which is deprecated. Register the correct mapping in `{auto_processor_class.__name__}` instead.",
+                    )
+                    auto_processor_class = cls.get_possibly_dynamic_module(sub_processor_class_name)
                 sub_processor = auto_processor_class.from_pretrained(
                     pretrained_model_name_or_path, subfolder=subfolder, **kwargs
                 )

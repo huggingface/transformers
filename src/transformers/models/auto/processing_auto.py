@@ -17,6 +17,7 @@ import importlib
 import inspect
 import json
 from collections import OrderedDict
+from typing import TYPE_CHECKING
 
 # Build the list of all feature extractors
 from ...configuration_utils import PreTrainedConfig

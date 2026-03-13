@@ -107,7 +107,7 @@ class HiggsAudioV2DelayPatternLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        scores = scores.reshape(-1, self.num_codebooks, self.codebook_size)
+        scores = scores.clone().reshape(-1, self.num_codebooks, self.codebook_size)
         batch_size = scores.shape[0]
 
         # we only look at the n-th last tokens to initialize the bos and eos delay patterns, where n is the delay pattern size
