@@ -208,7 +208,9 @@ def recursive_parse(
             if isinstance(node_content, int):
                 return node_content
             if not isinstance(node_content, str):
-                raise TypeError(f"Expected a string or int for schema node with type integer, got {type(node_content).__name__}: {node_content}")
+                raise TypeError(
+                    f"Expected a string or int for schema node with type integer, got {type(node_content).__name__}: {node_content}"
+                )
             try:
                 return int(node_content)
             except ValueError:
@@ -219,7 +221,9 @@ def recursive_parse(
             if isinstance(node_content, (int, float)):
                 return float(node_content)
             if not isinstance(node_content, str):
-                raise TypeError(f"Expected a string or number for schema node with type number, got {type(node_content).__name__}: {node_content}")
+                raise TypeError(
+                    f"Expected a string or number for schema node with type number, got {type(node_content).__name__}: {node_content}"
+                )
             try:
                 return float(node_content)
             except ValueError:
@@ -230,7 +234,9 @@ def recursive_parse(
             if isinstance(node_content, bool):
                 return node_content
             if not isinstance(node_content, str):
-                raise TypeError(f"Expected a string or bool for schema node with type boolean, got {type(node_content).__name__}: {node_content}")
+                raise TypeError(
+                    f"Expected a string or bool for schema node with type boolean, got {type(node_content).__name__}: {node_content}"
+                )
             if node_content.lower() in ("true", "1"):
                 return True
             elif node_content.lower() in ("false", "0"):
@@ -240,7 +246,9 @@ def recursive_parse(
         else:
             # String type
             if not isinstance(node_content, str):
-                raise TypeError(f"Expected a string for schema node with type string, got {type(node_content).__name__}: {node_content}")
+                raise TypeError(
+                    f"Expected a string for schema node with type string, got {type(node_content).__name__}: {node_content}"
+                )
             return node_content
     elif node_type is None or node_type == "any":
         return node_content  # Don't touch it
