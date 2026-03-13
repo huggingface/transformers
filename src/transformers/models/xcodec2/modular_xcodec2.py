@@ -659,7 +659,7 @@ class Xcodec2VocosBackbone(nn.Module):
         )
 
         # Initialize rotary embeddings
-        self.position_ids = torch.arange(config.num_attention_heads).unsqueeze(0)
+        self.num_attention_heads = config.num_attention_heads
         self.rotary_emb = Xcodec2RotaryEmbedding(config=config)
 
         # Create transformer layers
@@ -710,7 +710,8 @@ class Xcodec2VocosBackbone(nn.Module):
         x = x.transpose(1, 2)  # [batch, seq_len, hidden_dim]
 
         # Generate rotary embeddings
-        position_embeddings = self.rotary_emb(x, self.position_ids.to(x.device))
+        position_ids = torch.arange(self.num_attention_heads).unsqueeze(0)
+        position_embeddings = self.rotary_emb(x, position_ids.to(x.device))
 
         # Apply transformer layers with position embeddings
         for layer in self.transformers:
@@ -1357,7 +1358,6 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Xcodec2SnakeBeta):
-            # Initialize alpha and beta based on the logscale setting
             if module.logscale:
                 init.zeros_(module.alpha)
                 init.zeros_(module.beta)
@@ -1365,16 +1365,12 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
                 init.ones_(module.alpha)
                 init.ones_(module.beta)
         elif isinstance(module, Xcodec2FSQ):
-            # Non-persistent buffers computed deterministically from config; must be
-            # materialized here for the meta-device initialization flow (same pattern
-            # as RotaryEmbedding.inv_freq in the base PreTrainedModel._init_weights).
             levels = module.levels
             init.copy_(module._levels, torch.tensor(levels, dtype=int32))
             init.copy_(module._basis, torch.cumprod(torch.tensor([1] + levels[:-1]), dim=0, dtype=int32))
             if module.return_indices:
                 init.copy_(module.implicit_codebook, module._indices_to_codes(torch.arange(module.codebook_size)))
         elif isinstance(module, Xcodec2ResidualFSQ):
-            # scales buffer: (levels - 1) ** -ind for each quantizer
             levels_tensor = torch.tensor(module.levels, dtype=torch.float)
             scales = torch.stack([(levels_tensor - 1) ** -ind for ind in range(module.num_quantizers)])
             init.copy_(module.scales, scales)
