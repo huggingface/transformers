@@ -29,12 +29,13 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithPoolingAndCrossAttentions,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_clap import ClapAudioConfig, ClapConfig, ClapTextConfig
 
 
@@ -175,10 +176,7 @@ class ClapOutput(ModelOutput):
     audio_model_output: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> tuple[Any]:
-        return tuple(
-            self[k] if k not in ["text_model_output", "audio_model_output"] else getattr(self, k).to_tuple()
-            for k in self.keys()
-        )
+        return tuple(v.to_tuple() if isinstance(v, ModelOutput) else v for v in self.values())
 
 
 # Adapted from transformers.models.swin.modeling_swin.SwinDropPath
@@ -812,6 +810,7 @@ class ClapAudioEncoder(nn.Module):
 
         return normalized_input_features
 
+    @can_return_tuple
     def forward(
         self,
         input_features,
@@ -822,6 +821,10 @@ class ClapAudioEncoder(nn.Module):
         always_partition: bool | None = False,
         return_dict: bool | None = True,
     ) -> tuple | ClapAudioModelOutput:
+        # Unique logic so no refactor here yet
+        output_hidden_states = output_hidden_states or self.config.output_hidden_states
+        output_attentions = output_attentions or self.config.output_attentions
+
         input_features = input_features.transpose(1, 3)
         normalized_input_features = self.batch_norm(input_features)
         normalized_input_features = normalized_input_features.transpose(1, 3)
@@ -906,18 +909,6 @@ class ClapAudioEncoder(nn.Module):
         )
         latent_output = self.avgpool(torch.flatten(last_hidden_state, 2))
         latent_output = torch.flatten(latent_output, 1)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    last_hidden_state,
-                    latent_output,
-                    all_reshaped_hidden_states,
-                    all_self_attentions,
-                ]
-                if v is not None
-            )
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -1102,9 +1093,8 @@ class ClapTextSelfAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
-        output_attentions: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.attention_head_size)
 
@@ -1128,8 +1118,7 @@ class ClapTextSelfAttention(nn.Module):
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
-        return outputs
+        return attn_output, attn_weights
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput
@@ -1158,18 +1147,16 @@ class ClapTextAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
-        output_attentions: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
-        self_outputs = self.self(
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states, _ = self.self(
             hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
             **kwargs,
         )
-        attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+        hidden_states = self.output(hidden_states, residual)
+        return hidden_states
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate
@@ -1217,24 +1204,19 @@ class ClapTextLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
-        output_attentions: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
-        self_attention_outputs = self.attention(
+    ) -> torch.Tensor:
+        hidden_states = self.attention(
             hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
             **kwargs,
         )
-        attention_output = self_attention_outputs[0]
 
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-        layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+        hidden_states = apply_chunking_to_forward(
+            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, hidden_states
         )
-        outputs = (layer_output,) + outputs
 
-        return outputs
+        return hidden_states
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
@@ -1250,41 +1232,21 @@ class ClapTextEncoder(nn.Module):
         self.layer = nn.ModuleList([ClapTextLayer(config) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
-        output_attentions: bool | None = False,
-        output_hidden_states: bool | None = False,
-        return_dict: bool | None = True,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | BaseModelOutput:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = layer_module(
+    ) -> BaseModelOutput:
+        for layer_module in self.layer:
+            hidden_states = layer_module(
                 hidden_states,
                 attention_mask,
-                output_attentions,
                 **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
         return BaseModelOutput(
             last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
         )
 
 
@@ -1362,10 +1324,7 @@ class ClapAudioModel(ClapPreTrainedModel):
         self,
         input_features: torch.FloatTensor | None = None,
         is_longer: torch.BoolTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
@@ -1389,18 +1348,10 @@ class ClapAudioModel(ClapPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         return self.audio_encoder(
             input_features=input_features,
             is_longer=is_longer,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
 
@@ -1421,6 +1372,10 @@ class ClapAudioModel(ClapPreTrainedModel):
 class ClapTextModel(ClapPreTrainedModel):
     config: ClapTextConfig
     input_modalities = ("text",)
+    _can_record_outputs = {
+        "hidden_states": ClapTextLayer,
+        "attentions": ClapTextSelfAttention,
+    }
 
     def __init__(self, config, add_pooling_layer=True):
         r"""
@@ -1444,7 +1399,8 @@ class ClapTextModel(ClapPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    @can_return_tuple
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -1453,17 +1409,8 @@ class ClapTextModel(ClapPreTrainedModel):
         token_type_ids: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor] | BaseModelOutputWithPoolingAndCrossAttentions:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -1480,14 +1427,6 @@ class ClapTextModel(ClapPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length)), device=device)
 
-        if token_type_ids is None:
-            if hasattr(self.embeddings, "token_type_ids"):
-                buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(batch_size, seq_length)
-                token_type_ids = buffered_token_type_ids_expanded
-            else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
-
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
@@ -1501,9 +1440,7 @@ class ClapTextModel(ClapPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
+            **kwargs,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
@@ -1511,8 +1448,6 @@ class ClapTextModel(ClapPreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -1579,7 +1514,6 @@ class ClapModel(ClapPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            return_dict=True,
             **kwargs,
         )
         text_features = self.text_projection(text_outputs.pooler_output)
@@ -1616,7 +1550,7 @@ class ClapModel(ClapPreTrainedModel):
         ...     audio_features = model.get_audio_features(**inputs)
         ```"""
         audio_outputs: BaseModelOutputWithPooling = self.audio_model(
-            input_features=input_features, is_longer=is_longer, return_dict=True, **kwargs
+            input_features=input_features, is_longer=is_longer, **kwargs
         )
         audio_features = self.audio_projection(audio_outputs.pooler_output)
         audio_outputs.pooler_output = F.normalize(audio_features, dim=-1)
@@ -1633,10 +1567,7 @@ class ClapModel(ClapPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         return_loss: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | ClapOutput:
         r"""
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
@@ -1665,34 +1596,23 @@ class ClapModel(ClapPreTrainedModel):
         >>> logits_per_audio = outputs.logits_per_audio  # this is the audio-text similarity score
         >>> probs = logits_per_audio.softmax(dim=-1)  # we can take the softmax to get the label probabilities
         ```"""
-        # Use CLAP model's config for some fields (if specified) instead of those of audio & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         audio_outputs = self.audio_model(
             input_features=input_features,
             is_longer=is_longer,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
+            **kwargs,
         )
 
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
+            **kwargs,
         )
 
-        audio_embeds = audio_outputs[1] if not return_dict else audio_outputs.pooler_output
+        audio_embeds = audio_outputs.pooler_output
         audio_embeds = self.audio_projection(audio_embeds)
 
-        text_embeds = text_outputs[1] if not return_dict else text_outputs.pooler_output
+        text_embeds = text_outputs.pooler_output
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features
@@ -1726,6 +1646,10 @@ class ClapModel(ClapPreTrainedModel):
 class ClapTextModelWithProjection(ClapPreTrainedModel):
     config: ClapTextConfig
     input_modalities = ("text",)
+    _can_record_outputs = {
+        "hidden_states": ClapTextLayer,
+        "attentions": ClapTextSelfAttention,
+    }
 
     def __init__(self, config: ClapTextConfig):
         super().__init__(config)
@@ -1747,10 +1671,7 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
         input_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | ClapTextModelOutput:
         r"""
         Examples:
@@ -1766,19 +1687,13 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> text_embeds = outputs.text_embeds
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
+            **kwargs,
         )
-
-        pooled_output = text_outputs[1] if not return_dict else text_outputs.pooler_output
-
+        pooled_output = text_outputs.pooler_output
         text_embeds = self.text_projection(pooled_output)
 
         return ClapTextModelOutput(
@@ -1811,10 +1726,7 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
         self,
         input_features: torch.FloatTensor | None = None,
         is_longer: torch.BoolTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | ClapAudioModelOutput:
         r"""
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
@@ -1837,23 +1749,13 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> audio_embeds = outputs.audio_embeds
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        audio_outputs = self.audio_model(
+        audio_outputs: BaseModelOutputWithPooling = self.audio_model(
             input_features=input_features,
             is_longer=is_longer,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
+            **kwargs,
         )
 
-        pooled_output = audio_outputs[1] if not return_dict else audio_outputs.pooler_output
-
-        audio_embeds = self.audio_projection(pooled_output)
+        audio_embeds = self.audio_projection(audio_outputs.pooler_output)
 
         return ClapAudioModelOutput(
             audio_embeds=audio_embeds,
