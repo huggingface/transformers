@@ -1552,9 +1552,9 @@ class ContinuousBatchingConfig:
     Args:
         block_size (`int`, *optional*, defaults to 256):
             Size of each KV cache block in tokens.
-        num_blocks (`int`, *optional*, defaults to `None`):
+        num_blocks (`int`, *optional*):
             Number of blocks in the KV cache. Auto-inferred from GPU memory when `None`.
-        max_batch_tokens (`int`, *optional*, defaults to `None`):
+        max_batch_tokens (`int`, *optional*):
             Maximum number of tokens in a batch. Auto-inferred from GPU memory when `None`.
         max_memory_percent (`float`, *optional*, defaults to 0.8):
             Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache.
@@ -1564,10 +1564,10 @@ class ContinuousBatchingConfig:
         allow_block_sharing (`bool`, *optional*, defaults to `True`):
             Whether to allow block sharing for prefix caching. Block sharing can only be allowed, never forced,
             as some models do not support it. Disable if you have few short prompts but long generation lengths.
-        use_async_batching (`bool`, *optional*, defaults to `None`):
+        use_async_batching (`bool`, *optional*):
             Whether to enable async double-buffering, which removes CPU overhead from the continuous batching
             loop at the cost of doubled VRAM usage. Auto-detected when `None`.
-        use_cuda_graph (`bool`, *optional*, defaults to `None`):
+        use_cuda_graph (`bool`, *optional*):
             Whether to enable CUDA graphs. Auto-inferred when `None`.
         q_padding_interval_size (`int`, *optional*, defaults to 0):
             Query padding granularity in tokens for CUDA graphs. Uses a preset from `continuous_api.py` when
