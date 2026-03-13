@@ -653,7 +653,6 @@ class IsaacConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         # Mirror frequently accessed composite-level attributes.
-        self.vocab_size = self.text_config.vocab_size
         self.use_cache = self.text_config.use_cache
         self.rope_theta = self.text_config.rope_parameters["rope_theta"]
         self.max_position_embeddings = getattr(self.text_config, "max_position_embeddings", max_sequence_length)
@@ -1420,7 +1419,7 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
     def __init__(self, config: IsaacConfig):
         super().__init__(config)
         self.model = IsaacModel(config)
-        self.vocab_size = config.vocab_size
+        self.vocab_size = config.get_text_config().vocab_size
         self.lm_head = nn.Linear(config.get_text_config().hidden_size, config.get_text_config().vocab_size, bias=False)
 
     @auto_docstring
@@ -1500,7 +1499,7 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         logits = self.lm_head(hidden_states)
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=logits.shape[-1])
 
         return CausalLMOutputWithPast(
             loss=loss,

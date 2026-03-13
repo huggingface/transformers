@@ -1602,7 +1602,7 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
     def __init__(self, config: IsaacConfig):
         super().__init__(config)
         self.model = IsaacModel(config)
-        self.vocab_size = config.vocab_size
+        self.vocab_size = config.get_text_config().vocab_size
         self.lm_head = nn.Linear(config.get_text_config().hidden_size, config.get_text_config().vocab_size, bias=False)
 
         # Initialize weights and apply final processing
@@ -1685,7 +1685,7 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         logits = self.lm_head(hidden_states)
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=logits.shape[-1])
 
         return CausalLMOutputWithPast(
             loss=loss,
