@@ -20,7 +20,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="calp-hsat-fused")
+@auto_docstring(checkpoint="laion/clap-htsat-fused")
 class ClapTextConfig(PreTrainedConfig):
     r"""
 
@@ -84,7 +84,7 @@ class ClapTextConfig(PreTrainedConfig):
         self.projection_dim = projection_dim
 
 
-@auto_docstring(checkpoint="calp-hsat-fused")
+@auto_docstring(checkpoint="laion/clap-htsat-fused")
 class ClapAudioConfig(PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 8):
@@ -193,7 +193,7 @@ class ClapAudioConfig(PreTrainedConfig):
         self.projection_hidden_act = projection_hidden_act
 
 
-@auto_docstring(checkpoint="calp-hsat-fused")
+@auto_docstring(checkpoint="laion/clap-htsat-fused")
 class ClapConfig(PreTrainedConfig):
     r"""
     Example:
