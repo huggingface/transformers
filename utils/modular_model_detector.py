@@ -147,24 +147,56 @@ MAX_LENGTH = 4096
 
 
 def _normalize(string: str | None) -> str:
-    """Return a lowercase, alphanumeric-only version of ``string``."""
+    """
+    Normalize a string by removing all non-alphanumeric characters and converting to lowercase.
+
+    Args:
+        string (`str` or `None`): The string to normalize.
+
+    Returns:
+        `str`: The normalized string, or empty string if input is None.
+    """
     return re.sub(r"[^a-z0-9]+", "", string.lower()) if string else ""
 
 
 def _strip_source_for_tokens(code: str) -> str:
-    """Strip docstrings, comments, and imports from ``code``."""
+    """
+    Strip docstrings, comments, and import statements from source code.
+
+    Args:
+        code (`str`): The source code to strip.
+
+    Returns:
+        `str`: The stripped source code.
+    """
     code = re.sub(r'("""|\'\'\')(?:.|\n)*?\1', "", code)
     code = re.sub(r"#.*", "", code)
     return "\n".join(line for line in code.splitlines() if not re.match(r"\s*(from|import)\s+", line))
 
 
 def _tokenize(code: str) -> set[str]:
-    """Return the set of identifier-like tokens found in ``code``."""
+    """
+    Extract all Python identifiers from source code.
+
+    Args:
+        code (`str`): The source code to tokenize.
+
+    Returns:
+        `set[str]`: A set of all identifiers found in the code.
+    """
     return set(re.findall(r"\b[a-zA-Z_][a-zA-Z0-9_]*\b", code))
 
 
 def _leading_symbol_prefix(name: str) -> str:
-    """Return leading CamelCase/lowercase prefix from a symbol name."""
+    """
+    Extract the leading prefix from a symbol name (e.g., 'Llama' from 'LlamaAttention').
+
+    Args:
+        name (`str`): The symbol name to extract prefix from.
+
+    Returns:
+        `str`: The leading prefix, or empty string if no match.
+    """
     # match camel-case prefix (ex. "Llama" from "LlamaAttention")
     match = re.match(r"^([A-Z][a-z0-9]+)", name)
     if match:
@@ -179,16 +211,38 @@ def _leading_symbol_prefix(name: str) -> str:
 
 
 def _strip_type_hints(code: str) -> str:
-    """Remove common function and variable type hints from ``code``."""
+    """
+    Strip type hints from Python code to improve embedding similarity.
+
+    Removes:
+    - Function parameter type hints: `def foo(x: int)` -> `def foo(x)`
+    - Return type hints: `def foo() -> int:` -> `def foo():`
+    - Variable annotations: `x: int = 5` -> `x = 5`
+
+    Args:
+        code (`str`): The source code to strip type hints from.
+
+    Returns:
+        `str`: The code with type hints removed.
+    """
     # Remove return type hints first: `-> Type:` -> `:`
+    # Match: -> followed by optional whitespace, type expression, then colon
+    # The type can contain brackets, dots, spaces, etc.
+    # Remove any whitespace before the colon
     code = re.sub(r"->\s*[^:\n]+:\s*", ": ", code)
-
+    
     # Remove function parameter type hints: `param: Type` -> `param`
+    # Match identifier followed by colon and type, ending at comma, ), =, or newline
+    # Use lookahead to ensure we're in a function parameter context
+    # Pattern: word boundary, identifier, colon, type (not containing = or :), then comma/paren/equals
     code = re.sub(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*[^=,):\n]+(?=\s*[,)=])", r"\1", code)
-
+    
     # Remove variable annotations: `var: Type = value` -> `var = value`
+    # Match identifier, colon, type, equals sign
+    # Preserve spacing around equals
     code = re.sub(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*[^=\n]+\s*=", r"\1 =", code)
-
+    
+    # Clean up any extra spaces that might have been created
     code = re.sub(r"  +", " ", code)
     # Clean up spaces around commas
     code = re.sub(r"\s*,\s*", ", ", code)
@@ -201,12 +255,20 @@ def _strip_type_hints(code: str) -> str:
     code = re.sub(r"\s*=\s*", " = ", code)
     # Remove double spaces again after all replacements
     code = re.sub(r"  +", " ", code)
-
+    
     return code
 
 
 def _normalize_dtype_patterns(code: str) -> str:
-    """Drop common dtype save-and-restore patterns from ``code``."""
+    """
+    Normalize dtype save-and-cast patterns to a canonical form for better embedding comparison.
+
+    Removes dtype-saving lines and the corresponding cast-back calls:
+    - ``q_type, k_type = q.dtype, k.dtype`` → (line removed)
+    - ``input_dtype = hidden_states.dtype`` → (line removed)
+    - ``.to(dtype=some_var)`` → (removed)
+    - ``.to(VARNAME)`` where VARNAME ends in ``_type`` or ``_dtype`` or is ``dtype`` → (removed)
+    """
     # Remove lines that are purely dtype variable assignments (tuple or single)
     code = re.sub(r"^[^\S\n]*\w+\s*,\s*\w+\s*=\s*\w+\.dtype\s*,\s*\w+\.dtype[^\S\n]*$", "", code, flags=re.MULTILINE)
     code = re.sub(r"^[^\S\n]*\w+\s*=\s*\w+\.dtype[^\S\n]*$", "", code, flags=re.MULTILINE)
@@ -218,13 +280,26 @@ def _normalize_dtype_patterns(code: str) -> str:
 
 
 def _normalize_layer_constructor_kwargs(code: str) -> str:
-    """Remove minor kwargs (e.g. ``bias=...``) from common layer constructors."""
+    """
+    Remove minor config-driven keyword arguments from standard layer constructors so that
+    e.g. ``bias=False`` and ``bias=config.mlp_bias`` don't create false negatives.
+    """
     code = re.sub(r",\s*bias\s*=\s*[^,)]+", "", code)
     return code
 
 
 def _sanitize_for_embedding(code: str, model_hint: str | None, symbol_hint: str | None) -> str:
-    """Strip noise and replace model-specific identifiers with a generic placeholder."""
+    """
+    Sanitize code for embedding by replacing model-specific identifiers with generic placeholder.
+
+    Args:
+        code (`str`): The source code to sanitize.
+        model_hint (`str` or `None`): Hint about the model name (e.g., 'llama').
+        symbol_hint (`str` or `None`): Hint about the symbol name (e.g., 'LlamaAttention').
+
+    Returns:
+        `str`: The sanitized code with model-specific identifiers replaced by 'Model'.
+    """
     base = _strip_source_for_tokens(code)
     base = _strip_type_hints(base)
     base = _normalize_dtype_patterns(base)
@@ -248,7 +323,15 @@ def _sanitize_for_embedding(code: str, model_hint: str | None, symbol_hint: str 
 
 
 class CodeSimilarityAnalyzer:
-    """Analyze code similarities between model implementations."""
+    """
+    Analyzer for detecting code similarities between model implementations.
+
+    This class uses embedding-based and token-based similarity metrics to identify similar
+    code patterns across different model definitions in the transformers library.
+
+    Args:
+        hub_dataset (`str`): The Hub dataset repository ID containing the code embeddings index.
+    """
 
     def __init__(self, hub_dataset: str):
         for name in ("huggingface_hub", "httpx", "urllib3", "transformers"):
@@ -265,11 +348,7 @@ class CodeSimilarityAnalyzer:
 
         self.device = self.model.device
         # Get dtype from model parameters
-        self.dtype = (
-            next(self.model.parameters()).dtype
-            if hasattr(self.model, "parameters") and len(list(self.model.parameters())) > 0
-            else torch.float32
-        )
+        self.dtype = next(self.model.parameters()).dtype if hasattr(self.model, 'parameters') and len(list(self.model.parameters())) > 0 else torch.float32
         self.index_dir: Path | None = None
 
     # ---------- HUB IO ----------
@@ -457,7 +536,7 @@ class CodeSimilarityAnalyzer:
             f"encoding {len(sanitized_sources)} definitions with {EMBEDDING_MODEL} (device={self.device.type}, batch={BATCH_SIZE}, max_length={MAX_LENGTH})"
         )
         embeddings = self.encode(sanitized_sources)
-
+        
         logging.info("Saving index files...")
         with tqdm(total=3, desc="Saving index", unit="file") as pbar:
             safetensors_save({"embeddings": embeddings}, EMBEDDINGS_PATH)
@@ -477,12 +556,13 @@ class CodeSimilarityAnalyzer:
         base_embeddings: np.ndarray,
         identifier_map: dict[int, str],
         self_model_normalized: str,
+        self_name: str,
         k: int,
         dates: dict[str, str] | None = None,
     ) -> list[tuple[str, float]]:
         similarities = query_embedding_row @ base_embeddings.T
         buffer_size = min(k + 200, len(similarities))
-        indices = np.argpartition(-similarities, buffer_size)[:buffer_size]
+        indices = np.argpartition(-similarities, buffer_size)[: buffer_size]
         indices = indices[np.argsort(-similarities[indices])]
         output = []
         for match_id in indices:
@@ -495,14 +575,12 @@ class CodeSimilarityAnalyzer:
             output.append((identifier, float(similarities[match_id])))
         # Sort by score (descending), then by release date (ascending, oldest first) for tie-breaking
         if dates:
-
             def sort_key(item):
                 identifier, score = item
                 relative_path = identifier.split(":")[0]
                 model_id = Path(relative_path).parts[0] if Path(relative_path).parts else ""
                 release = dates.get(model_id, "9999-99-99")  # Unknown dates sort last
                 return (-score, release)
-
             output.sort(key=sort_key)
         return output[:k]
 
@@ -512,6 +590,7 @@ class CodeSimilarityAnalyzer:
         identifiers: list[str],
         tokens_map: dict[str, list[str]],
         self_model_normalized: str,
+        self_name: str,
         k: int,
     ) -> list[tuple[str, float]]:
         """
@@ -522,6 +601,7 @@ class CodeSimilarityAnalyzer:
             identifiers (`list[str]`): List of all definition identifiers in the index.
             tokens_map (`dict[str, list[str]]`): Mapping of identifiers to their token lists.
             self_model_normalized (`str`): Normalized name of the query model to exclude.
+            self_name (`str`): Name of the query definition to exclude.
             k (`int`): Number of top results to return.
 
         Returns:
@@ -560,18 +640,13 @@ class CodeSimilarityAnalyzer:
             relative_path, symbol_name = parts
             model_id = Path(relative_path).parts[0] if Path(relative_path).parts else ""
             by_name[(model_id, symbol_name)] = idx
-            suffix = symbol_name[len(_leading_symbol_prefix(symbol_name)) :]
+            suffix = symbol_name[len(_leading_symbol_prefix(symbol_name)):]
             if suffix:
                 by_suffix.setdefault((model_id, suffix), idx)
         return by_name, by_suffix
 
     def analyze_file(
-        self,
-        modeling_file: Path,
-        top_k_per_item: int = 10,
-        allow_hub_fallback: bool = True,
-        use_jaccard=False,
-        dates: dict[str, str] | None = None,
+        self, modeling_file: Path, top_k_per_item: int = 10, allow_hub_fallback: bool = True, use_jaccard=False, dates: dict[str, str] | None = None
     ) -> dict[str, dict[str, list]]:
         """
         Analyze a modeling file and find similar code definitions in the index.
@@ -618,12 +693,7 @@ class CodeSimilarityAnalyzer:
         for i, query_identifier in enumerate(query_identifiers):
             query_name = query_identifier.split(":")[-1]
             embedding_top = self._topk_embedding(
-                query_embeddings[i],
-                base_embeddings,
-                identifier_map,
-                self_model_normalized,
-                top_k_per_item,
-                dates,
+                query_embeddings[i], base_embeddings, identifier_map, self_model_normalized, query_name, top_k_per_item, dates
             )
 
             # Expand results with parent models from modular inheritance.
@@ -640,7 +710,7 @@ class CodeSimilarityAnalyzer:
                     continue
                 match_relative_path, match_name = parts
                 model_id = Path(match_relative_path).parts[0] if Path(match_relative_path).parts else ""
-                match_suffix = match_name[len(_leading_symbol_prefix(match_name)) :]
+                match_suffix = match_name[len(_leading_symbol_prefix(match_name)):]
                 for parent_model in inheritance_map.get(model_id, ()):
                     if parent_model in seen_parents or _normalize(parent_model) == self_model_normalized:
                         continue
@@ -664,11 +734,7 @@ class CodeSimilarityAnalyzer:
             entry = {"kind": kind, "embedding": embedding_top}
             if use_jaccard:
                 jaccard_top = self._topk_jaccard(
-                    query_tokens_list[i],
-                    identifiers,
-                    tokens_map,
-                    self_model_normalized,
-                    top_k_per_item,
+                    query_tokens_list[i], identifiers, tokens_map, self_model_normalized, query_name, top_k_per_item
                 )
                 jaccard_set = {identifier for identifier, _ in jaccard_top}
                 intersection = set(embedding_set & jaccard_set)
@@ -706,7 +772,6 @@ def build_date_data() -> dict[str, str]:
         except Exception:
             # Skip unreadable files quietly
             logging.info(f"Failed to read md for {md_path}")
-            continue
 
         m = _RELEASE_RE.search(text)
         if m:
@@ -792,7 +857,13 @@ def _colorize_heading(text: str) -> str:
 
 
 def _build_modular_inheritance_map() -> dict[str, set[str]]:
-    """Return {model_id: base_models} inferred from ``modular_*.py`` imports."""
+    """
+    Build a map of modular models to the base models they inherit from.
+
+    The map is inferred from import statements in ``modular_*.py`` files under ``MODELS_ROOT``.
+    Only imports of the form ``from ..<model>.modeling_... import ...`` are considered, and
+    self-references are ignored.
+    """
     inheritance: dict[str, set[str]] = {}
     for modular_path in MODELS_ROOT.rglob("modular_*.py"):
         model_id = modular_path.parent.name
@@ -825,7 +896,9 @@ def _build_modular_inheritance_map() -> dict[str, set[str]]:
 
 
 def _is_descendant(model_id: str, ancestor: str, inheritance_map: dict[str, set[str]]) -> bool:
-    """Return True if ``model_id`` transitively inherits from ``ancestor``."""
+    """
+    Return True if ``model_id`` transitively inherits from ``ancestor`` according to ``inheritance_map``.
+    """
     if model_id == ancestor:
         return False
 
@@ -850,7 +923,13 @@ def _compare_models(
     inheritance_map: dict[str, set[str]],
     model_class_scores: dict[str, dict[str, float]],
 ) -> int:
-    """Comparison function used to order models in the summary."""
+    """
+    Comparison function for sorting models by:
+    1) number of matched classes (descending)
+    2) ancestry (base models before descendants)
+    3) mean score (descending)
+    4) lexicographic model id
+    """
     model_a, classes_a = a
     model_b, classes_b = b
 
@@ -883,11 +962,18 @@ def _compare_models(
 def compute_model_class_match_summary(
     results: dict[str, dict],
 ) -> tuple[int, list[dict[str, float | int | str]]]:
-    """Summarize per-model class matches from raw ``analyze_file`` results."""
+    """
+    Build the "Model class match summary" from raw ``analyze_file`` results.
+
+    Returns:
+        `(total_classes, ordered_summary)` where `ordered_summary` is a list of dicts with keys
+        `model_id`, `num_matched`, `pct`, `mean_score`, in the same order as printed by the CLI
+        (models with most matched classes, ancestry-aware, then by mean score).
+    """
     grouped: dict[str, list[tuple[str, dict]]] = {"class": [], "function": []}
     for query_name, data in results.items():
         kind = data.get("kind", "function")
-        grouped[kind].append((query_name, data))
+        grouped.setdefault(kind, []).append((query_name, data))
 
     class_entries = grouped.get("class", [])
     if not class_entries:
@@ -897,9 +983,11 @@ def compute_model_class_match_summary(
     model_class_matches: dict[str, set[str]] = {}
     model_class_scores: dict[str, dict[str, float]] = {}
     for query_name, data in class_entries:
-        # For each class (query_name), compute the best score per identifier
-        # across all available metrics (embedding, jaccard) and attribute that
-        # score to the corresponding model.
+        # For each Sarvam class (query_name), compute the best score per identifier
+        # across all available metrics (embedding, jaccard). We then attribute that
+        # best score to the corresponding model. This way, if Jaccard provides a
+        # stronger signal than embeddings for a given model+class, it is the one
+        # that influences the summary.
         best_per_identifier: dict[str, float] = {}
 
         # 1) embedding scores
@@ -946,15 +1034,12 @@ def compute_model_class_match_summary(
         pct = 100.0 * len(matched) / total_classes
         scores_for_model = model_class_scores.get(model_id, {})
         mean_score = sum(scores_for_model.values()) / len(scores_for_model) if scores_for_model else 0.0
-        ordered_summary.append(
-            {
-                "model_id": model_id,
-                "num_matched": len(matched),
-                "pct": round(pct, 1),
-                "mean_score": round(mean_score, 4),
-                "classes": sorted(matched),
-            }
-        )
+        ordered_summary.append({
+            "model_id": model_id,
+            "num_matched": len(matched),
+            "pct": round(pct, 1),
+            "mean_score": round(mean_score, 4),
+        })
     return total_classes, ordered_summary
 
 
@@ -1194,27 +1279,16 @@ def main():
             logging.info(f"Total classes: {total_classes}")
             logging.info("")
             logging.info("Models with most matched classes:")
-
-            headers = ["Model", "Matched", "Pct", "Mean score", "Classes"]
-            rows: list[tuple[str, ...]] = []
             for item in ordered_summary[:15]:
                 model_id = item["model_id"]
                 num_matched = int(item["num_matched"])
                 pct = float(item["pct"])
                 mean_score = float(item["mean_score"])
-                classes = item.get("classes", [])
-
-                matched_str = f"{num_matched}/{total_classes}"
-                pct_str = f"{pct:.1f}%"
-                mean_str = f"{mean_score:.4f}"
-                classes_str = ", ".join(classes) if classes else ""
-
-                rows.append((model_id, matched_str, pct_str, mean_str, classes_str))
-
-            if rows:
-                logging.info(_format_table(headers, rows, None))
+                logging.info(
+                    f"  {model_id:25s}: {num_matched:2d}/{total_classes} classes ({pct:5.1f}%), "
+                    f"mean score {mean_score:.4f}"
+                )
             logging.info("")
-
 
 if __name__ == "__main__":
     main()
