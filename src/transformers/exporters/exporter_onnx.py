@@ -16,7 +16,7 @@
 """ONNX exporter.
 
 This module provides the `OnnxExporter` class and helper functions used to
-export `PreTrainedModel` instances to ONNX via TorchDynamo and `torch.onnx.export`.
+export `PreTrainedModel` instances to ONNX via Dynamo and `torch.onnx.export`.
 
 The export pipeline has four stages, each with its own set of patches/fixes:
 
@@ -77,7 +77,7 @@ class OnnxExporter(DynamoExporter):
     required_packages = ["torch", "onnx", "onnxscript"]
 
     def export(self, model: "PreTrainedModel", sample_inputs: dict[str, Any]) -> "ONNXProgram":
-        """Export a model to ONNX using TorchDynamo."""
+        """Export a model to ONNX using Dynamo."""
         inputs = copy.deepcopy(sample_inputs)
         model, inputs = prepare_for_export(model, inputs)
 

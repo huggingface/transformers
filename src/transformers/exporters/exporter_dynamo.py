@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""TorchDynamo exporter.
+"""Dynamo exporter.
 
 This module provides the `DynamoExporter` class and helper functions used to
 export `PreTrainedModel` instances to `ExportedProgram` via `torch.export.export`.
