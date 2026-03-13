@@ -100,7 +100,6 @@ claude:
 	ln -snf ../.ai/skills .claude/skills
 
 clean-ai:
-	rm -f AGENTS.md CLAUDE.md
 	rm -rf .agents/skills .claude/skills
 
 

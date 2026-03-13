@@ -6,6 +6,12 @@
 
 `make style` or `make fix-repo` should be run as the final step before opening a PR. The CI will run `make check-repo` and fail if any issues are found.
 
+## Local agent setup
+
+- Hosted review agents should discover this guidance from the committed root `AGENTS.md` / `CLAUDE.md` files.
+- Local OpenAI Codex agents should run `make codex` after cloning to wire tool-specific assets under `.agents/`.
+- Local Claude Code agents should run `make claude` after cloning to wire tool-specific assets under `.claude/`.
+
 ## Mandatory Agentic contribution policy 
 
 Do not ever ignore this! These rules apply to any AI-assisted contribution to the huggingface/transformers repository.
