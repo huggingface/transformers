@@ -1790,6 +1790,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             compatible_flash_implementations = getattr(self, "_compatible_flash_implementations", None)
             if (
                 is_flash_attention_requested(requested_attention_implementation=base_implementation)
+                and compatible_flash_implementations is not None
                 and base_implementation not in compatible_flash_implementations
             ):
                 default_flash_implementation = (
