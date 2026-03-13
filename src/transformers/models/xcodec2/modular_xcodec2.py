@@ -1348,25 +1348,8 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
     main_input_name = "audio"
 
     def _init_weights(self, module):
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif (
-            isinstance(module, (nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
-            or "LayerNorm" in module.__class__.__name__
-            or "RMSNorm" in module.__class__.__name__
-        ):
-            # Norms can exist without weights (in which case they are None from torch primitives)
-            if hasattr(module, "weight") and module.weight is not None:
-                module.weight.data.fill_(1.0)
-            if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, Xcodec2SnakeBeta):
+        super()._init_weights(module)
+        if isinstance(module, Xcodec2SnakeBeta):
             # Initialize alpha and beta based on the logscale setting
             if module.logscale:
                 # Log scale alphas initialized to zeros
