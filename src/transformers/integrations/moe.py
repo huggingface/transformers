@@ -127,11 +127,11 @@ def batched_mm_experts_forward(
 
     # Select gate_up or just up projection weights and biases
     if self.has_gate:
-        selected_weights = self.gate_up_proj[expert_ids]
-        selected_biases = self.gate_up_proj_bias[expert_ids] if self.has_bias else None
+        selected_weights = torch.index_select(self.gate_up_proj, 0, expert_ids)
+        selected_biases = torch.index_select(self.gate_up_proj_bias, 0, expert_ids) if self.has_bias else None
     else:
-        selected_weights = self.up_proj[expert_ids]
-        selected_biases = self.up_proj_bias[expert_ids] if self.has_bias else None
+        selected_weights = torch.index_select(self.up_proj, 0, expert_ids)
+        selected_biases = torch.index_select(self.up_proj_bias, 0, expert_ids) if self.has_bias else None
 
     # --- Up projection per expert (batched) ---
     proj_out = _batched_linear(
@@ -147,8 +147,8 @@ def batched_mm_experts_forward(
         proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
     # Select down projection weights and biases for selected samples
-    selected_weights = self.down_proj[expert_ids]
-    selected_biases = self.down_proj_bias[expert_ids] if self.has_bias else None
+    selected_weights = torch.index_select(self.down_proj, 0, expert_ids)
+    selected_biases = torch.index_select(self.down_proj_bias, 0, expert_ids) if self.has_bias else None
 
     # --- Down projection per expert (batched) ---
     proj_out = _batched_linear(
