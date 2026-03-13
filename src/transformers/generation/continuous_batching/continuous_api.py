@@ -549,11 +549,11 @@ class ContinuousBatchingManager:
         # Internal arguments
         self.model = model.eval()
         self.generation_config = generation_config
-        self.cb_config = continuous_batching_config
+        self.continuous_batching_config = continuous_batching_config
+        # This is an approximation until the cache is created: it will infer the correct value in cache.__init__
+        self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
 
-        self._use_prefix_sharing = self.cb_config.allow_block_sharing  # approximation until the cache is created
-
-        self.input_queue = queue.Queue(maxsize=self.cb_config.max_queue_size)
+        self.input_queue = queue.Queue(maxsize=self.continuous_batching_config.max_queue_size)
         self.output_queue = queue.Queue()
         self.stop_event = threading.Event()
         self.batch_processor: ContinuousBatchProcessor | None = None
@@ -570,26 +570,26 @@ class ContinuousBatchingManager:
 
         # Cuda graph behavior is determined below using either user-specified arguments or heuristics
         is_attn_mask_needed = attn_mask_is_needed(self.model.config)
-        self.use_cuda_graph = self.cb_config.decide_use_cuda_graphs(
+        self.use_cuda_graph = self.continuous_batching_config.decide_use_cuda_graphs(
             compile_config=getattr(generation_config, "compile_config", None),
             is_attn_mask_needed=is_attn_mask_needed,
         )
         # Same for asynchronous batching behavior
-        self.use_async_batching = self.cb_config.decide_use_async_batching(is_attn_mask_needed)
+        self.use_async_batching = self.continuous_batching_config.decide_use_async_batching(is_attn_mask_needed)
 
         # Resolve default parameters for Q and KV interval sizes, and max cached graphs. If one of those parameters is
         # not specified (set to 0) then we use the default value and change its value in the config.
-        if self.cb_config.q_padding_interval_size == 0:
-            self.cb_config.q_padding_interval_size = Q_PADDING_INTERVAL_SIZE
-        self.q_padding_interval_size = self.cb_config.q_padding_interval_size
+        if self.continuous_batching_config.q_padding_interval_size == 0:
+            self.continuous_batching_config.q_padding_interval_size = Q_PADDING_INTERVAL_SIZE
+        self.q_padding_interval_size = self.continuous_batching_config.q_padding_interval_size
 
-        if self.cb_config.kv_padding_interval_size == 0:
-            self.cb_config.kv_padding_interval_size = KV_PADDING_INTERVAL_SIZE
-        self.kv_padding_interval_size = self.cb_config.kv_padding_interval_size
+        if self.continuous_batching_config.kv_padding_interval_size == 0:
+            self.continuous_batching_config.kv_padding_interval_size = KV_PADDING_INTERVAL_SIZE
+        self.kv_padding_interval_size = self.continuous_batching_config.kv_padding_interval_size
 
-        if self.cb_config.max_cached_graphs == 0:
-            self.cb_config.max_cached_graphs = MAX_CACHED_GRAPHS
-        self.max_cached_graphs = self.cb_config.max_cached_graphs
+        if self.continuous_batching_config.max_cached_graphs == 0:
+            self.continuous_batching_config.max_cached_graphs = MAX_CACHED_GRAPHS
+        self.max_cached_graphs = self.continuous_batching_config.max_cached_graphs
 
         # Log probability generation is not supported yet (TODO)
         if self.log_prob_generation:
@@ -786,7 +786,7 @@ class ContinuousBatchingManager:
             t0 = perf_counter()
             paged_attention_cache = PagedAttentionCache(
                 self.model.config,
-                self.cb_config,
+                self.continuous_batching_config,
                 self.model.device,
                 self.model.dtype,
                 tp_size=getattr(self.model, "_tp_size", None),  # Use model's actual TP setting
@@ -794,9 +794,9 @@ class ContinuousBatchingManager:
             self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing  # update the approximation
             logger.debug(f"PagedAttentionCache created in {perf_counter() - t0} seconds")
 
-            scheduler = SCHEDULER_MAPPING.get(self.cb_config.scheduler, None)
+            scheduler = SCHEDULER_MAPPING.get(self.continuous_batching_config.scheduler, None)
             if scheduler is None:
-                logger.warning(f"Scheduler '{self.cb_config.scheduler}' not found. Defaulting to FIFO.")
+                logger.warning(f"Scheduler '{self.continuous_batching_config.scheduler}' not found. Defaulting to FIFO.")
                 scheduler = FIFOScheduler
 
             t1 = perf_counter()
@@ -914,17 +914,16 @@ class ContinuousMixin:
             gen_config.eos_token_id = -1
 
         # Retrieve continuous batching config, or create it if none is provided
-        if continuous_batching_config is not None:
-            cb_config = continuous_batching_config
-        elif getattr(gen_config, "continuous_batching_config", None) is not None:
-            cb_config = gen_config.continuous_batching_config
-        else:
-            cb_config = ContinuousBatchingConfig()
-        cb_config.account_for_cb_deprecated_arguments(**deprecated_kwargs)
+        if continuous_batching_config is None:
+            if isinstance(getattr(gen_config, "continuous_batching_config", None), ContinuousBatchingConfig):
+                continuous_batching_config = gen_config.continuous_batching_config
+            else:
+                continuous_batching_config = ContinuousBatchingConfig()
+        continuous_batching_config.account_for_cb_deprecated_arguments(**deprecated_kwargs)
 
         # Create and return the manager
         return ContinuousBatchingManager(
-            model=self, generation_config=gen_config, continuous_batching_config=cb_config
+            model=self, generation_config=gen_config, continuous_batching_config=continuous_batching_config
         )
 
     @contextmanager

@@ -119,7 +119,7 @@ class PagedAttentionCache:
     def __init__(
         self,
         config: PreTrainedConfig,
-        cb_config: ContinuousBatchingConfig,
+        continuous_batching_config: ContinuousBatchingConfig,
         device: torch.device | str,
         dtype: torch.dtype = torch.float16,
         tp_size: int | None = None,
@@ -129,7 +129,7 @@ class PagedAttentionCache:
 
         Args:
             config: Model configuration
-            cb_config: Continuous batching configuration containing cache parameters
+            continuous_batching_config: Continuous batching configuration containing cache parameters
             device: Device for the cache tensors
             dtype: Data type of the cache
             tp_size: Tensor parallelism size
@@ -145,7 +145,7 @@ class PagedAttentionCache:
         self.head_dim: int = head_dim if head_dim is not None else config.hidden_size // config.num_attention_heads
 
         # Extract cache dimensions. Default used to be 32, now it's 256 to be compatible with flash_with_kvcache.
-        self.block_size = cb_config.block_size
+        self.block_size = continuous_batching_config.block_size
         if self.block_size <= 0:
             raise ValueError(f"Block size must be positive, but got {self.block_size}")
 
@@ -191,9 +191,9 @@ class PagedAttentionCache:
             num_attention_masks=num_attention_masks,
         )
         num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
-            num_blocks=cb_config.num_blocks,
-            max_batch_tokens=cb_config.max_batch_tokens,
-            max_memory_percent=cb_config.max_memory_percent,
+            num_blocks=continuous_batching_config.num_blocks,
+            max_batch_tokens=continuous_batching_config.max_batch_tokens,
+            max_memory_percent=continuous_batching_config.max_memory_percent,
             cache_dtype=self.dtype,
         )
 
@@ -208,7 +208,7 @@ class PagedAttentionCache:
 
         # If max_blocks_per_request is not set, the default value is 16 max blocks. With default block size of 256, this
         # means a max sequence length of 4096 tokens for the fast decode path.
-        max_blocks_per_request = cb_config.max_blocks_per_request
+        max_blocks_per_request = continuous_batching_config.max_blocks_per_request
         if max_blocks_per_request is None:
             max_blocks_per_request = 0
             # logger.info( TODO: uncomment when we have good defaults
@@ -232,7 +232,7 @@ class PagedAttentionCache:
         logger.info(f"{self.cache_shape = } {self.key_cache[0].shape = } {self.key_cache[0].numel() = }")
 
         # Block management data structures
-        self.allow_block_sharing = cb_config.allow_block_sharing
+        self.allow_block_sharing = continuous_batching_config.allow_block_sharing
         self.group_cache_managers: list[CacheAllocator] = []
         self.num_full_attention_groups = 0
         self.num_sliding_attention_groups = 0
