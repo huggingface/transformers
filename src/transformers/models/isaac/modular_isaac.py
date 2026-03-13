@@ -119,6 +119,9 @@ class IsaacVisionConfig(Siglip2VisionConfig):
 class IsaacTextConfig(Qwen3Config):
     model_type = "isaac_text"
 
+    def __init__(self, **super_kwargs):
+        super().__init__(ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"}, **super_kwargs)
+
 
 class IsaacImageProcessorFastKwargs(ImagesKwargs, total=False):
     """
