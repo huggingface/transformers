@@ -1715,6 +1715,6 @@ class ContinuousBatchingConfig:
         if self.q_padding_interval_size == 0:
             self.q_padding_interval_size = 64
         if self.kv_padding_interval_size == 0:
-            self.kv_padding_interval_size = 64 * 256 # 64 blocks of 256 tokens ie. 16384 tokens
+            self.kv_padding_interval_size = 64 * 256  # 64 blocks of 256 tokens ie. 16384 tokens
         if self.max_cached_graphs == 0:
             self.max_cached_graphs = 32

@@ -787,7 +787,9 @@ class ContinuousBatchingManager:
 
             scheduler = SCHEDULER_MAPPING.get(self.continuous_batching_config.scheduler, None)
             if scheduler is None:
-                logger.warning(f"Scheduler '{self.continuous_batching_config.scheduler}' not found. Defaulting to FIFO.")
+                logger.warning(
+                    f"Scheduler '{self.continuous_batching_config.scheduler}' not found. Defaulting to FIFO."
+                )
                 scheduler = FIFOScheduler
 
             t1 = perf_counter()

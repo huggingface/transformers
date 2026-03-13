@@ -402,7 +402,9 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         # Generation with continuous batching
         continuous_batching_outputs = model.generate_batch(
-            inputs=input_ids, generation_config=model.generation_config, continuous_batching_config=continuous_batching_config
+            inputs=input_ids,
+            generation_config=model.generation_config,
+            continuous_batching_config=continuous_batching_config,
         )
 
         # Prepare non-continuous batching inputs
@@ -474,9 +476,14 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         use_compile: bool,
     ) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-        continuous_batching_config = ContinuousBatchingConfig(allow_block_sharing=allow_block_sharing, use_cuda_graph=use_cuda_graph)
+        continuous_batching_config = ContinuousBatchingConfig(
+            allow_block_sharing=allow_block_sharing, use_cuda_graph=use_cuda_graph
+        )
         self._test_continuous_batching_parity(
-            model_id=model_id, continuous_batching_config=continuous_batching_config, attn_implementation=attn_implementation, use_compile=use_compile
+            model_id=model_id,
+            continuous_batching_config=continuous_batching_config,
+            attn_implementation=attn_implementation,
+            use_compile=use_compile,
         )
 
     # FIXME: Qwen2.5-0.5B-Instruct is not here because it's  broken (it uses a repetition penalty logits processor)
@@ -505,7 +512,9 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
     def test_continuous_batching_fast(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-        continuous_batching_config = ContinuousBatchingConfig(use_cuda_graph=False, allow_block_sharing=False, use_async_batching=False)
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=False, allow_block_sharing=False, use_async_batching=False
+        )
         self._test_continuous_batching_parity(
             model_id=model_id,
             continuous_batching_config=continuous_batching_config,
@@ -515,7 +524,9 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
     def test_continuous_batching_long_generate(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-        continuous_batching_config = ContinuousBatchingConfig(use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False)
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False
+        )
         self._test_continuous_batching_parity(
             model_id=model_id,
             continuous_batching_config=continuous_batching_config,
