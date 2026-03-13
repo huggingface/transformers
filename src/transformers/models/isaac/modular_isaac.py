@@ -1031,11 +1031,6 @@ class IsaacModel(Qwen3PreTrainedModel):
     supports_gradient_checkpointing = True
     _can_compile_fullgraph = False
     _supports_flex_attn = False
-    _can_record_outputs = {
-        "hidden_states": OutputRecorder(IsaacTextDecoderLayer),
-        "attentions": IsaacTextAttention,
-        "vision_attentions": IsaacVisionAttention,
-    }
     _tied_weights_keys = {}
 
     def __init__(self, config: IsaacConfig):
@@ -1295,7 +1290,6 @@ class IsaacModel(Qwen3PreTrainedModel):
 
     @auto_docstring
     @merge_with_config_defaults
-    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
