@@ -244,17 +244,10 @@ For more details about how to generate, build, and write the documentation, take
 
 This repository keeps AI-agent configuration in `.ai/` and exposes local agent files via symlinks.
 
-- Edit source files only: `.ai/AGENTS.md` and `.ai/skills/...`
-- Do not edit generated paths: `AGENTS.md`, `CLAUDE.md`, `.agents/skills`, `.claude/skills`
+Skills can be exposed to agents by running `make codex` or `make claude`
 
-```bash
-make codex
-make claude
-```
-
-- `make codex`: links `AGENTS.md -> .ai/AGENTS.md` and `.agents/skills -> ../.ai/skills`
-- `make claude`: links `CLAUDE.md -> .ai/AGENTS.md` and `.claude/skills -> ../.ai/skills`
-- `make clean-ai`: removes generated links
+Cursor reads `AGENTS.md` and reads skills from Claude or Codex paths, so setting up the repository
+for Claude or Codex will work for Claude.
 
 ## Create a Pull Request
 
