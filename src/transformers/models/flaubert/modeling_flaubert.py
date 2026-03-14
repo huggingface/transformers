@@ -36,7 +36,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
 from .configuration_flaubert import FlaubertConfig
 
 
@@ -101,7 +101,6 @@ class MultiHeadAttention(nn.Module):
         mask,
         kv=None,
         cache=None,
-        output_attentions=False,
         cache_position=None,
     ):
         """
@@ -155,10 +154,9 @@ class MultiHeadAttention(nn.Module):
         context = torch.matmul(weights, v)  # (bs, n_heads, qlen, head_dim)
         context = context.transpose(1, 2).contiguous().view(bs, -1, self.n_heads * self.head_dim)
 
-        outputs = (self.out_lin(context),)
-        if output_attentions:
-            outputs = outputs + (weights,)
-        return outputs
+        # Always return (attn_output, attn_weights) so capture_outputs hooks can
+        # record attention weights unconditionally via _can_record_outputs.
+        return self.out_lin(context), weights
 
 
 # Copied from transformers.models.xlm.modeling_xlm.TransformerFFN
@@ -181,6 +179,54 @@ class TransformerFFN(nn.Module):
         x = self.lin2(x)
         x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         return x
+
+
+# Copied from transformers.models.xlm.modeling_xlm.XLMLayer with XLM->Flaubert
+class FlaubertLayer(nn.Module):
+    """
+    A single transformer layer wrapping attention + FFN.
+
+    This class exists so that `@capture_outputs` can hook into it for
+    attention weights via `_can_record_outputs`. The layer returns
+    `(hidden_state, attn_weights)` so the attentions hook records the
+    second element (index 1).
+    """
+
+    def __init__(self, attention, layer_norm1, ffn, layer_norm2, dropout):
+        super().__init__()
+        self.attention = attention
+        self.layer_norm1 = layer_norm1
+        self.ffn = ffn
+        self.layer_norm2 = layer_norm2
+        self.dropout = dropout
+
+    def forward(
+        self,
+        x,
+        attn_mask,
+        mask,
+        cache=None,
+        cache_position=None,
+    ):
+        attn_output, attn_weights = self.attention(
+            x,
+            attn_mask,
+            cache=cache,
+            cache_position=cache_position,
+        )
+
+        attn_output = nn.functional.dropout(attn_output, p=self.dropout, training=self.training)
+
+        tensor = x + attn_output
+        tensor = self.layer_norm1(tensor)
+
+        ffn_output = self.ffn(tensor)
+        tensor = tensor + ffn_output
+        tensor = self.layer_norm2(tensor)
+
+        tensor *= mask.unsqueeze(-1).to(tensor.dtype)
+
+        return tensor, attn_weights
 
 
 @auto_docstring(
@@ -656,6 +702,10 @@ class FlaubertPreTrainedModel(PreTrainedModel):
     config: FlaubertConfig
     base_model_prefix = "transformer"
 
+    _can_record_outputs = {
+        "attentions": FlaubertLayer,
+    }
+
     @property
     def dummy_inputs(self):
         inputs_list = torch.tensor([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
@@ -738,22 +788,15 @@ class FlaubertModel(FlaubertPreTrainedModel):
         self.layer_norm_emb = nn.LayerNorm(self.dim, eps=config.layer_norm_eps)
 
         # transformer layers
-        self.attentions = nn.ModuleList()
-        self.layer_norm1 = nn.ModuleList()
-        self.ffns = nn.ModuleList()
-        self.layer_norm2 = nn.ModuleList()
-        # if self.is_decoder:
-        #     self.layer_norm15 = nn.ModuleList()
-        #     self.encoder_attn = nn.ModuleList()
+        self.layers = nn.ModuleList()
 
         for i in range(self.n_layers):
-            self.attentions.append(MultiHeadAttention(self.n_heads, self.dim, config=config, layer_idx=i))
-            self.layer_norm1.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
-            # if self.is_decoder:
-            #     self.layer_norm15.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
-            #     self.encoder_attn.append(MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout))
-            self.ffns.append(TransformerFFN(self.dim, self.hidden_dim, self.dim, config=config))
-            self.layer_norm2.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
+            attn = MultiHeadAttention(self.n_heads, self.dim, config=config, layer_idx=i)
+            ln1 = nn.LayerNorm(self.dim, eps=config.layer_norm_eps)
+            ffn = TransformerFFN(self.dim, self.hidden_dim, self.dim, config=config)
+            ln2 = nn.LayerNorm(self.dim, eps=config.layer_norm_eps)
+
+            self.layers.append(FlaubertLayer(attn, ln1, ffn, ln2, config.dropout))
 
         self.layerdrop = getattr(config, "layerdrop", 0.0)
         self.pre_norm = getattr(config, "pre_norm", False)
@@ -888,10 +931,11 @@ class FlaubertModel(FlaubertPreTrainedModel):
         tensor = nn.functional.dropout(tensor, p=self.dropout, training=self.training)
         tensor *= mask.unsqueeze(-1).to(tensor.dtype)
 
-        # transformer layers
+        # transformer layers — using FlaubertLayer abstraction
         hidden_states = () if output_hidden_states else None
         attentions = () if output_attentions else None
-        for i in range(self.n_layers):
+
+        for layer in self.layers:
             # LayerDrop
             if self.training:
                 dropout_probability = torch.rand([])
@@ -901,39 +945,16 @@ class FlaubertModel(FlaubertPreTrainedModel):
             if output_hidden_states:
                 hidden_states = hidden_states + (tensor,)
 
-            # self attention
-            if not self.pre_norm:
-                attn_outputs = self.attentions[i](
-                    tensor,
-                    attn_mask,
-                    cache=cache,
-                    output_attentions=output_attentions,
-                    cache_position=cache_position,
-                )
-                attn = attn_outputs[0]
-                if output_attentions:
-                    attentions = attentions + (attn_outputs[1],)
-                attn = nn.functional.dropout(attn, p=self.dropout, training=self.training)
-                tensor = tensor + attn
-                tensor = self.layer_norm1[i](tensor)
-            else:
-                tensor_normalized = self.layer_norm1[i](tensor)
-                attn_outputs = self.attentions[i](tensor_normalized, attn_mask, cache=cache[i])
-                attn = attn_outputs[0]
-                if output_attentions:
-                    attentions = attentions + (attn_outputs[1],)
-                attn = nn.functional.dropout(attn, p=self.dropout, training=self.training)
-                tensor = tensor + attn
+            tensor, attn_weights = layer(
+                tensor,
+                attn_mask,
+                mask,
+                cache=cache,
+                cache_position=cache_position,
+            )
 
-            # FFN
-            if not self.pre_norm:
-                tensor = tensor + self.ffns[i](tensor)
-                tensor = self.layer_norm2[i](tensor)
-            else:
-                tensor_normalized = self.layer_norm2[i](tensor)
-                tensor = tensor + self.ffns[i](tensor_normalized)
-
-            tensor *= mask.unsqueeze(-1).to(tensor.dtype)
+            if output_attentions:
+                attentions = attentions + (attn_weights,)
 
         # Add last hidden state
         if output_hidden_states:
@@ -1072,6 +1093,7 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1110,9 +1132,7 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        transformer_outputs = self.transformer(
+        transformer_outputs: BaseModelOutput = self.transformer(
             input_ids,
             attention_mask=attention_mask,
             langs=langs,
@@ -1123,10 +1143,10 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        output = transformer_outputs[0]
+        output = transformer_outputs.last_hidden_state
         logits = self.sequence_summary(output)
 
         loss = None
@@ -1152,10 +1172,6 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
 
-        if not return_dict:
-            output = (logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
@@ -1178,6 +1194,7 @@ class FlaubertForTokenClassification(FlaubertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1214,9 +1231,7 @@ class FlaubertForTokenClassification(FlaubertPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.transformer(
+        transformer_outputs: BaseModelOutput = self.transformer(
             input_ids,
             attention_mask=attention_mask,
             langs=langs,
@@ -1227,11 +1242,10 @@ class FlaubertForTokenClassification(FlaubertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        sequence_output = outputs[0]
-
+        sequence_output = transformer_outputs.last_hidden_state
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
 
@@ -1240,15 +1254,11 @@ class FlaubertForTokenClassification(FlaubertPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
         return TokenClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
         )
 
 
@@ -1269,6 +1279,7 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1304,9 +1315,7 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
             Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        transformer_outputs = self.transformer(
+        transformer_outputs: BaseModelOutput = self.transformer(
             input_ids,
             attention_mask=attention_mask,
             langs=langs,
@@ -1317,10 +1326,10 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        sequence_output = transformer_outputs[0]
+        sequence_output = transformer_outputs.last_hidden_state
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
@@ -1343,10 +1352,6 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + transformer_outputs[1:]
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
             loss=total_loss,
@@ -1404,6 +1409,7 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1468,9 +1474,7 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
         >>> outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
         >>> loss = outputs.loss
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        transformer_outputs = self.transformer(
+        transformer_outputs: BaseModelOutput = self.transformer(
             input_ids,
             attention_mask=attention_mask,
             langs=langs,
@@ -1481,10 +1485,10 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        output = transformer_outputs[0]
+        output = transformer_outputs.last_hidden_state
 
         outputs = self.qa_outputs(
             output,
@@ -1493,11 +1497,8 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
             cls_index=cls_index,
             is_impossible=is_impossible,
             p_mask=p_mask,
-            return_dict=return_dict,
+            return_dict=True,
         )
-
-        if not return_dict:
-            return outputs + transformer_outputs[1:]
 
         return FlaubertForQuestionAnsweringOutput(
             loss=outputs.loss,
@@ -1524,6 +1525,7 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1586,7 +1588,6 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -1607,7 +1608,7 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
             )
             lengths = None
 
-        transformer_outputs = self.transformer(
+        transformer_outputs: BaseModelOutput = self.transformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
             langs=langs,
@@ -1618,9 +1619,9 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
-        output = transformer_outputs[0]
+        output = transformer_outputs.last_hidden_state
         logits = self.sequence_summary(output)
         logits = self.logits_proj(logits)
         reshaped_logits = logits.view(-1, num_choices)
@@ -1629,10 +1630,6 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
-
-        if not return_dict:
-            output = (reshaped_logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
             loss=loss,
