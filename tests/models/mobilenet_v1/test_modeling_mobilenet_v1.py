@@ -187,7 +187,7 @@ class MobileNetV1ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
             hidden_states = outputs.hidden_states
 
-            expected_num_stages = 26
+            expected_num_stages = 28
             self.assertEqual(len(hidden_states), expected_num_stages)
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
