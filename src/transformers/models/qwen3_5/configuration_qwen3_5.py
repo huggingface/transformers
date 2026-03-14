@@ -230,7 +230,6 @@ class Qwen3_5Config(PreTrainedConfig):
             if isinstance(text_config, dict):
                 for k, v in _label_kwargs.items():
                     text_config.setdefault(k, v)
-
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
