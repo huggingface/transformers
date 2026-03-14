@@ -2983,6 +2983,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
             )
 
+        # Mark the new lm_head's parameters as initialized so that post_init()
+        # does not reinitialize them (which would destroy the copied weights).
+        # See: https://github.com/huggingface/transformers/issues/35141
+        new_lm_head.weight._is_hf_initialized = True
+        if has_new_lm_head_bias and new_lm_head.bias is not None:
+            new_lm_head.bias._is_hf_initialized = True
+
         return new_lm_head
 
     def _init_added_embeddings_weights_with_mean(
