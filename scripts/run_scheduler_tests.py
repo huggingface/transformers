@@ -114,7 +114,7 @@ def print_section(title: str):
     print(f"\n--- {title} ---\n")
 
 
-def run_pytest(args: list, env: dict = None) -> subprocess.CompletedProcess:
+def run_pytest(args: list, env: dict | None = None) -> subprocess.CompletedProcess:
     """Run pytest with the given arguments."""
     cmd = [sys.executable, "-m", "pytest"] + args
     run_env = os.environ.copy()

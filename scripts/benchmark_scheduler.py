@@ -44,13 +44,13 @@ import time
 from pathlib import Path
 
 
-# Add repo root to path
+# Add repo root to path (must run before importing transformers)
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-import torch
+import torch  # noqa: E402
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
 
 def _get_device(device_str: str) -> torch.device:

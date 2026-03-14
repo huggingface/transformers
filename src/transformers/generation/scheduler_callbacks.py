@@ -569,8 +569,10 @@ class StreamingSchedulerCallback(SchedulerCallback):
                 self.generated_text = text
                 if self.on_text is not None:
                     self.on_text(new_text)
-        except Exception:
-            pass  # Silently ignore decode errors for partial tokens
+        except Exception as e:
+            logger.warning(
+                "Ignoring decode error for partial tokens: %s", e, exc_info=True
+            )
 
         return True
 
