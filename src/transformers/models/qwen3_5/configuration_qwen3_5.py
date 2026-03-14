@@ -219,6 +219,18 @@ class Qwen3_5Config(PreTrainedConfig):
         tie_word_embeddings=False,
         **kwargs,
     ):
+        # Propagate label-related kwargs to text_config so that e.g.
+        # AutoConfig.from_pretrained(model, num_labels=1) also updates the
+        # inner text_config used by ForSequenceClassification heads.
+        _label_keys = ("num_labels", "id2label", "label2id")
+        _label_kwargs = {k: kwargs[k] for k in _label_keys if k in kwargs}
+        if _label_kwargs:
+            if text_config is None:
+                text_config = {}
+            if isinstance(text_config, dict):
+                for k, v in _label_kwargs.items():
+                    text_config.setdefault(k, v)
+
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
