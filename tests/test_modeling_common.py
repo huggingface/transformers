@@ -2312,8 +2312,17 @@ class ModelTesterMixin:
 
                 # Capture weights immediately after resize
                 output_embeds = model.get_output_embeddings()
+                # Some models return non-standard output embeddings (e.g. ModuleList for Bark,
+                # custom Embeddings class for Kyutai) that don't have a .weight attribute.
+                if not hasattr(output_embeds, "weight"):
+                    continue
                 weight_before = output_embeds.weight.data.clone()
-                bias_before = output_embeds.bias.data.clone() if output_embeds.bias is not None else None
+                # nn.Embedding has no .bias attribute; guard with hasattr to avoid AttributeError
+                bias_before = (
+                    output_embeds.bias.data.clone()
+                    if hasattr(output_embeds, "bias") and output_embeds.bias is not None
+                    else None
+                )
 
                 # post_init must NOT reinitialize the resized head
                 model.post_init()
