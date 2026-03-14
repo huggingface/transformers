@@ -439,7 +439,6 @@ class AfmoeDecoderLayer(GradientCheckpointingLayer):
         self.layer_idx = layer_idx
 
         self.self_attn = AfmoeAttention(config=config, layer_idx=layer_idx)
-        self.attention_type = config.layer_types[layer_idx]
 
         # Dual normalization for attention
         self.input_layernorm = AfmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -603,10 +602,10 @@ class AfmoeModel(AfmoePreTrainedModel):
 
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_value=past_key_values,
                 use_cache=use_cache,

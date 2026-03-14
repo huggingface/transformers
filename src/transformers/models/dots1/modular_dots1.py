@@ -13,9 +13,11 @@
 # limitations under the License.
 import torch
 
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_outputs import CausalLMOutputWithPast
+from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3DecoderLayer,
     DeepseekV3MLP,
@@ -31,10 +33,138 @@ from ..qwen3.modeling_qwen3 import (
     Qwen3RotaryEmbedding,
     TransformersKwargs,
 )
-from .configuration_dots1 import Dots1Config
 
 
 logger = logging.get_logger(__name__)
+
+
+@auto_docstring(checkpoint="rednote-hilab/dots.llm1.base")
+class Dots1Config(PreTrainedConfig):
+    r"""
+    n_group (`int`, *optional*, defaults to 1):
+        Number of groups for routed experts.
+    first_k_dense_replace (`int`, *optional*, defaults to 0):
+        Number of dense layers at the beginning of the model before the first MoE layer.
+
+    Examples:
+
+    ```python
+    >>> from transformers import Dots1Model, Dots1Config
+    >>> # Initializing a Dots1 style configuration
+    >>> configuration = Dots1Config()
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+    """
+
+    model_type = "dots1"
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+    }
+
+    def __init__(
+        self,
+        vocab_size: int | None = 152064,
+        hidden_size: int | None = 4608,
+        intermediate_size: int | None = 10944,
+        moe_intermediate_size: int | None = 1408,
+        num_hidden_layers: int | None = 62,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = 32,
+        n_shared_experts: int | None = None,
+        n_routed_experts: int | None = None,
+        n_group: int | None = 1,
+        topk_group: int | None = 1,
+        num_experts_per_tok: int | None = None,
+        first_k_dense_replace: int | None = 0,
+        norm_topk_prob: bool | None = False,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 2048,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        routed_scaling_factor: float | None = 1.0,
+        sliding_window: int | None = 4096,
+        max_window_layers: int | None = 62,
+        layer_types: list[str] | None = None,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
+        **kwargs,
+    ):
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.moe_intermediate_size = moe_intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.n_shared_experts = n_shared_experts
+        self.n_routed_experts = n_routed_experts
+        self.num_experts_per_tok = num_experts_per_tok
+        self.first_k_dense_replace = first_k_dense_replace
+        self.norm_topk_prob = norm_topk_prob
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+        self.n_group = n_group
+        self.topk_group = topk_group
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
+        self.routed_scaling_factor = routed_scaling_factor
+        self.sliding_window = sliding_window
+        self.max_window_layers = max_window_layers
+
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention"
+                if self.sliding_window is not None and i >= self.max_window_layers
+                else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
+
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.rope_parameters = rope_parameters
+
+        super().__init__(**kwargs)
 
 
 class Dots1RMSNorm(Qwen3RMSNorm):
@@ -85,9 +215,7 @@ class Dots1MoE(DeepseekV3MoE):
 
 
 class Dots1DecoderLayer(DeepseekV3DecoderLayer):
-    def __init__(self, config: Dots1Config, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.attention_type = config.layer_types[layer_idx]
+    pass
 
 
 class Dots1PreTrainedModel(DeepseekV3PreTrainedModel):
@@ -129,6 +257,7 @@ class Dots1ForCausalLM(Qwen3ForCausalLM):
 
 
 __all__ = [
+    "Dots1Config",
     "Dots1PreTrainedModel",
     "Dots1Model",
     "Dots1ForCausalLM",

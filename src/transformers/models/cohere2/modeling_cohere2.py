@@ -290,7 +290,6 @@ class Cohere2DecoderLayer(GradientCheckpointingLayer):
         self.self_attn = Cohere2Attention(config=config, layer_idx=layer_idx)
         self.mlp = Cohere2MLP(config)
         self.input_layernorm = Cohere2LayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
-        self.attention_type = config.layer_types[layer_idx]
 
     def forward(
         self,
@@ -413,10 +412,10 @@ class Cohere2Model(Cohere2PreTrainedModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 past_key_values=past_key_values,
                 use_cache=use_cache,

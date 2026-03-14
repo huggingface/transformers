@@ -1312,9 +1312,9 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
         if self.rotary_emb is not None:
             position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
             # Depending on the layer type we opt for 2D base attention mask (Mamba) or 4D causal mask (Attention)
-            layer_mask = mamba_mask if decoder_layer.layer_type == "mamba" else causal_mask
+            layer_mask = mamba_mask if self.config.layers_block_type[i] == "mamba" else causal_mask
 
             hidden_states = decoder_layer(
                 hidden_states,

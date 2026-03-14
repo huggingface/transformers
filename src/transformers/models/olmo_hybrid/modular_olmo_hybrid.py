@@ -743,9 +743,9 @@ class OlmoHybridModel(Qwen3NextModel):
         # RoPE or NoPE
         position_embeddings = self.rotary_emb(hidden_states, position_ids) if self.rotary_emb is not None else None
 
-        for decoder_layer in self.layers:
-            layer_mask = linear_attn_mask if decoder_layer.layer_type == "linear_attention" else causal_mask
-            layer_position_embeddings = position_embeddings if decoder_layer.layer_type == "full_attention" else None
+        for i, decoder_layer in enumerate(self.layers):
+            layer_mask = linear_attn_mask if self.config.layer_types[i] == "linear_attention" else causal_mask
+            layer_position_embeddings = position_embeddings if self.config.layer_types[i] == "full_attention" else None
 
             hidden_states = decoder_layer(
                 hidden_states,

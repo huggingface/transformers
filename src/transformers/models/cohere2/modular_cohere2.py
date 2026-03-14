@@ -248,7 +248,6 @@ class Cohere2Attention(CohereAttention):
 class Cohere2DecoderLayer(CohereDecoderLayer):
     def __init__(self, config: Cohere2Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.attention_type = config.layer_types[layer_idx]
 
     def forward(
         self,
@@ -329,10 +328,10 @@ class Cohere2Model(Gemma2Model):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
