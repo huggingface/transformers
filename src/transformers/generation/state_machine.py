@@ -43,7 +43,7 @@ import copy
 import time
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 import torch
 
@@ -101,7 +101,7 @@ class GenerationPhase(Enum):
 
 
 # Valid phase transitions (from_phase -> set of allowed to_phases)
-VALID_TRANSITIONS: Dict[GenerationPhase, Set[GenerationPhase]] = {
+VALID_TRANSITIONS: dict[GenerationPhase, set[GenerationPhase]] = {
     GenerationPhase.IDLE: {GenerationPhase.INIT, GenerationPhase.ERROR},
     GenerationPhase.INIT: {GenerationPhase.PREFILL, GenerationPhase.ERROR},
     GenerationPhase.PREFILL: {GenerationPhase.DECODING, GenerationPhase.ERROR},
@@ -175,28 +175,28 @@ class GenerationState:
 
     phase: GenerationPhase = GenerationPhase.IDLE
     step: int = 0
-    input_ids: Optional[torch.LongTensor] = None
-    next_token_logits: Optional[torch.FloatTensor] = None
-    next_token_scores: Optional[torch.FloatTensor] = None
-    next_tokens: Optional[torch.LongTensor] = None
-    past_key_values: Optional[Any] = None
-    attention_mask: Optional[torch.LongTensor] = None
-    position_ids: Optional[torch.LongTensor] = None
+    input_ids: torch.LongTensor | None = None
+    next_token_logits: torch.FloatTensor | None = None
+    next_token_scores: torch.FloatTensor | None = None
+    next_tokens: torch.LongTensor | None = None
+    past_key_values: Any | None = None
+    attention_mask: torch.LongTensor | None = None
+    position_ids: torch.LongTensor | None = None
 
     # Status flags
     stopping_criteria_met: bool = False
     eos_token_generated: bool = False
-    unfinished_sequences: Optional[torch.LongTensor] = None
+    unfinished_sequences: torch.LongTensor | None = None
 
     # Batch-level scheduler control mask: shape (batch_size,), 1 = active, 0 = paused
     # Used by FORCE mode to pause individual sequences in a batch.
-    batch_control_mask: Optional[torch.LongTensor] = None
+    batch_control_mask: torch.LongTensor | None = None
 
     # Model kwargs (for encoder-decoder, etc.)
-    model_kwargs: Dict[str, Any] = field(default_factory=dict)
+    model_kwargs: dict[str, Any] = field(default_factory=dict)
 
     # User-defined extension
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     # Timing
     timestamp: float = field(default_factory=time.time)
@@ -265,7 +265,7 @@ class GenerationState:
         logger.info(f"Generation state saved to {path} (phase={self.phase.name}, step={self.step})")
 
     @classmethod
-    def load(cls, path: str, device: Optional[torch.device] = None) -> "GenerationState":
+    def load(cls, path: str, device: torch.device | None = None) -> "GenerationState":
         """
         Load state from disk.
 
@@ -324,7 +324,7 @@ class GenerationStateMachine:
     def __init__(self):
         self._phase: GenerationPhase = GenerationPhase.IDLE
         self._state: GenerationState = GenerationState(phase=GenerationPhase.IDLE)
-        self._history: List[Tuple[GenerationPhase, GenerationPhase, float]] = []
+        self._history: list[tuple[GenerationPhase, GenerationPhase, float]] = []
         self._transition_count: int = 0
 
     @property
@@ -344,7 +344,7 @@ class GenerationStateMachine:
         self._phase = state.phase
 
     @property
-    def history(self) -> List[Tuple[GenerationPhase, GenerationPhase, float]]:
+    def history(self) -> list[tuple[GenerationPhase, GenerationPhase, float]]:
         """List of (from_phase, to_phase, timestamp) transitions."""
         return self._history
 
@@ -400,7 +400,7 @@ class GenerationStateMachine:
         self._history.clear()
         self._transition_count = 0
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """
         Get a summary of the state machine for debugging.
 

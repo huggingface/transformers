@@ -35,7 +35,7 @@ Design principles:
 
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import torch
 
@@ -81,24 +81,24 @@ class ControlTokenParser:
 
     def __init__(
         self,
-        control_tokens: Optional[Dict[int, str]] = None,
-        action_handlers: Optional[Dict[str, Any]] = None,
+        control_tokens: dict[int, str] | None = None,
+        action_handlers: dict[str, Any] | None = None,
         strip_control_tokens: bool = True,
     ):
         self.control_tokens = control_tokens or {}
         self.action_handlers = action_handlers or {}
         self.strip_control_tokens = strip_control_tokens
-        self._inverse_map: Dict[str, int] = {v: k for k, v in self.control_tokens.items()}
+        self._inverse_map: dict[str, int] = {v: k for k, v in self.control_tokens.items()}
 
     def is_control_token(self, token_id: int) -> bool:
         """Check if a token ID is a registered control token."""
         return token_id in self.control_tokens
 
-    def get_action(self, token_id: int) -> Optional[str]:
+    def get_action(self, token_id: int) -> str | None:
         """Get the action name for a control token ID."""
         return self.control_tokens.get(token_id)
 
-    def get_token_id(self, action_name: str) -> Optional[int]:
+    def get_token_id(self, action_name: str) -> int | None:
         """Get the token ID for an action name."""
         return self._inverse_map.get(action_name)
 
@@ -127,7 +127,7 @@ class ControlTokenParser:
         logger.debug(f"ControlTokenParser: no handler for action '{action}' (token {token_id})")
         return False
 
-    def register_action(self, action_name: str, token_id: int, handler: Optional[Any] = None):
+    def register_action(self, action_name: str, token_id: int, handler: Any | None = None):
         """
         Register a new control token action.
 
@@ -145,8 +145,8 @@ class ControlTokenParser:
     def from_tokenizer(
         cls,
         tokenizer,
-        control_token_names: List[str],
-        action_handlers: Optional[Dict[str, Any]] = None,
+        control_token_names: list[str],
+        action_handlers: dict[str, Any] | None = None,
         strip_control_tokens: bool = True,
         prefix: str = "<|sched:",
         suffix: str = "|>",
@@ -251,11 +251,11 @@ class SchedulerContext:
 
     mode: SchedulerMode = SchedulerMode.NONE
     should_pause: bool = False
-    forced_token: Optional[int] = None
-    tokens_to_inject: Optional[List[int]] = None
-    logits_modifier: Optional[Any] = None  # Callable[[torch.FloatTensor, GenerationState], torch.FloatTensor]
-    custom_data: Dict[str, Any] = field(default_factory=dict)
-    step_budget: Optional[int] = None
+    forced_token: int | None = None
+    tokens_to_inject: list[int] | None = None
+    logits_modifier: Any | None = None  # Callable[[torch.FloatTensor, GenerationState], torch.FloatTensor]
+    custom_data: dict[str, Any] = field(default_factory=dict)
+    step_budget: int | None = None
     check_interval: int = 0
 
 
@@ -451,8 +451,8 @@ class GenerationScheduler:
     def __init__(
         self,
         generation_config=None,
-        mode: Union[str, SchedulerMode] = SchedulerMode.NONE,
-        control_token_parser: Optional[ControlTokenParser] = None,
+        mode: str | SchedulerMode = SchedulerMode.NONE,
+        control_token_parser: ControlTokenParser | None = None,
     ):
         """
         Initialize the scheduler.
@@ -470,11 +470,11 @@ class GenerationScheduler:
         self.state_machine = GenerationStateMachine()
         self.config = generation_config
         self.control_token_parser = control_token_parser
-        self._callbacks: List[SchedulerCallback] = []
+        self._callbacks: list[SchedulerCallback] = []
         self._context = SchedulerContext(mode=self._mode)
         self._is_active: bool = False
-        self._start_time: Optional[float] = None
-        self._step_times: List[float] = []
+        self._start_time: float | None = None
+        self._step_times: list[float] = []
 
         # Validate: INTERNAL mode should have a control_token_parser
         if self._mode == SchedulerMode.INTERNAL and self.control_token_parser is None:
@@ -511,7 +511,7 @@ class GenerationScheduler:
         return self._mode != SchedulerMode.NONE
 
     @property
-    def callbacks(self) -> List[SchedulerCallback]:
+    def callbacks(self) -> list[SchedulerCallback]:
         """Registered callbacks (read-only view)."""
         return list(self._callbacks)
 
@@ -549,7 +549,7 @@ class GenerationScheduler:
         self._context.forced_token = token_id
         logger.debug(f"Scheduler: forced next token = {token_id}")
 
-    def inject_tokens(self, token_ids: List[int]):
+    def inject_tokens(self, token_ids: list[int]):
         """
         Schedule token injection at the current position.
 
@@ -594,7 +594,7 @@ class GenerationScheduler:
 
     # ==================== State Persistence ====================
 
-    def save_checkpoint(self, path: Optional[str] = None) -> Dict[str, Any]:
+    def save_checkpoint(self, path: str | None = None) -> dict[str, Any]:
         """
         Serialize the full scheduler state for checkpointing.
 
@@ -624,7 +624,7 @@ class GenerationScheduler:
 
         return checkpoint
 
-    def load_checkpoint(self, checkpoint: Union[str, Dict[str, Any]], device: Optional[torch.device] = None):
+    def load_checkpoint(self, checkpoint: str | dict[str, Any], device: torch.device | None = None):
         """
         Restore scheduler state from a checkpoint.
 
@@ -854,7 +854,7 @@ class GenerationScheduler:
         """Whether a forced token is pending."""
         return self._context.forced_token is not None
 
-    def _consume_forced_token(self) -> Optional[int]:
+    def _consume_forced_token(self) -> int | None:
         """Consume and return the forced token (if any)."""
         token = self._context.forced_token
         self._context.forced_token = None
@@ -864,7 +864,7 @@ class GenerationScheduler:
         """Whether token injection is pending."""
         return self._context.tokens_to_inject is not None and len(self._context.tokens_to_inject) > 0
 
-    def _consume_injection(self) -> Optional[List[int]]:
+    def _consume_injection(self) -> list[int] | None:
         """Consume and return the injection tokens (if any)."""
         tokens = self._context.tokens_to_inject
         self._context.tokens_to_inject = None
@@ -922,7 +922,7 @@ class GenerationScheduler:
 
     # ==================== Statistics ====================
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """
         Get scheduler statistics.
 

@@ -160,6 +160,12 @@ if TYPE_CHECKING:
             PrefillFirstScheduler,
             Scheduler,
         )
+        from .generation_scheduler import (
+            ControlTokenParser,
+            GenerationScheduler,
+            SchedulerCallback,
+            SchedulerContext,
+        )
         from .logits_process import (
             AlternatingCodebooksLogitsProcessor,
             ClassifierFreeGuidanceLogitsProcessor,
@@ -194,22 +200,6 @@ if TYPE_CHECKING:
             WatermarkLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
         )
-        from .stopping_criteria import (
-            ConfidenceCriteria,
-            EosTokenCriteria,
-            MaxLengthCriteria,
-            MaxTimeCriteria,
-            StoppingCriteria,
-            StoppingCriteriaList,
-            StopStringCriteria,
-            validate_stopping_criteria,
-        )
-        from .generation_scheduler import (
-            ControlTokenParser,
-            GenerationScheduler,
-            SchedulerCallback,
-            SchedulerContext,
-        )
         from .scheduler_callbacks import (
             EntropyMonitorCallback,
             GenerationLoggerCallback,
@@ -220,11 +210,21 @@ if TYPE_CHECKING:
             TokenPatternCallback,
         )
         from .state_machine import (
+            VALID_TRANSITIONS,
             GenerationPhase,
             GenerationState,
             GenerationStateMachine,
             SchedulerMode,
-            VALID_TRANSITIONS,
+        )
+        from .stopping_criteria import (
+            ConfidenceCriteria,
+            EosTokenCriteria,
+            MaxLengthCriteria,
+            MaxTimeCriteria,
+            StoppingCriteria,
+            StoppingCriteriaList,
+            StopStringCriteria,
+            validate_stopping_criteria,
         )
         from .utils import (
             GenerateBeamDecoderOnlyOutput,

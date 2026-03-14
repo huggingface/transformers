@@ -70,6 +70,7 @@ from .configuration_utils import (
     GenerationMode,
 )
 from .continuous_batching import ContinuousMixin
+from .generation_scheduler import GenerationScheduler
 from .logits_process import (
     EncoderNoRepeatNGramLogitsProcessor,
     EncoderRepetitionPenaltyLogitsProcessor,
@@ -98,7 +99,6 @@ from .logits_process import (
     TypicalLogitsWarper,
     UnbatchedClassifierFreeGuidanceLogitsProcessor,
 )
-from .generation_scheduler import GenerationScheduler, SchedulerContext
 from .state_machine import GenerationPhase, GenerationState, SchedulerMode
 from .stopping_criteria import (
     ConfidenceCriteria,
@@ -2155,7 +2155,7 @@ class GenerationMixin(ContinuousMixin):
         negative_prompt_ids: torch.Tensor | None = None,
         negative_prompt_attention_mask: torch.Tensor | None = None,
         custom_generate: str | Callable | None = None,
-        scheduler: Optional[GenerationScheduler] = None,
+        scheduler: GenerationScheduler | None = None,
         **kwargs,
     ) -> GenerateOutput | torch.LongTensor:
         r"""
@@ -2696,7 +2696,7 @@ class GenerationMixin(ContinuousMixin):
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
-        scheduler: Optional[GenerationScheduler] = None,
+        scheduler: GenerationScheduler | None = None,
         **model_kwargs,
     ) -> GenerateNonBeamOutput | torch.LongTensor:
         r"""
@@ -3239,7 +3239,7 @@ class GenerationMixin(ContinuousMixin):
         stopping_criteria: StoppingCriteriaList,
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
-        scheduler: Optional[GenerationScheduler] = None,
+        scheduler: GenerationScheduler | None = None,
         **model_kwargs,
     ) -> GenerateBeamOutput | torch.LongTensor:
         r"""
@@ -3590,7 +3590,7 @@ class GenerationMixin(ContinuousMixin):
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
-        scheduler: Optional[GenerationScheduler] = None,
+        scheduler: GenerationScheduler | None = None,
         inputs_tensor: torch.FloatTensor | None = None,
         assistant_model: Optional["PreTrainedModel"] = None,
         assistant_tokenizer: Optional["PreTrainedTokenizerBase"] = None,

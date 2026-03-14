@@ -150,11 +150,11 @@ def check_dependencies():
     except ImportError:
         checks.append(("pytest", "NOT FOUND", False))
 
-    # Check scheduler modules
+    # Check scheduler modules (import modules only to avoid F401 unused names)
     try:
-        from transformers.generation.state_machine import SchedulerMode, GenerationPhase
-        from transformers.generation.generation_scheduler import GenerationScheduler
-        from transformers.generation.scheduler_callbacks import InternalSchedulerCallback
+        import transformers.generation.generation_scheduler
+        import transformers.generation.scheduler_callbacks
+        import transformers.generation.state_machine
         checks.append(("scheduler modules", "OK", True))
     except ImportError as e:
         checks.append(("scheduler modules", f"IMPORT ERROR: {e}", False))

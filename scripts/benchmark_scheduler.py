@@ -43,11 +43,13 @@ import sys
 import time
 from pathlib import Path
 
+
 # Add repo root to path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 import torch
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
@@ -78,7 +80,6 @@ def benchmark_generate(
     device: torch.device = torch.device("cpu"),
 ):
     """Run a generation benchmark and return timing statistics."""
-    from transformers.generation.generation_scheduler import GenerationScheduler
 
     kwargs = {
         "max_new_tokens": max_new_tokens,
@@ -254,7 +255,7 @@ def main():
 
     device = _get_device(args.device)
     print(f"\n{'='*72}")
-    print(f"  Generation Scheduler Benchmark")
+    print("  Generation Scheduler Benchmark")
     print(f"{'='*72}")
     print(f"  Model:          {args.model}")
     print(f"  Device:         {device}")
@@ -288,7 +289,6 @@ def main():
     from transformers.generation.scheduler_callbacks import (
         EntropyMonitorCallback,
         GenerationLoggerCallback,
-        StepBudgetCallback,
     )
 
     # Define configurations to benchmark
@@ -360,7 +360,7 @@ def main():
 
     # Print summary table
     print(f"\n{'='*72}")
-    print(f"  Summary")
+    print("  Summary")
     print(f"{'='*72}")
     print(f"  {'Configuration':<30} {'Avg(ms)':>8} {'Min(ms)':>8} {'Max(ms)':>8} {'Tok/s':>8} {'Overhead':>8}")
     print(f"  {'-'*30} {'-'*8} {'-'*8} {'-'*8} {'-'*8} {'-'*8}")

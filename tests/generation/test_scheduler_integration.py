@@ -56,7 +56,6 @@ if is_torch_available():
         ControlTokenParser,
         GenerationScheduler,
         SchedulerCallback,
-        SchedulerContext,
     )
     from transformers.generation.scheduler_callbacks import (
         EntropyMonitorCallback,
@@ -515,7 +514,7 @@ class TestForceModeIntegration(unittest.TestCase):
         scheduler.register_callback(forcer)
         scheduler.register_callback(collector)
 
-        output = self.model.generate(
+        self.model.generate(
             self.input_ids,
             max_new_tokens=10,
             do_sample=False,
@@ -562,7 +561,7 @@ class TestForceModeIntegration(unittest.TestCase):
         """Logits modification via callback changes generation output."""
         # Generate baseline
         torch.manual_seed(42)
-        baseline = self.model.generate(
+        self.model.generate(
             self.input_ids,
             max_new_tokens=10,
             do_sample=False,
@@ -574,7 +573,7 @@ class TestForceModeIntegration(unittest.TestCase):
         scaler = LogitsScalerCallback(factor=0.01)  # Flatten distribution dramatically
         scheduler.register_callback(scaler)
 
-        modified = self.model.generate(
+        self.model.generate(
             self.input_ids,
             max_new_tokens=10,
             do_sample=False,
@@ -751,7 +750,7 @@ class TestForceModeIntegration(unittest.TestCase):
             scheduler2 = GenerationScheduler(mode="force")
             scheduler2.register_callback(pattern_cb)
 
-            output = self.model.generate(
+            self.model.generate(
                 self.input_ids,
                 max_new_tokens=10,
                 do_sample=False,

@@ -24,9 +24,9 @@ and provide ready-to-use implementations for common use cases:
     - `StepBudgetCallback`: Enforces a maximum number of decoding steps.
 """
 
-import math
 from collections import deque
-from typing import Any, Callable, Dict, List, Optional, Set
+from collections.abc import Callable
+from typing import Any
 
 import torch
 from torch.nn import functional as F
@@ -81,7 +81,7 @@ class EntropyMonitorCallback(SchedulerCallback):
         self.window_size = window_size
         self.min_step = min_step
         self.action = action
-        self.entropy_history: List[float] = []
+        self.entropy_history: list[float] = []
         self._window: deque = deque(maxlen=window_size)
 
     def _compute_entropy(self, logits: torch.FloatTensor) -> float:
@@ -178,15 +178,15 @@ class TokenPatternCallback(SchedulerCallback):
 
     def __init__(
         self,
-        trigger_token_ids: Optional[Set[int]] = None,
-        trigger_sequences: Optional[List[List[int]]] = None,
-        on_trigger: Optional[Callable] = None,
+        trigger_token_ids: set[int] | None = None,
+        trigger_sequences: list[list[int]] | None = None,
+        on_trigger: Callable | None = None,
     ):
         super().__init__()
         self.trigger_token_ids = trigger_token_ids or set()
         self.trigger_sequences = trigger_sequences or []
         self.on_trigger = on_trigger
-        self.triggered_at: List[int] = []  # Steps where triggers occurred
+        self.triggered_at: list[int] = []  # Steps where triggers occurred
         self._recent_tokens: deque = deque(
             maxlen=max((len(seq) for seq in self.trigger_sequences), default=1)
         )
@@ -275,7 +275,7 @@ class GenerationLoggerCallback(SchedulerCallback):
         self.log_phases = log_phases
         self.log_logits_stats = log_logits_stats
         self.tokenizer = tokenizer
-        self._log: List[Dict[str, Any]] = []
+        self._log: list[dict[str, Any]] = []
 
     def on_phase_transition(
         self,
@@ -354,7 +354,7 @@ class GenerationLoggerCallback(SchedulerCallback):
         self._log.append(entry)
         logger.error(f"GenerationLogger: error at step {state.step}: {error}")
 
-    def get_log(self) -> List[Dict[str, Any]]:
+    def get_log(self) -> list[dict[str, Any]]:
         """Get the full generation log."""
         return list(self._log)
 
@@ -444,7 +444,7 @@ class RepetitionDetectorCallback(SchedulerCallback):
         self.ngram_size = ngram_size
         self.max_repetitions = max_repetitions
         self.action = action
-        self._ngram_counts: Dict[tuple, int] = {}
+        self._ngram_counts: dict[tuple, int] = {}
         self._recent_tokens: deque = deque(maxlen=ngram_size * (max_repetitions + 1))
 
     def on_token_generated(
@@ -522,7 +522,7 @@ class StreamingSchedulerCallback(SchedulerCallback):
     def __init__(
         self,
         tokenizer,
-        on_text: Optional[Callable] = None,
+        on_text: Callable | None = None,
         skip_special_tokens: bool = True,
         skip_prompt: bool = True,
     ):
@@ -532,7 +532,7 @@ class StreamingSchedulerCallback(SchedulerCallback):
         self.skip_special_tokens = skip_special_tokens
         self.skip_prompt = skip_prompt
         self.generated_text: str = ""
-        self._token_buffer: List[int] = []
+        self._token_buffer: list[int] = []
         self._prompt_length: int = 0
 
     def on_phase_transition(
@@ -625,14 +625,14 @@ class InternalSchedulerCallback(SchedulerCallback):
         self,
         control_token_parser: ControlTokenParser,
         max_consecutive_controls: int = 10,
-        on_control_detected: Optional[Callable] = None,
+        on_control_detected: Callable | None = None,
     ):
         super().__init__()
         self.parser = control_token_parser
         self.max_consecutive_controls = max_consecutive_controls
         self.on_control_detected = on_control_detected
         self._consecutive_control_count: int = 0
-        self.control_history: List[Dict[str, Any]] = []
+        self.control_history: list[dict[str, Any]] = []
 
     def on_token_generated(
         self,
@@ -697,7 +697,7 @@ class InternalSchedulerCallback(SchedulerCallback):
         """Reset per-step state."""
         return True
 
-    def get_control_history(self) -> List[Dict[str, Any]]:
+    def get_control_history(self) -> list[dict[str, Any]]:
         """Get the history of control token detections."""
         return list(self.control_history)
 
