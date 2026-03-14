@@ -891,11 +891,15 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            mm_token_type_ids[array_ids == self.video_token_id] = 2
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+            # Process each sequence individually to handle ragged (unpadded) input_ids
+            mm_token_type_ids = []
+            for ids in text_inputs["input_ids"]:
+                arr = np.array(ids)
+                token_types = np.zeros_like(arr)
+                token_types[arr == self.image_token_id] = 1
+                token_types[arr == self.video_token_id] = 2
+                mm_token_type_ids.append(token_types.tolist())
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
