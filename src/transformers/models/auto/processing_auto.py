@@ -14,7 +14,6 @@
 """AutoProcessor class."""
 
 import importlib
-import inspect
 import json
 from collections import OrderedDict
 from typing import TYPE_CHECKING
@@ -297,7 +296,21 @@ class AutoProcessor:
 
         # First, let's see if we have a processor or preprocessor config.
         # Filter the kwargs for `cached_file`.
-        cached_file_kwargs = {key: kwargs[key] for key in inspect.signature(cached_file).parameters if key in kwargs}
+        # Note: can't use inspect.signature here because cached_file uses **kwargs,
+        # so we explicitly list the hub-related params it actually forwards.
+        _hub_kwargs = (
+            "cache_dir",
+            "force_download",
+            "proxies",
+            "token",
+            "revision",
+            "local_files_only",
+            "subfolder",
+            "repo_type",
+            "user_agent",
+            "_commit_hash",
+        )
+        cached_file_kwargs = {key: kwargs[key] for key in _hub_kwargs if key in kwargs}
         # We don't want to raise
         cached_file_kwargs.update(
             {
