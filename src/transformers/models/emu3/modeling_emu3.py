@@ -1201,7 +1201,8 @@ class Emu3RotaryEmbedding(nn.Module):
 
 @auto_docstring
 class Emu3TextModel(Emu3PreTrainedModel):
-    def __init__(self, config: Emu3Config):
+    config: Emu3TextConfig
+    def __init__(self, config: Emu3TextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
