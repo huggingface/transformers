@@ -31,7 +31,8 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
+from ...utils.output_capturing import capture_outputs
 from .configuration_visual_bert import VisualBertConfig
 
 
@@ -459,6 +460,11 @@ class VisualBertPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
+    _can_record_outputs = {
+        "hidden_states": VisualBertLayer,
+        "attentions": VisualBertSelfAttention,
+    }
+
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -536,6 +542,7 @@ class VisualBertModel(VisualBertPreTrainedModel):
         self.embeddings.word_embeddings = value
 
     @auto_docstring
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -598,19 +605,22 @@ class VisualBertModel(VisualBertPreTrainedModel):
         last_hidden_states = outputs.last_hidden_state
         ```"""
 
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
+
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
+
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -626,17 +636,16 @@ class VisualBertModel(VisualBertPreTrainedModel):
         if visual_embeds is not None and visual_attention_mask is None:
             visual_attention_mask = torch.ones(visual_input_shape, device=device)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
         if visual_embeds is not None:
             combined_attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
-            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-                combined_attention_mask, (batch_size, input_shape + visual_input_shape)
+            extended_attention_mask = self.get_extended_attention_mask(
+                combined_attention_mask,
+                (batch_size, seq_length + visual_input_shape[1]),
             )
-
         else:
-            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-                attention_mask, (batch_size, input_shape)
+            extended_attention_mask = self.get_extended_attention_mask(
+                attention_mask,
+                (batch_size, seq_length),
             )
 
         embedding_output = self.embeddings(
@@ -649,36 +658,16 @@ class VisualBertModel(VisualBertPreTrainedModel):
             image_text_alignment=image_text_alignment,
         )
 
-        if self.bypass_transformer and visual_embeds is not None:
-            text_length = input_ids.size(1)
-            text_embedding_output = embedding_output[:, :text_length, :]
-            visual_embedding_output = embedding_output[:, text_length:, :]
+        encoder_outputs = self.encoder(
+            embedding_output,
+            attention_mask=extended_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
-            text_extended_attention_mask = extended_attention_mask[:, :, text_length, :text_length]
-
-            encoded_outputs = self.encoder(
-                text_embedding_output,
-                attention_mask=text_extended_attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-            sequence_output = encoded_outputs[0]
-            concatenated_input = torch.cat((sequence_output, visual_embedding_output), dim=1)
-            sequence_output = self.additional_layer(concatenated_input, extended_attention_mask)
-            pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
-        else:
-            encoder_outputs = self.encoder(
-                embedding_output,
-                attention_mask=extended_attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-            sequence_output = encoder_outputs[0]
-
-            pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        sequence_output = encoder_outputs[0]
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
@@ -720,6 +709,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         self.cls.predictions.bias = new_embeddings.bias
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -864,6 +854,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1051,6 +1042,7 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1188,6 +1180,7 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1361,6 +1354,7 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
