@@ -1419,6 +1419,7 @@ class Qwen3_5MoeCausalLMOutputWithPast(ModelOutput):
 
 
 class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
+    config: Qwen3_5MoeTextConfig
     def __init__(self, config: Qwen3_5MoeTextConfig):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
