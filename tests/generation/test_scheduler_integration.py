@@ -1571,7 +1571,7 @@ class TestBatchControlMaskIntegration(unittest.TestCase):
 
         scheduler.register_callback(MaskChecker())
 
-        output = self.model.generate(
+        self.model.generate(
             self.input_ids,
             max_new_tokens=3,
             do_sample=False,
@@ -1631,7 +1631,7 @@ class TestStreamingCallbackIntegration(unittest.TestCase):
         self.model.generate(
             self.input_ids, max_new_tokens=5, do_sample=False, scheduler=scheduler,
         )
-        first_text = cb.generated_text
+        cb.generated_text
 
         # Reset
         cb.reset()
