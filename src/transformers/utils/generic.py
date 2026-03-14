@@ -240,6 +240,10 @@ def is_flash_attention_requested(
     else:
         checked_attention_implementation = requested_attention_implementation
 
+    # theoretically can happen, equivalent to default implementation (sdpa/eager)
+    if checked_attention_implementation is None:
+        return False
+
     # If a specific version is requested, look for a pattern of type "flash...{version}"
     if version is not None:
         return re.match(r".*flash.*" + str(version), checked_attention_implementation) is not None
@@ -656,9 +660,9 @@ def torch_float(x):
     Casts an input to a torch float32 tensor if we are in a tracing context, otherwise to a Python float.
     """
     if not _is_torch_available:
-        return int(x)
+        return float(x)
 
-    return x.to(torch.float32) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
+    return x.to(torch.float32) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else float(x)
 
 
 def filter_out_non_signature_kwargs(extra: list | None = None):
