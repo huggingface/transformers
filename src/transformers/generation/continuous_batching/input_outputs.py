@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from contextlib import nullcontext
 from dataclasses import dataclass
 from functools import partial
 from itertools import count
@@ -221,7 +222,8 @@ class ContinuousBatchingIOs:
         other.max_seqlen_q = self.max_seqlen_q
         other.max_seqlen_k = dict(self.max_seqlen_k.items())
         # Transfer static tensors
-        with torch.cuda.stream(stream):
+        maybe_stream = torch.cuda.stream(stream) if stream is not None else nullcontext()
+        with maybe_stream:
             other._bulk_input_tensor.copy_(self._bulk_input_tensor, non_blocking=non_blocking)  # fast bulk transfer
             # Only transfer block_table for decode-only batches (when it's actually used)
             if self.use_block_table:
@@ -496,15 +498,17 @@ class HostDeviceIOPair:
         # The host IO has automatic pinned memory because it is created on the CPU
         self.host_io = ContinuousBatchingIOs(cache, config, torch.device("cpu"), model_dtype, max_graphs)
         self.device_io = ContinuousBatchingIOs(cache, config, device, model_dtype, max_graphs)
-        self.h2d_over = torch.cuda.Event()
-        self.compute_over = torch.cuda.Event()
-        self.d2h_over = torch.cuda.Event()
+        # Create events only on CUDA devices
+        self.h2d_over = torch.cuda.Event() if torch.cuda.is_available() else None
+        self.compute_over = torch.cuda.Event() if torch.cuda.is_available() else None
+        self.d2h_over = torch.cuda.Event() if torch.cuda.is_available() else None
 
     def transfer_inputs_h2d(self, stream: torch.cuda.Stream) -> None:
         self.host_io._transfer_inputs(self.device_io, stream=stream, non_blocking=True)
 
-    def transfer_outputs_d2h(self, stream: torch.cuda.Stream) -> None:
-        with torch.cuda.stream(stream):
+    def transfer_outputs_d2h(self, stream: torch.cuda.Stream | None) -> None:
+        maybe_stream = torch.cuda.stream(stream) if stream is not None else nullcontext()
+        with maybe_stream:
             self.host_io.output_ids.copy_(self.device_io.output_ids, non_blocking=True)
 
 
@@ -562,6 +566,9 @@ class ContinuousBatchingAsyncIOs:
         model_dtype: torch.dtype,
         max_graphs: int = 32,
     ) -> None:
+        # Async batching needs streams to function, so check is CUDA is available
+        if not torch.cuda.is_available():
+            raise RuntimeError(f"Async batching requires CUDA, but {torch.cuda.is_available() = }")
         # IO pairs used to avoid race conditions
         self.current_pair = 0
         self.io_pairs = [HostDeviceIOPair(cache, config, device, model_dtype, max_graphs) for _ in range(2)]
@@ -668,5 +675,5 @@ class ContinuousBatchingAsyncIOs:
     # This method is called after the switch and not during the first batch
     def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int]]:
         io_pair = self.io_pairs[self.current_pair]
-        io_pair.d2h_over.synchronize()
+        io_pair.d2h_over.synchronize()  # ty:ignore[unresolved-attribute]  <- this is always a CUDA event
         return io_pair.host_io.prepare_batch_update()
