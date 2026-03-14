@@ -2278,6 +2278,59 @@ class ModelTesterMixin:
         with _deepspeed_zero3(ds_config):
             self.test_resize_tokens_embeddings()
 
+    def test_resize_token_embeddings_no_reinitialization(self):
+        """
+        Regression test for https://github.com/huggingface/transformers/issues/35141
+
+        Calling post_init() after resize_token_embeddings() must NOT reinitialize the
+        output embedding (lm_head) weights when tie_word_embeddings=False.
+        """
+        if not self.test_resize_embeddings:
+            self.skipTest(reason="test_resize_embeddings is set to `False`")
+
+        original_config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        original_config.tie_word_embeddings = False
+        try:
+            original_config.get_text_config().tie_word_embeddings = False
+        except Exception:
+            pass
+
+        if original_config.tie_word_embeddings:
+            self.skipTest(reason="Model cannot untie embeddings")
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class):
+                config = copy.deepcopy(original_config)
+                model = model_class(config)
+                model.eval()
+
+                if model.get_output_embeddings() is None:
+                    continue
+
+                vocab_size = config.get_text_config().vocab_size
+                model.resize_token_embeddings(vocab_size + 10)
+
+                # Capture weights immediately after resize
+                output_embeds = model.get_output_embeddings()
+                weight_before = output_embeds.weight.data.clone()
+                bias_before = output_embeds.bias.data.clone() if output_embeds.bias is not None else None
+
+                # post_init must NOT reinitialize the resized head
+                model.post_init()
+
+                weight_after = model.get_output_embeddings().weight.data
+                self.assertTrue(
+                    torch.equal(weight_before, weight_after),
+                    "post_init() must not reinitialize output embedding weights after resize_token_embeddings(). "
+                    "See https://github.com/huggingface/transformers/issues/35141",
+                )
+                if bias_before is not None:
+                    bias_after = model.get_output_embeddings().bias.data
+                    self.assertTrue(
+                        torch.equal(bias_before, bias_after),
+                        "post_init() must not reinitialize output embedding bias after resize_token_embeddings().",
+                    )
+
     def test_resize_embeddings_untied(self):
         if not self.test_resize_embeddings:
             self.skipTest(reason="test_resize_embeddings is set to `False`")
