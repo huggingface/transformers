@@ -27,12 +27,14 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
     auto_docstring,
+    can_return_tuple,
     is_bitsandbytes_available,
     is_kernels_available,
     is_ninja_available,
     is_torch_cuda_available,
     logging,
 )
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_rwkv import RwkvConfig
 
 
@@ -337,7 +339,7 @@ class RwkvBlock(GradientCheckpointingLayer):
         self.attention = RwkvSelfAttention(config, layer_id)
         self.feed_forward = RwkvFeedForward(config, layer_id)
 
-    def forward(self, hidden, state=None, use_cache=False, output_attentions=False):
+    def forward(self, hidden, state=None, use_cache=False):
         if self.layer_id == 0:
             hidden = self.pre_ln(hidden)
 
@@ -347,13 +349,15 @@ class RwkvBlock(GradientCheckpointingLayer):
         feed_forward, state = self.feed_forward(self.ln2(hidden), state=state)
         hidden = hidden + feed_forward
 
-        outputs = (hidden, state)
-        if output_attentions:
-            outputs += (attention,)
-        else:
-            outputs += (None,)
+        # Rescale hidden states during inference when rescale_every is set
+        if (
+            not self.training
+            and self.config.rescale_every > 0
+            and (self.layer_id + 1) % self.config.rescale_every == 0
+        ):
+            hidden = hidden / 2
 
-        return outputs
+        return hidden, state
 
 
 @auto_docstring
@@ -364,6 +368,10 @@ class RwkvPreTrainedModel(PreTrainedModel):
     _keep_in_fp32_modules = ["time_decay", "time_first"]
     supports_gradient_checkpointing = True
     _is_stateful = True
+    _can_record_outputs = {
+        "hidden_states": RwkvBlock,
+        "attentions": OutputRecorder(target_class=RwkvSelfAttention, index=0),
+    }
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -507,6 +515,7 @@ class RwkvModel(RwkvPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings = new_embeddings
 
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -515,9 +524,6 @@ class RwkvModel(RwkvPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         state: list[torch.FloatTensor] | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | RwkvOutput:
         r"""
@@ -539,12 +545,7 @@ class RwkvModel(RwkvPreTrainedModel):
         use_cache (`bool`, *optional*):
             If set to `True`, the last state is returned and can be used to quickly generate the next logits.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         use_cache = use_cache if use_cache is not None else (self.config.use_cache if not self.training else False)
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if attention_mask is not None:
             logger.warning_once("`attention_mask` was passed, but it is unused in this model.")
@@ -579,39 +580,14 @@ class RwkvModel(RwkvPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        all_self_attentions = () if output_attentions else None
-        all_hidden_states = () if output_hidden_states else None
-        for idx, block in enumerate(self.blocks):
-            hidden_states, state, attentions = block(
-                hidden_states, state=state, use_cache=use_cache, output_attentions=output_attentions
-            )
-
-            if (
-                self.layers_are_rescaled
-                and self.config.rescale_every > 0
-                and (idx + 1) % self.config.rescale_every == 0
-            ):
-                hidden_states = hidden_states / 2
-
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (attentions,)
+        for block in self.blocks:
+            hidden_states, state = block(hidden_states, state=state, use_cache=use_cache)
 
         hidden_states = self.ln_out(hidden_states)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(x for x in [hidden_states, state, all_hidden_states, all_self_attentions] if x is not None)
 
         return RwkvOutput(
             last_hidden_state=hidden_states,
             state=state,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
         )
 
     def _rescale_layers(self):
@@ -683,6 +659,7 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.head = new_embeddings
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -692,9 +669,6 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
         state: list[torch.FloatTensor] | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple | RwkvCausalLMOutput:
@@ -721,19 +695,15 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
         use_cache (`bool`, *optional*):
             If set to `True`, the last state is returned and can be used to quickly generate the next logits.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         rwkv_outputs = self.rwkv(
             input_ids,
             inputs_embeds=inputs_embeds,
             state=state,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        hidden_states = rwkv_outputs[0]
+        hidden_states = rwkv_outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.head(hidden_states[:, slice_indices, :])
@@ -741,10 +711,6 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        if not return_dict:
-            output = (logits,) + rwkv_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return RwkvCausalLMOutput(
             loss=loss,
