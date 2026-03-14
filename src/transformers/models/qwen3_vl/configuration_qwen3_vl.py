@@ -189,6 +189,30 @@ class Qwen3VLConfig(PreTrainedConfig):
         self.vision_end_token_id = vision_end_token_id
         self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
+        # Propagate classification-related attributes to text_config for sequence classification tasks
+        # The text config is used for the actual model forward pass in tasks like sequence classification
+        self._propagate_classification_config_to_text_config()
+
+    def _propagate_classification_config_to_text_config(self):
+        """Propagate classification-related attributes to text_config."""
+        if hasattr(self, "text_config") and self.text_config is not None:
+            if hasattr(self, "num_labels") and self.num_labels is not None:
+                self.text_config.num_labels = self.num_labels
+            if hasattr(self, "id2label") and self.id2label is not None:
+                self.text_config.id2label = self.id2label.copy()
+            if hasattr(self, "label2id") and self.label2id is not None:
+                self.text_config.label2id = self.label2id.copy()
+
+    @property
+    def num_labels(self) -> int:
+        return super().num_labels
+
+    @num_labels.setter
+    def num_labels(self, num_labels: int):
+        # Call the parent setter first to set id2label
+        super(num_labels, type(self)).num_labels.fset(self, num_labels)  # type: ignore[attr-defined]
+        # Then propagate to text_config
+        self._propagate_classification_config_to_text_config()
 
 
 __all__ = ["Qwen3VLConfig", "Qwen3VLTextConfig"]
