@@ -126,6 +126,112 @@ def benchmark_generate(
     }
 
 
+def _build_html_report(
+    model_name: str,
+    device: torch.device,
+    max_new_tokens: int,
+    batch_size: int,
+    do_sample: bool,
+    warmup: int,
+    runs: int,
+    results,
+) -> str:
+    """Build an HTML report from benchmark results."""
+    import html
+
+    title = "Generation Scheduler Benchmark Report"
+    rows = []
+    for r in results:
+        rows.append(
+            (
+                html.escape(r["name"]),
+                f"{r['avg_latency_ms']:.1f}",
+                f"{r['min_latency_ms']:.1f}",
+                f"{r['max_latency_ms']:.1f}",
+                f"{r['tokens_per_sec']:.1f}",
+                f"{r['overhead_pct']:+.1f}%",
+            )
+        )
+
+    table_rows = "\n".join(
+        f"      <tr><td>{name}</td><td>{avg}</td><td>{min_}</td><td>{max_}</td><td>{tok}</td><td>{over}</td></tr>"
+        for (name, avg, min_, max_, tok, over) in rows
+    )
+
+    html_doc = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>{title}</title>
+  <style>
+    body {{
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 24px;
+      background-color: #fafafa;
+    }}
+    h1 {{
+      font-size: 24px;
+      margin-bottom: 4px;
+    }}
+    .meta {{
+      margin-bottom: 16px;
+      color: #555;
+      font-size: 14px;
+    }}
+    table {{
+      border-collapse: collapse;
+      width: 100%;
+      background: #fff;
+    }}
+    th, td {{
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      text-align: right;
+    }}
+    th:first-child,
+    td:first-child {{
+      text-align: left;
+    }}
+    thead {{
+      background: #f0f0f0;
+    }}
+    tbody tr:nth-child(even) {{
+      background: #f9f9f9;
+    }}
+  </style>
+</head>
+<body>
+  <h1>{title}</h1>
+  <div class="meta">
+    <div><strong>Model:</strong> {html.escape(model_name)}</div>
+    <div><strong>Device:</strong> {html.escape(str(device))}</div>
+    <div><strong>Max new tokens:</strong> {max_new_tokens}</div>
+    <div><strong>Batch size:</strong> {batch_size}</div>
+    <div><strong>Sampling:</strong> {do_sample}</div>
+    <div><strong>Warmup runs:</strong> {warmup}</div>
+    <div><strong>Timed runs:</strong> {runs}</div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Configuration</th>
+        <th>Avg (ms)</th>
+        <th>Min (ms)</th>
+        <th>Max (ms)</th>
+        <th>Tok/s</th>
+        <th>Overhead</th>
+      </tr>
+    </thead>
+    <tbody>
+{table_rows}
+    </tbody>
+  </table>
+</body>
+</html>
+"""
+    return html_doc
+
+
 def main():
     parser = argparse.ArgumentParser(description="Benchmark the Generation Scheduler overhead")
     parser.add_argument("--model", type=str, default="hf-internal-testing/tiny-random-gpt2",
@@ -138,6 +244,12 @@ def main():
     parser.add_argument("--runs", type=int, default=5, help="Number of timed runs")
     parser.add_argument("--do-sample", action="store_true", help="Use sampling instead of greedy")
     parser.add_argument("--full", action="store_true", help="Run full benchmark with all configurations")
+    parser.add_argument(
+        "--html-report",
+        type=str,
+        metavar="PATH",
+        help="Optional path to save an HTML summary report",
+    )
     args = parser.parse_args()
 
     device = _get_device(args.device)
@@ -256,6 +368,22 @@ def main():
         print(f"  {r['name']:<30} {r['avg_latency_ms']:8.1f} {r['min_latency_ms']:8.1f} "
               f"{r['max_latency_ms']:8.1f} {r['tokens_per_sec']:8.1f} {r['overhead_pct']:+7.1f}%")
     print(f"{'='*72}\n")
+
+    # Optional HTML report
+    if args.html_report:
+        report_path = Path(args.html_report)
+        html_content = _build_html_report(
+            args.model,
+            device,
+            args.max_new_tokens,
+            args.batch_size,
+            args.do_sample,
+            args.warmup,
+            args.runs,
+            results,
+        )
+        report_path.write_text(html_content, encoding="utf-8")
+        print(f"HTML report written to: {report_path.resolve()}")
 
 
 if __name__ == "__main__":
