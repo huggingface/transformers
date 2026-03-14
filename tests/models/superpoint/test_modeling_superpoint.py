@@ -196,9 +196,10 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
             hidden_states = outputs.hidden_states
 
             # SuperPoint's feature maps are of shape (batch_size, num_channels, width, height)
+            # hidden_states[0] is the input to the first conv block, so we offset by 1
             for i, conv_layer_size in enumerate(self.model_tester.encoder_hidden_sizes[:-1]):
                 self.assertListEqual(
-                    list(hidden_states[i].shape[-3:]),
+                    list(hidden_states[i + 1].shape[-3:]),
                     [
                         conv_layer_size,
                         self.model_tester.image_height // (2 ** (i + 1)),
