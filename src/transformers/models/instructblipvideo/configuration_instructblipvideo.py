@@ -28,7 +28,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
+@auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
 class InstructBlipVideoVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -36,10 +36,10 @@ class InstructBlipVideoVisionConfig(PreTrainedConfig):
     ```python
     >>> from transformers import InstructBlipVideoVisionConfig, InstructBlipVideoVisionModel
 
-    >>> # Initializing a InstructBlipVideoVisionConfig with Salesforce/instruct-blip-flan-t5 style configuration
+    >>> # Initializing a InstructBlipVideoVisionConfig with Salesforce/instructblip-flan-t5-xl style configuration
     >>> configuration = InstructBlipVideoVisionConfig()
 
-    >>> # Initializing a InstructBlipVideoVisionModel (with random weights) from the Salesforce/instruct-blip-flan-t5 style configuration
+    >>> # Initializing a InstructBlipVideoVisionModel (with random weights) from the Salesforce/instructblip-flan-t5-xl style configuration
     >>> model = InstructBlipVideoVisionModel(configuration)
 
     >>> # Accessing the model configuration
@@ -79,7 +79,7 @@ class InstructBlipVideoVisionConfig(PreTrainedConfig):
         self.qkv_bias = qkv_bias
 
 
-@auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
+@auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
 class InstructBlipVideoQFormerConfig(PreTrainedConfig):
     r"""
     cross_attention_frequency (`int`, *optional*, defaults to 2):
@@ -92,10 +92,10 @@ class InstructBlipVideoQFormerConfig(PreTrainedConfig):
     ```python
     >>> from transformers import InstructBlipVideoQFormerConfig, InstructBlipVideoQFormerModel
 
-    >>> # Initializing a InstructBlipVideo Salesforce/instruct-blip-flan-t5 style configuration
+    >>> # Initializing a InstructBlipVideo Salesforce/instructblip-flan-t5-xl style configuration
     >>> configuration = InstructBlipVideoQFormerConfig()
 
-    >>> # Initializing a model (with random weights) from the Salesforce/instruct-blip-flan-t5 style configuration
+    >>> # Initializing a model (with random weights) from the Salesforce/instructblip-flan-t5-xl style configuration
     >>> model = InstructBlipVideoQFormerModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -140,7 +140,7 @@ class InstructBlipVideoQFormerConfig(PreTrainedConfig):
         self.encoder_hidden_size = encoder_hidden_size
 
 
-@auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
+@auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
 class InstructBlipVideoConfig(PreTrainedConfig):
     r"""
     qformer_config (`dict`, *optional*):
@@ -159,10 +159,10 @@ class InstructBlipVideoConfig(PreTrainedConfig):
     ...     InstructBlipVideoForConditionalGeneration,
     ... )
 
-    >>> # Initializing a InstructBlipVideoConfig with Salesforce/instruct-blip-flan-t5 style configuration
+    >>> # Initializing a InstructBlipVideoConfig with Salesforce/instructblip-flan-t5-xl style configuration
     >>> configuration = InstructBlipVideoConfig()
 
-    >>> # Initializing a InstructBlipVideoForConditionalGeneration (with random weights) from the Salesforce/instruct-blip-flan-t5 style configuration
+    >>> # Initializing a InstructBlipVideoForConditionalGeneration (with random weights) from the Salesforce/instructblip-flan-t5-xl style configuration
     >>> model = InstructBlipVideoForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration

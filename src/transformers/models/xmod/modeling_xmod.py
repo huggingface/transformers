@@ -214,7 +214,6 @@ class XmodSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -232,12 +231,7 @@ class XmodSelfAttention(nn.Module):
                 current_past_key_values = past_key_values.self_attention_cache
 
             # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-            key_layer, value_layer = current_past_key_values.update(
-                key_layer,
-                value_layer,
-                self.layer_idx,
-                {"cache_position": cache_position},
-            )
+            key_layer, value_layer = current_past_key_values.update(key_layer, value_layer, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -367,7 +361,6 @@ class XmodAttention(nn.Module):
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: tuple[tuple[torch.FloatTensor]] | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         residual = hidden_states
@@ -380,7 +373,6 @@ class XmodAttention(nn.Module):
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         attention_output = self.output(attention_output, residual)
@@ -501,14 +493,12 @@ class XmodLayer(GradientCheckpointingLayer):
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: tuple[tuple[torch.FloatTensor]] | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         self_attention_output, _ = self.attention(
             hidden_states,
             attention_mask,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         attention_output = self_attention_output
@@ -567,7 +557,6 @@ class XmodEncoder(nn.Module):
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: tuple[tuple[torch.FloatTensor]] | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPastAndCrossAttentions:
         for i, layer_module in enumerate(self.layer):
@@ -578,7 +567,6 @@ class XmodEncoder(nn.Module):
                 encoder_hidden_states,
                 encoder_attention_mask,
                 past_key_values,
-                cache_position,
                 **kwargs,
             )
 
@@ -718,7 +706,6 @@ class XmodModel(XmodPreTrainedModel):
         encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: list[torch.FloatTensor] | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
@@ -726,6 +713,9 @@ class XmodModel(XmodPreTrainedModel):
             Indices of the language adapters that should be activated for each sample, respectively. Default: the index
             that corresponds to `self.config.default_language`.
         """
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
         else:
@@ -738,22 +728,9 @@ class XmodModel(XmodPreTrainedModel):
                 else DynamicCache(config=self.config)
             )
 
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if input_ids is not None:
-            device = input_ids.device
-            input_shape = input_ids.shape
-        else:
-            device = inputs_embeds.device
-            input_shape = inputs_embeds.shape[:-1]
-
-        batch_size, seq_length = input_shape
+        batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
         device = input_ids.device if input_ids is not None else inputs_embeds.device
-
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(past_key_values_length, past_key_values_length + seq_length, device=device)
 
         if lang_ids is None:
             if self.config.default_language is None:
@@ -775,7 +752,6 @@ class XmodModel(XmodPreTrainedModel):
             encoder_attention_mask=encoder_attention_mask,
             embedding_output=embedding_output,
             encoder_hidden_states=encoder_hidden_states,
-            cache_position=cache_position,
             past_key_values=past_key_values,
         )
 
@@ -787,7 +763,6 @@ class XmodModel(XmodPreTrainedModel):
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_ids=position_ids,
             **kwargs,
         )
@@ -807,7 +782,6 @@ class XmodModel(XmodPreTrainedModel):
         encoder_attention_mask,
         embedding_output,
         encoder_hidden_states,
-        cache_position,
         past_key_values,
     ):
         if self.config.is_decoder:
@@ -815,7 +789,6 @@ class XmodModel(XmodPreTrainedModel):
                 config=self.config,
                 inputs_embeds=embedding_output,
                 attention_mask=attention_mask,
-                cache_position=cache_position,
                 past_key_values=past_key_values,
             )
         else:
@@ -883,7 +856,6 @@ class XmodForCausalLM(XmodPreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         past_key_values: tuple[tuple[torch.FloatTensor]] | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | CausalLMOutputWithCrossAttentions:
@@ -927,7 +899,6 @@ class XmodForCausalLM(XmodPreTrainedModel, GenerationMixin):
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             return_dict=True,
             **kwargs,
         )

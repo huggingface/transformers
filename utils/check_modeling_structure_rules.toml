@@ -1,0 +1,159 @@
+[rules.TRF001]
+description = "Class-level config_class on <Model>PreTrainedModel should match <Model>Config naming."
+default_enabled = true
+allowlist_models = ["qwen3_omni_moe"]
+
+[rules.TRF001.explanation]
+what_it_does = "Checks naming consistency between <Model>PreTrainedModel and config_class."
+why_bad = "Mismatched config_class can break loading, auto classes, and developer expectations."
+bad_example = '''
+class FooPreTrainedModel(PreTrainedModel):
+    config_class = BarConfig
+'''
+good_example = '''
+class FooPreTrainedModel(PreTrainedModel):
+    config_class = FooConfig
+'''
+
+[rules.TRF002]
+description = "base_model_prefix should be a non-empty canonical string when defined on PreTrainedModel classes."
+default_enabled = true
+allowlist_models = ["lighton_ocr"]
+
+[rules.TRF002.explanation]
+what_it_does = "Checks that base_model_prefix, when set, is a non-empty, whitespace-free string literal."
+why_bad = "Invalid prefixes can break weight loading key mapping and base model access patterns."
+bad_example = '''
+class FooPreTrainedModel(PreTrainedModel):
+    base_model_prefix = ""
+'''
+good_example = '''
+class FooPreTrainedModel(PreTrainedModel):
+    base_model_prefix = "model"
+'''
+
+[rules.TRF003]
+description = "forward() should use capture_output/can_return_tuple decorators instead of manual return_dict branching."
+default_enabled = false
+allowlist_models = []
+
+[rules.TRF003.explanation]
+what_it_does = "Detects forward methods that use the old 'if not return_dict: return (x,)' pattern."
+why_bad = "The old return_dict branching pattern is error-prone and verbose. Use the capture_output or can_return_tuple decorators instead."
+bad_example = '''
+def forward(self, x, return_dict=None):
+    if not return_dict:
+        return (x,)
+    return FooOutput(last_hidden_state=x)
+'''
+good_example = '''
+@can_return_tuple
+def forward(self, x):
+    return FooOutput(last_hidden_state=x)
+'''
+
+[rules.TRF004]
+description = "Models must never override tie_weights. Use _tied_weights_keys instead."
+default_enabled = true
+allowlist_models = ["data2vec", "hubert", "sew", "sew_d", "unispeech", "unispeech_sat", "wav2vec2", "wav2vec2_conformer", "wavlm"]
+
+[rules.TRF004.explanation]
+what_it_does = "Checks that no model class defines a tie_weights method."
+why_bad = "Overriding tie_weights leads to bad consequences for loading, device_map computation, and saving. Use _tied_weights_keys class attribute to declare tied weights instead."
+bad_example = '''
+def tie_weights(self):
+    self.lm_head.weight = self.emb.weight
+'''
+good_example = '''
+class FooForCausalLM(FooPreTrainedModel):
+    _tied_weights_keys = ["lm_head.weight"]
+'''
+
+[rules.TRF005]
+description = "_no_split_modules, when defined, should be a list/tuple of non-empty strings."
+default_enabled = true
+allowlist_models = ["d_fine", "deformable_detr", "glm46v", "lw_detr", "pp_doclayout_v3", "rt_detr", "rt_detr_v2", "voxtral", "voxtral_realtime"]
+
+[rules.TRF005.explanation]
+what_it_does = "Checks the shape of _no_split_modules when present."
+why_bad = "Malformed values can break device-map partitioning and sharding behavior."
+bad_example = '''
+_no_split_modules = [SomeLayerClass, ""]
+'''
+good_example = '''
+_no_split_modules = ["FooDecoderLayer", "FooAttention"]
+'''
+
+[rules.TRF006]
+description = "forward with cache arguments should reference cache control/state variables consistently."
+default_enabled = true
+allowlist_models = ["chinese_clip", "evolla", "idefics2", "llama4"]
+
+[rules.TRF006.explanation]
+what_it_does = "Checks forward signatures that expose cache arguments for usage of those arguments in method body."
+why_bad = "Unused cache arguments can indicate incomplete caching support and inconsistent API behavior."
+bad_example = '''
+def forward(self, x, past_key_values=None, use_cache=False):
+    return x
+'''
+good_example = '''
+def forward(self, x, past_key_values=None, use_cache=False):
+    if use_cache:
+        ...
+    return x
+'''
+
+[rules.TRF007]
+description = "self.post_init() in __init__ should remain at the end of initialization for PreTrainedModel classes."
+default_enabled = true
+allowlist_models = ["distilbert", "lxmert", "mt5", "pix2struct", "pop2piano", "switch_transformers", "t5"]
+
+[rules.TRF007.explanation]
+what_it_does = "Checks for self attribute assignments after self.post_init() in __init__."
+why_bad = "Mutating model structure after post_init can bypass intended initialization/finalization logic."
+bad_example = '''
+def __init__(self, config):
+    ...
+    self.post_init()
+    self.proj = nn.Linear(...)
+'''
+good_example = '''
+def __init__(self, config):
+    ...
+    self.proj = nn.Linear(...)
+    self.post_init()
+'''
+
+[rules.TRF008]
+description = "Doc decorators on PreTrainedModel classes should avoid empty add_start_docstrings usage."
+default_enabled = true
+
+[rules.TRF008.explanation]
+what_it_does = "Checks add_start_docstrings usage on model classes for non-empty docstring arguments."
+why_bad = "Empty decorator usage produces unclear docs and weakens generated API documentation quality."
+bad_example = '''
+@add_start_docstrings("")
+class FooModel(FooPreTrainedModel):
+    ...
+'''
+good_example = '''
+@add_start_docstrings("The Foo model.")
+class FooModel(FooPreTrainedModel):
+    ...
+'''
+
+[rules.TRF009]
+description = "modeling_<name>.py should avoid importing implementation code from another model package."
+default_enabled = true
+allowlist_models = ["dpr", "maskformer", "sam3_video", "vision_text_dual_encoder"]
+
+[rules.TRF009.explanation]
+what_it_does = "Checks modeling files for cross-model imports such as transformers.models.other_model.* or from ..other_model.* imports."
+why_bad = "Cross-model implementation imports violate the single-file policy and make model behavior harder to inspect and maintain."
+bad_example = '''
+from transformers.models.llama.modeling_llama import LlamaAttention
+'''
+good_example = '''
+# Keep implementation local in this modeling file.
+# If code is reused, copy it with an appropriate # Copied from ... statement.
+'''

@@ -30,7 +30,11 @@ from ...integrations import use_kernel_forward_from_hub
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torchdynamo_compiling
 from ..auto.modeling_auto import AutoModel
-from .configuration_vibevoice_acoustic_tokenizer import VibeVoiceAcousticTokenizerConfig
+from .configuration_vibevoice_acoustic_tokenizer import (
+    VibeVoiceAcousticTokenizerConfig,
+    VibeVoiceAcousticTokenizerDecoderConfig,
+    VibeVoiceAcousticTokenizerEncoderConfig,
+)
 
 
 @dataclass
@@ -367,6 +371,8 @@ class VibeVoiceAcousticTokenizerPreTrainedModel(PreTrainedModel):
 
 
 class VibeVoiceAcousticTokenizerEncoderModel(VibeVoiceAcousticTokenizerPreTrainedModel):
+    config: VibeVoiceAcousticTokenizerEncoderConfig
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -458,6 +464,8 @@ class VibeVoiceAcousticTokenizerDecoderLayer(nn.Module):
 
 
 class VibeVoiceAcousticTokenizerDecoderModel(VibeVoiceAcousticTokenizerPreTrainedModel):
+    config: VibeVoiceAcousticTokenizerDecoderConfig
+
     def __init__(self, config):
         super().__init__(config)
 
