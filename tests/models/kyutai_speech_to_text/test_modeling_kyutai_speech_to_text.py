@@ -637,7 +637,7 @@ class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCa
 
         samples = self._load_datasamples(1)
         inputs = processor(
-            samples,
+            audio=samples,
         ).to(torch_device)
 
         out = model.generate(**inputs)
@@ -667,7 +667,7 @@ class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCa
 
         samples = self._load_datasamples(4)
         inputs = processor(
-            samples,
+            audio=samples,
         ).to(torch_device)
 
         out = model.generate(**inputs)
