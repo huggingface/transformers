@@ -23,7 +23,7 @@ import tempfile
 import unittest.mock
 import warnings
 from collections import defaultdict
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from copy import deepcopy
 from unittest.mock import Mock, patch
 
@@ -2290,10 +2290,8 @@ class ModelTesterMixin:
 
         original_config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         original_config.tie_word_embeddings = False
-        try:
+        with suppress(Exception):
             original_config.get_text_config().tie_word_embeddings = False
-        except Exception:
-            pass
 
         if original_config.tie_word_embeddings:
             self.skipTest(reason="Model cannot untie embeddings")
