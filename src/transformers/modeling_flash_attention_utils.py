@@ -92,7 +92,8 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
     3: {
         "flash_attn_version": 3,
         "general_availability_check": is_flash_attn_3_available,
-        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn_3") is not None,
+        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn_interface") is not None
+        and "flash-attn-3" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn_interface"]],
         "supported_devices": ((is_torch_cuda_available, "cuda"),),
         "cuda_min_major_version": 8,  # Ampere
     },
