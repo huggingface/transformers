@@ -227,7 +227,12 @@ class Qwen3_5Config(PreTrainedConfig):
         if isinstance(text_config, dict):
             self.text_config = self.sub_configs["text_config"](**text_config)
         elif text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
+            # Pop classification-related parameters to propagate to text_config
+            text_config_kwargs = {}
+            for key in ["num_labels", "id2label", "label2id"]:
+                if key in kwargs:
+                    text_config_kwargs[key] = kwargs.pop(key)
+            self.text_config = self.sub_configs["text_config"](**text_config_kwargs)
 
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
