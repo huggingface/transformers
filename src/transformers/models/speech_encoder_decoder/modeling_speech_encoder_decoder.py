@@ -22,7 +22,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel, AutoModelForCausalLM
 from .configuration_speech_encoder_decoder import SpeechEncoderDecoderConfig
@@ -195,8 +195,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                 All remaining positional arguments will be passed to the underlying model's `__init__` method.
 
             kwargs (remaining dictionary of keyword arguments, *optional*):
-                Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
-                `output_attentions=True`).
+                Can be used to update the configuration object (after it being loaded) and initiate the model.
 
                 - To update the encoder configuration, use the prefix *encoder_* for each configuration parameter.
                 - To update the decoder configuration, use the prefix *decoder_* for each configuration parameter.
@@ -305,6 +304,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         config.tie_word_embeddings = False
         return cls(encoder=encoder, decoder=decoder, config=config)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -317,13 +317,10 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         input_values: torch.FloatTensor | None = None,
         input_features: torch.FloatTensor | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
+    ) -> Seq2SeqLMOutput:
         r"""
         inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, feature_dim)`, *optional*):
             Float values of input raw speech waveform or speech features. Values can be obtained by loading a `.flac`
@@ -388,8 +385,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         >>> loss = model(input_values, labels=labels).loss
         >>> loss.backward()
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
 
         kwargs_decoder = {
@@ -397,6 +392,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         }
         if "num_items_in_batch" in kwargs_encoder:
             kwargs_decoder["num_items_in_batch"] = kwargs_encoder.pop("num_items_in_batch", None)
+        kwargs_decoder = kwargs_decoder | {k: v for k, v in kwargs.items() if not k.startswith("decoder_")}
 
         if encoder_outputs is None:
             if inputs is None:
@@ -412,9 +408,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
             encoder_outputs = self.encoder(
                 inputs,
                 attention_mask=attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
                 **kwargs_encoder,
             )
         elif isinstance(encoder_outputs, tuple):
@@ -449,26 +442,17 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             use_cache=use_cache,
             past_key_values=past_key_values,
-            return_dict=return_dict,
             **kwargs_decoder,
         )
 
         # Compute loss independent from decoder (as some shift the logits inside them)
         loss = None
         if labels is not None:
-            logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
+            logits = decoder_outputs.logits if hasattr(decoder_outputs, "logits") else decoder_outputs[0]
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.reshape(-1))
-
-        if not return_dict:
-            if loss is not None:
-                return (loss,) + decoder_outputs + encoder_outputs
-            else:
-                return decoder_outputs + encoder_outputs
 
         return Seq2SeqLMOutput(
             loss=loss,
