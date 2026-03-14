@@ -451,6 +451,7 @@ class GenerationConfig(PushToHubMixin):
         self.scheduler_mode = kwargs.pop("scheduler_mode", None)
         self.scheduler_check_interval = kwargs.pop("scheduler_check_interval", None)
         self.scheduler_step_budget = kwargs.pop("scheduler_step_budget", None)
+        self.continuous_batching_config = kwargs.pop("continuous_batching_config", None)
 
         # Deprecated (moved to the Hub). TODO remove for v5
         self.low_memory = kwargs.pop("low_memory", None)
