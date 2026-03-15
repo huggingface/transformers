@@ -55,6 +55,7 @@ from .generic import (
     filter_out_non_signature_kwargs,
     find_labels,
     flatten_dict,
+    int_div_ceil,
     is_numpy_array,
     is_tensor,
     is_timm_config_dict,
