@@ -826,4 +826,9 @@ class PPChart2TableForConditionalGeneration(PPChart2TablePreTrainedModel, Genera
         return model_inputs
 
 
-__all__ = ["PPChart2TableForConditionalGeneration", "PPChart2TableModel", "PPChart2TableVisionPreTrainedModel"]
+__all__ = [
+    "PPChart2TableForConditionalGeneration",
+    "PPChart2TableModel",
+    "PPChart2TableVisionPreTrainedModel",
+    "PPChart2TablePreTrainedModel",
+]

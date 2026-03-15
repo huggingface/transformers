@@ -74,44 +74,6 @@ class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
 
-    def _preprocess(
-        self,
-        images: list["torch.Tensor"],
-        do_resize: bool,
-        size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
-        disable_grouping: bool | None,
-        return_tensors: str | TensorType | None,
-        **kwargs,
-    ) -> BatchFeature:
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
-            resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
-
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            stacked_images = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            processed_images_grouped[shape] = stacked_images
-
-        pixel_values = reorder_images(processed_images_grouped, grouped_images_index)
-
-        return BatchFeature(
-            data={"pixel_values": pixel_values},
-            tensor_type=return_tensors,
-        )
-
 
 @auto_docstring
 class PPChart2TableProcessor(ProcessorMixin):
@@ -232,6 +194,7 @@ __all__ = [
     "PPChart2TableModel",
     "PPChart2TableConfig",
     "PPChart2TableVisionPreTrainedModel",
+    "PPChart2TablePreTrainedModel",
     "PPChart2TableImageProcessorFast",
     "PPChart2TableProcessor",
 ]
