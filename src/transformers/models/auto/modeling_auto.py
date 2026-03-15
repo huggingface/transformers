@@ -984,7 +984,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("paligemma", "PaliGemmaForConditionalGeneration"),
         ("perception_lm", "PerceptionLMForConditionalGeneration"),
         ("pix2struct", "Pix2StructForConditionalGeneration"),
-        ("pixtral", "LlavaForConditionalGeneration"),
+        ("llava", "LlavaForConditionalGeneration"),
         ("qwen2_5_vl", "Qwen2_5_VLForConditionalGeneration"),
         ("qwen2_vl", "Qwen2VLForConditionalGeneration"),
         ("qwen3_5", "Qwen3_5ForConditionalGeneration"),
@@ -1617,7 +1617,6 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
         # Model for Text-To-Waveform mapping
         ("bark", "BarkModel"),
         ("csm", "CsmForConditionalGeneration"),
-        ("fastspeech2_conformer", "FastSpeech2ConformerWithHifiGan"),
         ("fastspeech2_conformer_with_hifigan", "FastSpeech2ConformerWithHifiGan"),
         ("higgs_audio_v2", "HiggsAudioV2ForConditionalGeneration"),
         ("musicgen", "MusicgenForConditionalGeneration"),
