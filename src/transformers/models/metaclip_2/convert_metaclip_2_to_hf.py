@@ -33,6 +33,7 @@ from transformers import (
     MetaClip2Model,
 )
 
+
 def load_metaclip2_checkpoint(checkpoint_path: str, model_name: str) -> torch.nn.Module:
     """Load MetaCLIP 2 model from checkpoint."""
     print(f"Loading MetaCLIP 2 model: {model_name}")
