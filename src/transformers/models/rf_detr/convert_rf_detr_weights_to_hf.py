@@ -44,130 +44,51 @@ HOSTED_MODELS = {
 }
 
 # Model configurations for different sizes
+
 BASE_BACKBONE_CONFIG = {
     "attention_probs_dropout_prob": 0.0,
     "drop_path_rate": 0.0,
     "hidden_act": "gelu",
     "hidden_dropout_prob": 0.0,
+    "hidden_size": 384,
+    "image_size": 384,
     "initializer_range": 0.02,
     "layer_norm_eps": 1e-06,
     "layerscale_value": 1.0,
     "mlp_ratio": 4,
     "num_channels": 3,
     "num_hidden_layers": 12,
+    "num_attention_heads": 6,
+    "num_windows": 2,
+    "out_features": ["stage3", "stage6", "stage9", "stage12"],
+    "patch_size": 16,
     "qkv_bias": True,
     "use_swiglu_ffn": False,
 }
 
-BACKBONE_CONFIGS = {
-    "rf-detr-nano": {
-        **BASE_BACKBONE_CONFIG,
-        "num_attention_heads": 6,
-        "out_features": ["stage3", "stage6", "stage9", "stage12"],
-        "hidden_size": 384,
-        "patch_size": 16,
-        "num_windows": 2,
-        "image_size": 384,
-    },
-    "rf-detr-small": {
-        **BASE_BACKBONE_CONFIG,
-        "num_attention_heads": 6,
-        "out_features": ["stage3", "stage6", "stage9", "stage12"],
-        "hidden_size": 384,
-        "patch_size": 16,
-        "num_windows": 2,
-        "image_size": 512,
-    },
+# Backbone specs: model_name -> {image_size, **overrides of BASE_BACKBONE_CONFIG}
+MODEL_VARIANT_BACKBONE_CONFIG_KWARGS = {
+    "rf-detr-nano": {},
+    "rf-detr-small": {"image_size": 512},
     "rf-detr-base": {
-        **BASE_BACKBONE_CONFIG,
-        "num_attention_heads": 6,
-        "out_features": ["stage2", "stage5", "stage8", "stage11"],
-        "hidden_size": 384,
+        "image_size": 518,
         "patch_size": 14,
         "num_windows": 4,
-        "image_size": 518,
+        "out_features": ["stage2", "stage5", "stage8", "stage11"],
     },
-    "rf-detr-medium": {
-        **BASE_BACKBONE_CONFIG,
-        "num_attention_heads": 6,
-        "out_features": ["stage3", "stage6", "stage9", "stage12"],
-        "hidden_size": 384,
-        "patch_size": 16,
-        "num_windows": 2,
-        "image_size": 576,
-    },
-    "rf-detr-large": {
-        **BASE_BACKBONE_CONFIG,
-        "num_attention_heads": 6,
-        "out_features": ["stage3", "stage6", "stage9", "stage12"],
-        "hidden_size": 384,
-        "patch_size": 16,
-        "num_windows": 2,
-        "image_size": 704,
-    },
-    "rf-detr-seg-preview": {
-        **BASE_BACKBONE_CONFIG,
-        "num_attention_heads": 6,
-        "out_features": ["stage3", "stage6", "stage9", "stage12"],
-        "hidden_size": 384,
-        "patch_size": 12,
-        "num_windows": 2,
-        "image_size": 432,
-    },
-    "rf-detr-seg-nano": {
-        **BASE_BACKBONE_CONFIG,
-        "num_attention_heads": 6,
-        "out_features": ["stage3", "stage6", "stage9", "stage12"],
-        "hidden_size": 384,
-        "patch_size": 12,
-        "num_windows": 1,
-        "image_size": 312,
-    },
-    "rf-detr-seg-small": {
-        **BASE_BACKBONE_CONFIG,
-        "num_attention_heads": 6,
-        "out_features": ["stage3", "stage6", "stage9", "stage12"],
-        "hidden_size": 384,
-        "patch_size": 12,
-        "num_windows": 2,
-        "image_size": 384,
-    },
-    "rf-detr-seg-medium": {
-        **BASE_BACKBONE_CONFIG,
-        "num_attention_heads": 6,
-        "out_features": ["stage3", "stage6", "stage9", "stage12"],
-        "hidden_size": 384,
-        "patch_size": 12,
-        "num_windows": 2,
-        "image_size": 432,
-    },
-    "rf-detr-seg-large": {
-        **BASE_BACKBONE_CONFIG,
-        "num_attention_heads": 6,
-        "out_features": ["stage3", "stage6", "stage9", "stage12"],
-        "hidden_size": 384,
-        "patch_size": 12,
-        "num_windows": 2,
-        "image_size": 504,
-    },
-    "rf-detr-seg-xlarge": {
-        **BASE_BACKBONE_CONFIG,
-        "num_attention_heads": 6,
-        "out_features": ["stage3", "stage6", "stage9", "stage12"],
-        "hidden_size": 384,
-        "patch_size": 12,
-        "num_windows": 2,
-        "image_size": 624,
-    },
-    "rf-detr-seg-xxlarge": {
-        **BASE_BACKBONE_CONFIG,
-        "num_attention_heads": 6,
-        "out_features": ["stage3", "stage6", "stage9", "stage12"],
-        "hidden_size": 384,
-        "patch_size": 12,
-        "num_windows": 2,
-        "image_size": 768,
-    },
+    "rf-detr-medium": {"image_size": 576},
+    "rf-detr-large": {"image_size": 704},
+    "rf-detr-seg-preview": {"image_size": 432, "patch_size": 12},
+    "rf-detr-seg-nano": {"image_size": 312, "patch_size": 12, "num_windows": 1},
+    "rf-detr-seg-small": {"patch_size": 12},
+    "rf-detr-seg-medium": {"image_size": 432, "patch_size": 12},
+    "rf-detr-seg-large": {"image_size": 504, "patch_size": 12},
+    "rf-detr-seg-xlarge": {"image_size": 624, "patch_size": 12},
+    "rf-detr-seg-xxlarge": {"image_size": 768, "patch_size": 12},
+}
+
+BACKBONE_CONFIGS = {
+    name: {**BASE_BACKBONE_CONFIG, **spec} for name, spec in MODEL_VARIANT_BACKBONE_CONFIG_KWARGS.items()
 }
 
 BASE_MODEL_CONFIG = {
@@ -179,67 +100,23 @@ BASE_MODEL_CONFIG = {
     "projector_scale_factors": [1.0],
 }
 
-MODEL_CONFIGS = {
-    "rf-detr-nano": {
-        **BASE_MODEL_CONFIG,
-        "decoder_layers": 2,
-    },
-    "rf-detr-small": {
-        **BASE_MODEL_CONFIG,
-        "decoder_layers": 3,
-    },
-    "rf-detr-base": {
-        **BASE_MODEL_CONFIG,
-        "decoder_layers": 3,
-    },
-    "rf-detr-medium": {
-        **BASE_MODEL_CONFIG,
-        "decoder_layers": 4,
-    },
-    "rf-detr-large": {
-        **BASE_MODEL_CONFIG,
-        "decoder_layers": 4,
-    },
-    "rf-detr-seg-preview": {
-        **BASE_MODEL_CONFIG,
-        "decoder_layers": 4,
-        "num_queries": 200,
-        "class_loss_coefficient": 5.0,
-    },
-    "rf-detr-seg-nano": {
-        **BASE_MODEL_CONFIG,
-        "decoder_layers": 4,
-        "num_queries": 100,
-        "class_loss_coefficient": 5.0,
-    },
-    "rf-detr-seg-small": {
-        **BASE_MODEL_CONFIG,
-        "decoder_layers": 4,
-        "num_queries": 100,
-        "class_loss_coefficient": 5.0,
-    },
-    "rf-detr-seg-medium": {
-        **BASE_MODEL_CONFIG,
-        "decoder_layers": 5,
-        "num_queries": 200,
-        "class_loss_coefficient": 5.0,
-    },
-    "rf-detr-seg-large": {
-        **BASE_MODEL_CONFIG,
-        "decoder_layers": 5,
-        "class_loss_coefficient": 5.0,
-    },
-    "rf-detr-seg-xlarge": {
-        **BASE_MODEL_CONFIG,
-        "decoder_layers": 6,
-        "class_loss_coefficient": 5.0,
-    },
-    "rf-detr-seg-xxlarge": {
-        **BASE_MODEL_CONFIG,
-        "decoder_layers": 6,
-        "class_loss_coefficient": 5.0,
-    },
+# Model specs: model_name -> overrides of BASE_MODEL_CONFIG (at least decoder_layers)
+MODEL_VARIANT_CONFIG_KWARGS = {
+    "rf-detr-nano": {"decoder_layers": 2},
+    "rf-detr-small": {"decoder_layers": 3},
+    "rf-detr-base": {"decoder_layers": 3},
+    "rf-detr-medium": {"decoder_layers": 4},
+    "rf-detr-large": {"decoder_layers": 4},
+    "rf-detr-seg-preview": {"decoder_layers": 4, "num_queries": 200, "class_loss_coefficient": 5.0},
+    "rf-detr-seg-nano": {"decoder_layers": 4, "num_queries": 100, "class_loss_coefficient": 5.0},
+    "rf-detr-seg-small": {"decoder_layers": 4, "num_queries": 100, "class_loss_coefficient": 5.0},
+    "rf-detr-seg-medium": {"decoder_layers": 5, "num_queries": 200, "class_loss_coefficient": 5.0},
+    "rf-detr-seg-large": {"decoder_layers": 5, "class_loss_coefficient": 5.0},
+    "rf-detr-seg-xlarge": {"decoder_layers": 6, "class_loss_coefficient": 5.0},
+    "rf-detr-seg-xxlarge": {"decoder_layers": 6, "class_loss_coefficient": 5.0},
 }
+
+MODEL_CONFIGS = {name: {**BASE_MODEL_CONFIG, **spec} for name, spec in MODEL_VARIANT_CONFIG_KWARGS.items()}
 
 IMAGE_PROCESSORS = {
     "rf-detr-nano": (384, 384),
@@ -260,21 +137,14 @@ IMAGE_PROCESSORS = {
 
 def get_model_config(model_name: str):
     """Get the appropriate configuration for a given model size."""
-    config = None
-    sizes = MODEL_CONFIGS.keys()
-    for size in sizes:
-        if size == model_name:
-            print(f"Found config for {model_name}")
-            config = MODEL_CONFIGS[size]
-            config["backbone_config"] = BACKBONE_CONFIGS[size]
-            break
-
-    # Default to base configuration
-    if config is None:
+    config_key = model_name if model_name in MODEL_CONFIGS else "rf-detr-base"
+    if config_key != model_name:
         print(f"No config found for {model_name}, using base config")
-        config = MODEL_CONFIGS["rf-detr-base"]
-        config["backbone_config"] = BACKBONE_CONFIGS["rf-detr-base"]
+    else:
+        print(f"Found config for {model_name}")
 
+    config = MODEL_CONFIGS[config_key].copy()
+    config["backbone_config"] = BACKBONE_CONFIGS[config_key].copy()
     config["backbone_config"]["model_type"] = "rf_detr_dinov2"
 
     if "objects365" in model_name:
@@ -366,12 +236,6 @@ def convert_rf_detr_checkpoint(
         push_to_hub=push_to_hub,
         repo_id=repo_id,
         commit_message=f"Add {model_name} image processor",
-    )
-
-    # Save config
-    print("Saving config..." + " and pushing to hub..." if push_to_hub else "")
-    rf_detr_config.save_pretrained(
-        pytorch_dump_folder_path, push_to_hub=push_to_hub, repo_id=repo_id, commit_message=f"Add {model_name} config"
     )
 
     if push_to_hub:
