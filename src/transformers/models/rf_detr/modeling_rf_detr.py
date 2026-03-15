@@ -30,7 +30,7 @@ from torch.nn import functional as F
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithCrossAttentions
@@ -79,19 +79,21 @@ def window_partition(
     embeddings: torch.Tensor, num_windows: int, patch_size: int, height: int, width: int
 ) -> torch.Tensor:
     batch_size = embeddings.shape[0]
-    num_h_patches = height // patch_size
-    num_w_patches = width // patch_size
+    num_height_patches = height // patch_size
+    num_width_patches = width // patch_size
     cls_token_with_pos_embed = embeddings[:, :1]
     pixel_tokens_with_pos_embed = embeddings[:, 1:]
-    pixel_tokens_with_pos_embed = pixel_tokens_with_pos_embed.view(batch_size, num_h_patches, num_w_patches, -1)
-    num_w_patches_per_window = num_w_patches // num_windows
-    num_h_patches_per_window = num_h_patches // num_windows
+    pixel_tokens_with_pos_embed = pixel_tokens_with_pos_embed.view(
+        batch_size, num_height_patches, num_width_patches, -1
+    )
+    num_width_patches_per_window = num_width_patches // num_windows
+    num_height_patches_per_window = num_height_patches // num_windows
     windowed_pixel_tokens = pixel_tokens_with_pos_embed.view(
-        batch_size, num_windows, num_w_patches_per_window, num_windows, num_h_patches_per_window, -1
+        batch_size, num_windows, num_width_patches_per_window, num_windows, num_height_patches_per_window, -1
     )
     windowed_pixel_tokens = windowed_pixel_tokens.permute(0, 1, 3, 2, 4, 5)
     windowed_pixel_tokens = windowed_pixel_tokens.reshape(
-        batch_size * num_windows**2, num_h_patches_per_window * num_w_patches_per_window, -1
+        batch_size * num_windows**2, num_height_patches_per_window * num_width_patches_per_window, -1
     )
     windowed_cls_token_with_pos_embed = cls_token_with_pos_embed.repeat(num_windows**2, 1, 1)
     embeddings = torch.cat((windowed_cls_token_with_pos_embed, windowed_pixel_tokens), dim=1)
@@ -150,6 +152,7 @@ class RfDetrDinov2Embeddings(nn.Module):
             patch_pos_embed.to(torch.float32),
             size=(new_height, new_width),
             mode="bicubic",
+            # Difference from Dinov2, we use align_corners=False and antialias=True
             align_corners=False,
             antialias=True,
         ).to(dtype=target_dtype)
@@ -163,7 +166,7 @@ class RfDetrDinov2Embeddings(nn.Module):
         target_dtype = self.patch_embeddings.projection.weight.dtype
         embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
 
-        if bool_masked_pos is not None:
+        if bool_masked_pos is not None and self.use_mask_token:
             embeddings = torch.where(
                 bool_masked_pos.unsqueeze(-1), self.mask_token.to(embeddings.dtype).unsqueeze(0), embeddings
             )
@@ -175,8 +178,8 @@ class RfDetrDinov2Embeddings(nn.Module):
         # add positional encoding to each token
         embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
 
+        # Difference from Dinov2, we use window partitioning
         if self.config.num_windows > 1:
-            # reshape for windows
             embeddings = window_partition(embeddings, self.config.num_windows, self.config.patch_size, height, width)
         embeddings = self.dropout(embeddings)
 
@@ -417,12 +420,15 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor]:
         shortcut = hidden_states
+
+        # Difference from Dinov2, when the layer is not a window block, we need to unpartition the hidden states before the attention
         if self.global_attention:
             hidden_states = window_unpartition_before_attention(hidden_states, self.num_windows)
 
         hidden_states_norm = self.norm1(hidden_states)
         self_attention_output = self.attention(hidden_states_norm)
 
+        # And reverse the operation after the attention
         if self.global_attention:
             self_attention_output = window_partition_after_attention(
                 hidden_states, self_attention_output, self.num_windows
@@ -542,6 +548,8 @@ class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
         return self.embeddings.patch_embeddings
 
     @can_return_tuple
+    @filter_output_hidden_states
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -592,6 +600,7 @@ class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
                     num_h_patches = height // patch_size
                     num_w_patches = width // patch_size
 
+                    # Difference from Dinov2, when the layer is not a window block, we need to unpartition the hidden states before reshaping
                     if self.config.num_windows > 1:
                         hidden_state = window_unpartition(
                             hidden_state, self.config.num_windows, num_h_patches, num_w_patches
