@@ -503,10 +503,10 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        output_hidden_states = kwargs.pop("output_hidden_states", False)
-        embedding_output = self.embeddings(pixel_values, **kwargs)
+        kwargs["output_hidden_states"] = True
 
-        output: BaseModelOutput = self.encoder(embedding_output, output_hidden_states=True, **kwargs)
+        embedding_output = self.embeddings(pixel_values)
+        output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
         hidden_states = output.hidden_states
 
         feature_maps = ()
@@ -536,8 +536,9 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
                 feature_maps += (hidden_state,)
 
         return BackboneOutput(
-            feature_maps=feature_maps,
-            hidden_states=hidden_states if output_hidden_states else None,
+            feature_maps=tuple(feature_maps),
+            hidden_states=hidden_states,
+            attentions=output.attentions,
         )
 
 
