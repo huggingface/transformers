@@ -875,16 +875,16 @@ class Bnb4bitCompile(unittest.TestCase):
 class Bnb4BitPeakMemoryTest(unittest.TestCase):
     """Verify that float16 GPU memory is freed during 4-bit quantized loading.
 
-    Regression test for a bug where ``Bnb4bitQuantize.convert()`` held a Python
-    reference to the float16 source tensor while calling ``Params4bit.to()``.
-    ``Params4bit.__new__`` shares storage with the float16 data via
-    ``_make_subclass``, and the extra reference prevented the float16 allocation
-    from being freed after ``_quantize()`` replaced it with 4-bit data.  This
+    Regression test for a bug where `Bnb4bitQuantize.convert()` held a Python
+    reference to the float16 source tensor while calling `Params4bit.to()`.
+    `Params4bit.__new__` shares storage with the float16 data via
+    `_make_subclass`, and the extra reference prevented the float16 allocation
+    from being freed after `_quantize()` replaced it with 4-bit data.  This
     caused float16 tensors to accumulate linearly on GPU during
-    ``from_pretrained``, leading to OOM on models whose float16 size exceeds
+    `from_pretrained`, leading to OOM on models whose float16 size exceeds
     GPU VRAM (e.g. a 35B model on a 32 GB GPU).
 
-    The test loads a model with ``load_in_4bit`` and checks that peak GPU memory
+    The test loads a model with `load_in_4bit` and checks that peak GPU memory
     stays well below the float16 model size — confirming that float16 tensors
     are freed promptly during loading rather than accumulated.
     """
@@ -899,9 +899,7 @@ class Bnb4BitPeakMemoryTest(unittest.TestCase):
         # Compute the float16 model size using a meta-device model (we can't
         # use numel on quantized Params4bit since they pack data as uint8).
         with torch.device("meta"):
-            meta_model = AutoModelForCausalLM.from_config(
-                AutoConfig.from_pretrained(self.model_name)
-            )
+            meta_model = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
         fp16_size = sum(p.numel() * 2 for p in meta_model.parameters())
         del meta_model
 
