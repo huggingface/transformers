@@ -23,7 +23,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging, torch_int
-from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple
+from ...utils.generic import ModelOutput, TransformersKwargs
 from ..auto import AutoConfig
 from ..convnext.modeling_convnext import ConvNextLayer
 from ..dinov2.configuration_dinov2 import Dinov2Config
@@ -346,6 +346,7 @@ class RfDetrDinov2Embeddings(Dinov2Embeddings):
             patch_pos_embed.to(torch.float32),
             size=(new_height, new_width),
             mode="bicubic",
+            # Difference from Dinov2, we use align_corners=False and antialias=True
             align_corners=False,
             antialias=True,
         ).to(dtype=target_dtype)
@@ -359,7 +360,7 @@ class RfDetrDinov2Embeddings(Dinov2Embeddings):
         target_dtype = self.patch_embeddings.projection.weight.dtype
         embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
 
-        if bool_masked_pos is not None:
+        if bool_masked_pos is not None and self.use_mask_token:
             embeddings = torch.where(
                 bool_masked_pos.unsqueeze(-1), self.mask_token.to(embeddings.dtype).unsqueeze(0), embeddings
             )
@@ -371,8 +372,8 @@ class RfDetrDinov2Embeddings(Dinov2Embeddings):
         # add positional encoding to each token
         embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
 
+        # Difference from Dinov2, we use window partitioning
         if self.config.num_windows > 1:
-            # reshape for windows
             embeddings = window_partition(embeddings, self.config.num_windows, self.config.patch_size, height, width)
         embeddings = self.dropout(embeddings)
 
@@ -408,12 +409,15 @@ class RfDetrDinov2Layer(Dinov2Layer):
         hidden_states: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor]:
         shortcut = hidden_states
+
+        # Difference from Dinov2, when the layer is not a window block, we need to unpartition the hidden states before the attention
         if self.global_attention:
             hidden_states = window_unpartition_before_attention(hidden_states, self.num_windows)
 
         hidden_states_norm = self.norm1(hidden_states)
         self_attention_output = self.attention(hidden_states_norm)
 
+        # And reverse the operation after the attention
         if self.global_attention:
             self_attention_output = window_partition_after_attention(
                 hidden_states, self_attention_output, self.num_windows
@@ -471,11 +475,10 @@ def window_unpartition(
 
 
 class RfDetrDinov2Backbone(Dinov2Backbone):
-    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.Tensor,
-        **kwargs: TransformersKwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -522,6 +525,7 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
                     num_h_patches = height // patch_size
                     num_w_patches = width // patch_size
 
+                    # Difference from Dinov2, when the layer is not a window block, we need to unpartition the hidden states before reshaping
                     if self.config.num_windows > 1:
                         hidden_state = window_unpartition(
                             hidden_state, self.config.num_windows, num_h_patches, num_w_patches
