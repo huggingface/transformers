@@ -103,8 +103,6 @@ class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            # BGR to RGB conversion
-            stacked_images = stacked_images[:, [2, 1, 0], :, :]
             processed_images_grouped[shape] = stacked_images
 
         pixel_values = reorder_images(processed_images_grouped, grouped_images_index)

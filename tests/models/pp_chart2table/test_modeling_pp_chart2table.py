@@ -180,116 +180,41 @@ class PPChart2TableModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
 @require_torch
 class PPChart2TableIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("PaddlePaddle/PPChart2Table_safetensors")
+        self.processor = AutoProcessor.from_pretrained("/workspace/model_weight_torch/PP-Chart2Table")
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
     @slow
-    def test_small_model_integration_test_got_ocr_stop_strings(self):
-        model_id = "stepfun-ai/GOT-OCR-2.0-hf"
+    def test_small_model_integration_test_pp_chart2table(self):
+        model_id = "/workspace/model_weight_torch/PP-Chart2Table"
         model = PPChart2TableForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
-        image = load_image(
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures_ocr/resolve/main/iam_picture.jpeg"
-        )
+        image = load_image("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png")
 
         inputs = self.processor(image, return_tensors="pt").to(torch_device)
         generate_ids = model.generate(
             **inputs,
+            use_cache=True,
             do_sample=False,
-            num_beams=1,
-            tokenizer=self.processor.tokenizer,
-            stop_strings="<|im_end|>",
-            max_new_tokens=4096,
+            max_new_tokens=1024,
         )
         decoded_output = self.processor.decode(
             generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
         )
-        expected_output = "industre"
+        expected_output = "年份 | 单家五星级旅游饭店年平均营收 (百万元) | 单家五星级旅游饭店年平均利润 (百万元)\n2018 | 104.22 | 9.87\n2019 | 99.11 | 7.47\n2020 | 57.87 | -3.87\n2021 | 68.99 | -2.90\n2022 | 56.29 | -9.48\n2023 | 87.99 | 5.96"
         self.assertEqual(decoded_output, expected_output)
 
     @slow
-    def test_small_model_integration_test_got_ocr_format(self):
-        model_id = "PaddlePaddle/PPChart2Table_safetensors"
+    def test_small_model_integration_test_pp_chart2table_batched(self):
+        model_id = "/workspace/model_weight_torch/PP-Chart2Table"
         model = PPChart2TableForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
-        image = load_image(
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
-        )
-
-        inputs = self.processor(image, return_tensors="pt", format=True).to(torch_device)
-        generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
-        decoded_output = self.processor.decode(
-            generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
-        )
-        expected_output = "\\title{\nR"
-        self.assertEqual(decoded_output, expected_output)
-
-    @slow
-    def test_small_model_integration_test_got_ocr_fine_grained(self):
-        model_id = "PaddlePaddle/PPChart2Table_safetensors"
-        model = PPChart2TableForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
-        image = load_image(
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
-        )
-
-        inputs = self.processor(image, return_tensors="pt", color="green").to(torch_device)
-        generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
-        decoded_output = self.processor.decode(
-            generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
-        )
-        expected_output = "You should keep in"
-        self.assertEqual(decoded_output, expected_output)
-
-    @slow
-    def test_small_model_integration_test_got_ocr_crop_to_patches(self):
-        model_id = "PaddlePaddle/PPChart2Table_safetensors"
-        model = PPChart2TableForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
-        image = load_image(
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/one_column.png"
-        )
-
-        inputs = self.processor(image, return_tensors="pt", crop_to_patches=True).to(torch_device)
-        generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
-        decoded_output = self.processor.decode(
-            generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
-        )
-        expected_output = "on developing architectural improvements"
-        self.assertEqual(decoded_output, expected_output)
-
-    @slow
-    def test_small_model_integration_test_got_ocr_multi_pages(self):
-        model_id = "PaddlePaddle/PPChart2Table_safetensors"
-        model = PPChart2TableForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
-        image1 = load_image(
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/one_column.png"
-        )
-        image2 = load_image(
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
-        )
-
-        inputs = self.processor([image1, image2], return_tensors="pt", multi_page=True).to(torch_device)
-        generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
-        decoded_output = self.processor.decode(
-            generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
-        )
-        expected_output = "on developing architectural improvements"
-        self.assertEqual(decoded_output, expected_output)
-
-    @slow
-    def test_small_model_integration_test_got_ocr_batched(self):
-        model_id = "PaddlePaddle/PPChart2Table_safetensors"
-        model = PPChart2TableForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
-        image1 = load_image(
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
-        )
-        image2 = load_image(
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
-        )
+        image1 = load_image("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png")
+        image2 = load_image("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png")
 
         inputs = self.processor([image1, image2], return_tensors="pt").to(torch_device)
-        generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
+        generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=6)
         decoded_output = self.processor.batch_decode(
             generate_ids[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
         )
-        expected_output = ["Reducing the number", "R&D QUALITY"]
+        expected_output = ["年份 | 单家", "年份 | 单家"]
         self.assertEqual(decoded_output, expected_output)
