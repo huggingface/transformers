@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
-import io
 import json
 import os
 import pathlib
@@ -24,7 +23,6 @@ import warnings
 from copy import deepcopy
 from datetime import datetime
 
-import httpx
 import numpy as np
 import pytest
 
@@ -183,11 +181,7 @@ class ImageProcessingTestMixin:
         if self.image_processing_class is None or self.fast_image_processing_class is None:
             self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
-        dummy_image = Image.open(
-            io.BytesIO(
-                httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
-            )
-        )
+        dummy_image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
