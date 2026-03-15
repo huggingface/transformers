@@ -31,6 +31,7 @@ from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging, torch_compilable_check
 from .configuration_vits import VitsConfig
+from ..utils.capture_outputs import capture_outputs
 
 
 logger = logging.get_logger(__name__)
@@ -1091,12 +1092,10 @@ class VitsEncoder(nn.Module):
         hidden_states: torch.FloatTensor,
         padding_mask: torch.FloatTensor,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-    ) -> tuple | BaseModelOutput:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
+    
+    ) ->  BaseModelOutput:
+        # all_hidden_states = () if output_hidden_states else None
+        # all_self_attentions = () if output_attentions else None
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
@@ -1109,8 +1108,8 @@ class VitsEncoder(nn.Module):
         synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         for encoder_layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+            # if output_hidden_states:
+            #     all_hidden_states = all_hidden_states + (hidden_states,)
 
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = np.random.uniform(0, 1)
@@ -1122,28 +1121,23 @@ class VitsEncoder(nn.Module):
                     hidden_states,
                     attention_mask=attention_mask,
                     padding_mask=padding_mask,
-                    output_attentions=output_attentions,
+                    # output_attentions=output_attentions,
                 )
                 hidden_states = layer_outputs[0]
 
             if skip_the_layer:
                 layer_outputs = (None, None)
 
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+            # if output_attentions:
+            #     all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
         hidden_states = hidden_states * padding_mask
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+        # if not return_dict:
+        #     return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
 
         return BaseModelOutput(
             last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
         )
 
 
@@ -1164,9 +1158,9 @@ class VitsTextEncoder(nn.Module):
         input_ids: torch.Tensor,
         padding_mask: torch.FloatTensor,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = True,
+        # output_attentions: bool | None = None,
+        # output_hidden_states: bool | None = None,
+        # return_dict: bool | None = True,
     ) -> tuple[torch.Tensor] | VitsTextEncoderOutput:
         hidden_states = self.embed_tokens(input_ids) * math.sqrt(self.config.hidden_size)
 
@@ -1174,26 +1168,25 @@ class VitsTextEncoder(nn.Module):
             hidden_states=hidden_states,
             padding_mask=padding_mask,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            # output_attentions=output_attentions,
+            # output_hidden_states=output_hidden_states,
+            # return_dict=return_dict,
         )
 
-        last_hidden_state = encoder_outputs[0] if not return_dict else encoder_outputs.last_hidden_state
-
+        last_hidden_state = encoder_outputs[0] #if not return_dict else encoder_outputs.last_hidden_state
         stats = self.project(last_hidden_state.transpose(1, 2)).transpose(1, 2) * padding_mask
         prior_means, prior_log_variances = torch.split(stats, self.config.flow_size, dim=2)
 
-        if not return_dict:
-            outputs = (last_hidden_state, prior_means, prior_log_variances) + encoder_outputs[1:]
-            return outputs
+        # if not return_dict:
+        #     outputs = (last_hidden_state, prior_means, prior_log_variances) + encoder_outputs[1:]
+        #     return outputs
 
         return VitsTextEncoderOutput(
             last_hidden_state=last_hidden_state,
             prior_means=prior_means,
             prior_log_variances=prior_log_variances,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+            # hidden_states=encoder_outputs.hidden_states,
+            # attentions=encoder_outputs.attentions,
         )
 
 
@@ -1203,6 +1196,7 @@ class VitsPreTrainedModel(PreTrainedModel):
     base_model_prefix = "vits"
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
+    _can_capture_outputs = {"attentions" : VitsAttention  , "hidden_states" :  VitsEncoderLayer}
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -1266,20 +1260,20 @@ class VitsModel(VitsPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         speaker_id: int | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        # output_attentions: bool | None = None,
+        # output_hidden_states: bool | None = None,
+        # return_dict: bool | None = None,
         labels: torch.FloatTensor | None = None,
         speaking_rate: float | None = None,
         **kwargs,
-    ) -> tuple[Any] | VitsModelOutput:
+    ) -> VitsModelOutput:
         r"""
         speaker_id (`int`, *optional*):
             Which speaker embedding to use. Only used for multispeaker models.
@@ -1308,11 +1302,11 @@ class VitsModel(VitsPreTrainedModel):
         torch.Size([1, 45824])
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        # output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        # output_hidden_states = (
+        #     output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        # )
+        # return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
             raise NotImplementedError("Training of VITS is not supported yet.")
@@ -1336,15 +1330,13 @@ class VitsModel(VitsPreTrainedModel):
             input_ids=input_ids,
             padding_mask=input_padding_mask,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+        
         )
-        hidden_states = text_encoder_output[0] if not return_dict else text_encoder_output.last_hidden_state
+        hidden_states = text_encoder_output.last_hidden_state
         hidden_states = hidden_states.transpose(1, 2)
         input_padding_mask = input_padding_mask.transpose(1, 2)
-        prior_means = text_encoder_output[1] if not return_dict else text_encoder_output.prior_means
-        prior_log_variances = text_encoder_output[2] if not return_dict else text_encoder_output.prior_log_variances
+        prior_means = text_encoder_output.prior_means
+        prior_log_variances = text_encoder_output.prior_log_variances
 
         if self.config.use_stochastic_duration_prediction:
             log_duration = self.duration_predictor(
@@ -1390,16 +1382,16 @@ class VitsModel(VitsPreTrainedModel):
         waveform = waveform.squeeze(1)
         sequence_lengths = predicted_lengths * np.prod(self.config.upsample_rates)
 
-        if not return_dict:
-            outputs = (waveform, sequence_lengths, spectrogram) + text_encoder_output[3:]
-            return outputs
+        # if not return_dict:
+        #     outputs = (waveform, sequence_lengths, spectrogram) + text_encoder_output[3:]
+        #     return outputs
 
         return VitsModelOutput(
             waveform=waveform,
             sequence_lengths=sequence_lengths,
             spectrogram=spectrogram,
-            hidden_states=text_encoder_output.hidden_states,
-            attentions=text_encoder_output.attentions,
+            # hidden_states=text_encoder_output.hidden_states,
+            # attentions=text_encoder_output.attentions,
         )
 
 
