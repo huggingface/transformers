@@ -114,7 +114,7 @@ class FuyuBatchFeature(BatchFeature):
         def _safe_convert_tensor(elem):
             try:
                 return _convert_tensor(elem)
-            except:  # noqa E722
+            except Exception:
                 if key == "overflowing_values":
                     raise ValueError("Unable to create tensor returning overflowing values of different lengths. ")
                 raise ValueError(
