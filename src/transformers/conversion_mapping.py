@@ -440,6 +440,7 @@ VLMS = [
     "mistral3",
     "mllama",
     "paligemma",
+    "penguinvl",
     "shieldgemma2",
     "qwen2vl",
     "qwen2_5_vl",
