@@ -13,7 +13,6 @@
 # limitations under the License.
 """Image processor class for Fuyu."""
 
-
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict

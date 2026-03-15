@@ -13,7 +13,6 @@
 # limitations under the License.
 """Jamba model configuration"""
 
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, int_div_ceil, logging
 

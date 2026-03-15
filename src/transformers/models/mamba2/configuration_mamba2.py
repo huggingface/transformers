@@ -13,7 +13,6 @@
 # limitations under the License.
 """MAMBA2 configuration"""
 
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, int_div_ceil, logging
 
