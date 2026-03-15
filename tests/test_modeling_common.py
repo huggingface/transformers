@@ -2302,7 +2302,12 @@ class ModelTesterMixin:
                 model = model_class(config)
                 model.eval()
 
-                if model.get_output_embeddings() is None:
+                output_embeds = model.get_output_embeddings()
+                # Some models return None or non-standard output embeddings (e.g. ModuleList for
+                # Bark, custom Embeddings class for Kyutai) that don't have a .weight attribute.
+                # The check must happen BEFORE resize_token_embeddings(), which also accesses
+                # output_embeds.weight internally and would raise AttributeError if it's absent.
+                if output_embeds is None or not hasattr(output_embeds, "weight"):
                     continue
 
                 vocab_size = config.get_text_config().vocab_size
@@ -2310,10 +2315,6 @@ class ModelTesterMixin:
 
                 # Capture weights immediately after resize
                 output_embeds = model.get_output_embeddings()
-                # Some models return non-standard output embeddings (e.g. ModuleList for Bark,
-                # custom Embeddings class for Kyutai) that don't have a .weight attribute.
-                if not hasattr(output_embeds, "weight"):
-                    continue
                 weight_before = output_embeds.weight.data.clone()
                 # nn.Embedding has no .bias attribute; guard with hasattr to avoid AttributeError
                 bias_before = (
