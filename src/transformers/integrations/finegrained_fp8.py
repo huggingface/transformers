@@ -183,9 +183,8 @@ def _pad_dim_to_multiple_of_128(tensor: torch.Tensor, dim: int) -> torch.Tensor:
     if target == size:
         return tensor
     pad_amount = target - size
-    # F.pad expects padding from last dim backwards: (last_left, last_right, ..., first_left, first_right)
     pad = [0] * (2 * tensor.ndim)
-    pad_idx = 2 * (tensor.ndim - 1 - dim) + 1  # right-side of target dim
+    pad_idx = 2 * (tensor.ndim - 1 - dim) + 1
     pad[pad_idx] = pad_amount
     return F.pad(tensor, pad)
 
@@ -198,7 +197,8 @@ def w8a8_fp8_matmul(
     block_size: list[int],
     output_dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
-    r"""Dispatch to CUTLASS or Triton for FP8 matmul (``C = A @ B.T``).
+    """
+    Dispatch to CUTLASS or Triton for block-wise FP8 matmul.
 
     Uses CUTLASS when:
     - Block size is [128, 128] (the only size CUTLASS supports)
@@ -207,8 +207,7 @@ def w8a8_fp8_matmul(
     - Output dtype is bfloat16 or float16 (CUTLASS requirement)
     - Tensor dimensions are compatible (divisible by 16)
 
-    Otherwise falls back to Triton, padding ``B`` (and ``A``) to the next multiple
-    of 128 when a dimension would otherwise trigger a non-power-of-2 ``tl.arange``.
+    Otherwise falls back to Triton.
     """
 
     if _supports_cutlass(A, B, block_size, output_dtype):
