@@ -1225,6 +1225,8 @@ class IsaacModel(PreTrainedModel):
         pixel_values: torch.Tensor,
         image_token_grids: torch.Tensor,
         image_patch_attention_mask: torch.Tensor | None = None,
+        image_token_offsets: torch.Tensor | None = None,
+        image_token_lengths: torch.Tensor | None = None,
         image_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -1236,6 +1238,10 @@ class IsaacModel(PreTrainedModel):
                 Per-image token grids shaped `(batch_size, max_images, 2)` with `(height, width)` entries.
             image_patch_attention_mask (`torch.Tensor`, *optional*):
                 Mask for valid patch rows in `pixel_values`, shaped `(batch_size, max_images, max_patches)`.
+            image_token_offsets (`torch.Tensor`, *optional*):
+                Start offsets inside each per-image embedding sequence, shaped `(batch_size, max_images)`.
+            image_token_lengths (`torch.Tensor`, *optional*):
+                Number of image tokens to gather per image for placeholder scattering, shaped `(batch_size, max_images)`.
             image_attention_mask (`torch.Tensor`, *optional*):
                 Mask indicating which image slots are populated, shaped `(batch_size, max_images)`.
         """
@@ -1273,60 +1279,39 @@ class IsaacModel(PreTrainedModel):
             max_tokens = flat_projected_features.shape[1]
             projected_features = flat_projected_features.new_zeros((batch_size, max_images, max_tokens, hidden_size))
             projected_features[image_attention_mask] = flat_projected_features
+            offsets = (
+                image_token_offsets.to(device=device, dtype=torch.long)
+                if image_token_offsets is not None
+                else torch.zeros((batch_size, max_images), device=device, dtype=torch.long)
+            )
+            lengths = (
+                image_token_lengths.to(device=device, dtype=torch.long)
+                if image_token_lengths is not None
+                else torch.full((batch_size, max_images), max_tokens, device=device, dtype=torch.long)
+            )
+            flat_offsets = offsets[image_attention_mask]
+            flat_lengths = lengths[image_attention_mask]
+            token_positions = torch.arange(flat_lengths.max(), device=device, dtype=torch.long)
+            gather_positions = flat_offsets[:, None] + token_positions[None, :]
+            gather_mask = token_positions[None, :] < flat_lengths[:, None]
+            image_features = flat_projected_features[
+                torch.arange(flat_projected_features.shape[0], device=device, dtype=torch.long)[:, None],
+                gather_positions,
+            ][gather_mask]
             hidden_states = vision_outputs.hidden_states
             attentions = vision_outputs.attentions
         else:
             projected_features = pixel_values.new_zeros((batch_size, max_images, 0, hidden_size))
+            image_features = pixel_values.new_zeros((0, hidden_size))
             hidden_states = None
             attentions = None
 
         return BaseModelOutputWithPooling(
             last_hidden_state=projected_features,
-            pooler_output=projected_features,
+            pooler_output=image_features,
             hidden_states=hidden_states,
             attentions=attentions,
         )
-
-    def _get_scatter_image_features(
-        self,
-        image_features: torch.Tensor,
-        image_token_offsets: torch.Tensor | None = None,
-        image_token_lengths: torch.Tensor | None = None,
-        image_attention_mask: torch.Tensor | None = None,
-        device: torch.device | None = None,
-    ) -> torch.Tensor:
-        device = device if device is not None else self.text_model.embed_tokens.weight.device
-        image_features = image_features.to(device=device)
-        image_attention_mask = (
-            image_attention_mask.to(device=device, dtype=torch.bool)
-            if image_attention_mask is not None
-            else torch.ones(image_features.shape[:2], device=device, dtype=torch.bool)
-        )
-        offsets = (
-            image_token_offsets.to(device=device, dtype=torch.long)
-            if image_token_offsets is not None
-            else torch.zeros(image_features.shape[:2], device=device, dtype=torch.long)
-        )
-        lengths = (
-            image_token_lengths.to(device=device, dtype=torch.long)
-            if image_token_lengths is not None
-            else torch.full(image_features.shape[:2], image_features.shape[2], device=device, dtype=torch.long)
-        )
-
-        flat_image_features = image_features[image_attention_mask]
-        if flat_image_features.shape[0] == 0:
-            return image_features.new_zeros((0, image_features.shape[-1]))
-
-        flat_offsets = offsets[image_attention_mask]
-        flat_lengths = lengths[image_attention_mask]
-        token_positions = torch.arange(flat_lengths.max(), device=device, dtype=torch.long)
-        gather_positions = flat_offsets[:, None] + token_positions[None, :]
-        gather_mask = token_positions[None, :] < flat_lengths[:, None]
-        image_features = flat_image_features[
-            torch.arange(flat_image_features.shape[0], device=device, dtype=torch.long)[:, None],
-            gather_positions,
-        ][gather_mask]
-        return image_features
 
     def get_placeholder_mask(
         self,
@@ -1342,49 +1327,6 @@ class IsaacModel(PreTrainedModel):
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
         )
         return image_token_mask
-
-    def embed_multimodal_inputs(
-        self,
-        input_ids: torch.Tensor,
-        mm_token_type_ids: torch.Tensor,
-        vision_patches: torch.Tensor,
-        vision_token_grids: torch.Tensor,
-        vision_patch_attention_mask: torch.Tensor | None = None,
-        vision_token_offsets: torch.Tensor | None = None,
-        vision_token_lengths: torch.Tensor | None = None,
-        vision_image_attention_mask: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        mm_token_type_ids = mm_token_type_ids.to(device=input_ids.device, dtype=torch.long)
-        embeds = self.text_model.embed_tokens(input_ids)
-        image_token_mask = mm_token_type_ids == MM_TOKEN_TYPE_IMAGE
-
-        if not torch.any(image_token_mask):
-            return embeds, mm_token_type_ids
-
-        image_outputs = self.get_image_features(
-            pixel_values=vision_patches,
-            image_token_grids=vision_token_grids,
-            image_patch_attention_mask=vision_patch_attention_mask,
-            image_attention_mask=vision_image_attention_mask,
-            return_dict=True,
-        )
-        image_features = self._get_scatter_image_features(
-            image_features=image_outputs.pooler_output,
-            image_token_offsets=vision_token_offsets,
-            image_token_lengths=vision_token_lengths,
-            image_attention_mask=vision_image_attention_mask,
-            device=embeds.device,
-        )
-
-        image_features = image_features.to(device=embeds.device, dtype=embeds.dtype)
-        scatter_mask = self.get_placeholder_mask(
-            mm_token_type_ids=mm_token_type_ids,
-            inputs_embeds=embeds,
-            image_features=image_features,
-        )
-        embeds = embeds.masked_scatter(scatter_mask, image_features)
-
-        return embeds, mm_token_type_ids
 
     def get_rope_index(
         self,
@@ -1515,19 +1457,30 @@ class IsaacModel(PreTrainedModel):
             if mm_token_type_ids is not None or has_vision_inputs:
                 if mm_token_type_ids is None:
                     mm_token_type_ids = torch.full_like(input_ids, MM_TOKEN_TYPE_TEXT)
+                mm_token_type_ids = mm_token_type_ids.to(device=input_ids.device, dtype=torch.long)
+                inputs_embeds = self.text_model.embed_tokens(input_ids)
                 image_token_mask = mm_token_type_ids == MM_TOKEN_TYPE_IMAGE
                 if torch.any(image_token_mask) and (vision_patches is None or vision_token_grids is None):
                     raise ValueError("Image placeholders require `vision_patches` and `vision_token_grids`.")
-                inputs_embeds, mm_token_type_ids = self.embed_multimodal_inputs(
-                    input_ids=input_ids,
-                    mm_token_type_ids=mm_token_type_ids,
-                    vision_patches=vision_patches,
-                    vision_patch_attention_mask=vision_patch_attention_mask,
-                    vision_token_grids=vision_token_grids,
-                    vision_token_offsets=vision_token_offsets,
-                    vision_token_lengths=vision_token_lengths,
-                    vision_image_attention_mask=vision_image_attention_mask,
-                )
+                if torch.any(image_token_mask):
+                    image_outputs = self.get_image_features(
+                        pixel_values=vision_patches,
+                        image_token_grids=vision_token_grids,
+                        image_patch_attention_mask=vision_patch_attention_mask,
+                        image_token_offsets=vision_token_offsets,
+                        image_token_lengths=vision_token_lengths,
+                        image_attention_mask=vision_image_attention_mask,
+                        return_dict=True,
+                    )
+                    image_features = image_outputs.pooler_output.to(
+                        device=inputs_embeds.device, dtype=inputs_embeds.dtype
+                    )
+                    scatter_mask = self.get_placeholder_mask(
+                        mm_token_type_ids=mm_token_type_ids,
+                        inputs_embeds=inputs_embeds,
+                        image_features=image_features,
+                    )
+                    inputs_embeds = inputs_embeds.masked_scatter(scatter_mask, image_features)
             else:
                 inputs_embeds = self.text_model.embed_tokens(input_ids)
 

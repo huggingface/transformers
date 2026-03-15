@@ -44,7 +44,6 @@ from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProc
 from transformers.models.isaac.modeling_isaac import (
     IsaacVisionAttention,
     IsaacVisionConfig,
-    ModalityType,
     pixel_shuffle_padded,
 )
 from transformers.models.isaac.processing_isaac import IsaacProcessor
@@ -313,7 +312,7 @@ def create_isaac_processor(
 
 def to_model_multimodal_inputs(processor_output, device):
     keys = (
-        "modality_tensor",
+        "mm_token_type_ids",
         "position_ids",
         "vision_patches",
         "vision_patch_attention_mask",
@@ -582,7 +581,7 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         with torch.no_grad():
             reference = model(input_ids=input_ids, attention_mask=attention_mask)
 
-        with patch.object(model, "embed_multimodal_inputs", wraps=model.embed_multimodal_inputs) as mock_embed:
+        with patch.object(model, "get_image_features", wraps=model.get_image_features) as mock_get_image_features:
             with torch.no_grad():
                 result = model(
                     input_ids=input_ids,
@@ -590,18 +589,56 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     vision_token_grids=vision_token_grids,
                 )
 
-        mock_embed.assert_not_called()
+        mock_get_image_features.assert_not_called()
         torch.testing.assert_close(result.last_hidden_state, reference.last_hidden_state)
 
-    def test_prepare_multimodal_rope_position_ids(self):
-        position_ids = torch.tensor([[[7, 0, 0], [1, 2, 3], [4, 0, 0]]], device=torch_device, dtype=torch.long)
-        modality_tensor = torch.tensor(
-            [[ModalityType.text.value, ModalityType.image.value, ModalityType.text.value]],
+    def test_get_image_features_pooler_output_is_scatter_ready(self):
+        config = self.model_tester.get_config()
+        model = IsaacModel(config)
+        model.to(torch_device)
+        model.eval()
+
+        patch_size = self.model_tester.vision_config["patch_size"]
+        patch_dim = self.model_tester.vision_config["num_channels"] * patch_size * patch_size
+        pixel_values = torch.randn((2, 2, 4, patch_dim), device=torch_device, dtype=torch.float32)
+        image_token_grids = torch.tensor(
+            [[[2, 2], [2, 2]], [[2, 2], [0, 0]]],
             device=torch_device,
             dtype=torch.long,
         )
+        image_patch_attention_mask = torch.ones((2, 2, 4), device=torch_device, dtype=torch.long)
+        image_attention_mask = torch.tensor([[1, 1], [1, 0]], device=torch_device, dtype=torch.long)
+        image_token_offsets = torch.tensor([[1, 0], [2, 0]], device=torch_device, dtype=torch.long)
+        image_token_lengths = torch.tensor([[2, 1], [1, 0]], device=torch_device, dtype=torch.long)
 
-        rope_position_ids = IsaacModel.prepare_multimodal_rope_position_ids(position_ids, modality_tensor)
+        with torch.no_grad():
+            outputs = model.get_image_features(
+                pixel_values=pixel_values,
+                image_token_grids=image_token_grids,
+                image_patch_attention_mask=image_patch_attention_mask,
+                image_attention_mask=image_attention_mask,
+                image_token_offsets=image_token_offsets,
+                image_token_lengths=image_token_lengths,
+                return_dict=True,
+            )
+
+        expected = torch.cat(
+            (
+                outputs.last_hidden_state[0, 0, 1:3],
+                outputs.last_hidden_state[0, 1, 0:1],
+                outputs.last_hidden_state[1, 0, 2:3],
+            ),
+            dim=0,
+        )
+
+        self.assertEqual(outputs.pooler_output.ndim, 2)
+        torch.testing.assert_close(outputs.pooler_output, expected)
+
+    def test_prepare_multimodal_rope_position_ids(self):
+        position_ids = torch.tensor([[[7, 0, 0], [1, 2, 3], [4, 0, 0]]], device=torch_device, dtype=torch.long)
+        mm_token_type_ids = torch.tensor([[0, 1, 0]], device=torch_device, dtype=torch.long)
+
+        rope_position_ids = IsaacModel.prepare_multimodal_rope_position_ids(position_ids, mm_token_type_ids)
         expected = torch.tensor([[[7, 1, 4]], [[7, 2, 4]], [[7, 3, 4]]], device=torch_device, dtype=torch.long)
 
         torch.testing.assert_close(rope_position_ids, expected)
@@ -1062,14 +1099,14 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
 
             torch.testing.assert_close(batch_ids[-single_len:], single_ids)
 
-            batch_modality_row = batch_packed["modality_tensor"][i]
+            batch_modality_row = batch_packed["mm_token_type_ids"][i]
             expected_modality = torch.full(
                 (max_length,),
                 batch_modality_row[-1].item(),
                 dtype=batch_modality_row.dtype,
                 device=batch_modality_row.device,
             )
-            expected_modality[-single_len:] = single_packed["modality_tensor"].squeeze(0)
+            expected_modality[-single_len:] = single_packed["mm_token_type_ids"].squeeze(0)
             torch.testing.assert_close(batch_modality_row, expected_modality)
 
             batch_positions_row = batch_packed["position_ids"][i]
