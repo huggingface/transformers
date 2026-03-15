@@ -1764,14 +1764,6 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> RfDetrObjectDetectionOutput:
         r"""
-        decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
-            Not used by default. Can be used to mask object queries.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
-            can choose to directly pass a flattened representation of an image.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-            Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
-            embedded representation.
         labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
@@ -1789,15 +1781,15 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, LwDetrForObjectDetection
+        >>> from transformers import AutoImageProcessor, RfDetrForObjectDetection
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/lwdetr_small_60e_coco")
-        >>> model = LwDetrForObjectDetection.from_pretrained("stevenbucaille/lwdetr_small_60e_coco")
+        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/rf-detr-base")
+        >>> model = RfDetrForObjectDetection.from_pretrained("stevenbucaille/rf-detr-base")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -2069,10 +2061,24 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
 
     def segmentation_head(
         self, spatial_features, list_query_features, image_size: torch.Size, skip_blocks: bool = False
-    ):
-        # spatial features: (B, C, H, W)
-        # query features: [(B, N, C)] for each decoder layer
-        # output: (B, N, H*r, W*r)
+    ) -> list[torch.Tensor] | torch.Tensor:
+        """
+        Compute mask logits from spatial features and query features.
+
+        Args:
+            spatial_features: Multi-scale spatial features of shape
+                (batch_size, num_channels, feature_height, feature_width).
+            list_query_features: When `skip_blocks` is False, a list of query feature tensors of shape
+                (batch_size, num_queries, d_model) for each decoder layer. When `skip_blocks` is True,
+                a single tensor of shape (batch_size, num_queries, d_model).
+            image_size: Original image spatial dimensions (height, width).
+            skip_blocks: If True, skip the convolutional blocks and compute mask logits directly.
+
+        Returns:
+            When `skip_blocks` is False: list of mask logit tensors of shape
+            (batch_size, num_queries, mask_height, mask_width), where mask size is image size divided
+            by `downsample_ratio`. When `skip_blocks` is True: a single such tensor.
+        """
         target_size = (image_size[0] // self.downsample_ratio, image_size[1] // self.downsample_ratio)
         spatial_features = F.interpolate(spatial_features, size=target_size, mode="bilinear", align_corners=False)
 
@@ -2097,10 +2103,21 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> dict[str, torch.Tensor]:
+        r"""
+        The forward pass proceeds as follows:
+
+        1. Process the visual input through the base RF-DETR model to obtain multi-scale spatial features,
+           query embeddings, and their transformation history.
+        2. Generate classification logits and initial segmentation masks from the encoder's proposed
+           object query embeddings (first stage).
+        3. Predict the final classification labels and refined bounding boxes using the decoder's last
+           hidden state (second stage).
+        4. Pass the high-resolution spatial features and query hidden states through the segmentation
+           head to produce the final, detailed instance masks.
+        """
         image_size = pixel_values.shape[-2:]
 
-        # We start by processing the visual input through the base RF-DETR model to obtain
-        # multi-scale spatial features, query embeddings, and their transformation history.
+        # Step 1.
         outputs = self.rf_detr.model(pixel_values, pixel_mask=pixel_mask, **kwargs)
 
         spatial_features = outputs.backbone_features
@@ -2108,19 +2125,16 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         intermediate_reference_points = outputs.intermediate_reference_points
         enc_outputs_class = outputs.enc_outputs_class
 
-        # In the first stage, we generate classification logits and initial segmentation masks
-        # derived directly from the encoder's proposed object query embeddings.
+        # Step 2.
         enc_outputs_class_logits = self.rf_detr.predict_encoder_class_logits(enc_outputs_class)
         enc_outputs_masks = self.segmentation_head(spatial_features, enc_outputs_class, image_size, skip_blocks=True)
 
-        # For the second stage, we predict the final classification labels and refined bounding
-        # boxes using the decoder's last hidden state.
+        # Step 3.
         logits, pred_boxes = self.rf_detr.predict_class_and_boxes(
             last_hidden_states, intermediate_reference_points[-1]
         )
 
-        # We then pass the high-resolution spatial features and query hidden states through the
-        # segmentation head to produce the final, detailed instance masks.
+        # Step 4.
         outputs_masks = self.segmentation_head(spatial_features, outputs.intermediate_hidden_states, image_size)
         pred_masks = outputs_masks[-1]
 
