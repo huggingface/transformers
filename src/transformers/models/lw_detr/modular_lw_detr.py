@@ -241,6 +241,13 @@ class LwDetrConfig(PreTrainedConfig):
         auxiliary_loss=True,
         **kwargs,
     ):
+        if "mask_loss_coefficient" in kwargs:
+            logger.warning_once(
+                "The parameter `mask_loss_coefficient` was renamed to `class_loss_coefficient` in LW-DETR. "
+                "Please use `class_loss_coefficient` instead. `mask_loss_coefficient` will be removed in a future version."
+            )
+            class_loss_coefficient = kwargs.pop("mask_loss_coefficient")
+
         self.batch_norm_eps = batch_norm_eps
 
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
