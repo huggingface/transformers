@@ -209,12 +209,24 @@ class Qwen2VLConfig(PreTrainedConfig):
         tie_word_embeddings=False,
         **kwargs,
     ):
+        # Extract label-related arguments to propagate to text_config
+        num_labels = kwargs.get("num_labels")
+        id2label = kwargs.get("id2label")
+        label2id = kwargs.get("label2id")
+
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
 
         if isinstance(text_config, dict):
+            # Add label-related args to text_config dict if not already present
+            if num_labels is not None and "num_labels" not in text_config:
+                text_config["num_labels"] = num_labels
+            if id2label is not None and "id2label" not in text_config:
+                text_config["id2label"] = id2label
+            if label2id is not None and "label2id" not in text_config:
+                text_config["label2id"] = label2id
             self.text_config = self.sub_configs["text_config"](**text_config)
         elif text_config is None:
             # Hub configs are saved as flat dicts so we pop some of kwargs to init `TextConfig`
@@ -222,7 +234,16 @@ class Qwen2VLConfig(PreTrainedConfig):
             text_params = list(text_params) + ["rope_scaling", "rope_theta"]
             text_config = {key: kwargs.pop(key) for key in text_params if key in kwargs}
             text_config["dtype"] = kwargs.get("torch_dtype", kwargs.get("dtype"))  # don't pop the dtype
+            # Pass label-related args to text_config when creating default
+            if num_labels is not None:
+                text_config["num_labels"] = num_labels
+            if id2label is not None:
+                text_config["id2label"] = id2label
+            if label2id is not None:
+                text_config["label2id"] = label2id
             self.text_config = self.sub_configs["text_config"](**text_config)
+        else:
+            self.text_config = text_config
 
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
