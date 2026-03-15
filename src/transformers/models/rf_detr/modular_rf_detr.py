@@ -18,12 +18,13 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 
 from ...activations import ACT2FN
+from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging, torch_int
 from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple
-from ..auto import CONFIG_MAPPING
+from ..auto import AutoConfig
 from ..convnext.modeling_convnext import ConvNextLayer
 from ..dinov2.configuration_dinov2 import Dinov2Config
 from ..dinov2.modeling_dinov2 import (
@@ -33,7 +34,6 @@ from ..dinov2.modeling_dinov2 import (
     Dinov2Layer,
     Dinov2PreTrainedModel,
 )
-from ..lw_detr.configuration_lw_detr import LwDetrConfig
 from ..lw_detr.modeling_lw_detr import (
     LwDetrC2FLayer,
     LwDetrConvEncoder,
@@ -98,7 +98,7 @@ class RfDetrDinov2Config(Dinov2Config):
         self.window_block_indexes = window_block_indexes
 
 
-class RfDetrConfig(LwDetrConfig):
+class RfDetrConfig(PreTrainedConfig):
     r"""
     hidden_expansion (`float`, *optional*, defaults to 0.5):
         Expansion factor for hidden dimensions in the projector layers.
@@ -162,6 +162,7 @@ class RfDetrConfig(LwDetrConfig):
     ```"""
 
     model_type = "rf_detr"
+    sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
         self,
@@ -210,39 +211,33 @@ class RfDetrConfig(LwDetrConfig):
         segmentation_head_activation_function="gelu",
         **kwargs,
     ):
-        self.layer_norm_eps = layer_norm_eps
-
         # backbone
-        if backbone_config is None:
-            logger.info(
-                "`backbone_config` is `None`. Initializing the config with the default `RfDetrDinov2` backbone."
-            )
-            backbone_config = RfDetrDinov2Config(
-                attention_probs_dropout_prob=0.0,
-                drop_path_rate=0.0,
-                hidden_act="gelu",
-                hidden_dropout_prob=0.0,
-                initializer_range=0.02,
-                layer_norm_eps=1e-06,
-                layerscale_value=1.0,
-                mlp_ratio=4,
-                num_attention_heads=6,
-                num_channels=3,
-                num_hidden_layers=12,
-                qkv_bias=True,
-                use_swiglu_ffn=False,
-                out_features=["stage2", "stage5", "stage8", "stage11"],
-                hidden_size=384,
-                patch_size=14,
-                num_windows=4,
-                num_register_tokens=0,
-                image_size=518,
-                **kwargs,
-            )
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.pop("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=backbone_config,
+            default_config_type="rf_detr_dinov2",
+            default_config_kwargs={
+                "attention_probs_dropout_prob": 0.0,
+                "drop_path_rate": 0.0,
+                "hidden_act": "gelu",
+                "hidden_dropout_prob": 0.0,
+                "initializer_range": 0.02,
+                "layer_norm_eps": 1e-06,
+                "layerscale_value": 1.0,
+                "mlp_ratio": 4,
+                "num_attention_heads": 6,
+                "num_channels": 3,
+                "num_hidden_layers": 12,
+                "qkv_bias": True,
+                "use_swiglu_ffn": False,
+                "out_features": ["stage2", "stage5", "stage8", "stage11"],
+                "hidden_size": 384,
+                "patch_size": 14,
+                "num_windows": 4,
+                "num_register_tokens": 0,
+                "image_size": 518,
+            },
+            **kwargs,
+        )
 
         self.backbone_config = backbone_config
 
@@ -250,6 +245,7 @@ class RfDetrConfig(LwDetrConfig):
         self.activation_function = activation_function
         self.hidden_expansion = hidden_expansion
         self.c2f_num_blocks = c2f_num_blocks
+        self.layer_norm_eps = layer_norm_eps
         # decoder
         self.d_model = d_model
         self.dropout = dropout
@@ -288,7 +284,7 @@ class RfDetrConfig(LwDetrConfig):
         # segmentation
         self.mask_downsample_ratio = mask_downsample_ratio
         self.segmentation_head_activation_function = segmentation_head_activation_function
-        PreTrainedConfig.__init__(self, **kwargs)
+        super().__init__(**kwargs)
 
 
 def window_partition(
