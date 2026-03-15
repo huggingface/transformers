@@ -232,7 +232,11 @@ class RfDetrDinov2SelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
         new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
 
@@ -253,6 +257,7 @@ class RfDetrDinov2SelfAttention(nn.Module):
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
+            **kwargs,
         )
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -284,8 +289,12 @@ class RfDetrDinov2Attention(nn.Module):
         self.attention = RfDetrDinov2SelfAttention(config)
         self.output = RfDetrDinov2SelfOutput(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states, **kwargs)
         output = self.output(self_attn_output, hidden_states)
         return output
 
@@ -435,26 +444,6 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
         return layer_output
 
 
-class RfDetrDinov2Encoder(nn.Module):
-    def __init__(self, config: RfDetrDinov2Config):
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([RfDetrDinov2Layer(config, i) for i in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(self, hidden_states: torch.Tensor, output_hidden_states: bool = False) -> BaseModelOutput:
-        all_hidden_states = [hidden_states] if output_hidden_states else None
-        for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(hidden_states)
-            if all_hidden_states:
-                all_hidden_states.append(hidden_states)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=tuple(all_hidden_states) if all_hidden_states else None,
-        )
-
-
 @auto_docstring
 class RfDetrDinov2PreTrainedModel(PreTrainedModel):
     config: RfDetrDinov2Config
@@ -468,6 +457,7 @@ class RfDetrDinov2PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
+        "hidden_states": RfDetrDinov2Layer,
         "attentions": RfDetrDinov2SelfAttention,
     }
 
@@ -488,6 +478,21 @@ class RfDetrDinov2PreTrainedModel(PreTrainedModel):
                 init.zeros_(module.mask_token)
         elif isinstance(module, RfDetrDinov2LayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
+
+
+class RfDetrDinov2Encoder(RfDetrDinov2PreTrainedModel):
+    def __init__(self, config: RfDetrDinov2Config):
+        super().__init__(config)
+        self.layer = nn.ModuleList([RfDetrDinov2Layer(config, i) for i in range(config.num_hidden_layers)])
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states)
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 def window_unpartition(
@@ -780,8 +785,6 @@ class RfDetrAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_len, _ = hidden_states.shape
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
 
         hidden_states_original = hidden_states
         if position_embeddings is not None:
@@ -795,6 +798,8 @@ class RfDetrAttention(nn.Module):
             )
             hidden_states = torch.cat(hidden_states.split(seq_len // self.config.group_detr, dim=1), dim=0)
 
+        attention_input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*attention_input_shape, -1, self.head_dim)
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states_original).view(hidden_shape).transpose(1, 2)
@@ -813,7 +818,7 @@ class RfDetrAttention(nn.Module):
             scaling=self.scaling,
             **kwargs,
         )
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output.reshape(*attention_input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
 
         if self.training:
@@ -1413,26 +1418,6 @@ class RfDetrModel(RfDetrPreTrainedModel):
         valid_ratio = torch.stack([valid_ratio_width, valid_ratio_height], -1)
         return valid_ratio
 
-    def get_proposal_pos_embed(self, proposals):
-        """Get the position embedding of the proposals."""
-
-        num_pos_feats = self.config.d_model // 2
-        temperature = 10000
-        scale = 2 * math.pi
-
-        # Compute position embeddings in float32 to avoid overflow with large temperature values in fp16
-        proposals_dtype = proposals.dtype
-        dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=proposals.device)
-        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
-        # batch_size, num_queries, 4
-        proposals = proposals.sigmoid().to(torch.float32) * scale
-        # batch_size, num_queries, 4, 128
-        pos = proposals[:, :, :, None] / dim_t
-        # batch_size, num_queries, 4, 64, 2 -> batch_size, num_queries, 512
-        pos = torch.stack((pos[:, :, :, 0::2].sin(), pos[:, :, :, 1::2].cos()), dim=4).flatten(2)
-        # Convert back to target dtype after all computations are done
-        return pos.to(proposals_dtype)
-
     def gen_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes):
         """Generate the encoder output proposals from encoded enc_output.
 
@@ -1445,8 +1430,10 @@ class RfDetrModel(RfDetrPreTrainedModel):
             `tuple(torch.FloatTensor)`: A tuple of feature map and bbox prediction.
                 - object_query (Tensor[batch_size, sequence_length, hidden_size]): Object query features. Later used to
                   directly predict a bounding box. (without the need of a decoder)
-                - output_proposals (Tensor[batch_size, sequence_length, 4]): Normalized proposals, after an inverse
-                  sigmoid.
+                - output_proposals (Tensor[batch_size, sequence_length, 4]): Normalized proposals in [0, 1] space.
+                  Invalid positions (padding or out-of-bounds) are filled with 0.
+                - invalid_mask (Tensor[batch_size, sequence_length, 1]): Boolean mask that is True for invalid positions
+                  (padded pixels or proposals whose coordinates fall outside (0.01, 0.99)).
         """
         batch_size = enc_output.shape[0]
         proposals = []
@@ -1483,14 +1470,14 @@ class RfDetrModel(RfDetrPreTrainedModel):
             _cur += height * width
         output_proposals = torch.cat(proposals, 1)
         output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
-        output_proposals = output_proposals.masked_fill(padding_mask.unsqueeze(-1), float("inf"))
-        output_proposals = output_proposals.masked_fill(~output_proposals_valid, float("inf"))
+        invalid_mask = padding_mask | ~output_proposals_valid.squeeze(-1)
+        invalid_mask = padding_mask.unsqueeze(-1) | ~output_proposals_valid
+        output_proposals = output_proposals.masked_fill(invalid_mask, float(0))
 
         # assign each pixel as an object query
         object_query = enc_output
-        object_query = object_query.masked_fill(padding_mask.unsqueeze(-1), float(0))
-        object_query = object_query.masked_fill(~output_proposals_valid, float(0))
-        return object_query, output_proposals
+        object_query = object_query.masked_fill(invalid_mask, float(0))
+        return object_query, output_proposals, invalid_mask
 
     @can_return_tuple
     @auto_docstring
@@ -1548,7 +1535,7 @@ class RfDetrModel(RfDetrPreTrainedModel):
 
         # Next, we generate an initial set of object query embeddings and spatial location proposals
         # derived directly from the backbone's flattened output.
-        object_query_embedding, output_proposals = self.gen_encoder_output_proposals(
+        object_query_embedding, output_proposals, invalid_mask = self.gen_encoder_output_proposals(
             source_flatten, ~mask_flatten, spatial_shapes_list
         )
 
@@ -1567,7 +1554,7 @@ class RfDetrModel(RfDetrPreTrainedModel):
         # query group to capture the highest-confidence candidates from the encoder stage.
         for group_id in range(group_detr):
             object_query_undetach, topk_coords_logits = self.gen_topk_proposals(
-                group_id, object_query_embedding, output_proposals, topk
+                group_id, object_query_embedding, output_proposals, invalid_mask, topk
             )
             enc_outputs_coord_logits[:, group_id * topk : (group_id + 1) * topk] = topk_coords_logits
             enc_outputs_class[:, group_id * topk : (group_id + 1) * topk] = object_query_undetach
@@ -1624,7 +1611,7 @@ class RfDetrModel(RfDetrPreTrainedModel):
         )
 
     def gen_topk_proposals(
-        self, group_id: int, object_query_embedding: Tensor, output_proposals: Tensor, topk: int
+        self, group_id: int, object_query_embedding: Tensor, output_proposals: Tensor, invalid_mask: Tensor, topk: int
     ) -> tuple[Tensor, Tensor]:
         """
         Generates and selects the top-k object query embeddings and bounding box proposals for a specific query group.
@@ -1635,6 +1622,7 @@ class RfDetrModel(RfDetrPreTrainedModel):
 
         # Predict classification scores and bounding box refinements for the current query features.
         enc_outputs_class_proposals = self.enc_out_class_embed[group_id](object_query)
+        enc_outputs_class_proposals = enc_outputs_class_proposals.masked_fill(invalid_mask, float("-inf"))
         delta_bbox = self.enc_out_bbox_embed[group_id](object_query)
 
         # Apply the predicted deltas to the initial proposals to obtain refined spatial coordinates.
