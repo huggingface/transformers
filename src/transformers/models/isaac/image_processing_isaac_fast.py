@@ -156,7 +156,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
     MAX_PIXELS = 60_000_000  # 60‑megapixel ceiling ≈ 8200 × 7300 px
 
     resample = PILImageResampling.BILINEAR
-    model_input_names = ["patches", "token_grids"]
+    model_input_names = ["patches", "token_grids", "mm_token_type_ids"]
     valid_kwargs = IsaacImageProcessorFastKwargs
     unused_kwargs = ["size", "do_center_crop", "crop_size", "pad_size", "do_pad"]
 

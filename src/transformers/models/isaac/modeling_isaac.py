@@ -21,7 +21,6 @@
 
 import copy
 from collections.abc import Callable
-from enum import IntEnum
 from typing import Any, Optional
 
 from ... import initialization as init
@@ -57,19 +56,6 @@ if is_torch_available():
     import torch
     import torch.nn as nn
     import torch.nn.functional as F
-
-
-class ModalityType(IntEnum):
-    """
-    Modality identifiers for events.
-
-    Members:
-        image: Vision tokens (e.g., patches).
-        text: Textual tokens.
-    """
-
-    image = 0
-    text = 1
 
 
 class IsaacImageProcessorFastKwargs(ImagesKwargs, total=False):
@@ -1181,6 +1167,10 @@ class IsaacDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+MM_TOKEN_TYPE_TEXT = 0
+MM_TOKEN_TYPE_IMAGE = 1
+
+
 @auto_docstring
 class IsaacModel(PreTrainedModel):
     config: IsaacConfig
@@ -1220,10 +1210,10 @@ class IsaacModel(PreTrainedModel):
     @staticmethod
     def prepare_multimodal_rope_position_ids(
         position_ids: torch.Tensor,
-        modality_tensor: torch.Tensor,
+        mm_token_type_ids: torch.Tensor,
     ) -> torch.Tensor:
         pos = position_ids.clone()
-        text_mask = modality_tensor == ModalityType.text.value
+        text_mask = mm_token_type_ids == MM_TOKEN_TYPE_TEXT
         text_positions = pos[text_mask][..., :1]
         pos[text_mask] = text_positions.expand(-1, pos.shape[-1])
         return pos.permute(2, 0, 1).contiguous()
@@ -1340,13 +1330,11 @@ class IsaacModel(PreTrainedModel):
 
     def get_placeholder_mask(
         self,
-        modality_tensor: torch.LongTensor,
+        mm_token_type_ids: torch.LongTensor,
         inputs_embeds: torch.FloatTensor,
         image_features: torch.FloatTensor,
     ) -> torch.BoolTensor:
-        image_token_mask = (
-            modality_tensor.to(device=inputs_embeds.device, dtype=torch.long) == ModalityType.image.value
-        )
+        image_token_mask = mm_token_type_ids.to(device=inputs_embeds.device, dtype=torch.long) == MM_TOKEN_TYPE_IMAGE
         n_image_tokens = image_token_mask.sum()
         image_token_mask = image_token_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         torch_compilable_check(
@@ -1358,7 +1346,7 @@ class IsaacModel(PreTrainedModel):
     def embed_multimodal_inputs(
         self,
         input_ids: torch.Tensor,
-        modality_tensor: torch.Tensor,
+        mm_token_type_ids: torch.Tensor,
         vision_patches: torch.Tensor,
         vision_token_grids: torch.Tensor,
         vision_patch_attention_mask: torch.Tensor | None = None,
@@ -1366,12 +1354,12 @@ class IsaacModel(PreTrainedModel):
         vision_token_lengths: torch.Tensor | None = None,
         vision_image_attention_mask: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        modality = modality_tensor.to(device=input_ids.device, dtype=torch.long)
+        mm_token_type_ids = mm_token_type_ids.to(device=input_ids.device, dtype=torch.long)
         embeds = self.text_model.embed_tokens(input_ids)
-        image_token_mask = modality == ModalityType.image.value
+        image_token_mask = mm_token_type_ids == MM_TOKEN_TYPE_IMAGE
 
         if not torch.any(image_token_mask):
-            return embeds, modality
+            return embeds, mm_token_type_ids
 
         image_outputs = self.get_image_features(
             pixel_values=vision_patches,
@@ -1390,13 +1378,13 @@ class IsaacModel(PreTrainedModel):
 
         image_features = image_features.to(device=embeds.device, dtype=embeds.dtype)
         scatter_mask = self.get_placeholder_mask(
-            modality_tensor=modality,
+            mm_token_type_ids=mm_token_type_ids,
             inputs_embeds=embeds,
             image_features=image_features,
         )
         embeds = embeds.masked_scatter(scatter_mask, image_features)
 
-        return embeds, modality
+        return embeds, mm_token_type_ids
 
     def get_rope_index(
         self,
@@ -1460,7 +1448,7 @@ class IsaacModel(PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        modality_tensor: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.LongTensor | None = None,
         vision_patches: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
         vision_patch_attention_mask: torch.Tensor | None = None,
@@ -1485,9 +1473,9 @@ class IsaacModel(PreTrainedModel):
         Computes position embeddings once and passes them through all layers.
 
         Args:
-            modality_tensor (`torch.LongTensor`, *optional*):
-                Modality identifiers aligned with the embedded sequence, shaped `(batch_size, seq_len)` and containing
-                values from `ModalityType`. Treated as text-only when omitted.
+            mm_token_type_ids (`torch.LongTensor`, *optional*):
+                Multimodal token type ids aligned with the embedded sequence, shaped `(batch_size, seq_len)`. Isaac
+                follows the standard convention `0 -> text`, `1 -> image`. Treated as text-only when omitted.
             vision_patches (`torch.FloatTensor`, *optional*):
                 Padded per-image patch vectors of shape `(batch_size, max_images, max_patches, patch_dim)`.
             pixel_values (`torch.FloatTensor`, *optional*):
@@ -1524,15 +1512,15 @@ class IsaacModel(PreTrainedModel):
                 raise ValueError("`input_ids` or `inputs_embeds` must be provided.")
 
             has_vision_inputs = vision_patches is not None
-            if modality_tensor is not None or has_vision_inputs:
-                if modality_tensor is None:
-                    modality_tensor = torch.full_like(input_ids, ModalityType.text.value)
-                image_token_mask = modality_tensor == ModalityType.image.value
+            if mm_token_type_ids is not None or has_vision_inputs:
+                if mm_token_type_ids is None:
+                    mm_token_type_ids = torch.full_like(input_ids, MM_TOKEN_TYPE_TEXT)
+                image_token_mask = mm_token_type_ids == MM_TOKEN_TYPE_IMAGE
                 if torch.any(image_token_mask) and (vision_patches is None or vision_token_grids is None):
                     raise ValueError("Image placeholders require `vision_patches` and `vision_token_grids`.")
-                inputs_embeds, modality_tensor = self.embed_multimodal_inputs(
+                inputs_embeds, mm_token_type_ids = self.embed_multimodal_inputs(
                     input_ids=input_ids,
-                    modality_tensor=modality_tensor,
+                    mm_token_type_ids=mm_token_type_ids,
                     vision_patches=vision_patches,
                     vision_patch_attention_mask=vision_patch_attention_mask,
                     vision_token_grids=vision_token_grids,
@@ -1543,10 +1531,10 @@ class IsaacModel(PreTrainedModel):
             else:
                 inputs_embeds = self.text_model.embed_tokens(input_ids)
 
-        if modality_tensor is None:
+        if mm_token_type_ids is None:
             batch_size, seq_len = inputs_embeds.shape[:2]
-            modality_tensor = torch.full(
-                (batch_size, seq_len), ModalityType.text.value, device=inputs_embeds.device, dtype=torch.long
+            mm_token_type_ids = torch.full(
+                (batch_size, seq_len), MM_TOKEN_TYPE_TEXT, device=inputs_embeds.device, dtype=torch.long
             )
 
         device = inputs_embeds.device
@@ -1567,7 +1555,7 @@ class IsaacModel(PreTrainedModel):
         )
         self.rope_deltas = rope_deltas
 
-        rope_position_ids = self.prepare_multimodal_rope_position_ids(position_ids, modality_tensor)
+        rope_position_ids = self.prepare_multimodal_rope_position_ids(position_ids, mm_token_type_ids)
         text_position_ids = torch.cat((position_ids[..., 0].unsqueeze(0), rope_position_ids), dim=0)
 
         if isinstance(attention_mask, dict):
@@ -1613,7 +1601,7 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        modality_tensor: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.LongTensor | None = None,
         vision_patches: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
         vision_patch_attention_mask: torch.Tensor | None = None,
@@ -1633,8 +1621,9 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        modality_tensor (`torch.LongTensor`, *optional*):
-            Modality identifiers aligned with the token sequence, shaped `(batch_size, seq_len)`.
+        mm_token_type_ids (`torch.LongTensor`, *optional*):
+            Multimodal token type ids aligned with the token sequence, shaped `(batch_size, seq_len)`, using
+            `0 -> text` and `1 -> image`.
         vision_patches (`torch.FloatTensor`, *optional*):
             Padded per-image patch vectors of shape `(batch_size, max_images, max_patches, patch_dim)`.
         pixel_values (`torch.FloatTensor`, *optional*):
@@ -1667,7 +1656,7 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             )
         outputs = self.model(
             input_ids=input_ids,
-            modality_tensor=modality_tensor,
+            mm_token_type_ids=mm_token_type_ids,
             vision_patches=vision_patches,
             vision_patch_attention_mask=vision_patch_attention_mask,
             vision_token_grids=vision_token_grids,
@@ -1701,7 +1690,7 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         past_key_values: list[torch.FloatTensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        modality_tensor: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.LongTensor | None = None,
         vision_patches: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
         vision_patch_attention_mask: torch.Tensor | None = None,
@@ -1737,7 +1726,7 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             **kwargs,
         )
         multimodal_inputs = {
-            "modality_tensor": modality_tensor,
+            "mm_token_type_ids": mm_token_type_ids,
             "vision_patches": vision_patches,
             "vision_patch_attention_mask": vision_patch_attention_mask,
             "vision_token_grids": vision_token_grids,

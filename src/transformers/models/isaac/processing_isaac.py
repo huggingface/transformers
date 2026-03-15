@@ -24,7 +24,6 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import is_torch_available, is_vision_available
-from .modeling_isaac import ModalityType
 
 
 if is_torch_available():
@@ -33,6 +32,10 @@ if is_vision_available():
     from PIL.Image import Image
 else:
     Image = None
+
+
+MM_TOKEN_TYPE_TEXT = 0
+MM_TOKEN_TYPE_IMAGE = 1
 
 
 @auto_docstring
@@ -109,7 +112,7 @@ class IsaacProcessor(ProcessorMixin):
             )
 
         sample_input_ids: list[torch.Tensor] = []
-        sample_modality: list[torch.Tensor] = []
+        sample_mm_token_type_ids: list[torch.Tensor] = []
         sample_position_ids: list[torch.Tensor] = []
         sample_vision_patches: list[list[torch.Tensor]] = []
         sample_vision_grids: list[torch.Tensor] = []
@@ -159,7 +162,7 @@ class IsaacProcessor(ProcessorMixin):
             start = max(0, total - self.max_sequence_length)
             end = total
             base_device: torch.device | None = None
-            input_ids_chunks, modality_chunks, position_chunks = [], [], []
+            input_ids_chunks, mm_token_type_chunks, position_chunks = [], [], []
             vision_patches, vision_grids, vision_offsets, vision_lengths = [], [], [], []
             global_offset = 0
             position_offset = 0
@@ -185,9 +188,9 @@ class IsaacProcessor(ProcessorMixin):
                         slice_index = segment_local_indices + position_offset
                         zero_axis = torch.zeros_like(slice_index)
                         position_chunks.append(torch.stack((slice_index, zero_axis, zero_axis), -1))
-                        modality_chunks.append(
+                        mm_token_type_chunks.append(
                             torch.full(
-                                (segment_kept_length,), ModalityType.text.value, device=base_device, dtype=torch.long
+                                (segment_kept_length,), MM_TOKEN_TYPE_TEXT, device=base_device, dtype=torch.long
                             )
                         )
                         input_ids_chunks.append(item["tokens"].to(base_device)[segment_local_start:segment_local_end])
@@ -200,9 +203,9 @@ class IsaacProcessor(ProcessorMixin):
                         position_chunks.append(
                             torch.stack((slice_index, rem // grid_width_tokens, rem % grid_width_tokens), -1)
                         )
-                        modality_chunks.append(
+                        mm_token_type_chunks.append(
                             torch.full(
-                                (segment_kept_length,), ModalityType.image.value, device=base_device, dtype=torch.long
+                                (segment_kept_length,), MM_TOKEN_TYPE_IMAGE, device=base_device, dtype=torch.long
                             )
                         )
                         input_ids_chunks.append(
@@ -229,9 +232,9 @@ class IsaacProcessor(ProcessorMixin):
                 if input_ids_chunks
                 else torch.zeros((0,), device=base_device, dtype=torch.long)
             )
-            sample_modality.append(
-                torch.cat(modality_chunks, 0)
-                if modality_chunks
+            sample_mm_token_type_ids.append(
+                torch.cat(mm_token_type_chunks, 0)
+                if mm_token_type_chunks
                 else torch.zeros((0,), device=base_device, dtype=torch.long)
             )
             sample_position_ids.append(
@@ -259,9 +262,7 @@ class IsaacProcessor(ProcessorMixin):
 
         input_ids = torch.full((batch_size, max_len), self.text_pad_token_id, device=base_device, dtype=torch.long)
         attention_mask = torch.zeros((batch_size, max_len), device=base_device, dtype=torch.long)
-        modality_tensor = torch.full(
-            (batch_size, max_len), ModalityType.text.value, device=base_device, dtype=torch.long
-        )
+        mm_token_type_ids = torch.full((batch_size, max_len), MM_TOKEN_TYPE_TEXT, device=base_device, dtype=torch.long)
         position_ids = torch.zeros((batch_size, max_len, 3), device=base_device, dtype=torch.long)
 
         for batch_idx, length in enumerate(lengths):
@@ -269,7 +270,7 @@ class IsaacProcessor(ProcessorMixin):
                 continue
             input_ids[batch_idx, -length:] = sample_input_ids[batch_idx]
             attention_mask[batch_idx, -length:] = 1
-            modality_tensor[batch_idx, -length:] = sample_modality[batch_idx]
+            mm_token_type_ids[batch_idx, -length:] = sample_mm_token_type_ids[batch_idx]
             position_ids[batch_idx, -length:] = sample_position_ids[batch_idx]
 
         image_counts = [len(patches) for patches in sample_vision_patches]
@@ -316,7 +317,7 @@ class IsaacProcessor(ProcessorMixin):
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "position_ids": position_ids,
-            "modality_tensor": modality_tensor,
+            "mm_token_type_ids": mm_token_type_ids,
             "vision_patches": vision_patches,
             "vision_patch_attention_mask": vision_patch_attention_mask,
             "vision_token_grids": vision_token_grids,
