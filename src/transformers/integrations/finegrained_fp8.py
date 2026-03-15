@@ -162,6 +162,34 @@ def w8a8_block_fp8_matmul_cutlass(
     return C.view(original_shape[:-1] + (N,))
 
 
+def _needs_triton_padding(dim: int) -> bool:
+    r"""Check if a matrix dimension needs padding for the Triton tensor-scale FP8 kernel.
+
+    The Triton kernel uses ``BLOCK_SIZE = 128`` when ``dim % 128 == 0``, otherwise it
+    falls back to ``BLOCK_SIZE = dim``. Since ``tl.arange`` requires a power-of-2 range,
+    dimensions that are neither divisible by 128 nor a power of 2 will crash.
+    """
+    if dim % 128 == 0:
+        return False
+    # dim is used directly as block size; must be a power of 2
+    return (dim & (dim - 1)) != 0
+
+
+def _pad_dim_to_multiple_of_128(tensor: torch.Tensor, dim: int) -> torch.Tensor:
+    r"""Pad ``tensor`` with zeros along ``dim`` to the next multiple of 128."""
+    dim = dim % tensor.ndim  # normalise negative dims
+    size = tensor.shape[dim]
+    target = (size + 127) // 128 * 128
+    if target == size:
+        return tensor
+    pad_amount = target - size
+    # F.pad expects padding from last dim backwards: (last_left, last_right, ..., first_left, first_right)
+    pad = [0] * (2 * tensor.ndim)
+    pad_idx = 2 * (tensor.ndim - 1 - dim) + 1  # right-side of target dim
+    pad[pad_idx] = pad_amount
+    return F.pad(tensor, pad)
+
+
 def w8a8_fp8_matmul(
     A: torch.Tensor,
     B: torch.Tensor,
@@ -170,8 +198,7 @@ def w8a8_fp8_matmul(
     block_size: list[int],
     output_dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
-    """
-    Dispatch to CUTLASS or Triton for block-wise FP8 matmul.
+    r"""Dispatch to CUTLASS or Triton for FP8 matmul (``C = A @ B.T``).
 
     Uses CUTLASS when:
     - Block size is [128, 128] (the only size CUTLASS supports)
@@ -180,11 +207,33 @@ def w8a8_fp8_matmul(
     - Output dtype is bfloat16 or float16 (CUTLASS requirement)
     - Tensor dimensions are compatible (divisible by 16)
 
-    Otherwise falls back to Triton.
+    Otherwise falls back to Triton, padding ``B`` (and ``A``) to the next multiple
+    of 128 when a dimension would otherwise trigger a non-power-of-2 ``tl.arange``.
     """
 
     if _supports_cutlass(A, B, block_size, output_dtype):
         return w8a8_block_fp8_matmul_cutlass(A, B, As, Bs, output_dtype)
+
+    # For tensor-scale mode the Triton kernel uses the raw N / K as block sizes
+    # when they are not divisible by 128.  Triton requires tl.arange ranges to be
+    # powers of 2, so we pad to the next multiple of 128 and slice afterwards.
+    is_tensor_mode = block_size is None or (block_size[0] == B.size(0) and block_size[1] == B.size(1))
+    if is_tensor_mode:
+        N, K = B.shape
+        needs_n_pad = _needs_triton_padding(N)
+        needs_k_pad = _needs_triton_padding(K)
+
+        if needs_n_pad or needs_k_pad:
+            if needs_n_pad:
+                B = _pad_dim_to_multiple_of_128(B, dim=0)
+            if needs_k_pad:
+                B = _pad_dim_to_multiple_of_128(B, dim=1)
+                A = _pad_dim_to_multiple_of_128(A, dim=-1)
+
+            padded_block_size = [B.size(0), B.size(1)] if block_size is not None else None
+            kernel = _get_triton_kernel()
+            result = kernel.w8a8_fp8_matmul(A, B, As, Bs, padded_block_size, output_dtype)
+            return result[..., :N]
 
     # Fall back to Triton
     kernel = _get_triton_kernel()
