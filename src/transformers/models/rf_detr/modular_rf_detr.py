@@ -433,14 +433,14 @@ class RfDetrDinov2Layer(Dinov2Layer):
         return layer_output
 
 
+class RfDetrDinov2PreTrainedModel(Dinov2PreTrainedModel):
+    pass
+
+
 class RfDetrDinov2Encoder(Dinov2Encoder):
     def __init__(self, config: RfDetrDinov2Config):
         super().__init__(config)
         self.layer = nn.ModuleList([RfDetrDinov2Layer(config, i) for i in range(config.num_hidden_layers)])
-
-
-class RfDetrDinov2PreTrainedModel(Dinov2PreTrainedModel):
-    pass
 
 
 def window_unpartition(
@@ -648,7 +648,7 @@ class RfDetrModel(LwDetrModel):
         self.d_model = config.d_model
 
     def gen_topk_proposals(
-        self, group_id: int, object_query_embedding: Tensor, output_proposals: Tensor, topk: int
+        self, group_id: int, object_query_embedding: Tensor, output_proposals: Tensor, invalid_mask: Tensor, topk: int
     ) -> tuple[Tensor, Tensor]:
         """
         Generates and selects the top-k object query embeddings and bounding box proposals for a specific query group.
@@ -659,6 +659,7 @@ class RfDetrModel(LwDetrModel):
 
         # Predict classification scores and bounding box refinements for the current query features.
         enc_outputs_class_proposals = self.enc_out_class_embed[group_id](object_query)
+        enc_outputs_class_proposals = enc_outputs_class_proposals.masked_fill(invalid_mask, float("-inf"))
         delta_bbox = self.enc_out_bbox_embed[group_id](object_query)
 
         # Apply the predicted deltas to the initial proposals to obtain refined spatial coordinates.
@@ -736,7 +737,7 @@ class RfDetrModel(LwDetrModel):
 
         # Next, we generate an initial set of object query embeddings and spatial location proposals
         # derived directly from the backbone's flattened output.
-        object_query_embedding, output_proposals = self.gen_encoder_output_proposals(
+        object_query_embedding, output_proposals, invalid_mask = self.gen_encoder_output_proposals(
             source_flatten, ~mask_flatten, spatial_shapes_list
         )
 
@@ -755,7 +756,7 @@ class RfDetrModel(LwDetrModel):
         # query group to capture the highest-confidence candidates from the encoder stage.
         for group_id in range(group_detr):
             object_query_undetach, topk_coords_logits = self.gen_topk_proposals(
-                group_id, object_query_embedding, output_proposals, topk
+                group_id, object_query_embedding, output_proposals, invalid_mask, topk
             )
             enc_outputs_coord_logits[:, group_id * topk : (group_id + 1) * topk] = topk_coords_logits
             enc_outputs_class[:, group_id * topk : (group_id + 1) * topk] = object_query_undetach
