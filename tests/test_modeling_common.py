@@ -2302,12 +2302,16 @@ class ModelTesterMixin:
                 model = model_class(config)
                 model.eval()
 
-                output_embeds = model.get_output_embeddings()
-                input_embeds = model.get_input_embeddings()
-                # Some models use non-standard embedding classes (e.g. KyutaiSpeechToTextEmbeddings)
-                # that wrap nn.Embedding but don't expose a top-level .weight attribute.
+                # Some models raise NotImplementedError for get_input_embeddings() (e.g. Informer,
+                # PatchTST, WavLM, Detr) or return non-standard embedding objects without a
+                # top-level .weight (e.g. KyutaiSpeechToTextEmbeddings).
                 # resize_token_embeddings() accesses .weight on BOTH input and output embeddings
-                # internally (_get_resized_embeddings), so both guards must come before the call.
+                # internally, so all guards must come before the call.
+                try:
+                    output_embeds = model.get_output_embeddings()
+                    input_embeds = model.get_input_embeddings()
+                except NotImplementedError:
+                    continue
                 if (
                     output_embeds is None
                     or not hasattr(output_embeds, "weight")
