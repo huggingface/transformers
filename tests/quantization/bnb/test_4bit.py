@@ -866,3 +866,79 @@ class Bnb4bitCompile(unittest.TestCase):
                 max_new_tokens=10,
                 cache_implementation="static",
             )
+
+
+@require_bitsandbytes
+@require_accelerate
+@require_torch
+@slow
+class Bnb4BitPeakMemoryTest(unittest.TestCase):
+    """Verify that float16 GPU memory is freed during 4-bit quantized loading.
+
+    Regression test for a bug where ``Bnb4bitQuantize.convert()`` held a Python
+    reference to the float16 source tensor while calling ``Params4bit.to()``.
+    ``Params4bit.__new__`` shares storage with the float16 data via
+    ``_make_subclass``, and the extra reference prevented the float16 allocation
+    from being freed after ``_quantize()`` replaced it with 4-bit data.  This
+    caused float16 tensors to accumulate linearly on GPU during
+    ``from_pretrained``, leading to OOM on models whose float16 size exceeds
+    GPU VRAM (e.g. a 35B model on a 32 GB GPU).
+
+    The test loads a model with ``load_in_4bit`` and checks that peak GPU memory
+    stays well below the float16 model size — confirming that float16 tensors
+    are freed promptly during loading rather than accumulated.
+    """
+
+    model_name = "facebook/opt-350m"
+
+    def test_peak_memory_during_4bit_loading(self):
+        """Peak GPU memory during 4-bit loading should be much less than the float16 model size."""
+        if torch_device != "cuda":
+            self.skipTest("Peak memory tracking requires CUDA")
+
+        # Compute the float16 model size using a meta-device model (we can't
+        # use numel on quantized Params4bit since they pack data as uint8).
+        with torch.device("meta"):
+            meta_model = AutoModelForCausalLM.from_config(
+                AutoConfig.from_pretrained(self.model_name)
+            )
+        fp16_size = sum(p.numel() * 2 for p in meta_model.parameters())
+        del meta_model
+
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
+        gc.collect()
+
+        baseline = torch.cuda.memory_allocated()
+
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            dtype=torch.float16,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            device_map="auto",
+        )
+
+        peak_bytes = torch.cuda.max_memory_allocated() - baseline
+        final_bytes = torch.cuda.memory_allocated() - baseline
+
+        peak_mb = peak_bytes / 1e6
+        final_mb = final_bytes / 1e6
+        fp16_mb = fp16_size / 1e6
+
+        # Before the fix, float16 tensors accumulated on GPU without being
+        # freed, so peak memory exceeded the float16 model size (float16 data +
+        # quantized data both present).  After the fix, float16 is freed per
+        # weight, so peak stays below the float16 size — roughly the final
+        # quantized size + one float16 shard in transit + quantization state.
+        self.assertLess(
+            peak_bytes,
+            fp16_size,
+            f"Peak GPU memory during 4-bit loading ({peak_mb:.0f} MB) exceeds "
+            f"the float16 model size ({fp16_mb:.0f} MB). Float16 tensors are "
+            f"likely accumulating instead of being freed during quantization. "
+            f"Final quantized size: {final_mb:.0f} MB.",
+        )
+
+        del model
+        gc.collect()
+        backend_empty_cache(torch_device)
