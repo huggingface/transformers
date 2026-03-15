@@ -13,10 +13,9 @@
 # limitations under the License.
 """Zamba model configuration"""
 
-import math
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, int_div_ceil, logging
 
 
 logger = logging.get_logger(__name__)
@@ -125,7 +124,7 @@ class ZambaConfig(PreTrainedConfig):
         self.mamba_d_state = mamba_d_state
         self.mamba_d_conv = mamba_d_conv
         self.mamba_expand = mamba_expand
-        self.mamba_dt_rank = math.ceil(self.hidden_size / 16) if mamba_dt_rank == "auto" else mamba_dt_rank
+        self.mamba_dt_rank = int_div_ceil(self.hidden_size, 16) if mamba_dt_rank == "auto" else mamba_dt_rank
         self.time_step_min = time_step_min
         self.time_step_max = time_step_max
         self.time_step_floor = time_step_floor

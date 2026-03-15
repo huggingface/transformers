@@ -13,7 +13,6 @@
 # limitations under the License.
 """Fast Image processor class for EoMT."""
 
-import math
 from typing import Optional, Union
 
 import numpy as np
@@ -39,6 +38,7 @@ from ...utils import (
     TensorType,
     auto_docstring,
     filter_out_non_signature_kwargs,
+    int_div_ceil,
 )
 from .image_processing_eomt import (
     EomtImageProcessorKwargs,
@@ -127,7 +127,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         patch_size = size["shortest_edge"]
 
         longer_side = max(height, width)
-        num_patches = math.ceil(longer_side / patch_size)
+        num_patches = int_div_ceil(longer_side, patch_size)
         total_overlap = num_patches * patch_size - longer_side
         overlap_per_patch = total_overlap / (num_patches - 1) if num_patches > 1 else 0
 

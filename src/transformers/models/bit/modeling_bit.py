@@ -30,7 +30,7 @@ from ...modeling_outputs import (
     ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, int_div_ceil, logging
 from ...utils.generic import can_return_tuple
 from .configuration_bit import BitConfig
 
@@ -169,7 +169,7 @@ class DynamicPad2d(nn.Module):
         self.value = value
 
         def compute_padding(x, kernel_size, stride, dilation):
-            return max((math.ceil(x / stride) - 1) * stride + (kernel_size - 1) * dilation + 1 - x, 0)
+            return max((int_div_ceil(x, stride) - 1) * stride + (kernel_size - 1) * dilation + 1 - x, 0)
 
         self.compute_padding = compute_padding
 

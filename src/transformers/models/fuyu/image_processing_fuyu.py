@@ -13,7 +13,6 @@
 # limitations under the License.
 """Image processor class for Fuyu."""
 
-import math
 
 import numpy as np
 
@@ -40,6 +39,7 @@ from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
+    int_div_ceil,
     is_torch_available,
     is_torch_device,
     is_torch_dtype,
@@ -655,16 +655,8 @@ class FuyuImageProcessor(BaseImageProcessor):
                     image = image_input[batch_index, subseq_index]
                     image_height, image_width = image.shape[1], image.shape[2]
                     if variable_sized:
-                        # The min() is required here due to floating point issues:
-                        # math.ceil(torch.tensor(300).cuda() / 30) == 11
-                        new_h = min(
-                            image_height,
-                            math.ceil(image_unpadded_h[batch_index, subseq_index] / patch_height) * patch_height,
-                        )
-                        new_w = min(
-                            image_width,
-                            math.ceil(image_unpadded_w[batch_index, subseq_index] / patch_width) * patch_width,
-                        )
+                        new_h = int_div_ceil(image_unpadded_h[batch_index, subseq_index], patch_height) * patch_height
+                        new_w = int_div_ceil(image_unpadded_w[batch_index, subseq_index], patch_width) * patch_width
                         image = image[:, :new_h, :new_w]
                         image_height, image_width = new_h, new_w
 

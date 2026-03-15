@@ -23,7 +23,7 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...modeling_utils import PreTrainedAudioTokenizerBase
-from ...utils import ModelOutput, auto_docstring
+from ...utils import ModelOutput, auto_docstring, int_div_ceil
 from .configuration_dac import DacConfig
 
 
@@ -219,7 +219,7 @@ class DacEncoderBlock(nn.Module):
         self.res_unit3 = DacResidualUnit(dimension // 2, dilation=9)
         self.snake1 = Snake1d(dimension // 2)
         self.conv1 = nn.Conv1d(
-            dimension // 2, dimension, kernel_size=2 * stride, stride=stride, padding=math.ceil(stride / 2)
+            dimension // 2, dimension, kernel_size=2 * stride, stride=stride, padding=int_div_ceil(stride, 2)
         )
 
     def forward(self, hidden_state):
@@ -245,7 +245,7 @@ class DacDecoderBlock(nn.Module):
             output_dim,
             kernel_size=2 * stride,
             stride=stride,
-            padding=math.ceil(stride / 2),
+            padding=int_div_ceil(stride, 2),
         )
 
         self.res_unit1 = DacResidualUnit(output_dim, dilation=1)

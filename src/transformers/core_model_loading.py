@@ -15,7 +15,6 @@
 
 from __future__ import annotations
 
-import math
 import os
 import re
 import traceback
@@ -33,7 +32,7 @@ import torch
 
 from .integrations.accelerate import get_device, offload_weight
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
-from .utils import is_env_variable_true
+from .utils import int_div_ceil, is_env_variable_true
 from .utils.loading_report import LoadStateDictInfo
 from .utils.logging import get_logger, tqdm
 
@@ -354,7 +353,7 @@ class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
         self.concat_dim = concat_dim
 
     def split_list_into_chunks(self, tensor_list: list[torch.Tensor], chunks: int = 2):
-        split_size = math.ceil(len(tensor_list) / chunks)  # best effort split size
+        split_size = int_div_ceil(len(tensor_list), chunks)  # best effort split size
         return [tensor_list[i * split_size : (i + 1) * split_size] for i in range(chunks)]
 
     @torch.no_grad()

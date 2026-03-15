@@ -43,7 +43,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, int_div_ceil, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto.configuration_auto import AutoConfig
@@ -1539,7 +1539,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
                 # pad or truncate to config.chroma_length
                 if audio_hidden_states.shape[1] < self.config.chroma_length:
-                    n_repeat = int(math.ceil(self.config.chroma_length / audio_hidden_states.shape[1]))
+                    n_repeat = int_div_ceil(self.config.chroma_length, audio_hidden_states.shape[1])
                     audio_hidden_states = audio_hidden_states.repeat(1, n_repeat, 1)
                 else:
                     logger.warning(
@@ -1771,7 +1771,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
             # pad or truncate to config.chroma_length
             if audio_hidden_states.shape[1] < self.config.chroma_length:
-                n_repeat = int(math.ceil(self.config.chroma_length / audio_hidden_states.shape[1]))
+                n_repeat = int_div_ceil(self.config.chroma_length, audio_hidden_states.shape[1])
                 audio_hidden_states = audio_hidden_states.repeat(1, n_repeat, 1)
             audio_hidden_states = audio_hidden_states[:, : self.config.chroma_length]
 

@@ -665,7 +665,7 @@ def torch_float(x):
     return x.to(torch.float32) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
 
 
-def int_div_ceil(a: int | "torch.Tensor", b: int | "torch.Tensor") -> int:
+def int_div_ceil(a: int | torch.Tensor, b: int | torch.Tensor) -> int:
     """
     Perform integer ceiling division without intermediate floating-point conversion.
 

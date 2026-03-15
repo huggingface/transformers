@@ -18,7 +18,7 @@ import math
 import numpy as np
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, int_div_ceil, logging
 
 
 logger = logging.get_logger(__name__)
@@ -169,7 +169,7 @@ class EncodecConfig(PreTrainedConfig):
 
     @property
     def frame_rate(self) -> int:
-        return math.ceil(self.sampling_rate / self.hop_length)
+        return int_div_ceil(self.sampling_rate, self.hop_length)
 
     @property
     def num_quantizers(self) -> int:

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from dataclasses import dataclass
 
 import torch
@@ -29,6 +28,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    int_div_ceil,
     is_peft_available,
     logging,
     torch_compilable_check,
@@ -86,7 +86,7 @@ class GraniteSpeechEncoderProjector(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, seq_len, dim = hidden_states.size()
-        nblocks = math.ceil(seq_len / self.window_size)
+        nblocks = int_div_ceil(seq_len, self.window_size)
         pad = nblocks * self.window_size - seq_len
         hidden_states = nn.functional.pad(hidden_states, (0, 0, 0, pad), "constant", 0)
         hidden_states = hidden_states.view(batch_size * nblocks, self.window_size, dim)
@@ -152,7 +152,7 @@ class GraniteSpeechConformerAttention(nn.Module):
         hidden_states = self.pre_norm(hidden_states)
         bsz, num_features, _ = hidden_states.shape
 
-        num_blocks = math.ceil(num_features / self.context_size)
+        num_blocks = int_div_ceil(num_features, self.context_size)
         remainder = num_features % self.context_size
         if remainder > 0:
             # right padding to reach block size

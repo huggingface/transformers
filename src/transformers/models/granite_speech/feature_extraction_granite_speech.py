@@ -13,14 +13,13 @@
 # limitations under the License.
 """Feature extractor class for Granite Speech."""
 
-import math
 from collections.abc import Sequence
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...tokenization_utils_base import AudioInput
-from ...utils import is_torch_available, is_torchaudio_available, logging
+from ...utils import int_div_ceil, is_torch_available, is_torchaudio_available, logging
 from ...utils.import_utils import requires_backends
 
 
@@ -135,7 +134,7 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
             mel_length = raw_length // hop_length + 1
             # encoder frame takes two mel features
             encoder_length = mel_length // 2
-            nblocks = math.ceil(encoder_length / self.projector_window_size)
+            nblocks = int_div_ceil(encoder_length, self.projector_window_size)
             # projector output length
             projector_length = nblocks * effective_window_size
             projector_lengths.append(projector_length)

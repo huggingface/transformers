@@ -13,8 +13,6 @@
 # limitations under the License.
 """Image processor class for EoMT."""
 
-import math
-
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
@@ -41,6 +39,7 @@ from ...utils import (
     IMAGENET_DEFAULT_STD,
     TensorType,
     filter_out_non_signature_kwargs,
+    int_div_ceil,
     is_torch_available,
     logging,
 )
@@ -347,7 +346,7 @@ class EomtImageProcessor(BaseImageProcessor):
         patch_size = size["shortest_edge"]
 
         longer_side = max(image_size)
-        num_patches = math.ceil(longer_side / patch_size)
+        num_patches = int_div_ceil(longer_side, patch_size)
         total_overlap = num_patches * patch_size - longer_side
         overlap_per_patch = total_overlap / (num_patches - 1) if num_patches > 1 else 0
 

@@ -13,7 +13,6 @@
 # limitations under the License.
 """Fast Image processor class for MaskFormer."""
 
-import math
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
@@ -42,6 +41,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
+    int_div_ceil,
     logging,
 )
 from .image_processing_maskformer import (
@@ -192,8 +192,8 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
             )
         if size_divisor > 0:
             height, width = new_size
-            height = int(math.ceil(height / size_divisor) * size_divisor)
-            width = int(math.ceil(width / size_divisor) * size_divisor)
+            height = int_div_ceil(height, size_divisor) * size_divisor
+            width = int_div_ceil(width, size_divisor) * size_divisor
             new_size = (height, width)
 
         image = tvF.resize(

@@ -161,6 +161,7 @@ from .utils import (
     can_return_loss,
     check_torch_load_is_safe,
     find_labels,
+    int_div_ceil,
     is_accelerate_available,
     is_datasets_available,
     is_in_notebook,
@@ -2590,7 +2591,7 @@ class Trainer:
                 metric_key_prefix,
                 start_time,
                 num_samples=output.num_samples,
-                num_steps=math.ceil(output.num_samples / total_batch_size),
+                num_steps=int_div_ceil(output.num_samples, total_batch_size),
             )
         )
 
@@ -2864,7 +2865,7 @@ class Trainer:
                 metric_key_prefix,
                 start_time,
                 num_samples=output.num_samples,
-                num_steps=math.ceil(output.num_samples / total_batch_size),
+                num_steps=int_div_ceil(output.num_samples, total_batch_size),
             )
         )
 

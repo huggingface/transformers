@@ -31,7 +31,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import ModelOutput, auto_docstring, logging, torch_int
+from ...utils import ModelOutput, auto_docstring, int_div_ceil, logging, torch_int
 from .configuration_perceiver import PerceiverConfig
 
 
@@ -2965,7 +2965,7 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
         elif self.prep_type == "pixels":
             inp_dim = self.in_channels
             if not is_temporal:
-                inp_dim = math.ceil(inp_dim / self.spatial_downsample)
+                inp_dim = int_div_ceil(inp_dim, self.spatial_downsample)
         elif self.prep_type == "patches":
             if self.conv_after_patching:
                 inp_dim = self.out_channels

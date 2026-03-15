@@ -25,7 +25,7 @@ from ...image_processing_utils import select_best_resolution
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, int_div_ceil, logging
 from ...video_utils import VideoInput
 
 
@@ -146,7 +146,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             height, width = get_image_size(one_video[0], channel_dim=output_kwargs["images_kwargs"].get("data_format"))
             num_frames = one_video.shape[0]  # frame dim is always after batch dim
             patches_height_width = int(math.sqrt(self.num_image_tokens))
-            pooled_height_width = math.ceil(patches_height_width / 2)
+            pooled_height_width = int_div_ceil(patches_height_width, 2)
             num_video_tokens = (num_frames * pooled_height_width * pooled_height_width) + 1  # +1 for newline token
             text = [sample.replace(self.video_token, self.video_token * num_video_tokens) for sample in text]
 

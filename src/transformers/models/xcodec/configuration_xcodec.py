@@ -18,7 +18,7 @@ import math
 import numpy as np
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring
+from ...utils import auto_docstring, int_div_ceil
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -128,7 +128,7 @@ class XcodecConfig(PreTrainedConfig):
 
     @property
     def frame_rate(self) -> int:
-        return math.ceil(self.sample_rate / self.hop_length)
+        return int_div_ceil(self.sample_rate, self.hop_length)
 
     @property
     def semantic_hidden_size(self) -> int:

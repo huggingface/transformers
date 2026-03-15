@@ -47,7 +47,7 @@ from ...image_utils import (
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, logging
+from ...utils import TensorType, auto_docstring, int_div_ceil, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from .image_processing_llava_onevision import LlavaOnevisionImageProcessorKwargs
 
@@ -303,7 +303,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         image_features = image_features.permute(0, 3, 1, 2).contiguous()
 
         height, width = image_features.shape[2:]
-        scaled_shape = [math.ceil(height / 2), math.ceil(width / 2)]
+        scaled_shape = [int_div_ceil(height, 2), int_div_ceil(width, 2)]
         image_features = nn.functional.interpolate(image_features, size=scaled_shape, mode="bilinear")
 
         image_features = image_features.permute(0, 2, 3, 1)

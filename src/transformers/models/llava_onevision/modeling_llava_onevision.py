@@ -34,7 +34,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, int_div_ceil, torch_compilable_check
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ..auto import AutoModel
 from .configuration_llava_onevision import LlavaOnevisionConfig
@@ -621,7 +621,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         image_features = image_features.permute(0, 3, 1, 2).contiguous()
 
         height, width = image_features.shape[2:]
-        scaled_shape = [math.ceil(height / 2), math.ceil(width / 2)]
+        scaled_shape = [int_div_ceil(height, 2), int_div_ceil(width, 2)]
         image_features = nn.functional.interpolate(image_features, size=scaled_shape, mode="bilinear")
 
         image_features = image_features.permute(0, 2, 3, 1)

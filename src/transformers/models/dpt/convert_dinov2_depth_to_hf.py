@@ -16,7 +16,6 @@ https://github.com/facebookresearch/dinov2/tree/main"""
 
 import argparse
 import itertools
-import math
 from io import BytesIO
 from pathlib import Path
 
@@ -26,7 +25,7 @@ from PIL import Image
 from torchvision import transforms
 
 from transformers import Dinov2Config, DPTConfig, DPTForDepthEstimation, DPTImageProcessor
-from transformers.utils import logging
+from transformers.utils import int_div_ceil, logging
 
 
 logging.set_verbosity_info()
@@ -207,7 +206,7 @@ def get_original_pixel_values(image):
             self.multiple = multiple
 
         def _get_pad(self, size):
-            new_size = math.ceil(size / self.multiple) * self.multiple
+            new_size = int_div_ceil(size, self.multiple) * self.multiple
             pad_size = new_size - size
             pad_size_left = pad_size // 2
             pad_size_right = pad_size - pad_size_left
