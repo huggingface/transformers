@@ -291,19 +291,21 @@ def window_partition(
     embeddings: torch.Tensor, num_windows: int, patch_size: int, height: int, width: int
 ) -> torch.Tensor:
     batch_size = embeddings.shape[0]
-    num_h_patches = height // patch_size
-    num_w_patches = width // patch_size
+    num_height_patches = height // patch_size
+    num_width_patches = width // patch_size
     cls_token_with_pos_embed = embeddings[:, :1]
     pixel_tokens_with_pos_embed = embeddings[:, 1:]
-    pixel_tokens_with_pos_embed = pixel_tokens_with_pos_embed.view(batch_size, num_h_patches, num_w_patches, -1)
-    num_w_patches_per_window = num_w_patches // num_windows
-    num_h_patches_per_window = num_h_patches // num_windows
+    pixel_tokens_with_pos_embed = pixel_tokens_with_pos_embed.view(
+        batch_size, num_height_patches, num_width_patches, -1
+    )
+    num_width_patches_per_window = num_width_patches // num_windows
+    num_height_patches_per_window = num_height_patches // num_windows
     windowed_pixel_tokens = pixel_tokens_with_pos_embed.view(
-        batch_size, num_windows, num_w_patches_per_window, num_windows, num_h_patches_per_window, -1
+        batch_size, num_windows, num_width_patches_per_window, num_windows, num_height_patches_per_window, -1
     )
     windowed_pixel_tokens = windowed_pixel_tokens.permute(0, 1, 3, 2, 4, 5)
     windowed_pixel_tokens = windowed_pixel_tokens.reshape(
-        batch_size * num_windows**2, num_h_patches_per_window * num_w_patches_per_window, -1
+        batch_size * num_windows**2, num_height_patches_per_window * num_width_patches_per_window, -1
     )
     windowed_cls_token_with_pos_embed = cls_token_with_pos_embed.repeat(num_windows**2, 1, 1)
     embeddings = torch.cat((windowed_cls_token_with_pos_embed, windowed_pixel_tokens), dim=1)
