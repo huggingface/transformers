@@ -55,7 +55,7 @@ from .core_model_loading import (
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
-from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled, is_fsdp_enabled
+from .integrations import PeftAdapterMixin, deepspeed_config, hub_kernels, is_deepspeed_zero3_enabled, is_fsdp_enabled
 from .integrations.accelerate import (
     _get_device_map,
     accelerate_disk_offload,
@@ -70,7 +70,7 @@ from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.hub_kernels import is_kernel
+from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
@@ -397,7 +397,7 @@ def remove_tied_weights_from_state_dict(
 ) -> dict[str, torch.Tensor]:
     """
     Remove all tied weights from the given `state_dict`, making sure to keep only the main weight that `model`
-    will expect when reloading (even if we know tie weights symmetrically, it's better to keep the intended one).
+    will expect when reloading (even if we now tie weights symmetrically, it's better to keep the intended one).
     This is because `safetensors` does not allow tensor aliasing - so we're going to remove aliases before saving.
     """
     # To avoid any potential mistakes and mismatches between config and actual tied weights, here we check the pointers
@@ -1258,7 +1258,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Check the attention implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
         self.config._attn_implementation_internal = self._check_and_adjust_attn_implementation(
-            self.config._attn_implementation, is_init_check=True
+            self.config._attn_implementation,
+            is_init_check=True,
+            # We need to use this constant that is set through context manager as it cannot be forwarded in the model's __init__
+            allow_all_kernels=hub_kernels.ALLOW_ALL_KERNELS,
         )
         # Check the experts implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
@@ -1451,6 +1454,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if isinstance(dtype, str):
             dtype = getattr(torch, dtype)
 
+        # Set the same `dtype` on all subconfigs to avoid dtype mismatch. When "auto" dtype
+        # with nested models, we can't dispatch different dtype per backbone module
+        for sub_config_key in config.sub_configs:
+            if (sub_config := getattr(config, sub_config_key)) is not None:
+                sub_config.dtype = dtype
+
         # If passing `attn_implementation` as kwargs, respect it (it will be applied recursively on subconfigs)
         if "attn_implementation" in kwargs:
             config._attn_implementation = kwargs.pop("attn_implementation")
@@ -1459,9 +1468,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if "experts_implementation" in kwargs:
             config._experts_implementation = kwargs.pop("experts_implementation")
 
+        # Needed if the attn_implementation is an outside `kernels-community` kernel
+        allow_all_kernels = kwargs.get("allow_all_kernels", False)
+
         init_contexts = [apply_patches()]
         if dtype is not None:
             init_contexts.append(local_torch_dtype(dtype, cls.__name__))
+        if allow_all_kernels:
+            init_contexts.append(allow_all_hub_kernels())
 
         needs_zero3_init = is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called
         if needs_zero3_init:
@@ -1780,7 +1794,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return True
 
     def _check_and_adjust_attn_implementation(
-        self, attn_implementation: str | None, is_init_check: bool = False
+        self, attn_implementation: str | None, is_init_check: bool = False, allow_all_kernels: bool = False
     ) -> str:
         """
         Check that the `attn_implementation` exists and is supported by the models, and try to get the kernel from hub if
@@ -1794,6 +1808,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 fully instantiated. This is needed as we also check the devices of the weights, which are only available
                 later after __init__. This allows to raise proper exceptions early before instantiating the full models
                 if we know that the model does not support the requested attention.
+            allow_all_kernels (`bool`, optional):
+                Whether to load kernels from unverified hub repos, if `attn_implementation` is a custom kernel outside
+                of the `kernels-community` hub repository.
 
         Returns:
             `str`: The final attention implementation to use, including potential fallbacks from sdpa to eager, or from
@@ -1850,9 +1867,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             try:
                 # preload flash attention here to allow compile with fullgraph
                 if is_paged:
-                    lazy_import_paged_flash_attention(applicable_attn_implementation)
+                    lazy_import_paged_flash_attention(
+                        applicable_attn_implementation, allow_all_kernels=allow_all_kernels
+                    )
                 else:
-                    lazy_import_flash_attention(applicable_attn_implementation)
+                    lazy_import_flash_attention(applicable_attn_implementation, allow_all_kernels=allow_all_kernels)
 
                 # log that we used kernel fallback if successful
                 if requested_original_flash_attn:
@@ -1982,7 +2001,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # heuristic -> if we the use_experts_implementation decorator is used, then we can set it
         return "@use_experts_implementation" in code
 
-    def set_attn_implementation(self, attn_implementation: str | dict):
+    def set_attn_implementation(self, attn_implementation: str | dict, allow_all_kernels: bool = False):
         """
         Set the requested `attn_implementation` for this model.
 
@@ -1991,6 +2010,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 The attention implementation to set for this model. It can be either a `str`, in which case it will be
                 dispatched to all submodels if relevant, or a `dict` where keys are the sub_configs name, in which case each
                 submodel will dispatch the corresponding value.
+            allow_all_kernels (`bool`, optional):
+                Whether to load kernels from unverified hub repos, if `attn_implementation` is a custom kernel outside
+                of the `kernels-community` hub repository.
         """
         requested_implementation = (
             attn_implementation
@@ -2008,7 +2030,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 )
             else:
                 requested_implementation = self._check_and_adjust_attn_implementation(
-                    requested_implementation, is_init_check=False
+                    requested_implementation, is_init_check=False, allow_all_kernels=allow_all_kernels
                 )
                 # Apply the change (on the internal attr, to avoid setting it recursively)
                 self.config._attn_implementation_internal = requested_implementation
@@ -2535,15 +2557,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # Both are already present -> it means the config is wrong and do not reflect the actual
                 # checkpoint -> let's raise a warning and NOT tie them
                 if source_is_there and target_is_there:
-                    logger.warning(
-                        f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
-                        f"{target_param_name}, but both are present in the checkpoints, so we will NOT tie them. "
-                        "You should update the config with `tie_word_embeddings=False` to silence this warning"
-                    )
-                    # Remove from internal attribute to correctly reflect actual tied weights
-                    self.all_tied_weights_keys.pop(target_param_name)
-                    # Skip to next iteration
-                    continue
+                    # If both are present, check if the weights are exactly similar, and only tie in this case
+                    # This check is important, as torch `.bin` checkpoints always contain both keys, referencing the same storage
+                    if not torch.equal(self.get_parameter(source_param_name), self.get_parameter(target_param_name)):
+                        logger.warning(
+                            f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
+                            f"{target_param_name}, but both are present in the checkpoints with different values, so we will NOT "
+                            "tie them. You should update the config with `tie_word_embeddings=False` to silence this warning."
+                        )
+                        # Remove from internal attribute to correctly reflect actual tied weights
+                        self.all_tied_weights_keys.pop(target_param_name)
+                        # Skip to next iteration
+                        continue
                 # We're missing the source but we have the target -> we swap them, tying the parameter that exists
                 elif not source_is_there and target_is_there:
                     target_param_name, source_param_name = source_param_name, target_param_name
@@ -3591,9 +3616,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return super().float(*args)
 
     @classmethod
-    def get_init_context(cls, dtype: torch.dtype, is_quantized: bool, _is_ds_init_called: bool):
+    def get_init_context(
+        cls, dtype: torch.dtype, is_quantized: bool, _is_ds_init_called: bool, allow_all_kernels: bool | None
+    ):
         # Need to instantiate with correct dtype
         init_contexts = [local_torch_dtype(dtype, cls.__name__), init.no_tie_weights(), apply_patches()]
+        # Needed as we cannot forward the `allow_all_kernels` arg in the model's __init__
+        if allow_all_kernels:
+            init_contexts.append(allow_all_hub_kernels())
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
@@ -3917,6 +3947,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
+        allow_all_kernels = kwargs.pop("allow_all_kernels", False)
         use_kernels = kwargs.pop("use_kernels", False)
         kernel_config = kwargs.pop("kernel_config", None)
         key_mapping = kwargs.pop("key_mapping", None)
@@ -4065,7 +4096,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         )
 
         config.name_or_path = pretrained_model_name_or_path
-        model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called)
+        model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called, allow_all_kernels)
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         with ContextManagers(model_init_context):
@@ -4160,6 +4191,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         state_dict: dict | None,
         checkpoint_files: list[str] | None,
         load_config: LoadStateDictConfig,
+        expected_keys: list[str] | None = None,
     ) -> tuple[LoadStateDictInfo, dict]:
         """Perform the actual loading of some checkpoints into a `model`, by reading them from disk and dispatching them accordingly."""
         is_quantized = load_config.is_quantized
@@ -4169,7 +4201,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         }
 
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
-        expected_keys = list(model.state_dict().keys())
+        expected_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys
 
         if logger.level >= logging.WARNING:
             verify_tp_plan(expected_keys, getattr(model, "_tp_plan", None))
@@ -4523,8 +4555,23 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         `_initialize_weights`. Indeed, since the corresponding weights are missing from the state dict, they will not be replaced and need to
         be initialized correctly (i.e. weight initialization distribution).
 
-        Params that are not missing have the `is_hf_initialized` flag.
+        Also marks non-missing params/buffers with `_is_hf_initialized` and propagates this flag to modules,
+        so that `_initialize_weights` can skip fully-initialized modules entirely.
         """
+        if is_fsdp_enabled() and not is_local_dist_rank_0():
+            # Handle FSDP edge case when using cpu ram efficient loading to ensure it is marked as initialized
+            # since it will get its weights broadcasted from rank0
+            # We actually need to do that only because we want to re-initialize non-persistent buffers with correct values.
+            # Everything else in the state_dict will be gathered from rank0, so we don't need re-initialization.
+            # We could simply early return after buffer inits if we had a way to init only the non-persistent buffers
+            for key in self.state_dict():
+                try:
+                    param_or_buffer = self.get_parameter_or_buffer(key)
+                    param_or_buffer._is_hf_initialized = True
+                except AttributeError:
+                    pass  # may happen when handling pre-quantized weights
+            self._is_hf_initialized = True
+
         # This will only initialize submodules that are not marked as initialized by the line above.
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
@@ -4587,11 +4634,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Note: this is never an issue in main Transformers, as we never do module-tying, only parameter-tying, and we know
         # which params are supposed to be tied to which other params
         if self.is_remote_code():
-            # Remove those that are already initialized, but appear as missing due to module tying
+            # Remove those that are already initialized, but appear as missing due to module tying (only if they are not known
+            # tied weights, i.e. we did not explicitly mark them as initialized just above)
             loading_info.missing_keys = {
                 key
                 for key in loading_info.missing_keys
-                if not getattr(self.get_parameter_or_buffer(key), "_is_hf_initialized", False)
+                if key in self.all_tied_weights_keys
+                or not getattr(self.get_parameter_or_buffer(key), "_is_hf_initialized", False)
             }
 
     def get_parameter_or_buffer(self, target: str):

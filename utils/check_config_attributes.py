@@ -73,6 +73,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "Sam3VisionConfig": ["backbone_feature_sizes"],
     "SamHQVisionConfig": ["mlp_ratio"],
     "ClapAudioConfig": ["num_classes"],
+    "ClvpDecoderConfig": ["add_cross_attention"],
     "SpeechT5HifiGanConfig": ["sampling_rate"],
     "UdopConfig": ["feed_forward_proj"],
     "ZambaConfig": ["attn_layer_offset", "attn_layer_period"],
@@ -132,6 +133,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "IdeficsPerceiverConfig": True,
     "GptOssConfig": True,
     "LwDetrConfig": True,
+    "NemotronHConfig": True,
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)

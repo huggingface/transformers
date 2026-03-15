@@ -15,7 +15,7 @@
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..detr import DetrConfig
 
@@ -23,46 +23,21 @@ from ..detr import DetrConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="facebook/maskformer-swin-base-ade")
 class MaskFormerConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MaskFormerModel`]. It is used to instantiate a
-    MaskFormer model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the MaskFormer
-    [facebook/maskformer-swin-base-ade](https://huggingface.co/facebook/maskformer-swin-base-ade) architecture trained
-    on [ADE20k-150](https://huggingface.co/datasets/scene_parse_150).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Currently, MaskFormer only supports the [Swin Transformer](swin) as backbone.
-
-    Args:
-        mask_feature_size (`int`, *optional*, defaults to 256):
-            The masks' features size, this value will also be used to specify the Feature Pyramid Network features'
-            size.
-        no_object_weight (`float`, *optional*, defaults to 0.1):
-            Weight to apply to the null (no object) class.
-        use_auxiliary_loss(`bool`, *optional*, defaults to `False`):
-            If `True` [`MaskFormerForInstanceSegmentationOutput`] will contain the auxiliary losses computed using the
-            logits from each decoder's stage.
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `SwinConfig()`):
-            The configuration passed to the backbone, if unset, the configuration corresponding to
-            `swin-base-patch4-window12-384` will be used.
-        decoder_config (`Dict`, *optional*):
-            The configuration passed to the transformer decoder model, if unset the base config for `detr-resnet-50`
-            will be used.
-        init_std (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        init_xavier_std (`float`, *optional*, defaults to 1):
-            The scaling factor used for the Xavier initialization gain in the HM Attention map module.
-        dice_weight (`float`, *optional*, defaults to 1.0):
-            The weight for the dice loss.
-        cross_entropy_weight (`float`, *optional*, defaults to 1.0):
-            The weight for the cross entropy loss.
-        mask_weight (`float`, *optional*, defaults to 20.0):
-            The weight for the mask loss.
-        output_auxiliary_logits (`bool`, *optional*):
-            Should the model output its `auxiliary_logits` or not.
+    cross_entropy_weight (`float`, *optional*, defaults to 1.0):
+        The weight for the cross entropy loss.
+    mask_feature_size (`int`, *optional*, defaults to 256):
+        The masks' features size, this value will also be used to specify the Feature Pyramid Network features'
+        size.
+    fpn_feature_size (`int`, *optional*, defaults to 256):
+        The Feature Pyramid Network's features size.
+    decoder_config (`Dict`, *optional*):
+        The configuration passed to the transformer decoder model, if unset the base config for `detr-resnet-50`
+        will be used.
+    output_auxiliary_logits (`bool`, *optional*):
+        Should the model output its `auxiliary_logits` or not.
 
     Raises:
         `ValueError`:

@@ -218,12 +218,12 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
                 stacked_images = self.center_crop(stacked_images, crop_size)
-            if do_pad:
-                stacked_images = self.pad_image(stacked_images, size_divisor)
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
+            if do_pad:
+                stacked_images = self.pad_image(stacked_images, size_divisor)
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)

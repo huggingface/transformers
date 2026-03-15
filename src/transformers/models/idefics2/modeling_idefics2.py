@@ -187,7 +187,7 @@ def eager_attention_forward(
     attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     if hasattr(module, "num_key_value_groups"):
         key = repeat_kv(key, module.num_key_value_groups)
@@ -437,9 +437,6 @@ class Idefics2PreTrainedModel(PreTrainedModel):
 class Idefics2VisionTransformer(Idefics2PreTrainedModel):
     config: Idefics2VisionConfig
     input_modalities = ("image",)
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
     _can_record_outputs = {
         "hidden_states": Idefics2EncoderLayer,
         "attentions": Idefics2VisionAttention,
@@ -867,7 +864,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) == patch_size * patch_size).bool()
         # Get sequence from the vision encoder
         image_outputs = self.vision_model(
-            pixel_values=pixel_values, patch_attention_mask=patch_attention_mask, return_dict=True, **kwargs
+            pixel_values=pixel_values, patch_attention_mask=patch_attention_mask, **kwargs
         )
         image_hidden_states = image_outputs.last_hidden_state
 
@@ -903,7 +900,6 @@ class Idefics2Model(Idefics2PreTrainedModel):
         pixel_attention_mask: torch.BoolTensor | None = None,
         image_hidden_states: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | Idefics2BaseModelOutputWithPast:
         r"""
@@ -937,9 +933,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         if pixel_values is not None and image_hidden_states is not None:
             raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
         elif pixel_values is not None:
-            image_hidden_states = self.get_image_features(
-                pixel_values, pixel_attention_mask, return_dict=True
-            ).pooler_output
+            image_hidden_states = self.get_image_features(pixel_values, pixel_attention_mask, **kwargs).pooler_output
         elif image_hidden_states is not None:
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=input_ids.device)
 
@@ -959,7 +953,6 @@ class Idefics2Model(Idefics2PreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1028,10 +1021,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         image_hidden_states: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Idefics2CausalLMOutputWithPast:
@@ -1083,12 +1072,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         ['In this image, we can see the city of New York, and more specifically the Statue of Liberty. In this image, we can see the city of New York, and more specifically the Statue of Liberty.\n\n', 'In which city is that bridge located?\n\nThe bridge is located in the city of Pittsburgh, Pennsylvania.\n\n\nThe bridge is']
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
@@ -1100,10 +1083,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
             pixel_attention_mask=pixel_attention_mask,
             image_hidden_states=image_hidden_states,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            cache_position=cache_position,
-            return_dict=True,
             **kwargs,
         )
 
@@ -1133,7 +1112,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         pixel_values=None,
         pixel_attention_mask=None,
         image_hidden_states=None,
@@ -1149,7 +1127,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             pixel_values=pixel_values,
             pixel_attention_mask=pixel_attention_mask,
             image_hidden_states=image_hidden_states,

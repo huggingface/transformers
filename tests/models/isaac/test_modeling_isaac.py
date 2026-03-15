@@ -718,6 +718,33 @@ class IsaacPixelShufflePaddedTest(unittest.TestCase):
 
 
 @require_torch
+class IsaacPixelShufflePaddedTest(unittest.TestCase):
+    def test_pixel_shuffle_padded_matches_reference_no_attention_mask(self):
+        x = torch.arange(2 * 16 * 4, device=torch_device, dtype=torch.float32).view(2, 16, 4)
+        token_grids = torch.tensor([[4, 4], [2, 4]], device=torch_device, dtype=torch.long)
+        expected_hidden, expected_mask, expected_lengths = _pixel_shuffle_reference(x, token_grids, scale_factor=2)
+
+        hidden = pixel_shuffle_padded(x=x, token_grids=token_grids, scale_factor=2)
+
+        torch.testing.assert_close(hidden, expected_hidden)
+
+    def test_pixel_shuffle_padded_raises_on_non_divisible_grid(self):
+        x = torch.randn(1, 15, 8, device=torch_device)
+        token_grids = torch.tensor([[3, 5]], device=torch_device, dtype=torch.long)
+
+        with pytest.raises(ValueError, match="divisible"):
+            pixel_shuffle_padded(x=x, token_grids=token_grids, scale_factor=2)
+
+    def test_pixel_shuffle_padded_zero_grid(self):
+        x = torch.randn(1, 4, 8, device=torch_device)
+        token_grids = torch.tensor([[0, 0]], device=torch_device, dtype=torch.long)
+
+        hidden = pixel_shuffle_padded(x=x, token_grids=token_grids, scale_factor=2)
+
+        self.assertEqual(hidden.shape, (1, 0, 32))
+
+
+@require_torch
 @require_flash_attn
 class IsaacAttentionDtypeTest(unittest.TestCase):
     def _make_config(self):

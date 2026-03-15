@@ -111,6 +111,7 @@ _import_structure = {
     "generation": [
         "AsyncTextIteratorStreamer",
         "CompileConfig",
+        "ContinuousBatchingConfig",
         "GenerationConfig",
         "TextIteratorStreamer",
         "TextStreamer",
@@ -549,6 +550,7 @@ if TYPE_CHECKING:
     from .generation import BayesianDetectorModel as BayesianDetectorModel
     from .generation import ClassifierFreeGuidanceLogitsProcessor as ClassifierFreeGuidanceLogitsProcessor
     from .generation import CompileConfig as CompileConfig
+    from .generation import ContinuousBatchingConfig as ContinuousBatchingConfig
     from .generation import ContinuousBatchingManager as ContinuousBatchingManager
     from .generation import ContinuousMixin as ContinuousMixin
     from .generation import EncoderNoRepeatNGramLogitsProcessor as EncoderNoRepeatNGramLogitsProcessor

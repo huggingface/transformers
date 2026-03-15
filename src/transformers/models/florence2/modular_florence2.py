@@ -48,53 +48,24 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="florence-community/Florence-2-base")
 class Florence2VisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Florence2VisionModel`]. It is used to instantiate a Florence2VisionModel
-    according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Florence2VisionModel architecture.
+    window_size (`int`, *optional*, defaults to 12):
+        The window size of the model.
+    depths (`Tuple[int]`, *optional*, defaults to `(1, 1, 9, 1)`):
+        The depth of the model.
+    patch_stride (`Tuple[int]`, *optional*, defaults to `(4, 2, 2, 2)`):
+        The patch stride of the image.
+    patch_padding (`Tuple[int]`, *optional*, defaults to `(3, 1, 1, 1)`):
+        The patch padding of the image.
+    patch_prenorm (`Tuple[bool]`, *optional*, defaults to `(False, True, True, True)`):
+        Whether to apply layer normalization before the patch embedding layer.
+    num_groups (`Tuple[int]`, *optional*, defaults to `(4, 8, 16, 32)`):
+        The number of groups.
+    max_temporal_embeddings (`int`, *optional*, defaults to 100):
+        The configuration of the visual temporal embedding.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        in_channels (`int`, *optional*, defaults to 3):
-            Number of input image channels.
-        depths (`Tuple[int]`, *optional*, defaults to `(1, 1, 9, 1)`):
-            The depth of the model.
-        patch_size (`Tuple[int]`, *optional*, defaults to `(7, 3, 3, 3)`):
-            The patch size of the image.
-        patch_stride (`Tuple[int]`, *optional*, defaults to `(4, 2, 2, 2)`):
-            The patch stride of the image.
-        patch_padding (`Tuple[int]`, *optional*, defaults to `(3, 1, 1, 1)`):
-            The patch padding of the image.
-        patch_prenorm (`Tuple[bool]`, *optional*, defaults to `(False, True, True, True)`):
-            Whether to apply layer normalization before the patch embedding layer.
-        embed_dim (`Tuple[int]`, *optional*, defaults to `(128, 256, 512, 1024)`):
-            The dimension of the embedding layer.
-        num_heads (`Tuple[int]`, *optional*, defaults to `(4, 8, 16, 32)`):
-            The number of attention heads.
-        num_groups (`Tuple[int]`, *optional*, defaults to `(4, 8, 16, 32)`):
-            The number of groups.
-        window_size (`int`, *optional*, defaults to 12):
-            The window size of the model.
-        drop_path_rate (`float`, *optional*, defaults to 0.1):
-            The dropout rate of the drop path layer.
-        mlp_ratio (`int`, *optional*, defaults to 4.0):
-            Ratio of mlp hidden dim to embedding dim.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            If True, add a learnable bias to query, key, value.
-        activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        projection_dim (`int`, *optional*, defaults to 1024):
-            The dimension of the projection layer.
-        max_temporal_embeddings (`int`, *optional*, defaults to 100):
-            The configuration of the visual temporal embedding.
-        max_position_embeddings (`int`, *optional*, defaults to 50):
-            The configuration of the image position embedding.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     Example:
 
     ```python
@@ -156,29 +127,9 @@ class Florence2VisionConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="florence-community/Florence-2-base")
 class Florence2Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Florence2ForConditionalGeneration`]. It is used to instantiate an
-    Florence-2 model according to the specified arguments, defining the model architecture.
-
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the Florence-2
-    [florence-community/Florence-2-base](https://huggingface.co/florence-community/Florence-2-base) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`AutoConfig`].
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`Florence2VisionConfig`].
-        image_token_id (`int`, *optional*, defaults to 51289):
-            The image token index to encode the image prompt.
-        is_encoder_decoder (bool, optional, *optional*, defaults to `True`):
-            Whether the model is used as an encoder/decoder or not.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
-
     Example:
 
     ```python
@@ -1409,6 +1360,8 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
     def forward(
         self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
+        target_dtype = self.convs[0].conv.weight.dtype
+        hidden_states = hidden_states.to(dtype=target_dtype)
         for conv, block in zip(self.convs, self.blocks):
             hidden_states = conv(hidden_states)
             for layer in block:
@@ -1531,7 +1484,7 @@ class Florence2Model(LlavaModel):
         pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
         """
-        image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
+        image_outputs = self.vision_tower(pixel_values, **kwargs)
         image_outputs.pooler_output = self.multi_modal_projector(image_outputs.last_hidden_state)
 
         return image_outputs
@@ -1550,18 +1503,8 @@ class Florence2Model(LlavaModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | Florence2Seq2SeqModelOutput:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if encoder_outputs is None:
             if (input_ids is None) ^ (inputs_embeds is not None):
                 raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1570,7 +1513,7 @@ class Florence2Model(LlavaModel):
                 inputs_embeds = self.get_input_embeddings()(input_ids)
 
             if pixel_values is not None:
-                image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
+                image_features = self.get_image_features(pixel_values).pooler_output
                 image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 special_image_mask = self.get_placeholder_mask(
                     input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -1580,9 +1523,7 @@ class Florence2Model(LlavaModel):
             encoder_outputs = self.language_model.encoder(
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=True,
+                **kwargs,
             )
 
         if decoder_input_ids is None:
@@ -1598,10 +1539,7 @@ class Florence2Model(LlavaModel):
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            cache_position=cache_position,
-            return_dict=True,
+            **kwargs,
         )
 
         return Florence2Seq2SeqModelOutput(
@@ -1649,10 +1587,6 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Florence2Seq2SeqLMOutput:
@@ -1685,12 +1619,6 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "A green car parked in front of a yellow building."
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if labels is not None:
             if use_cache:
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
@@ -1711,10 +1639,6 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1764,7 +1688,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
             inputs_embeds = self.get_input_embeddings()(inputs_tensor)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
+            image_features = self.get_image_features(pixel_values).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 inputs_tensor, inputs_embeds=inputs_embeds, image_features=image_features

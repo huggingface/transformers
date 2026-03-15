@@ -15,75 +15,17 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="adept/fuyu-8b")
 class FuyuConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FuyuForCausalLM`]. It is used to instantiate an
-    Fuyu model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the
-    [adept/fuyu-8b](https://huggingface.co/adept/fuyu-8b).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 262144):
-            Vocabulary size of the Fuyu model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`FuyuForCausalLM`]
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 16384):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 36):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 64):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"relu2"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 16384):
-            The maximum sequence length that this model might ever be used with.
-        image_size (`int`, *optional*, defaults to 300):
-            The input image size.
-        patch_size (`int`, *optional*, defaults to 30):
-            The input vision transformer encoding patch size.
-        num_channels (`int`, *optional*, defaults to 3):
-            The input image number of channels.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`. Whether to tie weight embeddings
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie input and output embeddings.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        qk_layernorm (`bool`, *optional*, defaults to `True`):
-            Whether or not to normalize the Queries and Keys after projecting the hidden states
-        hidden_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio after applying the MLP to the hidden states.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio after computing the attention scores.
-        pad_token_id (`int`, *optional*):
-            The id of the *padding* token.
-        bos_token_id (`int`, *optional*, defaults to 1):
-            The id of the *beginning-of-sequence* token.
-        eos_token_id (`Union[int, list[int]]`, *optional*, defaults to 2):
-            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
-        image_token_id (`int`, *optional*, defaults to 71011):
-            The id of the image placeholder token.
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize the `language``[`Aut`].
+    Example:
 
     ```python
     >>> from transformers import FuyuConfig

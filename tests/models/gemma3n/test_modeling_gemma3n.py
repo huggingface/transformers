@@ -36,6 +36,7 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     require_deterministic_for_xpu,
+    require_timm,
     require_torch,
     require_torch_accelerator,
     set_config_for_less_flaky_test,
@@ -269,7 +270,7 @@ class Gemma3nTextModelTester(CausalLMModelTester):
         num_attention_heads=2,
         num_key_value_heads=2,
         altup_num_inputs=2,
-        intermediate_size=21,
+        intermediate_size=22,
         hidden_activation="gelu_pytorch_tanh",
         max_position_embeddings=512,
         type_vocab_size=16,
@@ -313,6 +314,10 @@ class Gemma3nTextModelTester(CausalLMModelTester):
         self.eos_token_id = eos_token_id
         self.head_dim = self.hidden_size // self.num_attention_heads
         self.is_decoder = is_decoder
+        # NOTE(3outeille): must be 0.0 for TP backward tests. In train mode, non-zero dropout causes
+        # different RNG states between the non-TP and TP model forward passes (they run sequentially),
+        # leading to different dropout masks and mismatched losses.
+        self.attention_probs_dropout_prob = 0.0
 
 
 @require_torch
@@ -320,6 +325,7 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Gemma3nTextModelTester
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
+    training_overfit_steps = 400
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
@@ -769,6 +775,7 @@ class Gemma3nVision2TextModelTester:
 
 
 @require_torch
+@require_timm
 class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Gemma3nModel, Gemma3nForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (Gemma3nForConditionalGeneration,) if is_torch_available() else ()
