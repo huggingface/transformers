@@ -687,7 +687,7 @@ class RfDetrModel(LwDetrModel):
         object_query_undetach = torch.gather(
             object_query, 1, topk_proposals.unsqueeze(-1).expand(-1, -1, self.config.d_model)
         )
-        return object_query_undetach, topk_coords_logits
+        return object_query_undetach, topk_coords_logits, topk_coords_logits_undetach
 
     def forward(
         self,
@@ -751,6 +751,9 @@ class RfDetrModel(LwDetrModel):
         # potential multi-group query structures.
         group_detr = self.group_detr if self.training else 1
         topk = self.num_queries
+        topk_coords_logits = torch.empty(
+            (batch_size, topk * group_detr, 4), device=self.device, dtype=output_proposals.dtype
+        )
         enc_outputs_coord_logits = torch.empty(
             (batch_size, topk * group_detr, 4), device=self.device, dtype=output_proposals.dtype
         )
@@ -761,10 +764,11 @@ class RfDetrModel(LwDetrModel):
         # Now, we iteratively refine the object queries and their corresponding coordinates for each
         # query group to capture the highest-confidence candidates from the encoder stage.
         for group_id in range(group_detr):
-            object_query_undetach, topk_coords_logits = self.gen_topk_proposals(
+            object_query_undetach, topk_coords_logits, topk_coords_logits_undetach = self.gen_topk_proposals(
                 group_id, object_query_embedding, output_proposals, invalid_mask, topk
             )
-            enc_outputs_coord_logits[:, group_id * topk : (group_id + 1) * topk] = topk_coords_logits
+            topk_coords_logits[:, group_id * topk : (group_id + 1) * topk] = topk_coords_logits
+            enc_outputs_coord_logits[:, group_id * topk : (group_id + 1) * topk] = topk_coords_logits_undetach
             enc_outputs_class[:, group_id * topk : (group_id + 1) * topk] = object_query_undetach
 
         # We initialize our learnable query features and their spatial reference points,
@@ -784,7 +788,7 @@ class RfDetrModel(LwDetrModel):
         two_stage_len = enc_outputs_coord_logits.shape[-2]
         reference_points_two_stage_subset = reference_points[..., :two_stage_len, :]
         reference_points_subset = reference_points[..., two_stage_len:, :]
-        reference_points_two_stage_subset = refine_bboxes(enc_outputs_coord_logits, reference_points_two_stage_subset)
+        reference_points_two_stage_subset = refine_bboxes(topk_coords_logits, reference_points_two_stage_subset)
         reference_points = torch.cat([reference_points_two_stage_subset, reference_points_subset], dim=-2)
         init_reference_points = reference_points
 
