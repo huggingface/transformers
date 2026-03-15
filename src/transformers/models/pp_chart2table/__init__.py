@@ -20,7 +20,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_pp_chart2table import *
-    from .image_processing_pp_chart2table import *
     from .image_processing_pp_chart2table_fast import *
     from .modeling_pp_chart2table import *
     from .processing_pp_chart2table import *

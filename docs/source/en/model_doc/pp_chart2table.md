@@ -73,10 +73,10 @@ model = AutoModelForImageTextToText.from_pretrained(
     dtype="float32",
     device_map="auto",
 )
-processor = AutoProcessor.from_pretrained(model_path, use_fast=True)
+processor = AutoProcessor.from_pretrained(model_path, use_fast=True).to(model.device)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", stream=True).raw)
-inputs = processor(images=image).to(model.device)
+inputs = processor(images=image)
 
 generated_ids = model.generate(**inputs, use_cache=True, do_sample=False, max_new_tokens=256)
 generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
@@ -130,10 +130,10 @@ model = AutoModelForImageTextToText.from_pretrained(
     dtype="float32",
     device_map="auto",
 )
-processor = AutoProcessor.from_pretrained(model_path)
+processor = AutoProcessor.from_pretrained(model_path).to(model.device)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", stream=True).raw)
-inputs = processor(images=[image, image]).to(model.device)
+inputs = processor(images=[image, image])
 
 generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=256)
 generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
