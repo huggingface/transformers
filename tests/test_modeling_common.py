@@ -2303,11 +2303,17 @@ class ModelTesterMixin:
                 model.eval()
 
                 output_embeds = model.get_output_embeddings()
-                # Some models return None or non-standard output embeddings (e.g. ModuleList for
-                # Bark, custom Embeddings class for Kyutai) that don't have a .weight attribute.
-                # The check must happen BEFORE resize_token_embeddings(), which also accesses
-                # output_embeds.weight internally and would raise AttributeError if it's absent.
-                if output_embeds is None or not hasattr(output_embeds, "weight"):
+                input_embeds = model.get_input_embeddings()
+                # Some models use non-standard embedding classes (e.g. KyutaiSpeechToTextEmbeddings)
+                # that wrap nn.Embedding but don't expose a top-level .weight attribute.
+                # resize_token_embeddings() accesses .weight on BOTH input and output embeddings
+                # internally (_get_resized_embeddings), so both guards must come before the call.
+                if (
+                    output_embeds is None
+                    or not hasattr(output_embeds, "weight")
+                    or input_embeds is None
+                    or not hasattr(input_embeds, "weight")
+                ):
                     continue
 
                 vocab_size = config.get_text_config().vocab_size
