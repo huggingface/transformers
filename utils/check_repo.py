@@ -244,6 +244,7 @@ IGNORE_NON_TESTED = (
         "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "BltGlobalTransformer",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
+        "VibeVoiceModel",  # Building part of bigger (tested) model. Tested implicitly through VibeVoiceForConditionalGeneration
         "HiggsAudioV2Model",  # Building part of bigger (tested) model. Tested implicitly through HiggsAudioV2ForConditionalGenerationIntegrationTest.
         "Ernie4_5_VLMoeTextModel",  # Building part of bigger (tested) model
         "Ernie4_5_VL_MoeForConditionalGeneration",  # BC alias
@@ -470,6 +471,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen3OmniMoeTalkerModel",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
+    "VibeVoiceModel",  # Building part of a bigger model
     "Ernie4_5_VLMoeTextModel",  # Building part of a bigger model
     "PeAudioFrameLevelModel",
     "Ernie4_5_VL_MoeForConditionalGeneration",  # BC Alias

@@ -10,6 +10,7 @@ deps = {
     "codecarbon": "codecarbon>=2.8.1",
     "datasets": "datasets>=2.15.0",
     "deepspeed": "deepspeed>=0.9.3",
+    "diffusers": "diffusers==0.35.2",
     "dill": "dill<0.3.5",
     "evaluate": "evaluate>=0.4.6",
     "faiss-cpu": "faiss-cpu",

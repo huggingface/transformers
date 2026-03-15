@@ -165,6 +165,7 @@ else:
             ("udop", "UdopProcessor"),
             ("unispeech", "Wav2Vec2Processor"),
             ("unispeech-sat", "Wav2Vec2Processor"),
+            ("vibevoice", "VibeVoiceProcessor"),
             ("vibevoice_asr", "VibeVoiceAsrProcessor"),
             ("video_llava", "VideoLlavaProcessor"),
             ("vilt", "ViltProcessor"),

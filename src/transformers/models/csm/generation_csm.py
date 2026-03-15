@@ -189,15 +189,16 @@ class CsmGenerationMixin(GenerationMixin):
         batch_size, cur_len = input_ids.shape[:2]
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
-        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
 
         # *************** Csm specific ***************
+        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
         if input_ids.ndim == 2 and model_kwargs.get("inputs_embeds") is None:
             # in the case where the passed input_ids correspond to text tokens, i.e. don't have a third dimension for codebook ids,
-            # we need to remove the input length to the MaxLengthCriteria stopping criteria has such input are not returned
+            # we need to remove the input length from the MaxLengthCriteria stopping criteria as such input are not returned
             for criterion in stopping_criteria:
                 if isinstance(criterion, MaxLengthCriteria):
                     criterion.max_length -= cur_len
+        model_kwargs.update({"output_hidden_states": True})
         # ============================================
 
         model_forward = (
@@ -225,10 +226,9 @@ class CsmGenerationMixin(GenerationMixin):
                 )
                 # prepare variable output controls (note: some models won't accept all output controls)
                 model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
+                # ============================================
                 outputs = model_forward(**model_inputs, return_dict=True)
             prefill_consumed = True
-
-            # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs,
                 model_kwargs,
@@ -238,8 +238,7 @@ class CsmGenerationMixin(GenerationMixin):
 
             # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
             # (the clone itself is always small)
-            next_token_logits = outputs.logits[:, -1, :].clone().float()
-            next_token_logits = next_token_logits.to(input_ids.device)
+            next_token_logits = outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=input_ids.device)
 
             # pre-process distribution
             next_token_scores = logits_processor(input_ids, next_token_logits)

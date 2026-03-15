@@ -112,6 +112,8 @@ class VibeVoiceAcousticTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
+    has_attentions = False
+    _is_composite = True
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -168,7 +170,11 @@ class VibeVoiceAcousticTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip("VibeVoiceAcousticTokenizerModel does not has no attribute `hf_device_map`")
+    @unittest.skip("VibeVoiceAcousticTokenizerModel has no attention mechanisms")
+    def test_can_set_attention_dynamically_composite_model(self):
+        pass
+
+    @unittest.skip("VibeVoiceAcousticTokenizerModel has composite structure with encoder/decoder")
     def test_model_parallelism(self):
         pass
 
@@ -306,7 +312,7 @@ class VibeVoiceAcousticTokenizerIntegrationTest(unittest.TestCase):
 
         # Load expected outputs
         RESULTS_PATH = (
-            Path(__file__).parent.parent.parent / "fixtures/vibevoice/expected_acoustic_tokenizer_results.json"
+            Path(__file__).parent.parent.parent / "fixtures/vibevoice_acoustic_tokenizer/expected_results.json"
         )
         with open(RESULTS_PATH, "r") as f:
             expected_results = json.load(f)
@@ -325,8 +331,8 @@ class VibeVoiceAcousticTokenizerIntegrationTest(unittest.TestCase):
         model = AutoModel.from_pretrained(
             self.model_checkpoint,
             dtype=dtype,
-            device_map=torch_device,
-        ).eval()
+            device_map="auto",
+        )
         processed_audio = feature_extractor(audio_arrays, sampling_rate=self.sampling_rate).to(
             torch_device, dtype=dtype
         )
