@@ -44,7 +44,6 @@ from ..lw_detr.modeling_lw_detr import (
     LwDetrModelOutput,
     LwDetrObjectDetectionOutput,
     LwDetrPreTrainedModel,
-    LwDetrScaleProjector,
     refine_bboxes,
 )
 
@@ -571,9 +570,9 @@ class RfDetrC2FLayer(LwDetrC2FLayer):
     pass
 
 
-class RfDetrScaleProjector(LwDetrScaleProjector):
+class RfDetrScaleProjector(nn.Module):
     def __init__(self, config: RfDetrConfig):
-        nn.Module.__init__(self)
+        super().__init__()
         intermediate_dims = [config.backbone_config.hidden_size] * len(config.backbone_config.out_indices)
         intermediate_dim = intermediate_dims[-1]
         projector_input_dim = intermediate_dim * len(intermediate_dims)
