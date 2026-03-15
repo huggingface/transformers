@@ -53,7 +53,20 @@ class Bnb4bitQuantize(ConversionOps):
             value = value.T
 
         old_value = model.get_parameter_or_buffer(full_layer_name)
-        new_value = bnb.nn.Params4bit(value, requires_grad=False, **old_value.__dict__).to(value.device)
+        target_device = value.device
+
+        # Create the Params4bit wrapper, then eagerly release all references to
+        # the float16 source tensor *before* quantizing.  Params4bit.__new__
+        # shares storage with `value` via torch.Tensor._make_subclass, so
+        # `value` keeps the original float16 GPU allocation alive even after
+        # _quantize() replaces the parameter's storage with 4-bit data.  On
+        # large models (35B+) this accumulates tens of GB of unreleased float16
+        # tensors and OOMs during from_pretrained.
+        new_value = bnb.nn.Params4bit(value, requires_grad=False, **old_value.__dict__)
+        del value
+        input_dict.clear()
+
+        new_value = new_value.to(target_device)
         module._is_hf_initialized = True
         return {full_layer_name: new_value}
 
