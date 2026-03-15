@@ -1389,7 +1389,6 @@ class IsaacModel(PreTrainedModel):
         past_key_values: list[torch.FloatTensor] | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         """
@@ -1473,12 +1472,7 @@ class IsaacModel(PreTrainedModel):
                 (batch_size, seq_len), MM_TOKEN_TYPE_TEXT, device=inputs_embeds.device, dtype=torch.long
             )
 
-        device = inputs_embeds.device
-        batch_size, seq_len = inputs_embeds.shape[:2]
-
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(past_seen_tokens, past_seen_tokens + seq_len, device=device)
 
         if attention_mask is None:
             attention_mask = torch.ones(inputs_embeds.shape[:2], device=inputs_embeds.device, dtype=torch.long)
@@ -1503,7 +1497,6 @@ class IsaacModel(PreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
