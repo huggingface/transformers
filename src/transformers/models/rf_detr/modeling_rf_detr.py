@@ -1498,6 +1498,21 @@ class RfDetrModel(RfDetrPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> RfDetrModelOutput:
         r"""
+        Forward pass of the model. The pipeline proceeds as follows:
+
+        1. Generate an initial set of object query embeddings and spatial location proposals from the
+           backbone's flattened output.
+        2. Initialize storage for refined encoder-stage predictions (accommodating multi-group query
+           structures) and iteratively refine object queries and their coordinates for each query group
+           to capture the highest-confidence candidates from the encoder stage.
+        3. Initialize learnable query features and spatial reference points (restricting to the primary
+           group during inference for efficiency).
+        4. Project the base reference points across the batch, refine them with the predicted coordinate
+           refinements (shifting attention to the discovered object locations before decoding), and expand
+           the target query features to match the batch dimensions.
+        5. Pass the refined queries and updated reference points through the transformer decoder to
+            aggregate detailed spatial context from the multi-scale features.
+
         Examples:
 
         ```python
@@ -1525,17 +1540,8 @@ class RfDetrModel(RfDetrPreTrainedModel):
         if pixel_mask is None:
             pixel_mask = torch.ones(((batch_size, height, width)), dtype=torch.long, device=device)
 
-        # We begin by extracting hierarchical feature maps from the backbone, which provides the
-        # multi-scale visual context for the detector.
         features, mask = self.backbone(pixel_values, pixel_mask)
 
-        # To prepare for transformer processing, we flatten the multi-scale features and masks
-        # while tracking spatial shapes and valid ratios to maintain cross-scale relationships.
-        # source_flatten (batch_size, sum(H*W), d_model) : flattened multi-scale feature maps
-        # mask_flatten (batch_size, sum(H*W)) : flattened mask
-        # spatial_shapes (num_levels, 2) : spatial shapes of the feature maps
-        # level_start_index (num_levels,) : start index of each level in source_flatten
-        # valid_ratios (batch_size, num_levels, 2) : valid ratios of the feature maps
         source_flatten = features.flatten(2).transpose(1, 2)
         mask_flatten = mask.flatten(1)
         spatial_shapes_list = [features.shape[2:]]
@@ -1543,14 +1549,12 @@ class RfDetrModel(RfDetrPreTrainedModel):
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = self.get_valid_ratio(mask, dtype=source_flatten.dtype).unsqueeze(1)
 
-        # Next, we generate an initial set of object query embeddings and spatial location proposals
-        # derived directly from the backbone's flattened output.
+        # Step 1.
         object_query_embedding, output_proposals, invalid_mask = self.gen_encoder_output_proposals(
             source_flatten, ~mask_flatten, spatial_shapes_list
         )
 
-        # We then initialize the storage for our refined encoder-stage predictions, accommodating
-        # potential multi-group query structures.
+        # Step 2.
         group_detr = self.group_detr if self.training else 1
         topk = self.num_queries
         topk_coords_logits = torch.empty(
@@ -1562,9 +1566,6 @@ class RfDetrModel(RfDetrPreTrainedModel):
         enc_outputs_class = torch.empty(
             (batch_size, topk * group_detr, self.config.d_model), device=self.device, dtype=output_proposals.dtype
         )
-
-        # Now, we iteratively refine the object queries and their corresponding coordinates for each
-        # query group to capture the highest-confidence candidates from the encoder stage.
         for group_id in range(group_detr):
             object_query_undetach, topk_coords_logits, topk_coords_logits_undetach = self.gen_topk_proposals(
                 group_id, object_query_embedding, output_proposals, invalid_mask, topk
@@ -1573,8 +1574,7 @@ class RfDetrModel(RfDetrPreTrainedModel):
             enc_outputs_coord_logits[:, group_id * topk : (group_id + 1) * topk] = topk_coords_logits_undetach
             enc_outputs_class[:, group_id * topk : (group_id + 1) * topk] = object_query_undetach
 
-        # We initialize our learnable query features and their spatial reference points,
-        # typically restricting the set to the primary group during inference for efficiency.
+        # Step 3.
         if self.training:
             reference_points = self.reference_point_embed.weight
             query_feat = self.query_feat.weight
@@ -1582,23 +1582,17 @@ class RfDetrModel(RfDetrPreTrainedModel):
             reference_points = self.reference_point_embed.weight[: self.num_queries]
             query_feat = self.query_feat.weight[: self.num_queries]
 
-        # Project the base reference points across the entire batch.
+        # Step 4.
         reference_points = reference_points.unsqueeze(0).expand(batch_size, -1, -1)
-
-        # We refine the initial reference points by applying the predicted coordinate refinements,
-        # effectively shifting our attention to the discovered object locations before decoding.
         two_stage_len = enc_outputs_coord_logits.shape[-2]
         reference_points_two_stage_subset = reference_points[..., :two_stage_len, :]
         reference_points_subset = reference_points[..., two_stage_len:, :]
         reference_points_two_stage_subset = refine_bboxes(topk_coords_logits, reference_points_two_stage_subset)
         reference_points = torch.cat([reference_points_two_stage_subset, reference_points_subset], dim=-2)
         init_reference_points = reference_points
-
-        # Expand our target query features to match the batch dimensions.
         target = query_feat.unsqueeze(0).expand(batch_size, -1, -1)
 
-        # Finally, we pass the refined queries and updated reference points through the transformer decoder,
-        # allowing them to aggregate detailed spatial context from the multi-scale features.
+        # Step 5.
         decoder_outputs = self.decoder(
             inputs_embeds=target,
             reference_points=reference_points,
@@ -1629,24 +1623,30 @@ class RfDetrModel(RfDetrPreTrainedModel):
     ) -> tuple[Tensor, Tensor]:
         """
         Generates and selects the top-k object query embeddings and bounding box proposals for a specific query group.
+
+        The pipeline proceeds as follows:
+
+        1. Project and normalize the base query embeddings for the specific query group.
+        2. Predict classification scores and bounding box refinements for the current query features.
+        3. Apply the predicted deltas to the initial proposals to obtain refined spatial coordinates.
+        4. Identify the indices of the highest-confidence predictions and gather the refined coordinates for these
+           top-k candidates (detached to prevent gradient flow back to the proposal generation stage).
+        5. Gather the associated query features to be used as starting points for the decoder stage.
         """
-        # We start by projecting and normalizing the base query embeddings for the specific query group.
+        # Step 1.
         object_query = self.enc_output[group_id](object_query_embedding)
         object_query = self.enc_output_norm[group_id](object_query)
 
-        # Predict classification scores and bounding box refinements for the current query features.
+        # Step 2.
         enc_outputs_class_proposals = self.enc_out_class_embed[group_id](object_query)
         enc_outputs_class_proposals = enc_outputs_class_proposals.masked_fill(invalid_mask, float("-inf"))
         delta_bbox = self.enc_out_bbox_embed[group_id](object_query)
 
-        # Apply the predicted deltas to the initial proposals to obtain refined spatial coordinates.
+        # Step 3.
         enc_outputs_coord = refine_bboxes(output_proposals, delta_bbox)
 
-        # Identify the indices of the highest-confidence predictions based on their classification logits.
+        # Step 4.
         topk_proposals = torch.topk(enc_outputs_class_proposals.max(-1)[0], topk, dim=1)[1]
-
-        # Gather the refined coordinates corresponding to these top-k candidates, detaching
-        # them to prevent gradient flow back to the proposal generation stage if necessary.
         topk_coords_logits_undetach = torch.gather(
             enc_outputs_coord,
             1,
@@ -1654,7 +1654,7 @@ class RfDetrModel(RfDetrPreTrainedModel):
         )
         topk_coords_logits = topk_coords_logits_undetach.detach()
 
-        # Similarly, gather the associated query features to be used as starting points for the decoder stage.
+        # Step 5.
         object_query_undetach = torch.gather(
             object_query, 1, topk_proposals.unsqueeze(-1).expand(-1, -1, self.config.d_model)
         )
@@ -1778,6 +1778,14 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
             respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
             in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
 
+        The forward pass proceeds as follows:
+
+        1. Process the visual input through the base RF-DETR model to obtain the transformer's last hidden state and
+           the final sequence of reference points.
+        2. First stage: Generate classification logits from the encoder's proposed object query embeddings.
+        3. Second stage: Predict the final classification labels and refined bounding boxes using the decoder's last hidden state
+           and the most recent reference points.
+
         Examples:
 
         ```python
@@ -1809,19 +1817,16 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
         Detected cat with confidence 0.789 at location [342.19, 24.3, 640.02, 372.25]
         Detected remote with confidence 0.633 at location [40.79, 72.78, 176.76, 117.25]
         ```"""
-        # We start by processing the visual input through the base RF-DETR model to obtain
-        # the transformer's last hidden state and the final sequence of reference points.
+        # Step 1.
         outputs = self.model(pixel_values, pixel_mask=pixel_mask, **kwargs)
 
         last_hidden_states = outputs.last_hidden_state
         intermediate_reference_points = outputs.intermediate_reference_points
 
-        # In the first stage, we generate classification logits derived directly from the
-        # encoder's proposed object query embeddings.
+        # Step 2.
         enc_outputs_class_logits = self.predict_encoder_class_logits(outputs.enc_outputs_class)
 
-        # For the second stage, we predict the final classification labels and refined bounding
-        # boxes using the decoder's last hidden state and the most recent reference points.
+        # Step 3.
         logits, pred_boxes = self.predict_class_and_boxes(last_hidden_states, intermediate_reference_points[-1])
 
         loss, loss_dict, auxiliary_outputs = None, None, None
