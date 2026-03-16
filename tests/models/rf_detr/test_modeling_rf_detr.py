@@ -218,7 +218,6 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     is_encoder_decoder = False
     test_missing_keys = False
-    test_torch_exportable = True
 
     @unittest.skip(
         "DINOv2 uses full (non-windowed) attention over long sequences; bfloat16 eager/FA2 differences exceed the test tolerance."
@@ -412,7 +411,6 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
-            print("Model class:", model_class)
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
@@ -651,7 +649,6 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
             for t in inputs["labels"]
         ]
 
-        print(inputs)
         torch.manual_seed(0)
         outputs = model(**inputs)
 
