@@ -148,19 +148,26 @@ print(result)
 
 [[autodoc]] PPChart2TableForConditionalGeneration
 
+## PPChart2TableModel
+
+[[autodoc]] PPChart2TableModel
+
 ## PPChart2TableConfig
 
 [[autodoc]] PPChart2TableConfig
+
+## PPChart2TableVisionPreTrainedModel
+
+[[autodoc]] PPChart2TableVisionPreTrainedModel
+
+## PPChart2TablePreTrainedModel
+
+[[autodoc]] PPChart2TablePreTrainedModel
 
 ## PPChart2TableImageProcessorFast
 
 [[autodoc]] PPChart2TableImageProcessorFast
 
-## PPChart2TableModel
-
-[[autodoc]] PPChart2TableModel
-
 ## PPChart2TableProcessor
 
 [[autodoc]] PPChart2TableProcessor
-

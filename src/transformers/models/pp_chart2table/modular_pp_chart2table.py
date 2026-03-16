@@ -13,17 +13,15 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 import torch.nn as nn
-import torchvision.transforms.v2.functional as tvF
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
-from ...image_utils import ImageInput, SizeDict
+from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, TensorType, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2Config
@@ -65,8 +63,8 @@ class PPChart2TableConfig(GotOcr2Config):
 @auto_docstring
 class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
     resample = 3
-    image_mean = [0.40821073, 0.4578275, 0.48145466]
-    image_std = [0.27577711, 0.26130258, 0.26862954]
+    image_mean = [0.48145466, 0.4578275, 0.40821073]
+    image_std = [0.26862954, 0.26130258, 0.27577711]
     size = {"height": 1024, "width": 1024}
     patch_size = 16
     merge_size = 4
@@ -142,6 +140,11 @@ class PPChart2TableVisionEncoder(GotOcr2VisionEncoder, PPChart2TableVisionPreTra
 
 @dataclass
 class PPChart2TableModelOutputWithPast(GotOcr2ModelOutputWithPast):
+    pass
+
+
+@auto_docstring
+class PPChart2TablePreTrainedModel(GotOcr2PreTrainedModel):
     pass
 
 
