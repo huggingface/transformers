@@ -4,6 +4,20 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_uvdoc.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from dataclasses import dataclass
 from typing import Any
 
@@ -14,18 +28,12 @@ import torch.nn.functional as F
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple
+from ...utils import auto_docstring, can_return_tuple
 from ...utils.output_capturing import capture_outputs
 from .configuration_uvdoc import UVDocConfig
 
 
 class UVDocResidualBlockWithDilation(nn.Module):
-    """
-    Residual block with optional dilated convolution for UVDoc backbone.
-    Uses standard convolution for downsampling layers and dilated convolution for middle layers
-    to balance spatial resolution and receptive field size.
-    """
-
     def __init__(
         self,
         in_channels: int,
@@ -34,20 +42,7 @@ class UVDocResidualBlockWithDilation(nn.Module):
         stride: int = 1,
         downsample: bool | None = None,
         is_top: bool = False,
-    ) -> None:
-        """
-        Initialize residual block with dilation support.
-
-        Args:
-            in_channels (`int`): Number of input channels
-            out_channels (`int`): Number of output channels
-            kernel_size (`int`): Size of convolutional kernel
-            stride (`int`, *optional*, defaults to 1): Stride of the first convolution
-            downsample (`bool`, *optional*, defaults to None):
-                Downsampling layer for residual connection (when stride != 1 or channel mismatch)
-            is_top (`bool`, *optional*, defaults to False):
-                Whether this is the first block in the layer (uses standard conv instead of dilated conv)
-        """
+    ):
         super().__init__()
 
         self.downsample = downsample
@@ -59,7 +54,7 @@ class UVDocResidualBlockWithDilation(nn.Module):
                 stride=stride,
                 padding=kernel_size // 2,
             )
-            self.downsample_bn = nn.BatchNorm2d(out_channels)
+            self.downsample_norm = nn.BatchNorm2d(out_channels)
 
         if stride != 1 or is_top:
             stride1, padding, dilation = stride, kernel_size // 2, 1
@@ -69,33 +64,27 @@ class UVDocResidualBlockWithDilation(nn.Module):
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size, stride1, padding, dilation=dilation)
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size, 1, padding, dilation=dilation)
 
-        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.norm1 = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU()
-        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.norm2 = nn.BatchNorm2d(out_channels)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         identity = hidden_state
         if self.downsample:
             identity = self.downsample_conv(hidden_state)
-            identity = self.downsample_bn(identity)
+            identity = self.downsample_norm(identity)
 
         hidden_state = self.conv1(hidden_state)
-        hidden_state = self.bn1(hidden_state)
+        hidden_state = self.norm1(hidden_state)
         hidden_state = self.relu(hidden_state)
         hidden_state = self.conv2(hidden_state)
-        hidden_state = self.bn2(hidden_state)
+        hidden_state = self.norm2(hidden_state)
         hidden_state += identity
         hidden_state = self.relu(hidden_state)
         return hidden_state
 
 
 class UVDocResNetStraight(nn.Module):
-    """
-    Modified ResNet backbone for UVDoc with dilated residual blocks.
-    Extracts multi-scale features from document images through progressive downsampling,
-    using dilated convolution to maintain large receptive fields.
-    """
-
     def __init__(self, config) -> None:
         super().__init__()
         self.in_channels = config.num_filter * config.map_num[0]
@@ -148,7 +137,7 @@ class UVDocResNetHead(nn.Module):
             stride=2,
             padding=kernel_size // 2,
         )
-        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.norm1 = nn.BatchNorm2d(out_channels)
         self.relu1 = nn.ReLU()
 
         self.conv2 = nn.Conv2d(
@@ -159,37 +148,18 @@ class UVDocResNetHead(nn.Module):
             stride=2,
             padding=kernel_size // 2,
         )
-        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.norm2 = nn.BatchNorm2d(out_channels)
         self.relu2 = nn.ReLU()
 
     def forward(self, hidden_state):
         hidden_state = self.conv1(hidden_state)
-        hidden_state = self.bn1(hidden_state)
+        hidden_state = self.norm1(hidden_state)
         hidden_state = self.relu1(hidden_state)
 
         hidden_state = self.conv2(hidden_state)
-        hidden_state = self.bn2(hidden_state)
+        hidden_state = self.norm2(hidden_state)
         hidden_state = self.relu2(hidden_state)
         return hidden_state
-
-
-@dataclass
-class UVDocModelOutput(ModelOutput):
-    """
-    Output class for UVDoc model forward pass.
-
-    Args:
-        logits (`torch.FloatTensor`, *optional*):
-            Rectified document image tensor of shape [B, C, H, W]
-        last_hidden_state (`torch.FloatTensor`, *optional*):
-            Last hidden state from bridge layers of shape [B, C, H, W]
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of hidden states from each bridge layer
-    """
-
-    logits: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring(
@@ -197,11 +167,6 @@ class UVDocModelOutput(ModelOutput):
     """
 )
 class UVDocPreTrainedModel(PreTrainedModel):
-    """
-    Base class for all UVDoc pre-trained models.
-    Inherits from Hugging Face PreTrainedModel and sets UVDoc-specific configurations.
-    """
-
     config: UVDocConfig
     base_model_prefix = "uvdoc"
     main_input_name = "pixel_values"
@@ -209,11 +174,6 @@ class UVDocPreTrainedModel(PreTrainedModel):
 
 
 class UVDocConvLayer(nn.Module):
-    """
-    Convolutional layer used in UVDoc model.
-    Consists of a convolutional operation followed by batch normalization and ReLU activation.
-    """
-
     def __init__(
         self,
         in_channels: int,
@@ -225,7 +185,7 @@ class UVDocConvLayer(nn.Module):
         activation: str = "relu",
     ):
         super().__init__()
-        self.convolution = nn.Conv2d(
+        self.conv = nn.Conv2d(
             in_channels,
             out_channels,
             bias=False,
@@ -234,13 +194,13 @@ class UVDocConvLayer(nn.Module):
             padding=padding,
             dilation=dilation,
         )
-        self.normalization = nn.BatchNorm2d(out_channels)
-        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
+        self.norm = nn.BatchNorm2d(out_channels)
+        self.act_fn = ACT2FN[activation] if activation is not None else nn.Identity()
 
     def forward(self, hidden_state):
-        hidden_state = self.convolution(hidden_state)
-        hidden_state = self.normalization(hidden_state)
-        hidden_state = self.activation(hidden_state)
+        hidden_state = self.conv(hidden_state)
+        hidden_state = self.norm(hidden_state)
+        hidden_state = self.act_fn(hidden_state)
         return hidden_state
 
 
@@ -270,7 +230,7 @@ class UVDocPointPositions2D(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.convolution1 = nn.Conv2d(
+        self.conv1 = nn.Conv2d(
             config.num_filter * config.map_num[2],
             config.num_filter * config.map_num[0],
             bias=False,
@@ -279,9 +239,9 @@ class UVDocPointPositions2D(nn.Module):
             padding=config.kernel_size // 2,
             padding_mode=config.padding_mode,
         )
-        self.normalization1 = nn.BatchNorm2d(config.num_filter * config.map_num[0])
+        self.norm1 = nn.BatchNorm2d(config.num_filter * config.map_num[0])
         self.prelu = nn.PReLU()
-        self.convolution2 = nn.Conv2d(
+        self.conv2 = nn.Conv2d(
             config.num_filter * config.map_num[0],
             2,
             kernel_size=config.kernel_size,
@@ -291,31 +251,16 @@ class UVDocPointPositions2D(nn.Module):
         )
 
     def forward(self, hidden_state):
-        hidden_state = self.convolution1(hidden_state)
-        hidden_state = self.normalization1(hidden_state)
+        hidden_state = self.conv1(hidden_state)
+        hidden_state = self.norm1(hidden_state)
         hidden_state = self.prelu(hidden_state)
-        hidden_state = self.convolution2(hidden_state)
+        hidden_state = self.conv2(hidden_state)
         return hidden_state
 
 
-@auto_docstring(
-    custom_intro="""
-    """
-)
+@auto_docstring
 class UVDocModel(UVDocPreTrainedModel):
-    """
-    Core UVDoc model for document rectification.
-    Combines ResNet backbone, multi-scale bridge layers, and spatial transformation
-    to correct perspective distortion in document images.
-    """
-
     def __init__(self, config: UVDocConfig) -> None:
-        """
-        Initialize UVDoc core model with configuration.
-
-        Args:
-            config (`UVDocConfig`): UVDoc model configuration
-        """
         super().__init__(config)
 
         self.upsample_size = config.upsample_size
@@ -349,15 +294,7 @@ class UVDocModel(UVDocPreTrainedModel):
         self,
         hidden_state: torch.FloatTensor,
         **kwargs: Any,
-    ) -> tuple[torch.FloatTensor, ...] | UVDocModelOutput:
-        """
-        Forward pass of UVDoc core model for document rectification.
-
-        Args:
-            hidden_state (`torch.FloatTensor`): Input image tensor of shape [B, C, H, W]
-
-        """
-
+    ) -> tuple[torch.FloatTensor, ...] | BaseModelOutputWithNoAttention:
         identity = hidden_state
         original_height, original_width = hidden_state.shape[2:]
         hidden_state = F.interpolate(
@@ -391,48 +328,24 @@ class UVDocModel(UVDocPreTrainedModel):
         rearranged_bezier_mesh = upsampled_2d_bezier_mesh.permute(0, 2, 3, 1)
         rectified_image_output = F.grid_sample(identity, rearranged_bezier_mesh, align_corners=True)
 
-        return UVDocModelOutput(
-            logits=rectified_image_output,
-            last_hidden_state=last_hidden_state,
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=rectified_image_output,
         )
 
 
 @dataclass
 class UVDocForDocumentRectificationOutput(BaseModelOutputWithNoAttention):
-    """
-    Output class for UVDocForDocumentRectification forward pass.
-    Extends BaseModelOutputWithNoAttention with document rectification logits.
-
-    Args:
-        logits (`torch.FloatTensor`, *optional*):
-            Rectified document image tensor of shape [B, C, H, W]
-        shape (`torch.FloatTensor`, *optional*):
-            Reserved for future use (shape information)
-    """
-
     logits: torch.FloatTensor | None = None
-    shape: torch.FloatTensor | None = None
 
 
 @auto_docstring(
-    custom_intro="""
+    custom_intro=r"""
     """
 )
 class UVDocForDocumentRectification(UVDocPreTrainedModel):
-    """
-    Wrapper class for UVDoc model focused on document rectification task.
-    Provides a user-friendly interface for inference/training with standard Hugging Face API.
-    """
-
     _keys_to_ignore_on_load_missing = ["num_batches_tracked"]
 
     def __init__(self, config: UVDocConfig) -> None:
-        """
-        Initialize UVDoc document rectification wrapper model.
-
-        Args:
-            config (`UVDocConfig`): UVDoc model configuration
-        """
         super().__init__(config)
         self.model = UVDocModel(config)
         self.post_init()
@@ -443,19 +356,10 @@ class UVDocForDocumentRectification(UVDocPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Any,
-    ) -> tuple[torch.FloatTensor, ...] | UVDocForDocumentRectificationOutput:
-        """
-        Forward pass of UVDoc document rectification model.
-
-        Args:
-            pixel_values (`torch.FloatTensor`): Input image tensor of shape [B, C, H, W] (preprocessed)
-
-        """
-
+    ) -> tuple[torch.FloatTensor, ...] | BaseModelOutputWithNoAttention:
         outputs = self.model(pixel_values)
 
-        return UVDocForDocumentRectificationOutput(
-            logits=outputs.logits,
+        return BaseModelOutputWithNoAttention(
             last_hidden_state=outputs.last_hidden_state,
         )
 

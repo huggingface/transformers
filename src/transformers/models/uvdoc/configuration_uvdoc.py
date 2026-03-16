@@ -4,79 +4,68 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_uvdoc.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
 @auto_docstring(
-    custom_intro="""
-    """
+    checkpoint="PaddlePaddle/UVDoc_safetensors",
+    custom_args=r"""
+    num_filter (`int`, *optional*, defaults to 32):
+        The number of convolutional filters (output channels) in the initial convolutional layers of the model,
+        controlling the depth of feature maps extracted from input document images. Larger values increase
+        model capacity but also computational cost.
+    in_channels (`int`, *optional*, defaults to 3):
+        The number of input channels of the model. Defaults to 3 for RGB document images; set to 1 for grayscale
+        document images.
+    kernel_size (`int`, *optional*, defaults to 5):
+        The size of convolutional kernels used in the backbone network, typically an odd integer to ensure
+        symmetric padding and preserve spatial dimensions of feature maps.
+    map_num (`List[int]`, *optional*, defaults to `[1, 2, 4, 8, 16]`):
+        The scaling factors for feature map dimensions in multi-scale feature fusion modules, used to align
+        feature maps of different resolutions for document structure restoration.
+    block_nums (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
+        The number of residual blocks in each stage of the model backbone, determining the depth of the network.
+        More blocks enhance feature extraction capability but increase inference time.
+    dilation_values (`Dict[str, Union[int, List[int]]]`, *optional*, defaults to `None`):
+        A dictionary of dilation rates for dilated convolutional layers in bridge modules (e.g., "bridge_1": 1,
+        "bridge_4": [8, 3, 2]). Dilated convolution expands the receptive field without increasing kernel size,
+        critical for capturing long-range geometric dependencies in distorted documents. If `None`, default values
+        will be used:{
+            "bridge_1": 1,
+            "bridge_2": 2,
+            "bridge_3": 5,
+            "bridge_4": [8, 3, 2],
+            "bridge_5": [12, 7, 4],
+            "bridge_6": [18, 12, 6]
+        }
+    padding_mode (`str`, *optional*, defaults to `"reflect"`):
+    The padding mode for convolutional layers, used to handle boundary pixels of document images. Supported
+    modes include `"reflect"` (recommended for document rectification to avoid edge artifacts), `"constant"`,
+    and `"replicate"`.
+    upsample_size (`List[int]`, *optional*, defaults to `[712, 488]`):
+    The target spatial size (width, height) of the upsampled output image, matching the desired resolution
+    of the rectified document. Adjust based on your input document size and task requirements.
+    upsample_mode (`str`, *optional*, defaults to `"bilinear"`):
+    The interpolation mode for upsampling layers to restore the original image resolution. Supported modes
+    include `"bilinear"` (smooth upsampling, recommended for document images), `"nearest"`, and `"bicubic"`.
+    """,
 )
 class UVDocConfig(PreTrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`UVDocModel`]. It is used to instantiate a
-    UVDoc model according to the specified arguments, defining the model architecture for document rectification
-    (correcting perspective distortion, tilt, and geometric deformation of document images).
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the UVDoc
-    [PaddlePaddle/UVDoc](https://huggingface.co/PaddlePaddle/UVDoc) baseline architecture for document rectification tasks.
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-    Args:
-        num_filter (`int`, *optional*, defaults to 32):
-            The number of convolutional filters (output channels) in the initial convolutional layers of the model,
-            controlling the depth of feature maps extracted from input document images. Larger values increase
-            model capacity but also computational cost.
-        in_channels (`int`, *optional*, defaults to 3):
-            The number of input channels of the model. Defaults to 3 for RGB document images; set to 1 for grayscale
-            document images.
-        kernel_size (`int`, *optional*, defaults to 5):
-            The size of convolutional kernels used in the backbone network, typically an odd integer to ensure
-            symmetric padding and preserve spatial dimensions of feature maps.
-        stride (`List[int]`, *optional*, defaults to `[1, 2, 2, 2]`):
-            The list of stride values for convolutional layers in the model, controlling the downsampling rate of
-            feature maps at each stage. Stride=1 retains spatial resolution, while stride=2 halves the resolution
-            to capture larger receptive fields.
-        map_num (`List[int]`, *optional*, defaults to `[1, 2, 4, 8, 16]`):
-            The scaling factors for feature map dimensions in multi-scale feature fusion modules, used to align
-            feature maps of different resolutions for document structure restoration.
-        block_nums (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
-            The number of residual blocks in each stage of the model backbone, determining the depth of the network.
-            More blocks enhance feature extraction capability but increase inference time.
-        dilation_values (`Dict[str, Union[int, List[int]]]`, *optional*, defaults to `None`):
-            A dictionary of dilation rates for dilated convolutional layers in bridge modules (e.g., "bridge_1": 1,
-            "bridge_4": [8, 3, 2]). Dilated convolution expands the receptive field without increasing kernel size,
-            critical for capturing long-range geometric dependencies in distorted documents. If `None`, default values
-            will be used:{
-                "bridge_1": 1,
-                "bridge_2": 2,
-                "bridge_3": 5,
-                "bridge_4": [8, 3, 2],
-                "bridge_5": [12, 7, 4],
-                "bridge_6": [18, 12, 6]
-            }
-        padding_mode (`str`, *optional*, defaults to `"reflect"`):
-        The padding mode for convolutional layers, used to handle boundary pixels of document images. Supported
-        modes include `"reflect"` (recommended for document rectification to avoid edge artifacts), `"constant"`,
-        and `"replicate"`.
-        upsample_size (`List[int]`, *optional*, defaults to `[712, 488]`):
-        The target spatial size (width, height) of the upsampled output image, matching the desired resolution
-        of the rectified document. Adjust based on your input document size and task requirements.
-        upsample_mode (`str`, *optional*, defaults to `"bilinear"`):
-        The interpolation mode for upsampling layers to restore the original image resolution. Supported modes
-        include `"bilinear"` (smooth upsampling, recommended for document images), `"nearest"`, and `"bicubic"`.
-        Examples:
-        ```python
-        >>> from transformers import UVDocConfig, UVDocModelForImageToImage
-        >>> # Initializing a UVDoc configuration
-        >>> configuration = UVDocConfig()
-        >>> # Customize configuration for grayscale document images
-        >>> configuration = UVDocConfig(in_channels=1, upsample_size=[800, 600])
-        >>> # Initializing a model (with random weights) from the configuration
-        >>> model = UVDocModelForImageToImage(configuration)
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-    """
-
     model_type = "uvdoc"
 
     def __init__(
@@ -84,12 +73,12 @@ class UVDocConfig(PreTrainedConfig):
         num_filter: int = 32,
         in_channels: int = 3,
         kernel_size: int = 5,
-        stride: list = [1, 2, 2, 2],
-        map_num: list = [1, 2, 4, 8, 16],
-        block_nums: list = [3, 4, 6, 3],
+        stride: list | None = None,
+        map_num: list | None = None,
+        block_nums: list | None = None,
         dilation_values: dict | None = None,
         padding_mode: str = "reflect",
-        upsample_size: list = [712, 488],
+        upsample_size: list | None = None,
         upsample_mode: str = "bilinear",
         **kwargs,
     ):

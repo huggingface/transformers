@@ -4,6 +4,21 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_uvdoc.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from typing import Optional
 
 import torch
 
@@ -11,126 +26,74 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...utils import auto_docstring
 from ...utils.generic import TensorType
+from .image_transforms import group_images_by_shape, reorder_images
+from .image_utils import SizeDict
 
 
-@auto_docstring(
-    custom_intro="""
-    """
-)
+@auto_docstring
 class UVDocImageProcessorFast(BaseImageProcessorFast):
-    """
-    Fast image processor for UVDoc models (PyTorch-optimized, inherits from `BaseImageProcessorFast`).
-    Optimized for speed with torch tensor operations, skipping numpy conversions for low-latency inference.
-    """
-
     image_mean = [0, 0, 0]
     image_std = [1, 1, 1]
     do_rescale = True
     do_normalize = True
 
-    def __init__(self, **kwargs) -> None:
-        """Initialize the fast UVDoc image processor (inherits class-level defaults)."""
-        super().__init__(**kwargs)
-
     def _preprocess(
         self,
-        images: list[torch.Tensor],
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
+        disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        """
-        Fast preprocessing for UVDoc model (pure PyTorch tensor operations).
-        Optimized for GPU inference with minimal data conversion overhead.
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-        Args:
-            images (`List[torch.Tensor]`):
-                List of input images (PyTorch tensors, [C, H, W] format).
-            do_rescale (`bool`):
-                Whether to rescale pixel values from 0-255 to 0-1.
-            rescale_factor (`float`):
-                Factor to scale pixel values by (1/255 for 0-255 → 0-1).
-            do_normalize (`bool`):
-                Whether to normalize images with mean/std.
-            image_mean (`Union[float, List[float]]`, *optional*):
-                Override normalization mean (defaults to class-level image_mean).
-            image_std (`Union[float, List[float]]`, *optional*):
-                Override normalization std (defaults to class-level image_std).
-            return_tensors (`Union[str, TensorType]`, *optional*):
-                Type of tensors to return (only "pt" is supported for fast processing).
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            stacked_images = stacked_images[:, [2, 1, 0], :, :]
+            processed_images_grouped[shape] = stacked_images
 
-        Returns:
-            `BatchFeature`: BatchFeature containing processed "pixel_values" (PyTorch tensor, [B, C, H, W]).
-        """
-        data = {}
+        pixel_values = reorder_images(processed_images_grouped, grouped_images_index)
 
-        processed_images = []
-        for image in images:
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
-            processed_images.append(image)
-        images = processed_images
-
-        images = [image[[2, 1, 0], :, :] for image in images]
-        data.update({"pixel_values": torch.stack(images, dim=0)})
-        encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
-
-        return encoded_inputs
+        return BatchFeature(
+            data={"pixel_values": pixel_values},
+            tensor_type=return_tensors,
+        )
 
     def post_process_document_rectification(self, images, scale=None):
-        """
-        Fast postprocessing for UVDoc model outputs (pure PyTorch tensor operations).
-        GPU-optimized conversion of model outputs to rectified document images (uint8).
-
-        Args:
-            images (`Union[torch.Tensor, Tuple[torch.Tensor, ...], List[torch.Tensor]]`):
-                Raw model outputs (logits) to postprocess (batch of images, GPU tensors).
-            scale (`Union[str, float, int]`, *optional*, defaults to 255.0):
-                Scaling factor to convert normalized outputs back to 0-255 pixel values.
-
-        Returns:
-            `List[torch.Tensor]`: List of rectified document images (uint8, [H, W, C], RGB, same device as input).
-        """
         if isinstance(scale, (str, float, int)):
             scale = torch.tensor(float(scale), device=images.device)
         else:
             scale = torch.tensor(255.0, device=images.device)
 
-        return [self.doctr(image, scale) for image in images]
+        post_process_images = []
+        for image in images:
+            image = image[0] if isinstance(image, tuple) else image
+            image = image.squeeze().permute(1, 2, 0)
+            image = image * scale
+            image = image.flip(dims=[-1]).to(dtype=torch.uint8, non_blocking=True, copy=False)
+
+            post_process_images.append(image)
+
+        return post_process_images
 
     def doctr(self, pred: torch.Tensor | tuple[torch.Tensor, ...], scale: torch.Tensor) -> torch.Tensor:
-        """
-        Core fast postprocessing logic for a single document image (pure PyTorch).
-        Converts model output tensor to a valid RGB image (uint8, [H, W, C]) without CPU conversion.
-
-        Args:
-            pred (`Union[torch.Tensor, Tuple[torch.Tensor, ...]]`):
-                Raw model output for a single image (or tuple containing the output, GPU tensor).
-            scale (`torch.Tensor`):
-                Scaling factor tensor (same device as input) to convert normalized values to 0-255.
-
-        Returns:
-            `torch.Tensor`: Rectified document image (uint8, [H, W, C], RGB, same device as input).
-
-        Raises:
-            AssertionError: If input is not a PyTorch tensor.
-        """
-        if isinstance(pred, tuple):
-            image = pred[0]
-        else:
-            image = pred
-
-        assert isinstance(image, torch.Tensor), "Invalid input 'image' in DocTrPostProcess. Expected a torch tensor."
-
-        image = image.squeeze()
-        image = image.permute(1, 2, 0)
-        image = image * scale
-        image = image.flip(dims=[-1])
-        image = image.to(dtype=torch.uint8, non_blocking=True, copy=False)
-
         return image
 
 
