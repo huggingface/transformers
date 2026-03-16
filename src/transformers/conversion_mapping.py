@@ -64,7 +64,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
     "paligemma": "llava",
-    "ayavision": "llava",
+    "aya_vision": "llava",
     "fuyu": "llava",
     "got_ocr2": "llava",
     "shieldgemma2": "llava",
