@@ -118,6 +118,8 @@ def is_valid_list_of_images(images: list):
 
 
 def concatenate_list(input_list):
+    if not input_list:
+        return []
     if isinstance(input_list[0], list):
         return [item for sublist in input_list for item in sublist]
     elif isinstance(input_list[0], np.ndarray):
@@ -140,7 +142,7 @@ def valid_images(imgs):
 
 def is_batched(img):
     if isinstance(img, (list, tuple)):
-        return is_valid_image(img[0])
+        return len(img) > 0 and is_valid_image(img[0])
     return False
 
 
@@ -217,9 +219,9 @@ def make_flat_list_of_images(
         return [img for img_list in images for img in img_list]
 
     if isinstance(images, (list, tuple)) and is_valid_list_of_images(images):
-        if is_pil_image(images[0]) or images[0].ndim == expected_ndims:
+        if len(images) > 0 and (is_pil_image(images[0]) or images[0].ndim == expected_ndims):
             return images
-        if images[0].ndim == expected_ndims + 1:
+        if len(images) > 0 and images[0].ndim == expected_ndims + 1:
             return [img for img_list in images for img in img_list]
 
     if is_valid_image(images):
@@ -255,9 +257,9 @@ def make_nested_list_of_images(
 
     # If it's a list of images, it's a single batch, so convert it to a list of lists
     if isinstance(images, (list, tuple)) and is_valid_list_of_images(images):
-        if is_pil_image(images[0]) or images[0].ndim == expected_ndims:
+        if len(images) > 0 and (is_pil_image(images[0]) or images[0].ndim == expected_ndims):
             return [images]
-        if images[0].ndim == expected_ndims + 1:
+        if len(images) > 0 and images[0].ndim == expected_ndims + 1:
             return [list(image) for image in images]
 
     # If it's a single image, convert it to a list of lists

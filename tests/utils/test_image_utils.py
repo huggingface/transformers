@@ -27,6 +27,8 @@ from transformers.image_utils import (
     make_flat_list_of_images,
     make_list_of_images,
     make_nested_list_of_images,
+    is_batched,
+    concatenate_list,
 )
 from transformers.testing_utils import is_flaky, require_torch, require_vision
 
@@ -897,3 +899,24 @@ class UtilFunctionTester(unittest.TestCase):
         image = np.random.randint(0, 256, (1, 3, 4, 5))
         inferred_axis = get_channel_dimension_axis(image)
         self.assertEqual(inferred_axis, 1)
+
+    def test_is_batched_empty_list(self):
+        """Test that is_batched handles empty lists without raising an error."""
+        # Empty list should not raise IndexError
+        self.assertFalse(is_batched([]))
+        self.assertFalse(is_batched(()))
+
+    def test_make_flat_list_of_images_empty_list(self):
+        """Test that make_flat_list_of_images handles empty lists."""
+        result = make_flat_list_of_images([])
+        self.assertEqual(result, [])
+
+    def test_make_nested_list_of_images_empty_list(self):
+        """Test that make_nested_list_of_images handles empty lists."""
+        result = make_nested_list_of_images([])
+        self.assertEqual(result, [])
+
+    def test_concatenate_list_empty(self):
+        """Test that concatenate_list handles empty lists."""
+        result = concatenate_list([])
+        self.assertEqual(result, [])
