@@ -188,18 +188,6 @@ class HyperClovaXConfig(PretrainedConfig):
         # Post-norm flag
         self.use_post_norm = use_post_norm
 
-        if "auto_map" in kwargs:
-            auto_AutoConfig = kwargs["auto_map"].get("AutoConfig", None)
-            auto_AutoModel = kwargs["auto_map"].get("AutoModel", None)
-            auto_AutoModelForCausalLM = kwargs["auto_map"].get("AutoModelForCausalLM", None)
-
-            if auto_AutoConfig is not None:
-                kwargs["auto_map"].pop("AutoConfig")
-            if auto_AutoModel is not None:
-                kwargs["auto_map"].pop("AutoModel")
-            if auto_AutoModelForCausalLM is not None:
-                kwargs["auto_map"].pop("AutoModelForCausalLM")
-
         super().__init__(**kwargs)
 
 
@@ -375,17 +363,8 @@ class HCXVisionConfig(PretrainedConfig):
         # Expose initializer_range at top level for _init_weights
         self.initializer_range = self.text_config.initializer_range
 
-        if "auto_map" in kwargs:
-            # 일단 auto_map 때문에 model에서 AutoModel.from_config해서 불러올 때 remote_code를 우선적으로 불러오는 문제가 있다. 그래서
-
-            auto_AutoModelForCausalLM = kwargs["auto_map"].get("AutoModelForCausalLM", None)
-            auto_AutoConfig = kwargs["auto_map"].get("AutoConfig", None)
-            if auto_AutoModelForCausalLM is not None:
-                kwargs["auto_map"].pop("AutoModelForCausalLM")
-            if auto_AutoConfig is not None:
-                kwargs["auto_map"].pop("AutoConfig")
-
-        kwargs.pop("model_type", None)
+        if kwargs.get("model_type") == "vlm":
+            kwargs["model_type"] = "hyperclovax_vision"
 
         super().__init__(**kwargs)
 
