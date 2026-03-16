@@ -18,7 +18,6 @@ from __future__ import annotations
 import math
 import os
 import re
-import threading
 import traceback
 from abc import abstractmethod
 from collections import defaultdict
@@ -529,7 +528,6 @@ class WeightTransform:
 
     distributed_operation: TensorParallelLayer | None = None
     quantization_operation: ConversionOps | None = None
-    _gpu_semaphore: threading.Semaphore | None = None
 
     collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
     layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
@@ -657,9 +655,6 @@ class WeightTransform:
             # Sync loading
             elif callable(tensors[0]):
                 tensors = [func() for func in tensors]
-            # Release the semaphore so the next worker thread can load a tensor to GPU.
-            if self._gpu_semaphore is not None:
-                self._gpu_semaphore.release()
             # Add them to the new dictionary
             collected_tensors[key] = tensors
 
@@ -800,14 +795,11 @@ def spawn_materialize(
     tensor: torch.Tensor,
     device=None,
     dtype=None,
-    semaphore: threading.Semaphore | None = None,
 ) -> Future | Callable:
     """Materialize a tensor from file asynchronously if `thread_pool` is provided, or return a Callable that will
     load the tensor synchronously when called."""
 
     def _job():
-        if semaphore is not None:
-            semaphore.acquire()
         return _materialize_copy(tensor, device, dtype)
 
     if thread_pool is not None:
@@ -1121,18 +1113,14 @@ def convert_and_load_state_dict_in_model(
     )
 
     # We use threading by default, if not explicitly deactivated via env variable. If we have to offload,
-    # we cannot use it either to control the memory as we are under memory constraints, so we need to be sequential
-    if is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD") or "disk" in device_map.values():
+    # we cannot use it either to control the memory as we are under memory constraints, so we need to be sequential.
+    # When doing on-the-fly quantization, we also use sync loading to avoid worker threads loading full-precision
+    # tensors to GPU faster than the main thread can quantize them, which would cause a large memory spike.
+    has_on_the_fly_quantization = hf_quantizer is not None and not hf_quantizer.pre_quantized
+    if is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD") or "disk" in device_map.values() or has_on_the_fly_quantization:
         thread_pool = None
     else:
         thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
-
-    # When doing on-the-fly quantization with async loading, use a semaphore to limit how many
-    # full-precision tensors can be on GPU at once. Without this, worker threads load tensors to
-    # GPU faster than the main thread can quantize them, causing a large spike in reserved memory.
-    gpu_semaphore = None
-    if thread_pool is not None and hf_quantizer is not None and not hf_quantizer.pre_quantized:
-        gpu_semaphore = threading.Semaphore(GLOBAL_WORKERS)
 
     renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
@@ -1178,16 +1166,6 @@ def convert_and_load_state_dict_in_model(
             )
             if needs_quantization:
                 mapping.quantization_operation = hf_quantizer.get_quantize_ops()
-                # Only throttle WeightRenaming (1 tensor per mapping). WeightConverter may collect
-                # multiple tensors and would deadlock if more tensors are needed than semaphore permits.
-                if isinstance(mapping, WeightRenaming):
-                    mapping._gpu_semaphore = gpu_semaphore
-                elif gpu_semaphore is not None:
-                    logger.warning_once(
-                        "Some weights require both conversion and quantization. The GPU memory throttling "
-                        "cannot be applied in this case. If you experience high memory usage, consider setting "
-                        "the environment variable `HF_DEACTIVATE_ASYNC_LOAD=1` to load with minimal memory footprint."
-                    )
 
             _dtype = dtype
             if (
@@ -1232,7 +1210,7 @@ def convert_and_load_state_dict_in_model(
 
             if future_or_tensor is None:
                 param_device = get_device(device_map, renamed_key, valid_torch_device=True)
-                future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype, mapping._gpu_semaphore)
+                future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
         elif source_pattern is not None:  # add all target keys as unexpected
