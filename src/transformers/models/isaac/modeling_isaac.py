@@ -1354,16 +1354,14 @@ class IsaacModel(PreTrainedModel):
 
     def compute_3d_position_ids(
         self,
-        input_ids: torch.Tensor | None,
+        input_ids: torch.Tensor,
         inputs_embeds: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor,
         position_ids: torch.Tensor | None = None,
         past_key_values: torch.Tensor | None = None,
     ) -> torch.Tensor:
         past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
         if past_seen_tokens == 0:
-            if attention_mask is None:
-                attention_mask = torch.ones(inputs_embeds.shape[:2], device=inputs_embeds.device, dtype=torch.long)
             position_ids, rope_deltas = self.get_rope_index(
                 position_ids=position_ids,
                 attention_mask=attention_mask,
@@ -1382,7 +1380,7 @@ class IsaacModel(PreTrainedModel):
             else:
                 rope_deltas = rope_deltas[:1].expand(inputs_embeds.shape[0], -1)
 
-        if attention_mask is not None and attention_mask.shape[-1] > inputs_embeds.shape[1]:
+        if attention_mask.shape[-1] > inputs_embeds.shape[1]:
             rope_position = attention_mask.long().cumsum(dim=-1) - 1
             rope_position = rope_position.masked_fill(attention_mask == 0, 0)
             rope_position = rope_position[:, -inputs_embeds.shape[1] :]
