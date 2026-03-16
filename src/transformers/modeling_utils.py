@@ -495,6 +495,7 @@ def _get_resolved_checkpoint_files(
     is_remote_code: bool,  # Because we can't determine this inside this function, we need it to be passed in
     transformers_explicit_filename: str | None = None,
     download_kwargs: DownloadKwargs | None = None,
+    tqdm_class: type | None = None,
 ) -> tuple[list[str] | None, dict | None]:
     """Get all the checkpoint filenames based on `pretrained_model_name_or_path`, and optional metadata if the
     checkpoints are sharded.
@@ -599,6 +600,7 @@ def _get_resolved_checkpoint_files(
                 "_raise_exceptions_for_gated_repo": False,
                 "_raise_exceptions_for_missing_entries": False,
                 "_commit_hash": commit_hash,
+                "tqdm_class": tqdm_class,
                 **has_file_kwargs,
             }
             can_auto_convert = (
@@ -744,6 +746,7 @@ def _get_resolved_checkpoint_files(
             revision=revision,
             subfolder=subfolder,
             _commit_hash=commit_hash,
+            tqdm_class=tqdm_class,
         )
     else:
         checkpoint_files = [resolved_archive_file] if pretrained_model_name_or_path is not None else None
@@ -3907,6 +3910,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         state_dict = kwargs.pop("state_dict", None)
         proxies = kwargs.pop("proxies", None)
+        tqdm_class = kwargs.pop("tqdm_class", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -4057,6 +4061,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             user_agent=user_agent,
             is_remote_code=cls.is_remote_code(),
             transformers_explicit_filename=getattr(config, "transformers_weights", None),
+            tqdm_class=tqdm_class,
         )
 
         is_quantized = hf_quantizer is not None

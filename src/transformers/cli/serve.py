@@ -38,8 +38,7 @@ from tokenizers.decoders import DecodeStream
 from tqdm import tqdm
 
 import transformers
-from transformers import AutoTokenizer, PreTrainedTokenizerBase
-from transformers import BitsAndBytesConfig, GenerationConfig
+from transformers import AutoTokenizer, BitsAndBytesConfig, GenerationConfig, PreTrainedTokenizerBase
 from transformers.generation import (
     LogitsProcessorList,
     TextIteratorStreamer,
@@ -428,7 +427,7 @@ class Serve:
     def __init__(
         self,
         continuous_batching: Annotated[
-            bool,
+            bool | None,
             typer.Option(
                 help="Whether to use continuous batching for chat completions. Will default to locally saved settings."
             ),
@@ -457,7 +456,7 @@ class Serve:
             typer.Option(help="Which quantization method to use. choices: 'bnb-4bit', 'bnb-8bit'"),
         ] = None,
         context_length: Annotated[
-            Optional[int],
+            int | None,
             typer.Option(help="Context Length, defaults to the model default."),
         ] = None,
         host: Annotated[str, typer.Option(help="Interface the server will listen to.")] = "localhost",
@@ -2122,8 +2121,59 @@ class Serve:
             data processor (tokenizer, audio processor, etc.).
         """
         import torch
+        from tqdm.auto import tqdm as base_tqdm
 
         from transformers import AutoConfig, AutoProcessor
+
+        _callback = progress_callback
+        _mid = model_id_and_revision
+
+        if _callback is not None:
+
+            class _SseTqdm(base_tqdm):
+                """Thin tqdm subclass that forwards progress events to the SSE stream."""
+
+                def __init__(self, *args, **kwargs):
+                    # Extract before super().__init__ because disable=True takes an early
+                    # return that skips setting self.desc and self.unit.
+                    self._sse_desc = kwargs.get("desc") or ""
+                    self._sse_unit = kwargs.get("unit") or "it"
+                    kwargs["disable"] = True  # suppress server-side display
+                    super().__init__(*args, **kwargs)
+                    self._n = 0
+                    # self.total IS set by the disabled path, so read it after super().__init__
+                    _callback(
+                        {
+                            "stage": "tqdm:start",
+                            "model": _mid,
+                            "desc": self._sse_desc,
+                            "total": self.total,
+                            "unit": self._sse_unit,
+                        }
+                    )
+
+                def update(self, n=1):
+                    if n is None:
+                        n = 1
+                    self._n += n
+                    _callback(
+                        {
+                            "stage": "tqdm:update",
+                            "model": _mid,
+                            "desc": self._sse_desc,
+                            "n": self._n,
+                            "total": self.total,  # may grow after init via direct assignment
+                            "unit": self._sse_unit,
+                        }
+                    )
+
+                def close(self):
+                    _callback({"stage": "tqdm:close", "model": _mid, "desc": self._sse_desc})
+                    super().close()
+
+            tqdm_class: type | None = _SseTqdm
+        else:
+            tqdm_class = None
 
         def emit_progress(stage: str, message: str | None = None):
             if progress_callback is None:
@@ -2175,7 +2225,7 @@ class Serve:
         emit_progress("config:ready")
         architecture = getattr(transformers, config.architectures[0])
         emit_progress("model:start", "Loading model weights")
-        model = architecture.from_pretrained(model_id, **model_kwargs)
+        model = architecture.from_pretrained(model_id, tqdm_class=tqdm_class, **model_kwargs)
         emit_progress("model:ready", "Model weights loaded")
 
         has_default_max_length = (

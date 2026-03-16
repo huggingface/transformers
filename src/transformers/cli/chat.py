@@ -19,7 +19,7 @@ import re
 import string
 import time
 from collections.abc import AsyncIterator
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -195,7 +195,24 @@ class RichInterface:
         import json
 
         import requests
-        from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeElapsedColumn
+        from rich.console import Group
+        from rich.progress import (
+            BarColumn,
+            DownloadColumn,
+            MofNCompleteColumn,
+            Progress,
+            TextColumn,
+            TimeElapsedColumn,
+            TimeRemainingColumn,
+            TransferSpeedColumn,
+        )
+
+        STAGES = ["processor", "config", "model"]
+        STAGE_LABELS = {
+            "processor:start": f"{model}  •  Loading processor",
+            "config:start": f"{model}  •  Loading config",
+            "model:start": f"{model}  •  Loading model weights",
+        }
 
         response = requests.post(
             f"{self.base_url.rstrip('/')}/load_model",
@@ -204,58 +221,70 @@ class RichInterface:
         )
         response.raise_for_status()
 
-        bars = {}  # desc -> task_id
-
-        progress = Progress(
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
+        stage_progress = Progress(
+            TextColumn("[bold]{task.description}"),
+            BarColumn(bar_width=40),
+            MofNCompleteColumn(),
             TimeElapsedColumn(),
             console=self._console,
-            transient=True,
+        )
+        dl_progress = Progress(
+            TextColumn("{task.description}"),
+            BarColumn(bar_width=40),
+            DownloadColumn(),
+            TransferSpeedColumn(),
+            TimeRemainingColumn(),
+            console=self._console,
         )
 
-        with progress:
-            stage_task = progress.add_task(model, total=None)  # or a number if you know it
+        stage_task = stage_progress.add_task(model, total=len(STAGES))
+        dl_task = dl_progress.add_task(model, total=None, visible=False)
+        bar_last_n: dict[str, int] = {}
+        byte_descs: set[str] = set()  # only track byte-unit bars in dl_progress
 
+        with Live(Group(stage_progress, dl_progress), console=self._console, transient=True):
             for line in response.iter_lines():
                 if not line or not line.startswith(b"data: "):
                     continue
 
                 payload = json.loads(line.split(b"data: ", 1)[1])
                 stage = payload.get("stage")
-                message = payload.get("message") or stage
 
                 if stage and stage.startswith("tqdm:"):
-                    desc = payload.get("desc") or "Loading weights"
+                    desc = payload.get("desc") or "download"
                     total = payload.get("total")
                     n = payload.get("n")
+                    unit = payload.get("unit")
 
-                    task_id = bars.get(desc)
-                    if stage == "tqdm:start" and task_id is None:
-                        task_id = progress.add_task(desc, total=total)
-                        bars[desc] = task_id
+                    if stage == "tqdm:start" and unit == "B":
+                        byte_descs.add(desc)
+                        dl_progress.update(dl_task, visible=True)
+                        if total:
+                            current_total = next((t.total for t in dl_progress.tasks if t.id == dl_task), 0) or 0
+                            dl_progress.update(dl_task, total=current_total + total)
 
-                    if task_id is not None:
+                    elif stage == "tqdm:update" and n is not None and desc in byte_descs:
+                        delta = n - bar_last_n.get(desc, 0)
+                        bar_last_n[desc] = n
+                        dl_progress.advance(dl_task, delta)
                         if total is not None:
-                            progress.update(task_id, total=total)
-                        if n is not None:
-                            progress.update(task_id, completed=n)
-                        elif stage == "tqdm:update":
-                            progress.advance(task_id, 1)
-                        if stage == "tqdm:close":
-                            progress.update(task_id, visible=False)
+                            current_total = next((t.total for t in dl_progress.tasks if t.id == dl_task), 0) or 0
+                            if total > current_total:
+                                dl_progress.update(dl_task, total=total)
+
                     continue
 
-                if stage:
-                    # update stage line (you can also set total if you know it)
-                    progress.update(stage_task, description=f"{model} • {message}")
-                    progress.advance(stage_task, 1)
+                if stage in STAGE_LABELS:
+                    stage_progress.update(stage_task, description=STAGE_LABELS[stage])
+
+                if stage and stage.endswith(":ready"):
+                    stage_progress.advance(stage_task, 1)
 
                 if stage == "ready":
                     break
                 if stage == "error":
                     raise RuntimeError(payload.get("message", "Unknown error"))
+
         self._console.print(Markdown(f"_*{model} is warm.*_"))
         self._console.print()
 
@@ -275,7 +304,7 @@ class Chat:
         self,
         model_id: Annotated[str, typer.Argument(help="ID of the model to use (e.g. 'HuggingFaceTB/SmolLM3-3B').")],
         base_url: Annotated[
-            Optional[str], typer.Argument(help="Base url to connect to (e.g. http://localhost:8000/v1).")
+            str | None, typer.Argument(help="Base url to connect to (e.g. http://localhost:8000/v1).")
         ] = f"http://{DEFAULT_HTTP_ENDPOINT['hostname']}:{DEFAULT_HTTP_ENDPOINT['port']}",
         generate_flags: Annotated[
             list[str] | None,
@@ -444,7 +473,7 @@ class Chat:
         config = self.config
 
         async with AsyncInferenceClient(base_url=self.base_url) as client:
-            pending_user_input: Optional[str] = None
+            pending_user_input: str | None = None
             while True:
                 try:
                     if pending_user_input is not None:
