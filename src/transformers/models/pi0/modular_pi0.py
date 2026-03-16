@@ -84,6 +84,25 @@ class PI0Processor(PaligemmaProcessor):
         state: list | np.ndarray | torch.Tensor | None = None,
         **kwargs: Unpack[PI0ProcessorKwargs],
     ) -> BatchFeature:
+        r"""
+        actions (`list | np.ndarray | torch.Tensor`, *optional*):
+            Actions to be predicted by the model. If provided, padding, mean and std normalization will be applied.
+        state (`list | np.ndarray | torch.Tensor`, *optional*):
+            Robotic states to be predicted by the model. If provided, padding, mean and std normalization will be applied.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`. If `suffix`
+              is provided, the `input_ids` will also contain the suffix input ids.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **pixel_attention_mask** -- Pixel values padding mask to be fed to a model. Returned when `images` is not `None`.
+            - **state** -- Robot state compatible with model if `state` is not None
+            - **actions** -- Label-actions compatible with training if `actions` is not None
+        """
         output_kwargs = self._merge_kwargs(
             PI0ProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
         )
@@ -178,6 +197,8 @@ class PI0Config(PreTrainedConfig):
         Minimum period for sinusoidal time embedding.
     max_period (`float`, *optional*, defaults to 4.0):
         Maximum period for sinusoidal time embedding.
+    vlm_projection_dim (`int`, *optional*, defaults to 2048):
+        The projection dimension for VLM's multimodal projection layer.
     loss_reduction (`str`, *optional*, defaults to `"mean"`):
         The reduction to use on MSE loss.
 

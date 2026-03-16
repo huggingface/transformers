@@ -93,6 +93,11 @@ class PI0Processor(ProcessorMixin):
         **kwargs: Unpack[PI0ProcessorKwargs],
     ) -> BatchFeature:
         r"""
+        actions (`list | np.ndarray | torch.Tensor`, *optional*):
+            Actions to be predicted by the model. If provided, padding, mean and std normalization will be applied.
+        state (`list | np.ndarray | torch.Tensor`, *optional*):
+            Robotic states to be predicted by the model. If provided, padding, mean and std normalization will be applied.
+
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -102,7 +107,9 @@ class PI0Processor(ProcessorMixin):
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **labels** -- Labels compatible with training if `suffix` is not None
+            - **pixel_attention_mask** -- Pixel values padding mask to be fed to a model. Returned when `images` is not `None`.
+            - **state** -- Robot state compatible with model if `state` is not None
+            - **actions** -- Label-actions compatible with training if `actions` is not None
         """
         output_kwargs = self._merge_kwargs(
             PI0ProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
