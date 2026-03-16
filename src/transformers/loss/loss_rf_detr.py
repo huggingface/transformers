@@ -16,8 +16,7 @@ from collections.abc import Callable
 import numpy as np
 import torch
 import torch.distributed as dist
-import torch.nn as nn
-import torch.nn.functional as F
+from torch import Tensor, nn
 
 from .. import requires_backends
 from ..image_transforms import center_to_corners_format
@@ -33,27 +32,27 @@ if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 
 
-def sigmoid_cross_entropy_loss(
-    inputs: torch.Tensor,
-    targets: torch.Tensor,
-    num_masks: float,
-):
-    """
+# Copied from transformers.models.mask2former.modeling_mask2former.sigmoid_cross_entropy_loss
+def sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor, num_masks: int) -> torch.Tensor:
+    r"""
     Args:
-        inputs: A float tensor of arbitrary shape.
-                The predictions for each example.
-        targets: A float tensor with the same shape as inputs. Stores the binary
-                 classification label for each element in inputs
-                (0 for the negative class and 1 for the positive class).
+        inputs (`torch.Tensor`):
+            A float tensor of arbitrary shape.
+        labels (`torch.Tensor`):
+            A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs
+            (0 for the negative class and 1 for the positive class).
+
     Returns:
-        Loss tensor
+        loss (`torch.Tensor`): The computed loss.
     """
-    loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
-    loss = loss.mean(1).sum() / num_masks
+    criterion = nn.BCEWithLogitsLoss(reduction="none")
+    cross_entropy_loss = criterion(inputs, labels)
+
+    loss = cross_entropy_loss.mean(1).sum() / num_masks
     return loss
 
 
-# Copied from transformers.models.maskformer.modeling_maskformer.pair_wise_sigmoid_cross_entropy_loss
+# Copied from transformers.models.mask2former.modeling_mask2former.pair_wise_sigmoid_cross_entropy_loss
 def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
     r"""
     A pair wise version of the cross entropy loss, see `sigmoid_cross_entropy_loss` for usage.
@@ -82,7 +81,7 @@ def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Ten
 
 
 # Copied from transformers.models.mask2former.modeling_mask2former.pair_wise_dice_loss
-def pair_wise_dice_loss(inputs: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
     """
     A pair wise version of the dice loss, see `dice_loss` for usage.
 
@@ -137,10 +136,9 @@ def sample_point(
     return point_features
 
 
-# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerLoss.calculate_uncertainty
 def calculate_uncertainty(logits: torch.Tensor) -> torch.Tensor:
     """
-    In Mask2Former paper, uncertainty is estimated as L1 distance between 0.0 and the logit prediction in 'logits'
+    Copied from Mask2FormerLoss.calculate_uncertainty, uncertainty is estimated as L1 distance between 0.0 and the logit prediction in 'logits'
     for the foreground class in `classes`.
 
     Args:
@@ -156,16 +154,15 @@ def calculate_uncertainty(logits: torch.Tensor) -> torch.Tensor:
     return uncertainty_scores
 
 
-# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerLoss.sample_points_using_uncertainty
 def sample_points_using_uncertainty(
-    logits: torch.Tensor,
-    uncertainty_function: Callable[[torch.Tensor], torch.Tensor],
+    logits: Tensor,
+    uncertainty_function: Callable[[Tensor], Tensor],
     num_points: int,
     oversample_ratio: int,
     importance_sample_ratio: float,
-) -> torch.Tensor:
+) -> Tensor:
     """
-    This function is meant for sampling points in [0, 1] * [0, 1] coordinate space based on their uncertainty. The
+    Copied from Mask2FormerLoss.sample_points_using_uncertainty, this function is meant for sampling points in [0, 1] * [0, 1] coordinate space based on their uncertainty. The
     uncertainty is calculated for each point using the passed `uncertainty function` that takes points logit
     prediction as input.
 
