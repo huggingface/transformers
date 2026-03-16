@@ -99,7 +99,6 @@ class Mistral4Config(PreTrainedConfig):
     rope_interleave: bool | None = True
     attention_bias: bool = False
     attention_dropout: float | int | None = 0.0
-    mlp_bias: bool | None = False
 
     def __post_init__(self, **kwargs):
         if self.rope_parameters is None:
