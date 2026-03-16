@@ -95,7 +95,6 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
     hidden_act: str = "relu"
     kernel_list: list | None = None
     id2label: dict[int, str] | dict[str, str] | None = None
-    num_labels: int = 1
 
     def __post_init__(self, **kwargs):
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
