@@ -14,4 +14,4 @@
 
 """Mistral4 model tests."""
 
-from .test_modeling_mistral4 import Mistral4ConfigTest, Mistral4ModelTest
+from .test_modeling_mistral4 import Mistral4IntegrationTest, Mistral4ModelTest
