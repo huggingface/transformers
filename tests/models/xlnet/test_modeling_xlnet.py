@@ -609,6 +609,22 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlnet_qa(*config_and_inputs)
 
+    def test_relative_positional_encoding_device(self):
+        """Test that relative_positional_encoding creates tensors on the correct device."""
+        self.model_tester.set_seed()
+        config = self.model_tester.get_config()
+        model = XLNetModel(config)
+        model.to(torch_device)
+        model.eval()
+
+        qlen, klen, bsz = 4, 6, 2
+        pos_emb = model.relative_positional_encoding(qlen, klen, bsz=bsz)
+        self.assertEqual(
+            pos_emb.device.type,
+            torch.device(torch_device).type,
+            f"pos_emb should be on {torch_device}, but got {pos_emb.device}",
+        )
+
     @unittest.skip(reason="xlnet cannot keep gradients in attentions or hidden states")
     def test_retain_grad_hidden_states_attentions(self):
         return
