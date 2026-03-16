@@ -13,16 +13,16 @@
 # limitations under the License.
 """DPT model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
 
 
-logger = logging.get_logger(__name__)
-
-
 @auto_docstring(checkpoint="Intel/dpt-large")
+@strict(accept_kwargs=True)
 class DPTConfig(PreTrainedConfig):
     r"""
     is_hybrid (`bool`, *optional*, defaults to `False`):
@@ -84,54 +84,52 @@ class DPTConfig(PreTrainedConfig):
     model_type = "dpt"
     sub_configs = {"backbone_config": AutoConfig}
 
-    def __init__(
-        self,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        image_size=384,
-        patch_size=16,
-        num_channels=3,
-        is_hybrid=False,
-        qkv_bias=True,
-        backbone_out_indices=[2, 5, 8, 11],
-        readout_type="project",
-        reassemble_factors=[4, 2, 1, 0.5],
-        neck_hidden_sizes=[96, 192, 384, 768],
-        fusion_hidden_size=256,
-        head_in_index=-1,
-        use_batch_norm_in_fusion_residual=False,
-        use_bias_in_fusion_residual=None,
-        add_projection=False,
-        use_auxiliary_head=True,
-        auxiliary_loss_weight=0.4,
-        semantic_loss_ignore_index=255,
-        semantic_classifier_dropout=0.1,
-        backbone_featmap_shape=[1, 1024, 24, 24],
-        neck_ignore_stages=[0, 1],
-        backbone_config=None,
-        pooler_output_size=None,
-        pooler_act="tanh",
-        **kwargs,
-    ):
-        self.hidden_size = hidden_size
-        self.is_hybrid = is_hybrid
+    # NOTE: some values are typed as `None` on purpose
+    # DPT creates one of: backbone or the general model only
+    # so official checkpoint saved them as `None`
+    hidden_size: int = 768
+    num_hidden_layers: None | int = 12
+    num_attention_heads: int | None = 12
+    intermediate_size: int | None = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float | int | None = 0.0
+    attention_probs_dropout_prob: float | int | None = 0.0
+    initializer_range: float = 0.02
+    layer_norm_eps: float | None = 1e-12
+    image_size: int | list[int] | tuple[int, int] | None = 384
+    patch_size: int | list[int] | tuple[int, int] | None = 16
+    num_channels: int | None = 3
+    is_hybrid: bool = False
+    qkv_bias: bool | None = True
+    backbone_out_indices: list[int] | tuple[int, ...] | None = (2, 5, 8, 11)
+    readout_type: str = "project"
+    reassemble_factors: list[int | float] | tuple[int | float, ...] = (4, 2, 1, 0.5)
+    neck_hidden_sizes: list[int] | tuple[int, ...] = (96, 192, 384, 768)
+    fusion_hidden_size: int = 256
+    head_in_index: int = -1
+    use_batch_norm_in_fusion_residual: bool | None = False
+    use_bias_in_fusion_residual: bool | None = None
+    add_projection: bool = False
+    use_auxiliary_head: bool | None = True
+    auxiliary_loss_weight: float = 0.4
+    semantic_loss_ignore_index: int = 255
+    semantic_classifier_dropout: float | int = 0.1
+    backbone_featmap_shape: list[int] | tuple[int, ...] | None = (1, 1024, 24, 24)
+    neck_ignore_stages: list[int] | tuple[int, ...] = (0, 1)
+    backbone_config: dict | PreTrainedConfig | None = None
+    pooler_output_size: int | None = None
+    pooler_act: str = "tanh"
 
-        if readout_type not in ["ignore", "add", "project"]:
+    def __post_init__(self, **kwargs):
+        if self.readout_type not in ["ignore", "add", "project"]:
             raise ValueError("Readout_type must be one of ['ignore', 'add', 'project']")
 
         if self.is_hybrid:
-            if isinstance(backbone_config, dict):
-                backbone_config.setdefault("model_type", "bit")
+            if isinstance(self.backbone_config, dict):
+                self.backbone_config.setdefault("model_type", "bit")
 
-            backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-                backbone_config=backbone_config,
+            self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+                backbone_config=self.backbone_config,
                 default_config_type="bit",
                 default_config_kwargs={
                     "global_padding": "same",
@@ -142,51 +140,19 @@ class DPTConfig(PreTrainedConfig):
                 },
                 **kwargs,
             )
-            if readout_type != "project":
+            if self.readout_type != "project":
                 raise ValueError("Readout type must be 'project' when using `DPT-hybrid` mode.")
-        elif kwargs.get("backbone") is not None or backbone_config is not None:
-            backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-                backbone_config=backbone_config,
+        elif kwargs.get("backbone") is not None or self.backbone_config is not None:
+            self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+                backbone_config=self.backbone_config,
                 **kwargs,
             )
-            backbone_out_indices = None
+            self.backbone_out_indices = None
 
-        self.backbone_config = backbone_config
-
-        # ViT parameters used if not using a hybrid backbone
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.layer_norm_eps = layer_norm_eps
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.qkv_bias = qkv_bias
-        self.backbone_out_indices = backbone_out_indices
-        self.backbone_featmap_shape = backbone_featmap_shape if is_hybrid else None
-        self.neck_ignore_stages = neck_ignore_stages if is_hybrid else []
-
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.readout_type = readout_type
-        self.reassemble_factors = reassemble_factors
-        self.neck_hidden_sizes = neck_hidden_sizes
-        self.fusion_hidden_size = fusion_hidden_size
-        self.head_in_index = head_in_index
-        self.use_batch_norm_in_fusion_residual = use_batch_norm_in_fusion_residual
-        self.use_bias_in_fusion_residual = use_bias_in_fusion_residual
-        self.add_projection = add_projection
-
-        # auxiliary head attributes (semantic segmentation)
-        self.use_auxiliary_head = use_auxiliary_head
-        self.auxiliary_loss_weight = auxiliary_loss_weight
-        self.semantic_loss_ignore_index = semantic_loss_ignore_index
-        self.semantic_classifier_dropout = semantic_classifier_dropout
-        self.pooler_output_size = pooler_output_size if pooler_output_size else hidden_size
-        self.pooler_act = pooler_act
-        super().__init__(**kwargs)
+        self.backbone_featmap_shape = self.backbone_featmap_shape if self.is_hybrid else None
+        self.neck_ignore_stages = self.neck_ignore_stages if self.is_hybrid else []
+        self.pooler_output_size = self.pooler_output_size if self.pooler_output_size else self.hidden_size
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["DPTConfig"]

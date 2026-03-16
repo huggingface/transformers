@@ -1426,7 +1426,7 @@ class LEDEncoder(LEDPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # check input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
@@ -1642,7 +1642,7 @@ class LEDDecoder(LEDPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
@@ -1828,7 +1828,7 @@ class LEDModel(LEDPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # Using this like Bart, as LED is derived from it. So far
         # No checkpoint on the hub exists that uses that in practice.
@@ -2029,7 +2029,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
         >>> print(tokenizer.decode(prediction, skip_special_tokens=True))
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None:
             if use_cache:
@@ -2146,7 +2146,7 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
             - 0 for local attention (a sliding window attention),
             - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         if start_positions is not None and end_positions is not None:
             use_cache = False
 

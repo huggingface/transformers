@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 from ..auto.configuration_auto import AutoConfig
@@ -23,6 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="")
+@strict(accept_kwargs=True)
 class SpeechEncoderDecoderConfig(PreTrainedConfig):
     r"""
     kwargs (*optional*):
@@ -65,8 +68,9 @@ class SpeechEncoderDecoderConfig(PreTrainedConfig):
     sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
     has_no_defaults_at_init = True
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    is_encoder_decoder: int | None = True
+
+    def __post_init__(self, **kwargs):
         if "encoder" not in kwargs or "decoder" not in kwargs:
             raise ValueError(
                 f"A configuration of type {self.model_type} cannot be instantiated because not both `encoder` and"
@@ -80,7 +84,7 @@ class SpeechEncoderDecoderConfig(PreTrainedConfig):
 
         self.encoder = AutoConfig.for_model(encoder_model_type, **encoder_config)
         self.decoder = AutoConfig.for_model(decoder_model_type, **decoder_config)
-        self.is_encoder_decoder = True
+        super().__post_init__(**kwargs)
 
     @classmethod
     def from_encoder_decoder_configs(
