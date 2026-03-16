@@ -390,7 +390,7 @@ class PagedAttentionCache:
             v_cache[layer_write_index, :, :] = value_states
 
         # Return the new KV values
-        return key_states_with_cache.contiguous(), value_states_with_cache.contiguous()
+        return key_states_with_cache, value_states_with_cache
 
     def get_block_table_key(self, flash_attn_with_kvcache_fn: Any) -> str:
         """A function to get the name of the block table key for the given flash_attn_with_kvcache_fn. The function's
