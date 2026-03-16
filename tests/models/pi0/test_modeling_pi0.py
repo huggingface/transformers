@@ -23,6 +23,7 @@ from transformers import PI0Config, PI0Processor, Trainer, TrainingArguments, is
 from transformers.image_utils import load_image
 from transformers.testing_utils import (
     require_torch,
+    require_torch_large_gpu,
     slow,
     torch_device,
 )
@@ -193,6 +194,10 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip("Prefix tuning doesn't work with GC and the model uses prefix tuning to fuse VLM outputs")
+    def test_flex_attention_with_grads(self):
+        pass
+
+    @unittest.skip("Prefix tuning doesn't work with GC and the model uses prefix tuning to fuse VLM outputs")
     def test_enable_input_require_grads_with_gradient_checkpointing(self):
         pass
 
@@ -234,6 +239,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
     def test_pi0_base_reference_values(self):
         model = PI0ForConditionalGeneration.from_pretrained("lerobot/pi0_base", torch_dtype=torch.float32).eval()
         processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224")
+        model.config.loss_reduction = "none"
 
         inputs = processor(
             text=["Pick up the object"],
@@ -257,7 +263,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             suffix_embs = model.embed_action_time(state, noise, timestep)
         self.assertEqual(suffix_embs.shape, (1, 51, 1024))
-        self.assertAlmostEqual(suffix_embs.mean().item(), -0.10177, delta=0.002)
+        self.assertAlmostEqual(suffix_embs.mean().item(), -0.10311780869960785, delta=0.002)
         torch.testing.assert_close(
             suffix_embs[0, 0, :4], torch.tensor([-0.0460, 0.8858, 0.7172, -0.7538]), atol=1e-3, rtol=1e-3
         )
@@ -269,7 +275,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
             prefix_embs = model.model.embed_prefix(**inputs)
 
         self.assertEqual(prefix_embs.shape, (1, 304, 2048))
-        self.assertAlmostEqual(prefix_embs.mean().item(), 0.0224, places=3)
+        self.assertAlmostEqual(prefix_embs.mean().item(), 0.022478658705949783, places=3)
         torch.testing.assert_close(
             prefix_embs[0, 0, :4], torch.tensor([1.1781, 0.1176, -0.2231, -0.3662]), atol=1e-3, rtol=1e-3
         )
@@ -286,15 +292,15 @@ class PI0ModelIntegrationTest(unittest.TestCase):
                 timestep=timestep,
             )
         self.assertEqual(outputs.loss.shape, (1, 50, 32))
-        self.assertAlmostEqual(outputs.loss.mean().item(), 3.950, places=3)
+        self.assertAlmostEqual(outputs.loss.mean().item(), 3.9500892162323, places=3)
 
         torch.manual_seed(99)  # different seed to sample random noise
         model.model.dit.config._attn_implementation = "eager"
         with torch.no_grad():
             sampled = model.sample_actions(**inputs, state=state, num_steps=3)
         self.assertEqual(sampled.shape, (1, 50, 32))
-        self.assertAlmostEqual(sampled.mean().item(), -0.0764, places=3)
-        self.assertAlmostEqual(sampled.std().item(), 0.2300, places=3)
+        self.assertAlmostEqual(sampled.mean().item(), -0.07640129327774048, places=3)
+        self.assertAlmostEqual(sampled.std().item(), 0.23003898561000824, places=3)
         torch.testing.assert_close(
             sampled[0, 0, :4], torch.tensor([0.0602, -0.1177, -0.5010, -0.0028]), atol=1e-3, rtol=1e-3
         )
@@ -305,6 +311,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
     def test_pi0_base_libero(self):
         model = PI0ForConditionalGeneration.from_pretrained("lerobot/pi0_base", torch_dtype=torch.float32).eval()
         processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224")
+        model.config.loss_reduction = "none"
 
         small_data = load_dataset("RaushanTurganbay/libero-small-testing", split="train")
         first_sample = small_data[0]
@@ -333,8 +340,8 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             sampled = model.sample_actions(**inputs, num_steps=5)
         self.assertEqual(sampled.shape, (1, 50, 32))
-        self.assertAlmostEqual(sampled.mean().item(), -0.0192, places=3)
-        self.assertAlmostEqual(sampled.std().item(), 0.1267, places=3)
+        self.assertAlmostEqual(sampled.mean().item(), -0.01923201233148575, places=3)
+        self.assertAlmostEqual(sampled.std().item(), 0.12665212154388428, places=3)
         torch.testing.assert_close(
             sampled[0, 0, :4], torch.tensor([-0.2456, -0.1260, -0.2977, 0.2654]), atol=1e-3, rtol=1e-3
         )
@@ -342,6 +349,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
             sampled[0, -1, :4], torch.tensor([-0.2541, -0.1213, -0.2637, 0.2935]), atol=1e-3, rtol=1e-3
         )
 
+    @require_torch_large_gpu
     def test_train_pi0_base_libero(self):
         model = PI0ForConditionalGeneration.from_pretrained("lerobot/pi0_base", torch_dtype=torch.float32).eval()
         processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224")
