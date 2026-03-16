@@ -164,11 +164,11 @@ class PPChart2TableModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="PPChart2Table does not support")
+    @unittest.skip(reason="PPChart2Table have reused the GotOcr2 model, which does not implement the latest logic for capturing attentions and hidden_states introduced in Transformers v5.")
     def test_get_image_features_attentions(self):
         pass
 
-    @unittest.skip(reason="PPChart2Table does not support")
+    @unittest.skip(reason="PPChart2Table have reused the GotOcr2 model, which does not implement the latest logic for capturing attentions and hidden_states introduced in Transformers v5.")
     def test_get_image_features_hidden_states(self):
         pass
 
@@ -180,14 +180,14 @@ class PPChart2TableModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
 @require_torch
 class PPChart2TableIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("/workspace/model_weight_torch/PP-Chart2Table")
+        self.processor = AutoProcessor.from_pretrained("PaddlePaddle/PP-Chart2Table_safetensors")
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_small_model_integration_test_pp_chart2table(self):
-        model_id = "/workspace/model_weight_torch/PP-Chart2Table"
+        model_id = "PaddlePaddle/PP-Chart2Table_safetensors"
         model = PPChart2TableForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
         image = load_image("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png")
 
@@ -206,7 +206,7 @@ class PPChart2TableIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_pp_chart2table_batched(self):
-        model_id = "/workspace/model_weight_torch/PP-Chart2Table"
+        model_id = "PaddlePaddle/PP-Chart2Table_safetensors"
         model = PPChart2TableForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
         image1 = load_image("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png")
         image2 = load_image("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png")
