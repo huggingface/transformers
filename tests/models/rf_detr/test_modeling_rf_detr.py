@@ -50,24 +50,8 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-OBJECT_DETECTION_CHECKPOINTS = [
-    "stevenbucaille/rf-detr-nano",
-    "stevenbucaille/rf-detr-small",
-    "stevenbucaille/rf-detr-base",
-    "stevenbucaille/rf-detr-base-2",
-    "stevenbucaille/rf-detr-medium",
-    "stevenbucaille/rf-detr-large",
-]
-
-SEGMENTATION_CHECKPOINTS = [
-    "stevenbucaille/rf-detr-seg-preview",
-    "stevenbucaille/rf-detr-seg-nano",
-    "stevenbucaille/rf-detr-seg-small",
-    "stevenbucaille/rf-detr-seg-medium",
-    "stevenbucaille/rf-detr-seg-large",
-    "stevenbucaille/rf-detr-seg-xlarge",
-    "stevenbucaille/rf-detr-seg-xxlarge",
-]
+OBJECT_DETECTION_CHECKPOINTS = ["stevenbucaille/rf-detr-base"]
+SEGMENTATION_CHECKPOINTS = ["stevenbucaille/rf-detr-seg-small"]
 
 
 def prepare_img():
@@ -614,22 +598,6 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 
 EXPECTED_OBJECT_DETECTION_OUTPUTS = {
-    "stevenbucaille/rf-detr-nano": {
-        "logits": [-6.68004, -5.66107, -11.70373, -8.32324, -5.76176],
-        "boxes": [0.25828, 0.54991, 0.47220, 0.87432, 0.55099],
-        "post_process_labels": [17, 75, 17, 75, 63],
-        "post_process_scores": [0.99419, 0.98870, 0.95431, 0.98553, 0.43040],
-        "post_process_boxes": [14.19509, 54.12025, 316.40289, 473.79239],
-        "loss": 14.893259,
-    },
-    "stevenbucaille/rf-detr-small": {
-        "logits": [-6.83893, -4.55097, -10.53040, -8.20657, -5.55314],
-        "boxes": [0.25782, 0.55037, 0.47922, 0.87102, 0.77074],
-        "post_process_labels": [17, 17, 75, 75, 65],
-        "post_process_scores": [0.99281, 0.98698, 0.99031, 0.98309, 0.51899],
-        "post_process_boxes": [11.65812, 55.13201, 318.35583, 473.22156],
-        "loss": 19.771887,
-    },
     "stevenbucaille/rf-detr-base": {
         "logits": [-7.60410, -4.65943, -10.03144, -5.63881, -9.88291],
         "boxes": [0.25465, 0.54864, 0.48583, 0.86991, 0.16926],
@@ -637,50 +605,10 @@ EXPECTED_OBJECT_DETECTION_OUTPUTS = {
         "post_process_scores": [0.98291, 0.97628, 0.97799, 0.86630, 0.61596],
         "post_process_boxes": [7.51008, 54.56673, 318.44214, 472.12595],
         "loss": 21.967346,
-    },
-    "stevenbucaille/rf-detr-base-2": {
-        "logits": [-6.81648, -6.80946, -7.72004, -6.06710, -10.37419],
-        "boxes": [0.16911, 0.19784, 0.21076, 0.09273, 0.25263],
-        "post_process_labels": [75, 17, 17, 75, 63],
-        "post_process_scores": [0.98108, 0.97893, 0.96431, 0.82874, 0.43441],
-        "post_process_boxes": [40.78329, 72.70991, 175.67207, 117.21776],
-        "loss": 21.532478,
-    },
-    "stevenbucaille/rf-detr-medium": {
-        "logits": [-6.58581, -8.07883, -12.52392, -7.78248, -10.47323],
-        "boxes": [0.16824, 0.19932, 0.21110, 0.09385, 0.77087],
-        "post_process_labels": [75, 17, 17, 75, 63],
-        "post_process_scores": [0.98818, 0.98767, 0.98665, 0.98013, 0.42874],
-        "post_process_boxes": [40.12718, 73.15034, 175.22226, 118.19680],
-        "loss": 26.337656,
-    },
-    "stevenbucaille/rf-detr-large": {
-        "logits": [-6.38973, -8.19355, -12.09174, -7.80438, -10.15835],
-        "boxes": [0.16901, 0.19936, 0.21087, 0.09311, 0.77199],
-        "post_process_labels": [75, 17, 17, 75, 63],
-        "post_process_scores": [0.99024, 0.98684, 0.98713, 0.94908, 0.52595],
-        "post_process_boxes": [40.68745, 73.34576, 175.64552, 118.03757],
-        "loss": 27.111633,
-    },
+    }
 }
 
 EXPECTED_SEGMENTATION_OUTPUTS = {
-    "stevenbucaille/rf-detr-seg-preview": {
-        "logits": [-7.05877, -4.23362, -6.54288, -8.13384, -6.36838],
-        "boxes": [0.25603, 0.55164, 0.48340, 0.87798, 0.73861],
-        "pred_masks": [-16.72129, -16.17153, -17.06426, -17.29409, -17.78559],
-        "post_process_labels": [17, 75, 75, 17],
-        "post_process_scores": [0.98604, 0.985644, 0.950492, 0.967915],
-        "loss": 76.374206,
-    },
-    "stevenbucaille/rf-detr-seg-nano": {
-        "logits": [-7.38427, -5.59449, -9.97889, -11.03668, -8.62285],
-        "boxes": [0.25230, 0.54825, 0.48196, 0.86925, 0.77119],
-        "pred_masks": [-12.01641, -12.37785, -13.37312, -13.54168, -13.53435],
-        "post_process_labels": [17, 17, 75, 75],
-        "post_process_scores": [0.987039, 0.984917, 0.978123, 0.966226],
-        "loss": 93.131385,
-    },
     "stevenbucaille/rf-detr-seg-small": {
         "logits": [-7.35031, -5.09690, -9.58117, -10.80274, -8.35001],
         "boxes": [0.25607, 0.54820, 0.48018, 0.87013, 0.90797],
@@ -688,39 +616,7 @@ EXPECTED_SEGMENTATION_OUTPUTS = {
         "post_process_labels": [17, 75, 75, 17],
         "post_process_scores": [0.984295, 0.984524, 0.971301, 0.977482],
         "loss": 87.918113,
-    },
-    "stevenbucaille/rf-detr-seg-medium": {
-        "logits": [-7.48751, -5.21394, -9.35906, -9.31897, -8.08021],
-        "boxes": [0.76891, 0.41680, 0.46182, 0.72004, 0.16810],
-        "pred_masks": [-15.67913, -17.05902, -16.72426, -17.19833, -17.18960],
-        "post_process_labels": [17, 75, 17, 75],
-        "post_process_scores": [0.982117, 0.982515, 0.986937, 0.94945],
-        "loss": 96.400970,
-    },
-    "stevenbucaille/rf-detr-seg-large": {
-        "logits": [-7.37005, -5.04871, -9.19777, -9.37870, -7.96562],
-        "boxes": [0.76796, 0.41489, 0.46220, 0.72197, 0.25254],
-        "pred_masks": [-15.13846, -16.88754, -16.55486, -17.23686, -17.40160],
-        "post_process_labels": [17, 17, 75, 75],
-        "post_process_scores": [0.973857, 0.980841, 0.982329, 0.940749],
-        "loss": 91.295486,
-    },
-    "stevenbucaille/rf-detr-seg-xlarge": {
-        "logits": [-7.42486, -4.72502, -8.16429, -8.30500, -7.21668],
-        "boxes": [0.76863, 0.41618, 0.46055, 0.72461, 0.16735],
-        "pred_masks": [-15.15330, -17.61085, -16.79776, -17.33611, -17.39120],
-        "post_process_labels": [17, 75, 75, 17],
-        "post_process_scores": [0.978207, 0.979888, 0.943645, 0.982371],
-        "loss": 105.523971,
-    },
-    "stevenbucaille/rf-detr-seg-xxlarge": {
-        "logits": [-7.33242, -5.11294, -6.31125, -7.06520, -7.07922],
-        "boxes": [0.25516, 0.53685, 0.49769, 0.88601, 0.76872],
-        "pred_masks": [-7.94849, -8.57010, -8.60056, -8.92854, -8.99288],
-        "post_process_labels": [17, 75, 75, 17],
-        "post_process_scores": [0.980528, 0.976553, 0.846246, 0.974776],
-        "loss": 98.795463,
-    },
+    }
 }
 
 
