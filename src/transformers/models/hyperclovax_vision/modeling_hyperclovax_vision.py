@@ -38,6 +38,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.auto import AutoModel
 from ...models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ...models.qwen2_5_vl.modeling_qwen2_5_vl import (
+    Qwen2_5_VisionRotaryEmbedding,
     Qwen2_5_VisionTransformerPretrainedModel,
     Qwen2_5_VLModelOutputWithPast,
 )
@@ -128,7 +129,7 @@ class HyperCLOVAXRotaryEmbedding(nn.Module):
         self.original_max_seq_len = config.max_position_embeddings
         inv_freq, self.attention_scaling = _compute_default_rope_parameters(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq, persistent=False)
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -417,6 +418,10 @@ class HCXVisionPreTrainedModel(PreTrainedModel):
             inv_freq, _ = _compute_default_rope_parameters(module.config)
             init.copy_(module.inv_freq, inv_freq)
             init.copy_(module.original_inv_freq, inv_freq)
+
+        if isinstance(module, Qwen2_5_VisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring

@@ -163,6 +163,10 @@ class HCXVisionPreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
             init.copy_(module.original_inv_freq, inv_freq)
 
+        if isinstance(module, Qwen2_5_VisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
+
 
 @auto_docstring
 class HyperClovaXTextModel(HCXVisionPreTrainedModel):
