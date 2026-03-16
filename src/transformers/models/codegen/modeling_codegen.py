@@ -228,9 +228,7 @@ class CodeGenMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.gptj.modeling_gptj.GPTJBlock with GPTJ->CodeGen
 class CodeGenBlock(GradientCheckpointingLayer):
-    # Ignore copy
     def __init__(self, config, layer_idx=None):
         super().__init__()
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
@@ -245,22 +243,24 @@ class CodeGenBlock(GradientCheckpointingLayer):
         attention_mask: torch.FloatTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         use_cache: bool | None = False,
+        output_attentions: bool | None = False,
         cache_position: torch.LongTensor | None = None,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor] | tuple[torch.Tensor, tuple[torch.FloatTensor, ...]] | None:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
-        attn_outputs, _ = self.attn(
+        attn_outputs, attn_weights = self.attn(
             hidden_states=hidden_states,
             layer_past=layer_past,
             attention_mask=attention_mask,
             position_ids=position_ids,
             use_cache=use_cache,
+            output_attentions=output_attentions,
             cache_position=cache_position,
         )
         feed_forward_hidden_states = self.mlp(hidden_states)
         hidden_states = attn_outputs + feed_forward_hidden_states + residual
 
-        return hidden_states
+        return hidden_states, attn_weights
 
 
 @auto_docstring
