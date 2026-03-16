@@ -93,7 +93,7 @@ else:
             ("groupvit", "CLIPProcessor"),
             ("higgs_audio_v2", "HiggsAudioV2Processor"),
             ("hubert", "Wav2Vec2Processor"),
-            ("hyperclovax_vision", "HyperClovaXProcessor"),
+            ("hyperclovax_vision", "HCXVisionV2Processor"),
             ("idefics", "IdeficsProcessor"),
             ("idefics2", "Idefics2Processor"),
             ("idefics3", "Idefics3Processor"),
