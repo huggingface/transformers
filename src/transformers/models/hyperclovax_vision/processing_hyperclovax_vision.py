@@ -1,3 +1,5 @@
+import copy
+
 from typing_extensions import Unpack
 
 from ...image_processing_utils import BatchFeature
@@ -38,6 +40,20 @@ class HCXVisionV2Processor(ProcessorMixin):
             else tokenizer.convert_tokens_to_ids(self.video_token)
         )
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
+
+    def apply_chat_template(self, conversation, chat_template=None, **kwargs):
+        conversation = copy.deepcopy(conversation)
+
+        tokenize = kwargs.get("tokenize", False)
+        if not tokenize:
+            template = chat_template
+            if template is None:
+                template = (
+                    self.chat_template["default"] if isinstance(self.chat_template, dict) else self.chat_template
+                )
+            return self.tokenizer.apply_chat_template(conversation, chat_template=template, **kwargs)
+
+        return super().conversation(conversation, chat_template=chat_template, **kwargs)
 
     @auto_docstring
     def __call__(
