@@ -54,12 +54,72 @@ class FastVlmConfig(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     image_token_index: int = 151646
-    image_seq_length: int = 576
     projector_hidden_act: str = "gelu"
     vision_feature_select_strategy: str = "full"
     vision_feature_layer: int | list[int] = -1
     multimodal_projector_bias: bool = True
     tie_word_embeddings: bool = False
+
+    def __init__(
+        self,
+        vision_config=None,
+        text_config=None,
+        image_token_index=32000,
+        projector_hidden_act="gelu",
+        vision_feature_select_strategy="default",
+        vision_feature_layer=-2,
+        image_seq_length=576,
+        multimodal_projector_bias=True,
+        tie_word_embeddings=False,
+        **kwargs,
+    ):
+        self.image_token_index = image_token_index
+        self.projector_hidden_act = projector_hidden_act
+        self.image_seq_length = image_seq_length
+        self.tie_word_embeddings = tie_word_embeddings
+
+        if vision_feature_select_strategy not in ["default", "full"]:
+            raise ValueError(
+                "vision_feature_select_strategy should be one of 'default', 'full'."
+                f"Got: {vision_feature_select_strategy}"
+            )
+
+        self.vision_feature_select_strategy = vision_feature_select_strategy
+        self.vision_feature_layer = vision_feature_layer
+
+        if isinstance(vision_config, dict):
+            vision_config["model_type"] = vision_config.get("model_type", "clip_vision_model")
+            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
+        elif vision_config is None:
+            vision_config = CONFIG_MAPPING["clip_vision_model"](
+                intermediate_size=4096,
+                hidden_size=1024,
+                patch_size=14,
+                image_size=336,
+                num_hidden_layers=24,
+                num_attention_heads=16,
+                vocab_size=32000,
+                projection_dim=768,
+            )
+
+        self.vision_config = vision_config
+
+        if isinstance(text_config, dict):
+            text_config["model_type"] = text_config.get("model_type", "llama")
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        elif text_config is None:
+            text_config = CONFIG_MAPPING["llama"]()
+
+        self.text_config = text_config
+        self.multimodal_projector_bias = multimodal_projector_bias
+
+        # The default value is `False` but this config is used with many model types
+        # Attr `tie_word_embeddings` was saved in text config for those models, so we
+        # need an ugly workaround and forward-pass the attr from text config
+        if not tie_word_embeddings and self.text_config.tie_word_embeddings:
+            self.tie_word_embeddings = self.text_config.tie_word_embeddings
+
+        super().__init__(**kwargs)
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):

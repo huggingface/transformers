@@ -835,7 +835,7 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(

@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
 
 from huggingface_hub.dataclasses import strict
@@ -70,41 +69,69 @@ class FalconMambaConfig(PreTrainedConfig):
 
     model_type = "falcon_mamba"
 
-    vocab_size: int = 50280
-    hidden_size: int = 768
-    state_size: int = 16
-    num_hidden_layers: int = 32
-    layer_norm_epsilon: float = 1e-5
-    pad_token_id: int | None = 0
-    bos_token_id: int | None = 0
-    eos_token_id: int | list[int] | None = 0
-    expand: int = 2
-    conv_kernel: int = 4
-    use_bias: bool = False
-    use_conv_bias: bool = True
-    hidden_act: str = "silu"
-    initializer_range: float = 0.1
-    residual_in_fp32: bool = True
-    time_step_rank: str | int = "auto"
-    time_step_scale: float = 1.0
-    time_step_min: float = 0.001
-    time_step_max: float = 0.1
-    time_step_init_scheme: str = "random"
-    time_step_floor: float = 1e-4
-    rescale_prenorm_residual: bool = False
-    use_cache: bool = True
-
     use_falcon_mambapy: bool = False
     use_associative_scan: bool = True
-    tie_word_embeddings: bool = True
     mixer_rms_eps: float = 1e-6
 
-    def __post_init__(self, **kwargs):
-        self.intermediate_size = int(self.expand * self.hidden_size)
-        self.time_step_rank = (
-            math.ceil(self.hidden_size / 16) if self.time_step_rank == "auto" else self.time_step_rank
-        )
-        super().__post_init__(**kwargs)
+    def __init__(
+        self,
+        vocab_size=50280,
+        hidden_size=768,
+        state_size=16,
+        num_hidden_layers=32,
+        layer_norm_epsilon=1e-5,
+        pad_token_id=0,
+        bos_token_id=0,
+        eos_token_id=0,
+        expand=2,
+        conv_kernel=4,
+        use_bias=False,
+        use_conv_bias=True,
+        hidden_act="silu",
+        initializer_range=0.1,
+        residual_in_fp32=True,
+        time_step_rank="auto",
+        time_step_scale=1.0,
+        time_step_min=0.001,
+        time_step_max=0.1,
+        time_step_init_scheme="random",
+        time_step_floor=1e-4,
+        rescale_prenorm_residual=False,
+        use_cache=True,
+        use_falcon_mambapy=False,
+        use_associative_scan=True,
+        tie_word_embeddings=True,
+        **kwargs,
+    ):
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.state_size = state_size
+        self.num_hidden_layers = num_hidden_layers
+        self.layer_norm_epsilon = layer_norm_epsilon
+        self.conv_kernel = conv_kernel
+        self.expand = expand
+        self.intermediate_size = int(expand * self.hidden_size)
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.use_bias = use_bias
+        self.use_conv_bias = use_conv_bias
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.time_step_rank = math.ceil(self.hidden_size / 16) if time_step_rank == "auto" else time_step_rank
+        self.time_step_scale = time_step_scale
+        self.time_step_min = time_step_min
+        self.time_step_max = time_step_max
+        self.time_step_init_scheme = time_step_init_scheme
+        self.time_step_floor = time_step_floor
+        self.rescale_prenorm_residual = rescale_prenorm_residual
+        self.residual_in_fp32 = residual_in_fp32
+        self.use_cache = use_cache
+        self.use_falcon_mambapy = use_falcon_mambapy
+        self.use_associative_scan = use_associative_scan
+        self.tie_word_embeddings = tie_word_embeddings
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["FalconMambaConfig"]
