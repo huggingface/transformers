@@ -21,7 +21,7 @@ one exporter (Dynamo, ONNX, ExecuTorch):
 - `get_leaf_tensors`: recursively extract all leaf tensors from nested outputs.
 - `prepare_for_export`: configure model config, attention/experts implementations,
   and patch non-exportable module behaviours before any export.
-- `simulate_generation`: run `model.generate()` and capture the forward kwargs
+- `decompose_prefill_decode`: run `model.generate()` and capture the forward kwargs
   for the prefill and decode steps.
 """
 
@@ -172,18 +172,21 @@ def prepare_for_export(
 # ── Simulate generation ─────────────────────────────────────────────────────
 
 
-def simulate_generation(model: "PreTrainedModel", inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Run generate() for 2 tokens and capture the prefill and decode inputs.
+def decompose_prefill_decode(
+    model: "PreTrainedModel", inputs: dict[str, Any]
+) -> tuple[tuple["PreTrainedModel", dict], tuple["PreTrainedModel", dict]]:
+    """Run generate() for 2 tokens and capture the prefill and decode model+inputs pairs.
 
     This reuses the full generation machinery so every model (hybrid, SSM,
     encoder-decoder, …) gets correct inputs without reimplementing the
     generation loop.
 
     Returns:
-        ``(prefill_inputs, decode_inputs)`` — the kwargs the forward received
-        on the first (prefill) and second (decode) iterations.
+        ``((prefill_model, prefill_inputs), (decode_model, decode_inputs))`` — a shallow
+        copy of the model and the forward kwargs captured on the first (prefill) and
+        second (decode) generation iterations.
     """
-    captured = []
+    captured_inputs = []
 
     @contextmanager
     def capture_forward(model):
@@ -191,7 +194,7 @@ def simulate_generation(model: "PreTrainedModel", inputs: dict[str, Any]) -> tup
 
         @functools.wraps(original_forward)
         def capturing_forward(*args, **kwargs):
-            captured.append(copy.deepcopy(kwargs))
+            captured_inputs.append(copy.deepcopy(kwargs))
             return original_forward(*args, **kwargs)
 
         model.forward = capturing_forward
@@ -203,9 +206,9 @@ def simulate_generation(model: "PreTrainedModel", inputs: dict[str, Any]) -> tup
             model.generate(**copy.deepcopy(inputs), max_new_tokens=2, min_new_tokens=2)
     except Exception as e:
         raise RuntimeError(
-            f"simulate_generation failed for {type(model).__name__}. "
+            f"decompose_prefill_decode failed for {type(model).__name__}. "
             f"Inputs passed: {list(inputs.keys())}. "
             f"Make sure the inputs are compatible with model.generate()."
         ) from e
 
-    return captured[0], captured[1]
+    return (copy.copy(model), captured_inputs[0]), (copy.copy(model), captured_inputs[1])

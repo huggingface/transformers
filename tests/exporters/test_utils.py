@@ -24,7 +24,7 @@ from transformers import set_seed
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
-from transformers.exporters.utils import get_leaf_tensors, simulate_generation
+from transformers.exporters.utils import decompose_prefill_decode, get_leaf_tensors
 from transformers.testing_utils import (
     require_executorch,
     require_onnxruntime,
@@ -39,7 +39,7 @@ from transformers.testing_utils import (
 # ──────────────────────────── skip lists ────────────────────────────
 
 # Model classes skipped for all export backends.
-_EXPORT_SKIP_MODEL_CLASSES = {
+EXPORT_SKIP_MODEL_CLASSES = {
     # VideoMAE computes loss even when return_loss=False, hitting a data-dependent guard in mse_loss.
     # TODO: fix VideoMAE to skip loss computation when labels are not provided.
     "VideoMAEForPreTraining",
@@ -51,9 +51,9 @@ _EXPORT_SKIP_MODEL_CLASSES = {
 
 
 # Model classes skipped for generate export tests only.
-_EXPORT_GENERATE_SKIP_MODEL_CLASSES = {
+EXPORT_GENERATE_SKIP_MODEL_CLASSES = {
     # These VLMs override generate() and delegate to an inner language model without ever calling
-    # the top-level forward(), so simulate_generation can't capture prefill/decode inputs.
+    # the top-level forward(), so decompose_prefill_decode can't capture prefill/decode inputs.
     # TODO: refactor these models to call the top-level forward() instead of using internal submodules
     "Blip2ForConditionalGeneration",
     "InstructBlipForConditionalGeneration",
@@ -71,8 +71,7 @@ _EXPORT_GENERATE_SKIP_MODEL_CLASSES = {
 
 
 # ONNX models that export but produce extremely inaccurate outputs (non-deterministic top-k, NaN, etc.).
-# TODO: investigate and fix each of these at the model level.
-_ONNX_EXTREMELY_INACCURATE_MODEL_TYPES: set[str] = {
+ONNX_EXTREMELY_INACCURATE_MODEL_TYPES: set[str] = {
     "blt",  # 94.3% mismatch in last_hidden_state
     "flava",  # non-deterministic masking produces variable output shapes (mmm_image_logits)
     "flaubert",  # 40% mismatch in end_top_index (top-k beam search non-determinism)
@@ -87,14 +86,19 @@ _ONNX_EXTREMELY_INACCURATE_MODEL_TYPES: set[str] = {
     "rt_detr_v2",  # 43.3% mismatch in enc_topk_bboxes (non-deterministic top-k)
     "siglip2",  # 100% mismatch in logits
     "siglip2_vision_model",  # 73.8% mismatch in last_hidden_state
+    "lw_detr",  # 6.7% mismatch in enc_outputs_coord_logits
     "vit_mae",  # 99.3% mismatch in ids_restore (random masking)
     "xlm",  # 6.2% mismatch in end_top_index
 }
 
-_DYNAMIC_EXPORT_PARAMS = parameterized.expand(
+# Parameterization for torch.export export tests. Tests will run once with dynamic=True and once with dynamic=False,
+DYNAMIC_EXPORT_PARAMS = parameterized.expand(
     [(False,)],
     name_func=lambda f, _, p: f"{f.__name__}_{'dynamic' if p.args[0] else 'static'}",
 )
+
+# Maximum time (in seconds) for a single export test before it is killed.
+EXPORT_TEST_TIMEOUT = 60
 
 
 # ──────────────────────────── helpers ────────────────────────────
@@ -118,25 +122,13 @@ def _disable_loss(config, inputs_dict):
     config.return_loss = False
 
 
-def _move_flags_to_config(model, *inputs_dicts):
-    """Pop output flags from one or more inputs dicts and set them on model.config.
-
-    When multiple dicts are provided, flags must have consistent values across all dicts.
-    """
-    # Output flags that must live on model.config, not in the inputs dict. simulate_generation captures
-    # these from generate()'s kwargs; we move them to config so eager and exported runs match.
+def _move_flags_to_config(model, inputs):
+    """Pop output flags from inputs and set them on model.config."""
     _output_flags = ("use_cache", "output_attentions", "output_hidden_states", "return_dict", "return_loss")
     for flag in _output_flags:
-        values = [d.pop(flag, None) for d in inputs_dicts]
-        non_none = [v for v in values if v is not None]
-        if not non_none:
-            continue
-        if len(set(non_none)) > 1:
-            raise ValueError(
-                f"Output flag '{flag}' has inconsistent values across inputs: {non_none}. "
-                f"simulate_generation should produce consistent flags across stages."
-            )
-        setattr(model.config, flag, non_none[0])
+        value = inputs.pop(flag, None)
+        if value is not None:
+            setattr(model.config, flag, value)
 
 
 def _set_exportable_impl(model):
@@ -177,7 +169,7 @@ class ExportTesterMixin:
             self.skipTest(reason="Model architecture is not Dynamo exportable/traceable")
 
         # TODO: these source-code greps silently hide unexportable models. Each pattern should be
-        # fixed at the model level and the affected models moved to _EXPORT_SKIP_MODEL_CLASSES.
+        # fixed at the model level and the affected models moved to EXPORT_SKIP_MODEL_CLASSES.
         with open(inspect.getfile(self.all_model_classes[0]), "r") as f:
             source_code = f.read()
             # TODO: rewrite chunked attention loops as tensor ops or use torch._dynamo.allow_in_graph
@@ -192,9 +184,9 @@ class ExportTesterMixin:
 
     def _should_skip(self, model_class, generate=False):
         """Return True if this model class should be skipped for export tests."""
-        if model_class.__name__ in _EXPORT_SKIP_MODEL_CLASSES:
+        if model_class.__name__ in EXPORT_SKIP_MODEL_CLASSES:
             return True
-        if generate and model_class.__name__ in _EXPORT_GENERATE_SKIP_MODEL_CLASSES:
+        if generate and model_class.__name__ in EXPORT_GENERATE_SKIP_MODEL_CLASSES:
             return True
         return False
 
@@ -253,9 +245,10 @@ class ExportTesterMixin:
 
     # ──────────────────── torch.export tests ─────────────────────
 
-    @_DYNAMIC_EXPORT_PARAMS
     @slow
+    @DYNAMIC_EXPORT_PARAMS
     @pytest.mark.torch_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     def test_torch_export(self, dynamic, atol=1e-4, rtol=1e-4):
         """Test if model can be exported with torch.export.export()"""
         self._skip_if_not_exportable()
@@ -289,6 +282,7 @@ class ExportTesterMixin:
     @require_onnxscript
     @require_onnxruntime
     @pytest.mark.onnx_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     def test_onnx_export(self, atol=1e-2, rtol=1e-2):
         """Test if model can be exported with torch.onnx.export()"""
         self._skip_if_not_exportable()
@@ -316,7 +310,7 @@ class ExportTesterMixin:
                 onnx_outputs = dict(zip(onnx_names, onnx_outputs))
                 self.assertTrue(onnx_outputs, "ONNX outputs are empty.")
 
-                if model.config.model_type not in _ONNX_EXTREMELY_INACCURATE_MODEL_TYPES:
+                if model.config.model_type not in ONNX_EXTREMELY_INACCURATE_MODEL_TYPES:
                     self._check_outputs_close(onnx_outputs, eager_outputs, atol=atol, rtol=rtol, check_device=False)
 
     # ──────────────────── ExecuTorch tests ───────────────────────
@@ -324,6 +318,7 @@ class ExportTesterMixin:
     @slow
     @require_executorch
     @pytest.mark.executorch_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     def test_executorch_export(self):
         """Test if model can be exported with ExecuTorchExporter."""
 
@@ -374,42 +369,47 @@ class ExportGenerateTesterMixin:
                 f"The test is not preparing inputs correctly. Inputs: {list(inputs_dict.keys())}"
             ) from e
 
-        prefill_inputs, decode_inputs = simulate_generation(model, inputs_dict)
+        (prefill_model, prefill_inputs), (decode_model, decode_inputs) = decompose_prefill_decode(model, inputs_dict)
 
-        # Move output flags from inputs to config. simulate_generation captures whatever
+        # Move output flags from inputs to config. decompose_prefill_decode captures whatever
         # generate() passes to forward(), which includes flags like use_cache, return_dict, etc.
         # These must live on the config so eager and exported runs produce matching output structures.
-        _move_flags_to_config(model, prefill_inputs, decode_inputs)
+        _move_flags_to_config(prefill_model, prefill_inputs)
+        _move_flags_to_config(decode_model, decode_inputs)
 
         # Sanity check: captured inputs must work with eager forward before we attempt export
-        for stage_name, stage_inputs in [("prefill", prefill_inputs), ("decode", decode_inputs)]:
+        for stage_name, stage_model, stage_inputs in [
+            ("prefill", prefill_model, prefill_inputs),
+            ("decode", decode_model, decode_inputs),
+        ]:
             shapes = {k: v.shape if hasattr(v, "shape") else type(v).__name__ for k, v in stage_inputs.items()}
             try:
                 with torch.no_grad():
-                    model(**copy.deepcopy(stage_inputs))
+                    stage_model(**copy.deepcopy(stage_inputs))
             except Exception as e:
                 raise RuntimeError(
-                    f"Eager forward ({stage_name}) failed for {model_class.__name__} after simulate_generation. "
+                    f"Eager forward ({stage_name}) failed for {model_class.__name__} after decompose_prefill_decode. "
                     f"The captured inputs are inconsistent. Shapes: {shapes}"
                 ) from e
 
-        return model, prefill_inputs, decode_inputs
+        return (prefill_model, prefill_inputs), (decode_model, decode_inputs)
 
-    def _collect_eager_outputs(self, model, stages):
+    def _collect_eager_outputs(self, stages):
         """Run eager forward for each stage and return a dict of {stage_name: leaf_tensors}."""
         eager_outputs = {}
-        for stage_name, stage_inputs in stages:
+        for stage_name, stage_model, stage_inputs in stages:
             with torch.no_grad():
                 set_seed(1234)
-                eager_outputs[stage_name] = get_leaf_tensors(model(**copy.deepcopy(stage_inputs)))
+                eager_outputs[stage_name] = get_leaf_tensors(stage_model(**copy.deepcopy(stage_inputs)))
                 assert eager_outputs[stage_name], f"Eager outputs are empty for {stage_name}."
         return eager_outputs
 
     # ──────────────────── torch.export tests ─────────────────────
 
-    @_DYNAMIC_EXPORT_PARAMS
     @slow
+    @DYNAMIC_EXPORT_PARAMS
     @pytest.mark.torch_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     def test_torch_export_generate(self, dynamic, atol=1e-4, rtol=1e-4):
         """Test if generative model can be exported for prefill and decode."""
         self._skip_if_not_exportable()
@@ -421,15 +421,17 @@ class ExportGenerateTesterMixin:
                 if self._should_skip(model_class, generate=True):
                     continue
 
-                model, prefill_inputs, decode_inputs = self._prepare_export_generate_model_and_inputs(model_class)
-                stages = [("prefill", prefill_inputs), ("decode", decode_inputs)]
+                (prefill_model, prefill_inputs), (decode_model, decode_inputs) = (
+                    self._prepare_export_generate_model_and_inputs(model_class)
+                )
+                stages = [("prefill", prefill_model, prefill_inputs), ("decode", decode_model, decode_inputs)]
 
                 # Collect eager outputs before export (export modifies the model in-place)
-                eager_outputs = self._collect_eager_outputs(model, stages)
+                eager_outputs = self._collect_eager_outputs(stages)
 
-                for stage_name, stage_inputs in stages:
+                for stage_name, stage_model, stage_inputs in stages:
                     with self.subTest(stage=stage_name):
-                        exported_program = exporter.export(model, stage_inputs)
+                        exported_program = exporter.export(stage_model, stage_inputs)
 
                         with torch.no_grad():
                             set_seed(1234)
@@ -446,6 +448,7 @@ class ExportGenerateTesterMixin:
     @require_onnxscript
     @require_onnxruntime
     @pytest.mark.onnx_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     def test_onnx_export_generate(self, atol=1e-2, rtol=1e-2):
         """Test if generative model can be ONNX-exported for prefill and decode."""
         self._skip_if_not_exportable()
@@ -457,15 +460,17 @@ class ExportGenerateTesterMixin:
                 if self._should_skip(model_class, generate=True):
                     continue
 
-                model, prefill_inputs, decode_inputs = self._prepare_export_generate_model_and_inputs(model_class)
-                stages = [("prefill", prefill_inputs), ("decode", decode_inputs)]
+                (prefill_model, prefill_inputs), (decode_model, decode_inputs) = (
+                    self._prepare_export_generate_model_and_inputs(model_class)
+                )
+                stages = [("prefill", prefill_model, prefill_inputs), ("decode", decode_model, decode_inputs)]
 
                 # Collect eager outputs before export (export modifies the model in-place)
-                eager_outputs = self._collect_eager_outputs(model, stages)
+                eager_outputs = self._collect_eager_outputs(stages)
 
-                for stage_name, stage_inputs in stages:
+                for stage_name, stage_model, stage_inputs in stages:
                     with self.subTest(stage=stage_name):
-                        onnx_program = exporter.export(model, stage_inputs)
+                        onnx_program = exporter.export(stage_model, stage_inputs)
                         onnx_inputs = {
                             k: v for k, v in stage_inputs.items() if not isinstance(v, (bool, int, float, str))
                         }
@@ -478,7 +483,7 @@ class ExportGenerateTesterMixin:
                         onnx_outputs = dict(zip(onnx_names, onnx_outputs))
                         self.assertTrue(onnx_outputs, "ONNX outputs are empty.")
 
-                        if model.config.model_type not in _ONNX_EXTREMELY_INACCURATE_MODEL_TYPES:
+                        if stage_model.config.model_type not in ONNX_EXTREMELY_INACCURATE_MODEL_TYPES:
                             self._check_outputs_close(
                                 eager_outputs[stage_name], onnx_outputs, atol=atol, rtol=rtol, check_device=False
                             )
@@ -488,6 +493,7 @@ class ExportGenerateTesterMixin:
     @slow
     @require_executorch
     @pytest.mark.executorch_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     def test_executorch_export_generate(self):
         """Test if generative model can be ExecuTorch-exported for prefill and decode."""
 
@@ -500,8 +506,13 @@ class ExportGenerateTesterMixin:
                 if self._should_skip(model_class, generate=True):
                     continue
 
-                model, prefill_inputs, decode_inputs = self._prepare_export_generate_model_and_inputs(model_class)
+                (prefill_model, prefill_inputs), (decode_model, decode_inputs) = (
+                    self._prepare_export_generate_model_and_inputs(model_class)
+                )
 
-                for stage_name, stage_inputs in [("prefill", prefill_inputs), ("decode", decode_inputs)]:
+                for stage_name, stage_model, stage_inputs in [
+                    ("prefill", prefill_model, prefill_inputs),
+                    ("decode", decode_model, decode_inputs),
+                ]:
                     with self.subTest(stage=stage_name):
-                        exporter.export(model, stage_inputs)
+                        exporter.export(stage_model, stage_inputs)
