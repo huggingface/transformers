@@ -5,35 +5,6 @@ from ..modeling_flash_attention_utils import lazy_import_paged_flash_attention
 
 
 @torch.compiler.disable
-def _flash_attn_with_kvcache_wrapper(
-    flash_attn_with_kvcache,
-    q: torch.Tensor,
-    k_cache: torch.Tensor,
-    v_cache: torch.Tensor,
-    k: torch.Tensor,
-    v: torch.Tensor,
-    cache_seqlens: torch.Tensor,
-    softmax_scale: float,
-    causal: bool,
-    window_size: tuple[int, int],
-    **flash_kwargs,
-) -> torch.Tensor:
-    """Non-compiled wrapper around flash_attn_with_kvcache to prevent dynamo tracing issues."""
-    return flash_attn_with_kvcache(
-        q,
-        k_cache,
-        v_cache,
-        k=k,
-        v=v,
-        cache_seqlens=cache_seqlens,
-        softmax_scale=softmax_scale,
-        causal=causal,
-        window_size=window_size,
-        **flash_kwargs,
-    )
-
-
-@torch.compiler.disable
 def paged_attention_forward(
     module: torch.nn.Module,
     q: torch.Tensor,
@@ -133,20 +104,17 @@ def paged_attention_forward(
             flash_kwargs["s_aux"] = kwargs["s_aux"]  # this is only available in VLLM's FA3
         # Call flash_attn_with_kvcache - this updates cache in-place and computes attention
         # Use wrapper to prevent dynamo from tracing into the flash attention kernel
-        attn_output = (
-            _flash_attn_with_kvcache_wrapper(  # TODO: add more doc in a dedicated wrapper (coming in next PRs)
-                flash_attn_with_kvcache,
-                q=q,
-                k_cache=k_cache,
-                v_cache=v_cache,
-                k=k,
-                v=v,
-                cache_seqlens=cache_seqlens,
-                softmax_scale=module.scaling,
-                causal=True,
-                window_size=sliding_window,
-                **flash_kwargs,
-            )
+        attn_output = flash_attn_with_kvcache(
+            q=q,
+            k_cache=k_cache,
+            v_cache=v_cache,
+            k=k,
+            v=v,
+            cache_seqlens=cache_seqlens,
+            softmax_scale=module.scaling,
+            causal=True,
+            window_size=sliding_window,
+            **flash_kwargs,
         )
         if isinstance(attn_output, tuple):
             attn_output = attn_output[0]
