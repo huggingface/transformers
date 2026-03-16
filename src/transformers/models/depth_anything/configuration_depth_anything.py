@@ -15,47 +15,33 @@
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="LiheYoung/depth-anything-small-hf")
 class DepthAnythingConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DepthAnythingModel`]. It is used to instantiate a DepthAnything
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the DepthAnything
-    [LiheYoung/depth-anything-small-hf](https://huggingface.co/LiheYoung/depth-anything-small-hf) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `Dinov2Config()`):
-            The configuration of the backbone model.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size of the patches to extract from the backbone features.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        reassemble_hidden_size (`int`, *optional*, defaults to 384):
-            The number of input channels of the reassemble layers.
-        reassemble_factors (`list[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
-            The up/downsampling factors of the reassemble layers.
-        neck_hidden_sizes (`list[str]`, *optional*, defaults to `[48, 96, 192, 384]`):
-            The hidden sizes to project to for the feature maps of the backbone.
-        fusion_hidden_size (`int`, *optional*, defaults to 64):
-            The number of channels before fusion.
-        head_in_index (`int`, *optional*, defaults to -1):
-            The index of the features to use in the depth estimation head.
-        head_hidden_size (`int`, *optional*, defaults to 32):
-            The number of output channels in the second convolution of the depth estimation head.
-        depth_estimation_type (`str`, *optional*, defaults to `"relative"`):
-            The type of depth estimation to use. Can be one of `["relative", "metric"]`.
-        max_depth (`float`, *optional*):
-            The maximum depth to use for the "metric" depth estimation head. 20 should be used for indoor models
-            and 80 for outdoor models. For "relative" depth estimation, this value is ignored.
+    reassemble_hidden_size (`int`, *optional*, defaults to 384):
+        The number of input channels of the reassemble layers.
+    reassemble_factors (`list[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
+        The up/downsampling factors of the reassemble layers.
+    neck_hidden_sizes (`list[str]`, *optional*, defaults to `[48, 96, 192, 384]`):
+        The hidden sizes to project to for the feature maps of the backbone.
+    fusion_hidden_size (`int`, *optional*, defaults to 64):
+        The number of channels before fusion.
+    head_in_index (`int`, *optional*, defaults to -1):
+        The index of the features to use in the depth estimation head.
+    head_hidden_size (`int`, *optional*, defaults to 32):
+        The number of output channels in the second convolution of the depth estimation head.
+    depth_estimation_type (`str`, *optional*, defaults to `"relative"`):
+        The type of depth estimation to use. Can be one of `["relative", "metric"]`.
+    max_depth (`float`, *optional*):
+        The maximum depth to use for the "metric" depth estimation head. 20 should be used for indoor models
+        and 80 for outdoor models. For "relative" depth estimation, this value is ignored.
 
     Example:
 

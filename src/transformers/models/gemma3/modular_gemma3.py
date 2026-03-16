@@ -59,77 +59,18 @@ from ..siglip import SiglipVisionConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="google/gemma-3-4b-it")
 class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Gemma3TextModel`]. It is used to instantiate an Gemma3Text
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Gemma3Text-7B.
-    e.g. [google/gemma3_text-7b](https://huggingface.co/google/gemma3_text-7b)
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 262208):
-            Vocabulary size of the Gemma3Text model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Gemma3TextModel`]
-        hidden_size (`int`, *optional*, defaults to 2304):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 9216):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 26):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*, defaults to 4):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
-            `num_attention_heads`.
-        head_dim (`int`, *optional*, defaults to 256):
-            The attention head dimension.
-        hidden_activation (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the decoder. Will default to `"gelu_pytorch_tanh"`
-            if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"` activation function.
-        max_position_embeddings (`int`, *optional*, defaults to 131072):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*, defaults to 0):
-            Padding token id.
-        eos_token_id (`int`, *optional*, defaults to 1):
-            End of stream token id.
-        bos_token_id (`int`, *optional*, defaults to 2):
-            Beginning of stream token id.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        query_pre_attn_scalar (`float`, *optional*, defaults to 256):
-            Scaling factor used on the attention scores
-        sliding_window (`int`, *optional*, defaults to 4096):
-            In Gemma3Text, every other layer uses sliding window attention. This is the size of the sliding window.
-        layer_types (`list`, *optional*):
-            Attention pattern for each layer.
-        final_logit_softcapping (`float`, *optional*):
-            Scaling factor when applying tanh softcapping on the logits.
-        attn_logit_softcapping (`float`, *optional*):
-            Scaling factor when applying tanh softcapping on the attention scores.
-        rope_parameters (`dict`, *optional*):
-            Dictionary mapping attention patterns (`"full_attention"`, `"sliding_attention"`) to `RopeParameters`.
-            Each value should be a dictionary containing `rope_type` and optional scaling parameters.
-        use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
-            If True, the model will attend to all text tokens instead of using a causal mask. This does not change
-            behavior for vision tokens.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
+    final_logit_softcapping (`float`, *optional*):
+        Scaling factor when applying tanh softcapping on the logits.
+    attn_logit_softcapping (`float`, *optional*):
+        Scaling factor when applying tanh softcapping on the attention scores.
+    query_pre_attn_scalar (`float`, *optional*, defaults to 256):
+        scaling factor used on the attention scores
+    use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
+        If True, the model will attend to all text tokens instead of using a causal mask. This does not change
+        behavior for vision tokens.
 
     ```python
     >>> from transformers import Gemma3TextModel, Gemma3TextConfig
@@ -257,34 +198,15 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
         return kwargs
 
 
+@auto_docstring(checkpoint="google/gemma-3-4b-it")
 class Gemma3Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Gemma3ForConditionalGeneration`]. It is used to instantiate an
-    Gemma3ForConditionalGeneration according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the PaliGemma-2B.
-
-    e.g. [google/gemma-3-4b](https://huggingface.co/google/gemma-3-4b)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`Union[Gemma3TextConfig, dict]`, *optional*):
-            The config object of the text backbone.
-        vision_config (`Union[AutoConfig, dict]`,  *optional*):
-            Custom vision config or dict.
-        mm_tokens_per_image (`int`, *optional*, defaults to 256):
-            The number of tokens per image embedding.
-        boi_token_index (`int`, *optional*, defaults to 255999):
-            The begin-of-image token index to wrap the image prompt.
-        eoi_token_index (`int`, *optional*, defaults to 256000):
-            The end-of-image token index to wrap the image prompt.
-        image_token_index (`int`, *optional*, defaults to 262144):
-            The image token index to encode the image prompt.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
+    mm_tokens_per_image (`int`, *optional*, defaults to 256):
+        The number of tokens per image embedding.
+    boi_token_index (`int`, *optional*, defaults to 255999):
+        The begin-of-image token index to wrap the image prompt.
+    eoi_token_index (`int`, *optional*, defaults to 256000):
+        The end-of-image token index to wrap the image prompt.
 
     Example:
 
@@ -482,7 +404,6 @@ class Gemma3Attention(Gemma2Attention):
         position_embeddings: torch.Tensor = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
@@ -499,9 +420,7 @@ class Gemma3Attention(Gemma2Attention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -545,7 +464,6 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
@@ -558,7 +476,6 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = self.post_attention_layernorm(hidden_states)
@@ -639,7 +556,6 @@ class Gemma3TextModel(Gemma2Model):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -651,14 +567,10 @@ class Gemma3TextModel(Gemma2Model):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
@@ -667,7 +579,6 @@ class Gemma3TextModel(Gemma2Model):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
@@ -696,7 +607,6 @@ class Gemma3TextModel(Gemma2Model):
                 position_embeddings=position_embeddings[decoder_layer.attention_type],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -757,7 +667,6 @@ def create_causal_mask_mapping(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    cache_position: torch.Tensor,
     past_key_values: Cache | None,
     position_ids: torch.Tensor | None,
     token_type_ids: torch.Tensor | None = None,
@@ -779,7 +688,6 @@ def create_causal_mask_mapping(
         "config": config.get_text_config(),
         "inputs_embeds": inputs_embeds,
         "attention_mask": attention_mask,
-        "cache_position": cache_position,
         "past_key_values": past_key_values,
         "position_ids": position_ids,
     }
@@ -797,13 +705,13 @@ def create_causal_mask_mapping(
 
         # First find where a new image block starts: 1 if image and previous not image
         # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
-        is_image = (token_type_ids == 1).to(cache_position.device)
+        is_image = (token_type_ids == 1).to(inputs_embeds.device)
         is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
         new_image_start = is_image & ~is_previous_image
         image_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
         image_group_ids = torch.where(is_image, image_group_ids, -1)
         mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
-            token_type_ids.to(cache_position.device), image_group_ids
+            token_type_ids.to(inputs_embeds.device), image_group_ids
         )
 
     return create_masks_for_generate(**mask_kwargs)
@@ -838,7 +746,6 @@ class Gemma3Model(PaliGemmaModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -858,12 +765,6 @@ class Gemma3Model(PaliGemmaModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
         # Merge text and images
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
@@ -879,7 +780,6 @@ class Gemma3Model(PaliGemmaModel):
                 self.config,
                 inputs_embeds,
                 attention_mask,
-                cache_position,
                 past_key_values,
                 position_ids,
                 token_type_ids,
@@ -894,7 +794,6 @@ class Gemma3Model(PaliGemmaModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
-            cache_position=cache_position,
             **lm_kwargs,
         )
 
@@ -922,7 +821,6 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -984,7 +882,6 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             labels=labels,
-            cache_position=cache_position,
             **lm_kwargs,
         )
 
@@ -1029,7 +926,6 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         input_ids,
         past_key_values=None,
         inputs_embeds=None,
-        cache_position=None,
         position_ids=None,
         pixel_values=None,
         attention_mask=None,
@@ -1047,7 +943,6 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            cache_position=cache_position,
             use_cache=use_cache,
             logits_to_keep=logits_to_keep,
             token_type_ids=token_type_ids,
