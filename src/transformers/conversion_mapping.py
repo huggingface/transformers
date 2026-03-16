@@ -66,7 +66,8 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "paligemma": "llava",
     "ayavision": "llava",
     "fuyu": "llava",
-    "gotocr2": "llava",
+    "got_ocr2": "llava",
+    "shieldgemma2": "llava",
     "gemma3": "llava",
     "internvl": "llava",
     "llava_next": "llava",
@@ -95,7 +96,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"text_model.model", target_patterns="text_model"),
             WeightRenaming(source_patterns=r"text_model.lm_head", target_patterns="lm_head"),
         ],
-        "paddleocrvl": [
+        "paddleocr_vl": [
+            WeightRenaming(source_patterns=r"mlp_AR", target_patterns="model.projector"),
             WeightRenaming(
                 source_patterns=r"^model(?!(\.visual|\.projector|\.language_model))",
                 target_patterns="model.language_model",
@@ -140,7 +142,7 @@ def _build_checkpoint_conversion_mapping():
         ],
         "sam3_tracker": [
             WeightRenaming(
-                source_patterns=r"detector_model.vision_encoder.backbone.", target_patterns="vision_encoder.backbone"
+                source_patterns=r"detector_model.vision_encoder.backbone.", target_patterns="vision_encoder.backbone."
             ),
             WeightRenaming(source_patterns=r"tracker_neck.", target_patterns="vision_encoder.neck."),
         ],
