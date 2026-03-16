@@ -140,7 +140,6 @@ class ViTMAEPatchEmbeddings(nn.Module):
         return self.projection(pixel_values).flatten(2).transpose(1, 2)
 
 
-
 class ViTMAEEmbeddings(nn.Module):
     """
     Construct the CLS token, position and patch embeddings for MAE.

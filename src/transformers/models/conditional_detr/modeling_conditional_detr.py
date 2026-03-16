@@ -489,7 +489,7 @@ class ConditionalDetrDecoderSelfAttention(nn.Module):
         config: ConditionalDetrConfig,
         hidden_size: int,
         num_attention_heads: int,
-        dropout: float = 0.0,
+        dropout: float | int = 0.0,
     ):
         super().__init__()
         self.config = config
@@ -575,7 +575,7 @@ class ConditionalDetrDecoderCrossAttention(nn.Module):
         config: ConditionalDetrConfig,
         hidden_size: int,
         num_attention_heads: int,
-        dropout: float = 0.0,
+        dropout: float | int = 0.0,
     ):
         super().__init__()
         self.config = config

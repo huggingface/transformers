@@ -165,7 +165,6 @@ class ViTEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.llama.modeling_llama.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,

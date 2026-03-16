@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-TODO
+LASR is the architecture behind MedASR, a speech-to-text model from Google Health AI pre-trained for medical dictation. It's based on the [Conformer architecture](https://huggingface.co/papers/2005.08100) and designed as a starting point for developers building dictation tools with medical terminology, like radiology dictation. MedASR performs well on medical audio but can struggle with terms outside its training data, such as non-standard medication names or temporal references (dates, times, or durations).
 
 ## Usage
 
@@ -36,7 +36,7 @@ TODO
 ```py
 from transformers import pipeline
 
-pipe = pipeline("automatic-speech-recognition", model="path/to/lasr-model")
+pipe = pipeline("automatic-speech-recognition", model="google/medasr")
 out = pipe("path/to/audio.mp3")
 print(out)
 ```
@@ -47,12 +47,9 @@ print(out)
 ```py
 from transformers import AutoModelForCTC, AutoProcessor
 from datasets import load_dataset, Audio
-import torch
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
-processor = AutoProcessor.from_pretrained("path/to/lasr-model")
-model = AutoModelForCTC.from_pretrained("path/to/lasr-model", dtype="auto", device_map=device)
+processor = AutoProcessor.from_pretrained("google/medasr")
+model = AutoModelForCTC.from_pretrained("google/medasr", dtype="auto", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -67,13 +64,31 @@ print(processor.batch_decode(outputs))
 </hfoption>
 </hfoptions>
 
-### Making The Model Go Brrr
-
-TODO
-
 ### Training
 
-TODO
+The example below prepares a batch of audio and text, passes it through the LASR/MedASR model, and computes the training loss.
+
+```python
+from transformers import AutoModelForCTC, AutoProcessor
+from datasets import load_dataset, Audio
+
+# Load processor and model
+processor = AutoProcessor.from_pretrained("google/medasr")
+model = AutoModelForCTC.from_pretrained("google/medasr", dtype="auto", device_map="auto")
+
+# Load a small example dataset and prepare batch
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+speech_samples = [el["array"] for el in ds["audio"][:5]]
+text_samples = [el for el in ds["text"][:5]]
+
+# Passing `text` to the processor will prepare the `labels`
+inputs = processor(audio=speech_samples, text=text_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs.to(device, dtype=model.dtype)
+
+outputs = model(**inputs)
+outputs.loss.backward()
+```
 
 ## LasrTokenizer
 

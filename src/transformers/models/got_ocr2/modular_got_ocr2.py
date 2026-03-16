@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache
@@ -21,7 +23,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
@@ -29,7 +31,6 @@ from ..llava.modeling_llava import (
     LlavaModel,
     LlavaModelOutputWithPast,
     LlavaPreTrainedModel,
-    TransformersKwargs,
 )
 from ..sam.modeling_sam import (
     SamMLPBlock,
@@ -44,6 +45,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/sam-vit-huge")
+@strict(accept_kwargs=True)
 class GotOcr2VisionConfig(PreTrainedConfig):
     r"""
     output_channels (`int`, *optional*, defaults to 256):
@@ -61,50 +63,27 @@ class GotOcr2VisionConfig(PreTrainedConfig):
     """
 
     base_config_key = "vision_config"
-
-    def __init__(
-        self,
-        hidden_size=768,
-        output_channels=256,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        num_channels=3,
-        image_size=1024,
-        patch_size=16,
-        hidden_act="gelu",
-        layer_norm_eps=1e-06,
-        attention_dropout=0.0,
-        initializer_range=1e-10,
-        qkv_bias=True,
-        use_abs_pos=True,
-        use_rel_pos=True,
-        window_size=14,
-        global_attn_indexes=[2, 5, 8, 11],
-        mlp_dim=3072,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.output_channels = output_channels
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.hidden_act = hidden_act
-        self.layer_norm_eps = layer_norm_eps
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.qkv_bias = qkv_bias
-        self.use_abs_pos = use_abs_pos
-        self.use_rel_pos = use_rel_pos
-        self.window_size = window_size
-        self.global_attn_indexes = global_attn_indexes
-        self.mlp_dim = mlp_dim
+    hidden_size: int = 768
+    output_channels: int = 256
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    num_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] = 1024
+    patch_size: int | list[int] | tuple[int, int] = 16
+    hidden_act: str = "gelu"
+    layer_norm_eps: float = 1e-06
+    attention_dropout: float | int = 0.0
+    initializer_range: float = 1e-10
+    qkv_bias: bool = True
+    use_abs_pos: bool = True
+    use_rel_pos: bool = True
+    window_size: int = 14
+    global_attn_indexes: list[int] | tuple[int, ...] = (2, 5, 8, 11)
+    mlp_dim: int = 3072
 
 
 @auto_docstring(checkpoint="facebook/sam-vit-huge")
+@strict(accept_kwargs=True)
 class GotOcr2Config(PreTrainedConfig):
     r"""
     Example:
@@ -128,30 +107,23 @@ class GotOcr2Config(PreTrainedConfig):
     }
     sub_configs = {"text_config": AutoConfig, "vision_config": GotOcr2VisionConfig}
 
-    def __init__(
-        self,
-        vision_config: dict | None = None,
-        text_config: dict | None = None,
-        image_token_index: int | None = 151859,
-        image_seq_length: int | None = 576,
-        tie_word_embeddings: bool | None = True,
-        **kwargs,
-    ):
-        self.image_token_index = image_token_index
-        self.image_seq_length = image_seq_length
+    vision_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    image_token_index: int = 151859
+    image_seq_length: int = 576
+    tie_word_embeddings: bool = True
 
-        if vision_config is None:
+    def __post_init__(self, **kwargs):
+        if self.vision_config is None:
             self.vision_config = GotOcr2VisionConfig()
-        elif isinstance(vision_config, dict):
-            self.vision_config = GotOcr2VisionConfig(**vision_config)
-        elif isinstance(vision_config, GotOcr2VisionConfig):
-            self.vision_config = vision_config
+        elif isinstance(self.vision_config, dict):
+            self.vision_config = GotOcr2VisionConfig(**self.vision_config)
 
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "qwen2")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["qwen2"](
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["qwen2"](
                 vocab_size=151860,
                 hidden_size=1024,
                 intermediate_size=2816,
@@ -163,7 +135,7 @@ class GotOcr2Config(PreTrainedConfig):
                 initializer_range=0.02,
                 rms_norm_eps=1e-6,
                 use_cache=True,
-                tie_word_embeddings=tie_word_embeddings,
+                tie_word_embeddings=self.tie_word_embeddings,
                 rope_theta=1000000.0,
                 rope_parameters=None,
                 use_sliding_window=False,
@@ -172,10 +144,7 @@ class GotOcr2Config(PreTrainedConfig):
                 attention_dropout=0.0,
             )
 
-        self.text_config = text_config
-        self.tie_word_embeddings = tie_word_embeddings
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 class GotOcr2MLPBlock(SamMLPBlock):
@@ -270,6 +239,8 @@ class GotOcr2Model(LlavaModel):
 
         return image_outputs
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -279,18 +250,8 @@ class GotOcr2Model(LlavaModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GotOcr2ModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -313,10 +274,7 @@ class GotOcr2Model(LlavaModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -342,10 +300,6 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GotOcr2CausalLMOutputWithPast:
@@ -385,12 +339,6 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         "You should keep in mind what features from the module should be used, especially
         when you're planning to sell a template."
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -399,10 +347,7 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=True,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )
