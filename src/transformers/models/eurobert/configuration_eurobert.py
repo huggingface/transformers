@@ -19,12 +19,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+from ...configuration_utils import strict
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ..llama import LlamaConfig
 
 
 @auto_docstring(checkpoint="EuroBERT/EuroBERT-210m")
+@strict(accept_kwargs=True)
 class EuroBertConfig(LlamaConfig):
     r"""
     mask_token_id (`int`, *optional*, defaults to 128002):
