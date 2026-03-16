@@ -743,7 +743,7 @@ class WeightConverter(WeightTransform):
                     full_layer_name=layer_name,
                     model=model,
                     config=config,
-                    missing_keys=loading_info.missing_keys if loading_info else None,
+                    loading_info=loading_info,
                 )
 
         # Tensors are returned from ops with the target patterns, we need to expand them to full name.

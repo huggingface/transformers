@@ -750,11 +750,21 @@ class Fp8Dequantize(ConversionOps):
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         if len(input_dict) < 2:
-            # case where we only got weights, need to check for "weight$"
             return {full_layer_name: input_dict["weight$"]}
 
-        quantized = input_dict["weight$"][0]
-        scales = input_dict["weight_scale_inv"][0]
+        if "weight$" in input_dict:
+            quantized = input_dict["weight$"][0]
+            scales = input_dict["weight_scale_inv"][0]
+            if f"{full_layer_name[:-7]}_scale_inv" in kwargs["loading_info"].unexpected_keys: 
+                kwargs["loading_info"].unexpected_keys.remove(f"{full_layer_name[:-7]}_scale_inv")
+                kwargs["loading_info"].unexpected_keys.remove(f"{full_layer_name[:-7]}_weight")
+        else:
+            quantized, scales = input_dict.values()
+            quantized, scales =quantized[0], scales[0]
+            if f"{full_layer_name}_scale_inv" in kwargs["loading_info"].unexpected_keys: 
+                kwargs["loading_info"].unexpected_keys.remove(f"{full_layer_name}_scale_inv")
+                kwargs["loading_info"].unexpected_keys.remove(f"{full_layer_name}_activation_scale")
+                kwargs["loading_info"].unexpected_keys.remove(f"{full_layer_name}_weight")
 
         rows, cols = quantized.shape[-2:]
         block_size = self.hf_quantizer.quantization_config.weight_block_size
@@ -767,6 +777,7 @@ class Fp8Dequantize(ConversionOps):
             raise ValueError(
                 f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_m}, {block_n})."
             )
+
         quantized = quantized.to(scales.dtype)
         reshaped = quantized.reshape(-1, rows // block_m, block_m, cols // block_n, block_n)
         expanded_scales = scales.reshape(-1, rows // block_m, cols // block_n)

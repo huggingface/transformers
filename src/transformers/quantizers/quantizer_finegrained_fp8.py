@@ -152,7 +152,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         return Fp8Quantize(self)
 
     def get_weight_conversions(self):
-        from ..core_model_loading import WeightConverter
+        from ..core_model_loading import WeightConverter, WeightRenaming
         from ..integrations.finegrained_fp8 import Fp8Dequantize
 
         if self.pre_quantized and self.quantization_config.dequantize:
@@ -160,9 +160,20 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 # either use the dollar sign, or permute the source patterns to start matching against the scales first
                 # We also collect the activation scales, they will not be used
                 WeightConverter(
-                    source_patterns=["weight$", "weight_scale_inv", "activation_scale"],
+                    source_patterns=["mlp.experts.down_proj_scale_inv", "mlp.experts.down_proj", ],
+                    target_patterns="mlp.experts.down_proj",
+                    operations=[Fp8Dequantize(self)],
+                ),
+                WeightConverter(
+                    source_patterns=["mlp.experts.gate_up_proj_scale_inv$", "mlp.experts.gate_up_proj", ],
+                    target_patterns="mlp.experts.gate_up_proj",
+                    operations=[Fp8Dequantize(self)],
+                ),
+                WeightConverter(
+                    source_patterns=[r"weight$", "weight_scale_inv", "activation_scale"],
                     target_patterns="weight",
                     operations=[Fp8Dequantize(self)],
-                )
+                ),
+
             ]
         return []
