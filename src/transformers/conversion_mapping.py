@@ -147,7 +147,6 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="model.vlm.language_model.embed_tokens",
             ),
         ],
-        ],
         "chmv2": [WeightRenaming(r"backbone.layer.", r"backbone.model.layer.")],
         "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
         "dinov3_vit": [WeightRenaming(r"(?<!model\.)layer.", r"model.layer.")],
