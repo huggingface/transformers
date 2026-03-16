@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -1140,7 +1141,6 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-
 class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`ConditionalDetrDecoderLayer`].
@@ -1243,7 +1243,9 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
         reference_points = reference_points_before_sigmoid.sigmoid().transpose(0, 1)
         obj_center = reference_points[..., :2].transpose(0, 1)
         # get sine embedding for the query vector
-        query_sine_embed_before_transformation = encode_sinusoidal_position_embedding(obj_center, num_pos_feats=self.config.d_model // 2)
+        query_sine_embed_before_transformation = encode_sinusoidal_position_embedding(
+            obj_center, num_pos_feats=self.config.d_model // 2
+        )
 
         for idx, decoder_layer in enumerate(self.layers):
             if self.training:

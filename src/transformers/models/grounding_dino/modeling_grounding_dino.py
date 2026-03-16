@@ -1002,7 +1002,6 @@ class GroundingDinoDeformableLayer(nn.Module):
         return hidden_states, attn_weights
 
 
-
 class GroundingDinoEncoderLayer(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
@@ -1675,7 +1674,9 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
                 reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
             else:
                 raise ValueError("Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
-            query_pos = encode_sinusoidal_position_embedding(reference_points_input[:, :, 0, :], num_pos_feats=self.config.d_model // 2)
+            query_pos = encode_sinusoidal_position_embedding(
+                reference_points_input[:, :, 0, :], num_pos_feats=self.config.d_model // 2
+            )
             query_pos = self.reference_points_head(query_pos)
 
             # In original implementation they apply layer norm before outputting intermediate hidden states

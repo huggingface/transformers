@@ -119,9 +119,7 @@ class Chunk(ConversionOps):
         # Clone to ensure contiguous tensors (chunk returns views that may be non-contiguous)
         return dict(zip(targets, [c.contiguous().clone() for c in chunks]))
 
-    def get_target_patterns(
-        self, input_dict: dict, target_patterns: list[str], **kwargs
-    ) -> list[str]:
+    def get_target_patterns(self, input_dict: dict, target_patterns: list[str], **kwargs) -> list[str]:
         # Here we always return the target patterns
         if len(input_dict) > 1 or len(target_patterns) == 1:
             raise ValueError("Undefined Operation encountered!")

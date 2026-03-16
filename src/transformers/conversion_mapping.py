@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 _MODEL_TO_CONVERSION_PATTERN = {
     # ViT-style vision models (old HuggingFace checkpoint format → new modular format)
     "deit": "vit",
+    "pixio": "vit",
     "vit_mae": "vit",
     # Mixtral-style MoE
     "mixtral": "mixtral",

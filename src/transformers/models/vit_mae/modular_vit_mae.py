@@ -41,7 +41,6 @@ from .configuration_vit_mae import ViTMAEConfig
 logger = logging.get_logger(__name__)
 
 
-
 @dataclass
 @auto_docstring(
     custom_intro="""
