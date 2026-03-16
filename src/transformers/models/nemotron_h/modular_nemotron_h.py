@@ -270,6 +270,7 @@ MIXER_TYPES = {
     "mamba": NemotronHMamba2Mixer,
     "attention": NemotronHAttention,
     "moe": NemotronHMoE,
+    "mlp": NemotronHMLP,
 }
 
 
@@ -296,7 +297,11 @@ class NemotronHBlock(GradientCheckpointingLayer):
         self.norm = NemotronHRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
 
         self.block_type = config.layers_block_type[layer_idx]
-        self.mixer = MIXER_TYPES[self.block_type](config, layer_idx=layer_idx)
+
+        mixer_kwargs = {"config": config}
+        if self.block_type != "mlp":
+            mixer_kwargs["layer_idx"] = layer_idx
+        self.mixer = MIXER_TYPES[self.block_type](**mixer_kwargs)
 
     def forward(
         self,
@@ -476,6 +481,7 @@ class NemotronHModel(NemotronHPreTrainedModel):
             "mamba": mamba_mask,
             "attention": causal_mask,
             "moe": None,
+            "mlp": None,
         }
 
         for layer_idx, mixer_block in enumerate(self.layers):
