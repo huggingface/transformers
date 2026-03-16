@@ -12,10 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
+
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
 from ...activations import ACT2FN
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
@@ -32,9 +36,11 @@ from ..pp_lcnet.modeling_pp_lcnet import (
 )
 
 
-@auto_docstring(
-    checkpoint="PaddlePaddle/Not_yet_released",
-    custom_args=r"""
+@auto_docstring(checkpoint="PaddlePaddle/Not_yet_released")
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
+class PPLCNetV3Config(PPLCNetConfig):
+    r"""
     scale (`float`, *optional*, defaults to 1.0):
         The scaling factor for the model's channel dimensions, used to adjust the model size and computational cost
         without changing the overall architecture (e.g., 0.25, 0.5, 1.0, 1.5).
@@ -59,29 +65,15 @@ from ..pp_lcnet.modeling_pp_lcnet import (
         The number of kxk convolution branches in the learnable reparameterization layer, used to enhance feature
         extraction capability through multi-branch architecture during training while enabling efficient inference
         via structural reparameterization.
-    """,
-)
-class PPLCNetV3Config(PPLCNetConfig):
+    """
+
     model_type = "pp_lcnet_v3"
 
-    def __init__(
-        self,
-        scale: float = 1.0,
-        hidden_act: str | None = "hardswish",
-        out_features: list | None = None,
-        out_indices: list | None = None,
-        stem_channels: int = 16,
-        stem_stride: int = 2,
-        block_configs: list | None = None,
-        reduction: int = 4,
-        divisor: int = 8,
-        conv_symmetric_num: int = 4,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        del self.hidden_dropout_prob
-        del self.class_expand
-        self.conv_symmetric_num = conv_symmetric_num
+    conv_symmetric_num: int = 4
+    hidden_dropout_prob = AttributeError()
+    class_expand = AttributeError()
+
+    def __post_init__(self, **kwargs):
         # Default block configs for PP-LCNetV3
         # Each tuple: (kernel_size, in_channels, out_channels, stride, use_squeeze_excitation)
         self.block_configs = (
@@ -103,9 +95,15 @@ class PPLCNetV3Config(PPLCNetConfig):
                 # Stage 5 (blocks6)
                 [[5, 256, 512, 2, True], [5, 512, 512, 1, True], [5, 512, 512, 1, False], [5, 512, 512, 1, False]],
             ]
-            if block_configs is None
-            else block_configs
+            if self.block_configs is None
+            else self.block_configs
         )
+        self.depths = [len(blocks) for blocks in self.block_configs]
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.block_configs) + 1)]
+        self.set_output_features_output_indices(
+            out_indices=kwargs.pop("out_indices"), out_features=kwargs.pop("out_features")
+        )
+        PreTrainedConfig.__post_init__(**kwargs)
 
 
 class PPLCNetV3ConvLayer(PPLCNetConvLayer):

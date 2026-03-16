@@ -13,11 +13,13 @@
 # limitations under the License.
 
 import math
+from dataclasses import dataclass
 from typing import Optional
 
 import torch
 import torch.nn as nn
 import torchvision.transforms.v2.functional as tvF
+from huggingface_hub.dataclasses import strict
 
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneConfigMixin, BackboneMixin, filter_output_hidden_states
@@ -46,9 +48,11 @@ from ..mobilenet_v2.modeling_mobilenet_v2 import make_divisible
 from ..resnet.modeling_resnet import ResNetConvLayer
 
 
-@auto_docstring(
-    checkpoint="PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors",
-    custom_args=r"""
+@auto_docstring(checkpoint="PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors")
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
+class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
+    r"""
     scale (`float`, *optional*, defaults to 1.0):
         The scaling factor for the model's channel dimensions, used to adjust the model size and computational cost
         without changing the overall architecture (e.g., 0.25, 0.5, 1.0, 1.5).
@@ -69,36 +73,23 @@ from ..resnet.modeling_resnet import ResNetConvLayer
     divisor (`int`, *optional*, defaults to 8):
         The divisor used to ensure that various model parameters (e.g., channel dimensions, kernel sizes) are
         multiples of this value, promoting efficient model implementation and resource utilization.
-    """,
-)
-class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
+    """
+
     model_type = "pp_lcnet"
 
-    def __init__(
-        self,
-        scale: float = 1.0,
-        block_configs: list | None = None,
-        stem_channels: int = 16,
-        stem_stride: int = 2,
-        reduction: int = 4,
-        class_expand: int = 1280,
-        divisor: int = 8,
-        hidden_act: str | None = "hardswish",
-        out_features: list | None = None,
-        out_indices: list | None = None,
-        hidden_dropout_prob: float = 0.2,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.scale = scale
-        self.hidden_act = hidden_act
-        self.stem_channels = stem_channels
-        self.stem_stride = stem_stride
-        self.reduction = reduction
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.class_expand = class_expand
-        self.divisor = divisor
+    scale: float = 1.0
+    block_configs: list | None = None
+    stem_channels: int = 16
+    stem_stride: int = 2
+    reduction: int = 4
+    class_expand: int = 1280
+    divisor: int = 8
+    hidden_act: str = "hardswish"
+    _out_features: list[str] | None = None
+    _out_indices: list[int] | None = None
+    hidden_dropout_prob: float = 0.2
 
+    def __post_init__(self, **kwargs):
         # Default block configs for PP-LCNet
         # Each tuple: (kernel_size, in_channels, out_channels, stride, use_squeeze_excitation)
         self.block_configs = (
@@ -121,14 +112,21 @@ class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
                 # Stage 5 (blocks6)
                 [[5, 256, 512, 2, True], [5, 512, 512, 1, True]],
             ]
-            if block_configs is None
-            else block_configs
+            if self.block_configs is None
+            else self.block_configs
         )
-        if len(self.block_configs) != 5:
-            raise ValueError(f"block_configs must have 5 stages, but got {len(self.block_configs)}")
+
         self.depths = [len(blocks) for blocks in self.block_configs]
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.block_configs) + 1)]
-        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
+        self.set_output_features_output_indices(
+            out_indices=kwargs.pop("out_indices"), out_features=kwargs.pop("out_features")
+        )
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if len(self.block_configs) != 5:
+            raise ValueError(f"block_configs must have 5 stages, but got {len(self.block_configs)}")
 
 
 class PPLCNetImageProcessorKwargs(ImagesKwargs, total=False):

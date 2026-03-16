@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ...activations import ACT2FN
 from ...backbone_utils import consolidate_backbone_kwargs_to_config, load_backbone
@@ -40,9 +42,11 @@ from ..pp_ocrv5_server_det.modeling_pp_ocrv5_server_det import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(
-    checkpoint="PaddlePaddle/PP-OCRv5_mobile_det_safetensors",
-    custom_args=r"""
+@auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5_mobile_det_safetensors")
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
+class PPOCRV5MobileDetConfig(PreTrainedConfig):
+    r"""
     reduction (`int`, *optional*, defaults to 4):
         The reduction factor for feature channel dimensions, used to reduce the number of model parameters and
         computational complexity while maintaining feature representability.
@@ -58,25 +62,21 @@ logger = logging.get_logger(__name__)
     layer_list_out_channels (`List[int]`, *optional*, defaults to `[12, 18, 42, 360]`):
         The list of output channels for each backbone stage, used to configure the input channels of the RSE layers
         in the neck network for multi-scale feature fusion.
-    """,
-)
-class PPOCRV5MobileDetConfig(PreTrainedConfig):
+    """
+
     model_type = "pp_ocrv5_mobile_det"
     sub_configs = {"backbone_config": AutoConfig}
 
-    def __init__(
-        self,
-        backbone_config=None,
-        reduction=4,
-        neck_out_channels=96,
-        interpolate_mode="nearest",
-        kernel_list=[3, 2, 2],
-        layer_list_out_channels=[12, 18, 42, 360],
-        **kwargs,
-    ):
-        # ---- Backbone ----
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+    backbone_config: dict | PreTrainedConfig | None = None
+    reduction: int = 4
+    neck_out_channels: int = 96
+    interpolate_mode: str = "nearest"
+    kernel_list: list[int] | tuple[int, ...] = (3, 2, 2)
+    layer_list_out_channels: list[int] | tuple[int, ...] = (12, 18, 42, 360)
+
+    def __post_init__(self, **kwargs):
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_config_type="pp_lcnet_v3",
             default_config_kwargs={
                 "scale": 0.75,
@@ -86,18 +86,7 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
             },
             **kwargs,
         )
-        self.backbone_config = backbone_config
-        self.reduction = reduction
-
-        # ---- Neck ----
-        self.neck_out_channels = neck_out_channels
-        self.interpolate_mode = interpolate_mode
-
-        # ---- Head ----
-        self.kernel_list = kernel_list
-        self.layer_list_out_channels = layer_list_out_channels
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring
