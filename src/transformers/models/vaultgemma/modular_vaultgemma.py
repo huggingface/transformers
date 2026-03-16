@@ -22,7 +22,7 @@ from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import Gemma2Attention, Gemma2DecoderLayer, Gemma2ForCausalLM, Gemma2MLP, Gemma2RMSNorm
 
 
-@auto_docstring(checkpoint="google/vaultgemma-7b")
+@auto_docstring(checkpoint="google/vaultgemma-1b")
 class VaultGemmaConfig(Gemma2Config):
     def __init__(
         self,
@@ -112,7 +112,6 @@ class VaultGemmaDecoderLayer(Gemma2DecoderLayer):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
@@ -124,7 +123,6 @@ class VaultGemmaDecoderLayer(Gemma2DecoderLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = residual + hidden_states

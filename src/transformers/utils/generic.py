@@ -240,6 +240,10 @@ def is_flash_attention_requested(
     else:
         checked_attention_implementation = requested_attention_implementation
 
+    # theoretically can happen, equivalent to default implementation (sdpa/eager)
+    if checked_attention_implementation is None:
+        return False
+
     # If a specific version is requested, look for a pattern of type "flash...{version}"
     if version is not None:
         return re.match(r".*flash.*" + str(version), checked_attention_implementation) is not None
@@ -939,7 +943,7 @@ def merge_with_config_defaults(func):
 class GeneralInterface(MutableMapping):
     """
     Dict-like object keeping track of a class-wide mapping, as well as a local one. Allows to have library-wide
-    modifications though the class mapping, as well as local modifications in a single file with the local mapping.
+    modifications through the class mapping, as well as local modifications in a single file with the local mapping.
     """
 
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if

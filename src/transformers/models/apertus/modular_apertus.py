@@ -42,7 +42,7 @@ from ..nemotron.modeling_nemotron import NemotronMLP
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="swiss-ai/Apertus-8B")
+@auto_docstring(checkpoint="swiss-ai/Apertus-8B-Instruct-2509")
 class ApertusConfig(PreTrainedConfig):
     r"""
     ```python
@@ -217,7 +217,7 @@ class ApertusDecoderLayer(LlamaDecoderLayer):
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.attention_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
@@ -260,8 +260,8 @@ class ApertusForCausalLM(LlamaForCausalLM):
         ```python
         >>> from transformers import AutoTokenizer, ApertusForCausalLM
 
-        >>> model = ApertusForCausalLM.from_pretrained("swiss-ai/Apertus-8B")
-        >>> tokenizer = AutoTokenizer.from_pretrained("swiss-ai/Apertus-8B")
+        >>> model = ApertusForCausalLM.from_pretrained("swiss-ai/Apertus-8B-Instruct-2509")
+        >>> tokenizer = AutoTokenizer.from_pretrained("swiss-ai/Apertus-8B-Instruct-2509")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")

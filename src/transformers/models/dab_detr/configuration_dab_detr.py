@@ -22,7 +22,7 @@ from ..auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="IDEA-Research/dab_detr-base")
+@auto_docstring(checkpoint="IDEA-Research/dab-detr-resnet-50")
 class DabDetrConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 300):
@@ -56,10 +56,10 @@ class DabDetrConfig(PreTrainedConfig):
     ```python
     >>> from transformers import DabDetrConfig, DabDetrModel
 
-    >>> # Initializing a DAB-DETR IDEA-Research/dab_detr-base style configuration
+    >>> # Initializing a DAB-DETR IDEA-Research/dab-detr-resnet-50 style configuration
     >>> configuration = DabDetrConfig()
 
-    >>> # Initializing a model (with random weights) from the IDEA-Research/dab_detr-base style configuration
+    >>> # Initializing a model (with random weights) from the IDEA-Research/dab-detr-resnet-50 style configuration
     >>> model = DabDetrModel(configuration)
 
     >>> # Accessing the model configuration
