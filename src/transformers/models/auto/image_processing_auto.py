@@ -172,6 +172,8 @@ else:
             ("poolformer", ("PoolFormerImageProcessor", "PoolFormerImageProcessorFast")),
             ("pp_doclayout_v2", (None, "PPDocLayoutV2ImageProcessorFast")),
             ("pp_doclayout_v3", (None, "PPDocLayoutV3ImageProcessorFast")),
+            ("pp_lcnet", (None, "PPLCNetImageProcessorFast")),
+            ("pp_ocrv5_mobile_det", (None, "PPOCRV5ServerDetImageProcessorFast")),
             ("pp_ocrv5_server_det", (None, "PPOCRV5ServerDetImageProcessorFast")),
             ("prompt_depth_anything", ("PromptDepthAnythingImageProcessor", "PromptDepthAnythingImageProcessorFast")),
             ("pvt", ("PvtImageProcessor", "PvtImageProcessorFast")),
