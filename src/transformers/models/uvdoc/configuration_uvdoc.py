@@ -45,17 +45,9 @@ from ...utils import auto_docstring
         The number of residual blocks in each stage of the model backbone, determining the depth of the network.
         More blocks enhance feature extraction capability but increase inference time.
     dilation_values (`Dict[str, Union[int, List[int]]]`, *optional*, defaults to `None`):
-        A dictionary of dilation rates for dilated convolutional layers in bridge modules (e.g., "bridge_1": 1,
-        "bridge_4": [8, 3, 2]). Dilated convolution expands the receptive field without increasing kernel size,
-        critical for capturing long-range geometric dependencies in distorted documents. If `None`, default values
-        will be used:{
-            "bridge_1": 1,
-            "bridge_2": 2,
-            "bridge_3": 5,
-            "bridge_4": [8, 3, 2],
-            "bridge_5": [12, 7, 4],
-            "bridge_6": [18, 12, 6]
-        }
+        A dictionary of dilation rates for dilated convolutional layers in bridge modules.
+        Dilated convolution expands the receptive field without increasing kernel size,
+        critical for capturing long-range geometric dependencies in distorted documents. 
     padding_mode (`str`, *optional*, defaults to `"reflect"`):
         The padding mode for convolutional layers, used to handle boundary pixels of document images. Supported
         modes include `"reflect"` (recommended for document rectification to avoid edge artifacts), `"constant"`,
