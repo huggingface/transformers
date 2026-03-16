@@ -1224,9 +1224,5 @@ class VideomtForUniversalSegmentation(VideomtPreTrainedModel):
 
         return mask_logits, class_logits
 
-    @staticmethod
-    def _disable_attention_mask(attn_mask, prob, num_query_tokens, encoder_start_tokens, device):
-        raise AttributeError("Not needed for Videomt")
-
 
 __all__ = ["VideomtPreTrainedModel", "VideomtForUniversalSegmentation"]

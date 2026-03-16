@@ -168,7 +168,6 @@ class VideomtForUniversalSegmentation(EomtForUniversalSegmentation):
         super().__init__(config)
         self.query_updater = nn.Linear(config.hidden_size, config.hidden_size)
 
-    @staticmethod
     def _disable_attention_mask(attn_mask, prob, num_query_tokens, encoder_start_tokens, device):
         raise AttributeError("Not needed for Videomt")
 
