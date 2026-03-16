@@ -107,6 +107,7 @@ class Mistral4Config(PreTrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        mlp_bias (`bool | None`, *optional*, defaults to `False`): <fill_docstring>
 
     ```python
     >>> from transformers import Mistral4Model, Mistral4Config

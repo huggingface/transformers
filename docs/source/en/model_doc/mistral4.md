@@ -15,7 +15,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-16-02 and added to Hugging Face Transformers on 2026-16-02.*
+*This model was released on 2026-03-16 and added to Hugging Face Transformers on 2026-03-16.*
 
 # Mistral4 
 
