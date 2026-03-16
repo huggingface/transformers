@@ -810,7 +810,7 @@ class ContinuousBatchingManager:
                 cache=paged_attention_cache,
                 config=self.model.config,
                 generation_config=self.generation_config,
-                continuous_batching_config=self.cb_config,
+                continuous_batching_config=self.continuous_batching_config,
                 input_queue=self.input_queue,
                 output_queue=self.output_queue,
                 stop_event=self.stop_event,

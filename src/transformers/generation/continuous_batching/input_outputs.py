@@ -420,13 +420,11 @@ class ContinuousBatchingIOs:
         batch_size = self.num_q_tokens if use_padding else self.true_batch_size
 
         # Prepare the kwargs, the attributes that are either tensors or dict of tensors are initialized to empty dicts.
-        # When using block table, max_seqlen_q and max_seqlen_k are not used by flash_attn_with_kvcache, so we set them
-        # to constant `1` to avoid dynamo guards on these changing integer values. This applies throughout this method.
         kwargs = PagedAttentionArgs(
             input_ids=self.input_ids[:q_size].unsqueeze(0),
             position_ids=self.position_ids[:q_size].unsqueeze(0),
             cu_seq_lens_q=self.cumulative_seqlens_q[: batch_size + 1],
-            max_seqlen_q=1 if self.use_block_table else self.max_seqlen_q,
+            max_seqlen_q=self.max_seqlen_q,
             logits_indices=self.logits_indices[:q_size],
             cu_seq_lens_k={},
             max_seqlen_k={},
@@ -446,6 +444,11 @@ class ContinuousBatchingIOs:
             kwargs.max_seqlen_q = self.max_seqlen_q
             self.cumulative_seqlens_q[self.true_batch_size + 1 :] = q_size
             # FIXME: is there another way to avoid this? It has a very slight impact on performance (~5 tok/s)
+
+        # When using block table, max_seqlen_q and max_seqlen_k are not used by flash_attn_with_kvcache, so we set them
+        # to constant `1` to avoid dynamo guards on these changing integer values. This applies throughout this method.
+        if self.use_block_table:
+            kwargs.max_seqlen_q = 1
 
         # For the attributes that are lists of tensors, we construct list of tensor references
         for i in range(self.cache.num_groups):
@@ -483,7 +486,7 @@ class ContinuousBatchingIOs:
         """Returns the tensors used inside the generation step that are not inputs to the model forward pass. In
         synchronous batching, there is no carry over, so the only tensor that will be used is output_ids, but we still
         return 3 tensors to have the same interface as when using async batching."""
-        return self.output_ids, self.output_ids, self.carry_over_ids
+        return self.carry_over_ids, self.output_ids, self.output_ids
 
     def get_graph(self) -> torch.cuda.CUDAGraph | None:
         graph = self.graphs.get_graph(self.num_q_tokens, self.max_kv_read)
