@@ -206,7 +206,7 @@ def _lazy_imports(
     return flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache, pad_input, unpad_input
 
 
-def _lazy_define_process_function(flash_varlen_fn, flash_function_with_kv_cache = None):
+def _lazy_define_process_function(flash_varlen_fn, flash_function_with_kv_cache=None):
     """
     Depending on the version and kernel some features are not supported. Due to limitations in
     `torch.compile`, we opt to statically type which (optional) kwarg parameters are supported
@@ -219,7 +219,9 @@ def _lazy_define_process_function(flash_varlen_fn, flash_function_with_kv_cache 
     process_parameters = inspect.signature(_process_flash_attention_kwargs).parameters
     function_to_signature_mapping = {
         "flash_varlen_fn": inspect.signature(flash_varlen_fn).parameters,
-        "flash_with_kvcache_fn": inspect.signature(flash_function_with_kv_cache).parameters if flash_function_with_kv_cache is not None else {},
+        "flash_with_kvcache_fn": inspect.signature(flash_function_with_kv_cache).parameters
+        if flash_function_with_kv_cache is not None
+        else {},
     }
     supports_mapping = {
         "flash_varlen_fn": {},
@@ -233,7 +235,9 @@ def _lazy_define_process_function(flash_varlen_fn, flash_function_with_kv_cache 
             supports_mapping[function_name][fa_param] = fa_param in function_to_signature_mapping[function_name]
 
             if fa_alternative_param_name != fa_param:
-                supports_mapping[function_name][fa_alternative_param_name] = fa_alternative_param_name in function_to_signature_mapping[function_name]
+                supports_mapping[function_name][fa_alternative_param_name] = (
+                    fa_alternative_param_name in function_to_signature_mapping[function_name]
+                )
 
     return partial(_process_flash_attention_kwargs, supports_mapping=supports_mapping)
 
@@ -260,7 +264,9 @@ def lazy_import_flash_attention(
         )
         _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn, _flash_with_kvcache_fn)
 
-    return (_flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn), partial(_process_flash_kwargs_fn, flash_fn_name="flash_varlen_fn")
+    return (_flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn), partial(
+        _process_flash_kwargs_fn, flash_fn_name="flash_varlen_fn"
+    )
 
 
 def lazy_import_paged_flash_attention(implementation: str | None, allow_all_kernels: bool = False):
@@ -269,8 +275,10 @@ def lazy_import_paged_flash_attention(implementation: str | None, allow_all_kern
     """
     from .integrations.flash_paged import paged_attention_forward
 
-    (_, flash_attn_varlen_func, flash_attn_with_kvcache_fn, _, _), _process_flash_kwargs_fn = lazy_import_flash_attention(
-        implementation, attention_wrapper=paged_attention_forward, allow_all_kernels=allow_all_kernels
+    (_, flash_attn_varlen_func, flash_attn_with_kvcache_fn, _, _), _process_flash_kwargs_fn = (
+        lazy_import_flash_attention(
+            implementation, attention_wrapper=paged_attention_forward, allow_all_kernels=allow_all_kernels
+        )
     )
     return flash_attn_varlen_func, flash_attn_with_kvcache_fn, _process_flash_kwargs_fn
 
@@ -585,7 +593,7 @@ def _process_flash_attention_kwargs(
     softcap: float | None = None,
     deterministic: bool | None = None,
     s_aux: torch.Tensor | None = None,
-    block_table = None,
+    block_table=None,
     max_seqlen_q: int | torch.IntTensor | None = None,
     max_seqlen_k: int | torch.IntTensor | None = None,
     flash_fn_name: str | None = None,
@@ -650,13 +658,17 @@ def _process_flash_attention_kwargs(
     if supported_signature["softcap"] and softcap is not None:
         flash_kwargs["softcap"] = softcap
 
-    if ((legacy_sink_param := supported_signature["s_aux"]) or supported_signature["learnable_sink"]) and s_aux is not None:
+    if (
+        (legacy_sink_param := supported_signature["s_aux"]) or supported_signature["learnable_sink"]
+    ) and s_aux is not None:
         if legacy_sink_param:
             flash_kwargs["s_aux"] = s_aux  # e.g. FA3 (vllm)
         else:
             flash_kwargs["learnable_sink"] = s_aux  # FA4
 
-    if ((legacy_block_table_param := supported_signature["block_table"]) or supported_signature["page_table"]) and block_table is not None:
+    if (
+        (legacy_block_table_param := supported_signature["block_table"]) or supported_signature["page_table"]
+    ) and block_table is not None:
         if legacy_block_table_param:
             flash_kwargs["block_table"] = block_table  # e.g. FA2
         else:

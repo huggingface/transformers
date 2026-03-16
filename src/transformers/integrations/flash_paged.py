@@ -41,7 +41,11 @@ def _prepare_varlen_fa(
         "cu_seqlens_q": cu_seq_lens_q.to(torch.int32),
         "cu_seqlens_k": cu_seq_lens_k.to(torch.int32),
     }
-    flash_args = (q, k, v,)
+    flash_args = (
+        q,
+        k,
+        v,
+    )
 
     return flash_attn_varlen_func, flash_args, flash_kwargs
 
@@ -64,9 +68,7 @@ def _prepare_kvcache_fa(
     # Get layer group index for this layer
     group_idx, layer_idx_in_group = cache.layer_index_to_group_indices[module.layer_idx]
     # KV cache shape: [num_pages, num_kv_heads, head_dim] -> [num_blocks, block_size, num_kv_heads, head_dim]
-    k_cache = cache.key_cache[layer_idx_in_group].view(
-        -1, cache.block_size, cache.num_key_value_heads, cache.head_dim
-    )
+    k_cache = cache.key_cache[layer_idx_in_group].view(-1, cache.block_size, cache.num_key_value_heads, cache.head_dim)
     v_cache = cache.value_cache[layer_idx_in_group].view(
         -1, cache.block_size, cache.num_key_value_heads, cache.head_dim
     )
@@ -87,7 +89,13 @@ def _prepare_kvcache_fa(
         **kwargs,
     )
     flash_kwargs = flash_kwargs | {"cache_seqlens": cache_seq_lens.to(torch.int32)}
-    flash_args = (q, k_cache, v_cache, k, v,)
+    flash_args = (
+        q,
+        k_cache,
+        v_cache,
+        k,
+        v,
+    )
 
     return flash_attn_with_kvcache, flash_args, flash_kwargs
 
