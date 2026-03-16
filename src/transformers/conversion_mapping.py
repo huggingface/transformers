@@ -89,6 +89,7 @@ def _build_checkpoint_conversion_mapping():
         ],
         "colpali": [
             WeightRenaming(source_patterns=r"vlm(?!\.model)", target_patterns="vlm.model"),
+            WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
         ],
         "emu3": [
             WeightRenaming(source_patterns=r"text_model.model", target_patterns="text_model"),
@@ -110,9 +111,18 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"vlm.model(?!\.(language_model|visual))",
                 target_patterns="vlm.model.language_model",
             ),
+            WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
         ],
         "gemma3n_text": [
             WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
+        ],
+        "timm_wrapper": [
+            # Simply add the prefix `timm_model`. Similar to `base_model_prefix` but also removes prefix
+            # when saving.TODO: Would be probably much cleaner with a `add_prefix` argument in WeightRenaming
+            WeightRenaming(
+                source_patterns=r"(.+)",
+                target_patterns=r"timm_model.\1",
+            )
         ],
         "chmv2": [WeightRenaming(r"backbone.layer.", r"backbone.model.layer.")],
         "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
