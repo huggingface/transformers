@@ -2951,8 +2951,7 @@ class GenerationMixin(ContinuousMixin):
             next_tokens = next_tokens * unfinished_sequences + pad_id * (1 - unfinished_sequences)
 
         # In-place write of first generated token (no torch.cat)
-        first_pos = torch.tensor([prefill_len], dtype=torch.long, device=device)
-        output_ids.scatter_(1, first_pos.view(1, 1).expand(batch_size, 1), next_tokens.view(batch_size, 1))
+        output_ids[:, prefill_len] = next_tokens
         current_ids[:, 0] = next_tokens
 
         if streamer is not None:
@@ -3027,9 +3026,7 @@ class GenerationMixin(ContinuousMixin):
                 next_tokens = next_tokens * unfinished_sequences + pad_id * (1 - unfinished_sequences)
 
             # 1. In-place write to pre-allocated output buffer (no torch.cat)
-            output_ids.scatter_(
-                1, (cache_position + 1).view(1, 1).expand(batch_size, 1), next_tokens.view(batch_size, 1)
-            )
+            output_ids[:, prefill_len + i + 1] = next_tokens
             # Update current token buffer for next decode step
             current_ids[:, 0] = next_tokens
 
