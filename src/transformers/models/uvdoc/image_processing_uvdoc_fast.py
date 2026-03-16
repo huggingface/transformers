@@ -24,10 +24,10 @@ import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import SizeDict
 from ...utils import auto_docstring
 from ...utils.generic import TensorType
-from .image_transforms import group_images_by_shape, reorder_images
-from .image_utils import SizeDict
 
 
 @auto_docstring
@@ -66,6 +66,7 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
+            # BGR to RGB conversion
             stacked_images = stacked_images[:, [2, 1, 0], :, :]
             processed_images_grouped[shape] = stacked_images
 
@@ -82,19 +83,21 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
         else:
             scale = torch.tensor(255.0, device=images.device)
 
-        post_process_images = []
+        results = []
         for image in images:
             image = image[0] if isinstance(image, tuple) else image
             image = image.squeeze().permute(1, 2, 0)
             image = image * scale
             image = image.flip(dims=[-1]).to(dtype=torch.uint8, non_blocking=True, copy=False)
 
-            post_process_images.append(image)
+            results.append(
+                {
+                    "image": image,
+                    "label": 0,  # Single class: text
+                }
+            )
 
-        return post_process_images
-
-    def doctr(self, pred: torch.Tensor | tuple[torch.Tensor, ...], scale: torch.Tensor) -> torch.Tensor:
-        return image
+        return results
 
 
 __all__ = ["UVDocImageProcessorFast"]

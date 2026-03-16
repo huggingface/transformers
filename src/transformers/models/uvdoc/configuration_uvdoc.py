@@ -35,10 +35,10 @@ from ...utils import auto_docstring
     kernel_size (`int`, *optional*, defaults to 5):
         The size of convolutional kernels used in the backbone network, typically an odd integer to ensure
         symmetric padding and preserve spatial dimensions of feature maps.
-    map_num (`List[int]`, *optional*, defaults to `[1, 2, 4, 8, 16]`):
+    feature_map_multipliers (`List[int]`, *optional*, defaults to `[1, 2, 4, 8, 16]`):
         The scaling factors for feature map dimensions in multi-scale feature fusion modules, used to align
         feature maps of different resolutions for document structure restoration.
-    block_nums (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
+    block_counts_per_stage (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
         The number of residual blocks in each stage of the model backbone, determining the depth of the network.
         More blocks enhance feature extraction capability but increase inference time.
     dilation_values (`Dict[str, Union[int, List[int]]]`, *optional*, defaults to `None`):
@@ -54,15 +54,15 @@ from ...utils import auto_docstring
             "bridge_6": [18, 12, 6]
         }
     padding_mode (`str`, *optional*, defaults to `"reflect"`):
-    The padding mode for convolutional layers, used to handle boundary pixels of document images. Supported
-    modes include `"reflect"` (recommended for document rectification to avoid edge artifacts), `"constant"`,
-    and `"replicate"`.
+        The padding mode for convolutional layers, used to handle boundary pixels of document images. Supported
+        modes include `"reflect"` (recommended for document rectification to avoid edge artifacts), `"constant"`,
+        and `"replicate"`.
     upsample_size (`List[int]`, *optional*, defaults to `[712, 488]`):
-    The target spatial size (width, height) of the upsampled output image, matching the desired resolution
-    of the rectified document. Adjust based on your input document size and task requirements.
+        The target spatial size (width, height) of the upsampled output image, matching the desired resolution
+        of the rectified document. Adjust based on your input document size and task requirements.
     upsample_mode (`str`, *optional*, defaults to `"bilinear"`):
-    The interpolation mode for upsampling layers to restore the original image resolution. Supported modes
-    include `"bilinear"` (smooth upsampling, recommended for document images), `"nearest"`, and `"bicubic"`.
+        The interpolation mode for upsampling layers to restore the original image resolution. Supported modes
+        include `"bilinear"` (smooth upsampling, recommended for document images), `"nearest"`, and `"bicubic"`.
     """,
 )
 class UVDocConfig(PreTrainedConfig):
@@ -73,9 +73,9 @@ class UVDocConfig(PreTrainedConfig):
         num_filter: int = 32,
         in_channels: int = 3,
         kernel_size: int = 5,
-        stride: list | None = None,
-        map_num: list | None = None,
-        block_nums: list | None = None,
+        block_stride_values: list | None = None,
+        feature_map_multipliers: list | None = None,
+        block_counts_per_stage: list | None = None,
         dilation_values: dict | None = None,
         padding_mode: str = "reflect",
         upsample_size: list | None = None,
@@ -85,13 +85,16 @@ class UVDocConfig(PreTrainedConfig):
         self.num_filter = num_filter
         self.in_channels = in_channels
         self.kernel_size = kernel_size
-        self.stride = stride
-        self.map_num = map_num
-        self.block_nums = block_nums
+        self.block_stride_values = block_stride_values
+        self.feature_map_multipliers = feature_map_multipliers
+        self.block_counts_per_stage = block_counts_per_stage
         self.dilation_values = dilation_values
         self.padding_mode = padding_mode
         self.upsample_size = upsample_size
         self.upsample_mode = upsample_mode
+
+        self.id2label = {0: "image"}
+        self.num_labels = 1
 
         super().__init__(**kwargs)
 
