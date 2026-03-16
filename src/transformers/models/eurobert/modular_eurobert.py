@@ -17,6 +17,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ...configuration_utils import strict
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, MaskedLMOutput, SequenceClassifierOutput, TokenClassifierOutput
 from ...modeling_rope_utils import RopeParameters
@@ -28,12 +29,15 @@ from ..llama.modeling_llama import LlamaAttention, LlamaModel, LlamaPreTrainedMo
 
 
 @auto_docstring(checkpoint="EuroBERT/EuroBERT-210m")
+@strict(accept_kwargs=True)
 class EuroBertConfig(LlamaConfig):
     r"""
     mask_token_id (`int`, *optional*, defaults to 128002):
         Mask token id.
     classifier_pooling (`str`, *optional*, defaults to `"late"`):
         The pooling strategy to use for the classifier. Can be one of ['bos', 'mean', 'late'].
+    is_causal (`bool`, *optional*, defaults to `False`):
+        Whether to use causal attention masking. Set to `False` for bidirectional attention.
 
     ```python
     >>> from transformers import EuroBertModel, EuroBertConfig
