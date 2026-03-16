@@ -150,3 +150,4 @@ parallelism_config = ParallelismConfig(
 - The Accelerate [Sequence Parallelism](https://huggingface.co/docs/accelerate/concept_guides/sequence_parallelism) guide covers the Ulysses implementation in more depth and shows how to write a custom training loop.
 - The [DeepSpeed ALST tutorial](https://www.deepspeed.ai/tutorials/ulysses-alst-sequence-parallelism/) covers the full ALST system, including TiledMLP and activation checkpoint offloading.
 - The [parallelism methods](./perf_train_gpu_many) guide shows how to combine sequence parallelism with other strategies like ZeRO.
+- The [Ulysses Sequence Parallelism: Training with Million-Token Contexts](https://huggingface.co/blog/ulysses-sp) blog post explains how Ulysses works and how it's integrated in Accelerate, Trainer, and SFTTrainer.
