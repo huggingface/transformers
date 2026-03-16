@@ -43,11 +43,14 @@ You can find all the available RF-DETR checkpoints under the [stevenbucaille](ht
 organization.
 The original code can be found [here](https://github.com/roboflow/rf-detr).
 
-RfDetr is compatible with models from the original [rf-detr](https://github.com/roboflow/rf-detr) library. You can train your models using the [Roboflow](https://roboflow.com/) platform, then use `RfDetr` in `transformers` to import the weights and deploy your model anywhere.
+Thanks to the weight conversion mapping, RfDetr is compatible with models from the original
+[rf-detr](https://github.com/roboflow/rf-detr) library as well as models that you trained using the
+[Roboflow](https://roboflow.com/) platform. This means you can use Roboflow platform to train your model and use
+`RfDetr` in `transformers` to import the weights and deploy your model anywhere.
+You can also train your model using [`Trainer`] as described below.
 
 
 > [!TIP]
-> This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
 >
 > Click on the RF-DETR models in the right sidebar for more examples of how to apply RF-DETR to different object
 > detection tasks.
@@ -62,7 +65,7 @@ The example below demonstrates how to perform object detection with the [`Pipeli
 from transformers import pipeline
 import torch
 
-pipeline = pipeline("object-detection", model="stevenbucaille/rf-detr-base")
+pipeline = pipeline("object-detection", model="stevenbucaille/rf-detr-base", device_map="auto")
 
 pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
 ```
@@ -80,7 +83,7 @@ url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
 image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/rf-detr-base")
-model = AutoModelForObjectDetection.from_pretrained("stevenbucaille/rf-detr-base")
+model = AutoModelForObjectDetection.from_pretrained("stevenbucaille/rf-detr-base", device_map="auto")
 
 # prepare image for the model
 inputs = image_processor(images=image, return_tensors="pt")
