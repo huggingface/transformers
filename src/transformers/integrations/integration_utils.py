@@ -2411,10 +2411,30 @@ class KubeflowCallback(TrainerCallback):
         self._last_update_time = 0.0
         self._cached_token = None
         self._token_read_time = 0.0
+        self._ssl_context = None
+        self._ssl_context_initialized = False
+
+        logger.debug("[Kubeflow] Callback initialized")
+
+    def _get_ssl_context(self):
+        """Get cached SSL context for TLS verification."""
+        import ssl
+
+        if self._ssl_context_initialized:
+            return self._ssl_context
+
+        ca_file = os.environ.get(self._ENV_CA_CERT)
+        if ca_file:
+            try:
+                self._ssl_context = ssl.create_default_context(cafile=ca_file)
+            except Exception as e:
+                logger.warning(f"[Kubeflow] Failed to create SSL context with CA file {ca_file}: {e}")
+                self._ssl_context = None
+        self._ssl_context_initialized = True
+        return self._ssl_context
 
     def _get_token(self):
         """Get cached service account token."""
-        import os
         import time
 
         now = time.monotonic()
@@ -2423,6 +2443,7 @@ class KubeflowCallback(TrainerCallback):
 
         token_path = os.environ.get(self._ENV_TOKEN_PATH)
         if not token_path or not os.path.exists(token_path):
+            logger.debug(f"[Kubeflow] Token file not found: {token_path}")
             return None
 
         try:
@@ -2430,14 +2451,13 @@ class KubeflowCallback(TrainerCallback):
                 self._cached_token = f.read().strip()
                 self._token_read_time = now
                 return self._cached_token
-        except OSError:
+        except OSError as e:
+            logger.debug(f"[Kubeflow] Failed to read token file: {e}")
             return None
 
     def _update_status(self, progress_percent=None, estimated_time_remaining=None, metrics=None, force=False):
         """Send progress update to Kubeflow Trainer controller."""
         import json
-        import os
-        import ssl
         import time
         import urllib.request
         from datetime import datetime, timezone
@@ -2470,13 +2490,11 @@ class KubeflowCallback(TrainerCallback):
             data = json.dumps({"trainerStatus": trainer_status}).encode("utf-8")
             headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
-            ca_file = os.environ.get(self._ENV_CA_CERT)
-            ssl_context = ssl.create_default_context(cafile=ca_file) if ca_file else None
-
             req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-            with urllib.request.urlopen(req, timeout=5, context=ssl_context) as resp:
+            with urllib.request.urlopen(req, timeout=5, context=self._get_ssl_context()) as resp:
                 return resp.status == 200
-        except Exception:
+        except Exception as e:
+            logger.debug(f"[Kubeflow] Failed to update status: {e}")
             return False
 
     def on_train_begin(self, args, state, control, **kwargs):
@@ -2489,9 +2507,10 @@ class KubeflowCallback(TrainerCallback):
         self._metrics = {}
         self._initialized = True
 
+        logger.debug(f"[Kubeflow] Training started, max_steps={state.max_steps}")
         self._update_status(
             progress_percent=0,
-            metrics={"total_steps": str(state.max_steps)} if state.max_steps else None,
+            metrics={"total_steps": state.max_steps} if state.max_steps else None,
             force=True,
         )
 
@@ -2513,6 +2532,7 @@ class KubeflowCallback(TrainerCallback):
         import time
 
         progress = int((state.global_step / state.max_steps) * 100)
+        # Cap at 99% until on_train_end reports 100% to indicate completion
         progress = min(progress, 99)
 
         eta_seconds = None
@@ -2523,12 +2543,12 @@ class KubeflowCallback(TrainerCallback):
             eta_seconds = int(avg_time_per_step * remaining_steps)
 
         metrics = {
-            **{k: str(v) for k, v in self._metrics.items()},
-            "current_step": str(state.global_step),
-            "total_steps": str(state.max_steps),
+            **self._metrics,
+            "current_step": state.global_step,
+            "total_steps": state.max_steps,
         }
         if state.epoch is not None:
-            metrics["current_epoch"] = str(round(state.epoch, 2))
+            metrics["current_epoch"] = round(state.epoch, 2)
 
         self._update_status(
             progress_percent=progress,
@@ -2540,10 +2560,11 @@ class KubeflowCallback(TrainerCallback):
         if not self._initialized or not state.is_world_process_zero:
             return
 
+        logger.debug("[Kubeflow] Training completed")
         self._update_status(
             progress_percent=100,
             estimated_time_remaining=0,
-            metrics={k: str(v) for k, v in self._metrics.items()},
+            metrics=self._metrics,
             force=True,
         )
 

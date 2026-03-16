@@ -818,6 +818,8 @@ class KubeflowCallbackTest(unittest.TestCase):
                     callback._last_update_time = 0.0
                     callback._cached_token = None
                     callback._token_read_time = 0.0
+                    callback._ssl_context = None
+                    callback._ssl_context_initialized = False
         return callback
 
     @staticmethod
@@ -880,8 +882,8 @@ class KubeflowCallbackTest(unittest.TestCase):
         self.assertEqual(call_kwargs["progress_percent"], 50)
         self.assertIn("estimated_time_remaining", call_kwargs)
         self.assertIn("metrics", call_kwargs)
-        self.assertEqual(call_kwargs["metrics"]["current_step"], "50")
-        self.assertEqual(call_kwargs["metrics"]["total_steps"], "100")
+        self.assertEqual(call_kwargs["metrics"]["current_step"], 50)
+        self.assertEqual(call_kwargs["metrics"]["total_steps"], 100)
 
     def test_on_step_end_skips_when_not_initialized(self):
         """on_step_end should skip if not initialized."""
@@ -963,6 +965,8 @@ class KubeflowCallbackTest(unittest.TestCase):
                     callback._last_update_time = 0.0
                     callback._cached_token = "test-token"
                     callback._token_read_time = time.monotonic()  # Use current time so cache is valid
+                    callback._ssl_context = None
+                    callback._ssl_context_initialized = True  # Skip SSL context creation
 
                     with patch("urllib.request.urlopen") as mock_urlopen:
                         mock_response = Mock()
@@ -992,6 +996,8 @@ class KubeflowCallbackTest(unittest.TestCase):
                     callback._last_update_time = 0.0
                     callback._cached_token = "test-token"
                     callback._token_read_time = 0.0
+                    callback._ssl_context = None
+                    callback._ssl_context_initialized = True
 
                     result = callback._update_status(progress_percent=50, force=True)
                     self.assertFalse(result)
