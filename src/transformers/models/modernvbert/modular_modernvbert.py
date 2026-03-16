@@ -14,14 +14,15 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
 
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -41,7 +42,8 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="ModernVBERT/modernvbert")
-class ModernVBertConfig(PretrainedConfig):
+@strict(accept_kwargs=True)
+class ModernVBertConfig(PreTrainedConfig):
     r"""
     pixel_shuffle_factor (`int | None`, *optional*, defaults to 4): Scale factor used by any pixel-shuffle / upsampling operations in the vision head.
     initializer_cutoff_factor (`float | None`, *optional*, defaults to 2.0): The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
@@ -66,46 +68,30 @@ class ModernVBertConfig(PretrainedConfig):
     ```"""
 
     model_type = "modernvbert"
-    sub_configs: dict[str, Any] = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        image_token_id: int | None = 50407,
-        pixel_shuffle_factor: int | None = 4,
-        initializer_range: float | None = 0.02,
-        initializer_cutoff_factor: float | None = 2.0,
-        classifier_pooling: Literal["cls", "mean"] = "cls",
-        classifier_dropout: float | None = 0.0,
-        classifier_bias: bool | None = False,
-        **kwargs,
-    ):
-        if classifier_pooling not in ["cls", "mean"]:
-            raise ValueError(
-                f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {classifier_pooling}.'
-            )
+    text_config: PreTrainedConfig | dict | None = None
+    vision_config: PreTrainedConfig | dict | None = None
+    image_token_id: int = 50407
+    pixel_shuffle_factor: int = 4
+    initializer_range: float = 0.02
+    initializer_cutoff_factor: float = 2.0
+    classifier_pooling: Literal["cls", "mean"] = "cls"
+    classifier_dropout: float = 0.0
+    classifier_bias: bool = False
 
-        if text_config is None:
-            text_config = CONFIG_MAPPING["modernbert"]()
-        elif isinstance(text_config, dict):
-            text_config = CONFIG_MAPPING["modernbert"](**text_config)
-        self.text_config = text_config
+    def __post_init__(self, **kwargs):
+        if self.text_config is None:
+            self.text_config = CONFIG_MAPPING["modernbert"]()
+        elif isinstance(self.text_config, dict):
+            self.text_config = CONFIG_MAPPING["modernbert"](**self.text_config)
 
-        if vision_config is None:
-            vision_config = CONFIG_MAPPING["siglip_vision_model"]()
-        elif isinstance(vision_config, dict):
-            vision_config = CONFIG_MAPPING["siglip_vision_model"](**vision_config)
-        self.vision_config = vision_config
+        if self.vision_config is None:
+            self.vision_config = CONFIG_MAPPING["siglip_vision_model"]()
+        elif isinstance(self.vision_config, dict):
+            self.vision_config = CONFIG_MAPPING["siglip_vision_model"](**self.vision_config)
 
-        self.pixel_shuffle_factor = pixel_shuffle_factor
-        self.initializer_range = initializer_range
-        self.initializer_cutoff_factor = initializer_cutoff_factor
-        self.classifier_pooling = classifier_pooling
-        self.classifier_dropout = classifier_dropout
-        self.classifier_bias = classifier_bias
-
-        super().__init__(image_token_id=image_token_id, **kwargs)
+        super().__post_init__(**kwargs)
 
 
 @dataclass

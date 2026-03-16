@@ -12,15 +12,15 @@
 # limitations under the License.
 """VipLlava model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-logger = logging.get_logger(__name__)
-
-
 @auto_docstring(checkpoint="llava-hf/vip-llava-7b-hf")
+@strict(accept_kwargs=True)
 class VipLlavaConfig(PreTrainedConfig):
     r"""
     projector_layernorm_eps (`float`, *optional*, defaults to 1e-05):
@@ -55,30 +55,20 @@ class VipLlavaConfig(PreTrainedConfig):
     }
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
-    def __init__(
-        self,
-        vision_config=None,
-        text_config=None,
-        image_token_index=32000,
-        projector_hidden_act="gelu",
-        projector_layernorm_eps=1e-5,
-        vision_feature_layers=[-2, -5, -8, -11, 6],
-        image_seq_length=576,
-        tie_word_embeddings=False,
-        **kwargs,
-    ):
-        self.image_token_index = image_token_index
-        self.projector_hidden_act = projector_hidden_act
-        self.projector_layernorm_eps = projector_layernorm_eps
-        self.vision_feature_layers = vision_feature_layers
-        self.image_seq_length = image_seq_length
-        self.vision_config = vision_config
-        self.tie_word_embeddings = tie_word_embeddings
+    vision_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    image_token_index: int = 32000
+    projector_hidden_act: str = "gelu"
+    projector_layernorm_eps: float = 1e-5
+    vision_feature_layers: int | list[int] | tuple[int, ...] = (-2, -5, -8, -11, 6)
+    image_seq_length: int = 576
+    tie_word_embeddings: bool = False
 
+    def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "clip_vision_model")
-            self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        elif vision_config is None:
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "clip_vision_model")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
+        elif self.vision_config is None:
             self.vision_config = CONFIG_MAPPING["clip_vision_model"](
                 intermediate_size=4096,
                 hidden_size=1024,
@@ -90,15 +80,13 @@ class VipLlavaConfig(PreTrainedConfig):
                 projection_dim=768,
             )
 
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "llama")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["llama"]()
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "llama")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["llama"]()
 
-        self.text_config = text_config
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["VipLlavaConfig"]

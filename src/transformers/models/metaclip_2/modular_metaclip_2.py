@@ -1,4 +1,20 @@
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
@@ -31,6 +47,7 @@ _CONFIG_FOR_DOC = "MetaClip2Config"
 
 
 @auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
+@strict(accept_kwargs=True)
 class MetaClip2TextConfig(CLIPTextConfig):
     r"""
     Example:
@@ -50,6 +67,7 @@ class MetaClip2TextConfig(CLIPTextConfig):
 
 
 @auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
+@strict(accept_kwargs=True)
 class MetaClip2VisionConfig(CLIPVisionConfig):
     r"""
     Example:
@@ -69,6 +87,7 @@ class MetaClip2VisionConfig(CLIPVisionConfig):
 
 
 @auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
+@strict(accept_kwargs=True)
 class MetaClip2Config(CLIPConfig):
     r"""
     Example:
@@ -174,6 +193,8 @@ class MetaClip2PreTrainedModel(CLIPPreTrainedModel):
             init.ones_(module.weight)
         if isinstance(module, nn.Linear) and module.bias is not None:
             init.zeros_(module.bias)
+        if hasattr(module, "logit_scale"):
+            init.constant_(module.logit_scale, self.config.logit_scale_init_value)
 
 
 class MetaClip2TextTransformer(CLIPTextTransformer):
