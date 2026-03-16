@@ -401,7 +401,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model_id: str,
         continuous_batching_config: ContinuousBatchingConfig,
         attn_implementation: str,
-        use_compile: bool,
         max_new_tokens: int = 20,
         num_repeat_prompts: int = 1,
     ) -> None:
@@ -445,8 +444,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model = model.to(torch_device).eval()
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
-        if use_compile:
-            model.generation_config.compile_config = CompileConfig(fullgraph=True, mode="default")
 
         # Generation with continuous batching
         continuous_batching_outputs = model.generate_batch(
@@ -472,8 +469,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
         model.generation_config.use_cuda_graph = continuous_batching_config.use_cuda_graph
-        if use_compile:
-            model.generation_config.compile_config = CompileConfig(fullgraph=True, mode="default")
 
         generate_outputs = model.generate(**inputs.to(torch_device), generation_config=model.generation_config)
 
@@ -496,14 +491,14 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             if continuous_batching_output != generate_output:
                 decoded_continuous_batching_output = tokenizer.decode(continuous_batching_output)
                 decoded_generate_output = tokenizer.decode(generate_output)
-                msg = f"Test failed for {model_id = } {continuous_batching_config = }, {attn_implementation = }, {use_compile = }\n"
+                msg = f"Test failed for {model_id = } {continuous_batching_config = }, {attn_implementation = }\n"
                 msg += f"User message              : {repr(user_message)}\n"
                 msg += f"Continuous batching output: {repr(decoded_continuous_batching_output)}\n"
                 msg += f"Generate output           : {repr(decoded_generate_output)}"
                 self.fail(msg)
 
         del model
-        flush_memory(flush_compile=use_compile)
+        flush_memory(flush_compile=continuous_batching_config.use_default_compile_configs)
 
     @parameterized.expand(
         list(
@@ -525,13 +520,12 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     ) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         continuous_batching_config = ContinuousBatchingConfig(
-            allow_block_sharing=allow_block_sharing, use_cuda_graph=use_cuda_graph
+            allow_block_sharing=allow_block_sharing, use_cuda_graph=use_cuda_graph, use_default_compile_configs=use_compile
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
             continuous_batching_config=continuous_batching_config,
             attn_implementation=attn_implementation,
-            use_compile=use_compile,
         )
 
     # FIXME: Qwen2.5-0.5B-Instruct is not here because it's  broken (it uses a repetition penalty logits processor)
@@ -548,12 +542,11 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     @slow
     def test_continuous_batching_diverse_models(self, model_id: str, use_cuda_graph: bool, use_compile: bool) -> None:
         try:
-            continuous_batching_config = ContinuousBatchingConfig(use_cuda_graph=use_cuda_graph)
+            continuous_batching_config = ContinuousBatchingConfig(use_cuda_graph=use_cuda_graph, use_default_compile_configs=use_compile)
             self._test_continuous_batching_parity(
                 model_id=model_id,
                 continuous_batching_config=continuous_batching_config,
                 attn_implementation="flash_attention_2",
-                use_compile=use_compile,
             )
         finally:
             flush_memory(flush_compile=use_compile)
@@ -561,25 +554,23 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     def test_continuous_batching_fast(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         continuous_batching_config = ContinuousBatchingConfig(
-            use_cuda_graph=False, allow_block_sharing=False, use_async_batching=False
+            use_cuda_graph=False, allow_block_sharing=False, use_async_batching=False, use_default_compile_configs=False
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
             continuous_batching_config=continuous_batching_config,
             attn_implementation="sdpa",
-            use_compile=False,
         )
 
     def test_continuous_batching_long_generate(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         continuous_batching_config = ContinuousBatchingConfig(
-            use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False
+            use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False, use_default_compile_configs=True
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
             continuous_batching_config=continuous_batching_config,
             attn_implementation="flash_attention_2",
-            use_compile=True,
             max_new_tokens=80,
         )
 
@@ -670,7 +661,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
                 model_id=model_id,
                 continuous_batching_config=continuous_batching_config,
                 attn_implementation="sdpa",
-                use_compile=False,
                 max_new_tokens=30,
                 num_repeat_prompts=4,
             )
@@ -908,10 +898,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         self._test_continuous_batching_parity(
             model_id=model_id,
             continuous_batching_config=ContinuousBatchingConfig(
-                allow_block_sharing=True, use_cuda_graph=use_cuda_graph, use_async_batching=True
+                allow_block_sharing=True, use_cuda_graph=use_cuda_graph, use_async_batching=True, use_default_compile_configs=use_compile
             ),
             attn_implementation=attn_implementation,
-            use_compile=use_compile,
         )
 
     @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
