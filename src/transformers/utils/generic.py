@@ -240,6 +240,10 @@ def is_flash_attention_requested(
     else:
         checked_attention_implementation = requested_attention_implementation
 
+    # theoretically can happen, equivalent to default implementation (sdpa/eager)
+    if checked_attention_implementation is None:
+        return False
+
     # If a specific version is requested, look for a pattern of type "flash...{version}"
     if version is not None:
         return re.match(r".*flash.*" + str(version), checked_attention_implementation) is not None

@@ -166,6 +166,13 @@ class OmDetTurboConfig(PreTrainedConfig):
             **kwargs,
         )
 
+        # Extract timm.create_model kwargs; TimmBackbone doesn't forward arbitrary config attrs to timm
+        self.timm_kwargs = {}
+        if getattr(self.backbone_config, "model_type", None) == "timm_backbone":
+            for attr in ("img_size", "always_partition"):
+                if hasattr(self.backbone_config, attr):
+                    self.timm_kwargs[attr] = getattr(self.backbone_config, attr)
+
         if self.text_config is None:
             logger.info("`text_config` is `None`. Initializing the config with the default `clip_text_model`")
             self.text_config = CONFIG_MAPPING["clip_text_model"]()
@@ -174,6 +181,11 @@ class OmDetTurboConfig(PreTrainedConfig):
             self.text_config = CONFIG_MAPPING[text_model_type](**self.text_config)
 
         super().__post_init__(**kwargs)
+
+    def to_dict(self):
+        output = super().to_dict()
+        output.pop("timm_kwargs", None)
+        return output
 
 
 __all__ = ["OmDetTurboConfig"]

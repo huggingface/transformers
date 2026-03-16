@@ -475,6 +475,8 @@ class Qwen3_5ModelOutputWithPast(Qwen3VLModelOutputWithPast):
 
 
 class Qwen3_5TextModel(Qwen3NextModel):
+    config: Qwen3_5TextConfig
+
     def __init__(self, config: Qwen3_5TextConfig):
         super().__init__(config)
         self.rotary_emb = Qwen3_5TextRotaryEmbedding(config=config)

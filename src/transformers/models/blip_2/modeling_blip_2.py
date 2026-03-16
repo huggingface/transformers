@@ -877,6 +877,8 @@ class Blip2TextEmbeddings(nn.Module):
     """
 )
 class Blip2QFormerModel(Blip2PreTrainedModel):
+    config: Blip2QFormerConfig
+
     _supports_attention_backend = False  # adds position on attn weights before last matmul
     _supports_flash_attn = False
     _supports_sdpa = False
