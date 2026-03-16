@@ -2852,6 +2852,202 @@ class GenerationMixin(ContinuousMixin):
         else:
             return input_ids
 
+    def _static_sample(
+        self: "GenerativePreTrainedModel",
+        input_ids: torch.LongTensor,
+        logits_processor: LogitsProcessorList,
+        stopping_criteria: StoppingCriteriaList,
+        generation_config: GenerationConfig,
+        synced_gpus: bool = False,
+        streamer: Optional["BaseStreamer"] = None,
+        **model_kwargs,
+    ) -> GenerateNonBeamOutput | torch.LongTensor:
+        r"""
+        Static-shape generation loop for use with `StaticCache`. Avoids growing tensors via `torch.cat` on every
+        decode step — all five dynamic operations from `_sample` are replaced with pre-allocated buffers and
+        in-place updates:
+
+        1. `input_ids` concatenation → in-place write to pre-allocated output buffer
+        2. `attention_mask` growth → pre-allocated 2D mask updated in-place each step
+        3. `position_ids` concatenation → derived from `cache_position` each step
+        4. `cache_position` concatenation → single-element tensor incremented in-place
+        5. `while` loop → fixed-count `for` loop over `max_new_tokens`
+
+        Automatically dispatched from `generate()` when `StaticCache` is detected.
+        Only supports decoder-only models.
+        """
+        # init values
+        pad_token_id = generation_config._pad_token_tensor
+        output_attentions = generation_config.output_attentions
+        output_hidden_states = generation_config.output_hidden_states
+        output_scores = generation_config.output_scores
+        output_logits = generation_config.output_logits
+        return_dict_in_generate = generation_config.return_dict_in_generate
+        has_eos_stopping_criteria = any(hasattr(criteria, "eos_token_id") for criteria in stopping_criteria)
+        do_sample = generation_config.do_sample
+
+        batch_size, prefill_len = input_ids.shape
+        max_length = generation_config.max_length
+        max_new_tokens = max_length - prefill_len
+        device = input_ids.device
+        pad_id = pad_token_id.item() if pad_token_id is not None else 0
+
+        # init attention / hidden states / scores tuples
+        scores = () if (return_dict_in_generate and output_scores) else None
+        raw_logits = () if (return_dict_in_generate and output_logits) else None
+        decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
+        decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
+
+        # --- Static pre-allocations ---
+
+        # 1. Output buffer: pre-allocated to full max_length, prompt copied in
+        output_ids = input_ids.new_full((batch_size, max_length), pad_id)
+        output_ids[:, :prefill_len] = input_ids
+
+        # 2. Attention mask: pre-allocated to max_length, prompt positions = 1, future = 0
+        if (attention_mask := model_kwargs.get("attention_mask")) is not None:
+            static_attn_mask = attention_mask.new_zeros(batch_size, max_length)
+            static_attn_mask[:, :prefill_len] = attention_mask
+            model_kwargs["attention_mask"] = static_attn_mask
+
+        # 3. Current-token buffer for decode steps: always shape [batch, 1], no growth
+        current_ids = input_ids.new_empty(batch_size, 1)
+
+        # keep track of which sequences are already finished
+        unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=device)
+
+        model_forward = (
+            self.get_compiled_call(generation_config.compile_config)
+            if self._valid_auto_compile_criteria(model_kwargs, generation_config)
+            else self.__call__
+        )
+
+        # --- Prefill (unchanged path, dynamic shapes) ---
+        outputs = self._prefill(
+            input_ids,
+            generation_config,
+            model_kwargs,
+            is_first_iteration=not generation_config.is_assistant,
+        )
+
+        # --- Process first token from prefill output ---
+        # Copy is needed to avoid keeping a hanging ref to outputs.logits
+        next_token_logits = outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=device)
+        next_token_scores = logits_processor(input_ids, next_token_logits)
+
+        if return_dict_in_generate:
+            if output_scores:
+                scores += (next_token_scores,)
+            if output_logits:
+                raw_logits += (next_token_logits,)
+
+        if do_sample:
+            probs = nn.functional.softmax(next_token_scores, dim=-1)
+            next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+        else:
+            next_tokens = torch.argmax(next_token_scores, dim=-1)
+
+        if has_eos_stopping_criteria:
+            next_tokens = next_tokens * unfinished_sequences + pad_id * (1 - unfinished_sequences)
+
+        # In-place write of first generated token (no torch.cat)
+        first_pos = torch.tensor([prefill_len], dtype=torch.long, device=device)
+        output_ids.scatter_(1, first_pos.view(1, 1).expand(batch_size, 1), next_tokens.view(batch_size, 1))
+        current_ids[:, 0] = next_tokens
+
+        if streamer is not None:
+            streamer.put(next_tokens.cpu())
+
+        unfinished_sequences = unfinished_sequences & ~stopping_criteria(output_ids[:, : prefill_len + 1], scores)
+
+        del outputs
+
+        # --- Reset model_kwargs for static decode loop ---
+        # cache_position: single-element tensor pointing to where the next decode token will be written
+        model_kwargs["cache_position"] = torch.tensor([prefill_len], dtype=torch.long, device=device)
+        # position_ids: derived from cache_position (no torch.cat accumulation)
+        if model_kwargs.get("position_ids") is not None:
+            model_kwargs["position_ids"] = model_kwargs["cache_position"].unsqueeze(0).expand(batch_size, 1)
+
+        # --- Static decode loop (for loop, no while, no growing tensors) ---
+        for _ in range(max_new_tokens - 1):
+            cur_pos = model_kwargs["cache_position"]  # shape [1], e.g. [prefill_len]
+
+            # 3. position_ids: derived directly from cur_pos, not concatenated
+            if model_kwargs.get("position_ids") is not None:
+                model_kwargs["position_ids"] = cur_pos.unsqueeze(0).expand(batch_size, 1).clone()
+
+            # 2. attention_mask: in-place update at cur_pos (no torch.cat)
+            if model_kwargs.get("attention_mask") is not None:
+                model_kwargs["attention_mask"].scatter_(1, cur_pos.view(1, 1).expand(batch_size, 1), 1)
+
+            # Run decode step using current_ids (always [batch, 1], no growth)
+            model_inputs = self.prepare_inputs_for_generation(current_ids, next_sequence_length=1, **model_kwargs)
+            with self._optimize_model_for_decode():
+                outputs = model_forward(**model_inputs, return_dict=True)
+
+            model_kwargs["past_key_values"] = outputs.past_key_values
+
+            # Copy is needed to avoid keeping a hanging ref to outputs.logits
+            next_token_logits = outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=device)
+
+            # next_pos: where the new token will be written in the output buffer
+            next_pos = cur_pos + 1  # shape [1]
+            cur_len = next_pos.item() + 1
+            next_token_scores = logits_processor(output_ids[:, :cur_len], next_token_logits)
+
+            if return_dict_in_generate:
+                if output_scores:
+                    scores += (next_token_scores,)
+                if output_logits:
+                    raw_logits += (next_token_logits,)
+                if output_attentions:
+                    decoder_attentions += (outputs.attentions,) if not self.config.is_encoder_decoder else ()
+                if output_hidden_states:
+                    decoder_hidden_states += (outputs.hidden_states,) if not self.config.is_encoder_decoder else ()
+
+            if do_sample:
+                probs = nn.functional.softmax(next_token_scores, dim=-1)
+                next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+            else:
+                next_tokens = torch.argmax(next_token_scores, dim=-1)
+
+            if has_eos_stopping_criteria:
+                next_tokens = next_tokens * unfinished_sequences + pad_id * (1 - unfinished_sequences)
+
+            # 1. In-place write to pre-allocated output buffer (no torch.cat)
+            output_ids.scatter_(1, next_pos.view(1, 1).expand(batch_size, 1), next_tokens.view(batch_size, 1))
+            # Update current token buffer for next decode step
+            current_ids[:, 0] = next_tokens
+
+            if streamer is not None:
+                streamer.put(next_tokens.cpu())
+
+            # 4. cache_position scalar increment (no torch.cat) — updated AFTER forward pass
+            model_kwargs["cache_position"] = next_pos
+
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(output_ids[:, :cur_len], scores)
+            if unfinished_sequences.max() == 0:
+                break
+
+            del outputs
+
+        if streamer is not None:
+            streamer.end()
+
+        if return_dict_in_generate:
+            cache = model_kwargs.get("past_key_values")
+            return GenerateDecoderOnlyOutput(
+                sequences=output_ids,
+                scores=scores,
+                logits=raw_logits,
+                attentions=decoder_attentions,
+                hidden_states=decoder_hidden_states,
+                past_key_values=cache,
+            )
+        else:
+            return output_ids
+
     @staticmethod
     def _flatten_beam_dim(tensor: torch.Tensor) -> torch.Tensor:
         """[batch_size, num_beams, ...] -> [batch_size * num_beams, ...]"""
