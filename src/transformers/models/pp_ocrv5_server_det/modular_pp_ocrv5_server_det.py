@@ -57,7 +57,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(
-    checkpoint="PaddlePaddle/PP-OCRv5-server-det",
+    checkpoint="PaddlePaddle/PP-OCRv5_server_det_safetensors",
     custom_args=r"""
     interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
         The interpolation mode used for upsampling or downsampling feature maps in the neck network.

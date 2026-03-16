@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_pp_ocrv5_server_rec.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,42 +19,35 @@
 # limitations under the License.
 
 
+from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...backbone_utils import consolidate_backbone_kwargs_to_config, load_backbone
-from ..auto import AutoConfig
 from ...utils import auto_docstring
+from ..auto import AutoConfig
 
 
-@auto_docstring(custom_intro="Configuration for the PP-OCRv5_server_rec model.")
+@auto_docstring(
+    checkpoint="PaddlePaddle/PP-OCRv5_server_rec_safetensors",
+    custom_args=r"""
+    head_out_channels (`int`, *optional*, defaults to 18385):
+        The number of output channels from the PPOCRV5ServerRecHead, responsible for final classification.
+    """,
+)
 class PPOCRV5ServerRecConfig(PreTrainedConfig):
     model_type = "pp_ocrv5_server_rec"
     sub_configs = {"backbone_config": AutoConfig}
-    """
-    This is the configuration class to store the configuration of a [`PPOCRV5ServerRec`]. It is used to instantiate a
-    PPOCRV5 Server text recognition model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the PPOCRV5 Server Rec
-    [PaddlePaddle/PP-OCRv5-server-rec](https://huggingface.co/PaddlePaddle/PP-OCRv5-server-rec) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-    """
 
     def __init__(
         self,
         backbone_config=None,
-        text_rec: bool = True,
-        stem_channels: list = [3, 32, 48],
-        det: bool = False,
-        use_lab: bool = False,
-        use_last_conv: bool = True,
-        class_expand: int = 2048,
-        dropout_prob: float = 0.0,
-        class_num: int = 1000,
-        lr_mult_list: list = [1.0, 1.0, 1.0, 1.0, 1.0],
-        out_indices: list | None = None,
-        stage_config: dict | None = None,
-        head_list: list | None = None,
-        decode_list: dict | None = None,
+        hidden_act: str = "silu",
+        hidden_size: int = 120,
+        mlp_ratio: float = 2.0,
+        depth: int = 2,
+        head_out_channels: int = 18385,
+        conv_kernel_size: list = [1, 3],
+        qkv_bias: bool = True,
+        num_attention_heads: int = 8,
+        attention_dropout: float = 0.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -70,24 +63,22 @@ class PPOCRV5ServerRecConfig(PreTrainedConfig):
                 "freeze_norm": True,
                 "lr_mult_list": [1.0, 1.0, 1.0, 1.0, 1.0],
                 "out_features": ["stage1", "stage2", "stage3", "stage4"],
+                "stage_downsample": [True, True, True, True],
+                "stage_downsample_strides": [[2, 1], [1, 2], [2, 1], [2, 1]],
             },
             **kwargs,
         )
         self.backbone_config = backbone_config
 
-        self.text_rec = text_rec
-        self.stem_channels = stem_channels
-        self.stage_config = stage_config
-        self.det = det
-        self.use_lab = use_lab
-        self.use_last_conv = use_last_conv
-        self.class_expand = class_expand
-        self.dropout_prob = dropout_prob
-        self.class_num = class_num
-        self.lr_mult_list = lr_mult_list
-        self.out_indices = out_indices
-        self.head_list = head_list
-        self.decode_list = decode_list
+        self.hidden_act = hidden_act
+        self.hidden_size = hidden_size
+        self.mlp_ratio = mlp_ratio
+        self.depth = depth
+        self.head_out_channels = head_out_channels
+        self.conv_kernel_size = conv_kernel_size
+        self.qkv_bias = qkv_bias
+        self.num_attention_heads = num_attention_heads
+        self.attention_dropout = attention_dropout
 
 
 __all__ = ["PPOCRV5ServerRecConfig"]
