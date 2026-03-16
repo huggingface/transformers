@@ -52,12 +52,41 @@ class SLANeXtVisionAttention(GotOcr2VisionAttention):
     checkpoint="PaddlePaddle/SLANeXt_wired",
     custom_intro="Configuration for the SLANeXt model.",
     custom_args=r"""
+    vision_config (`SLANeXtVisionConfig` or `dict`, *optional*):
+        Configuration for the vision encoder. If not provided, default values will be used.
     encoder_embed_dim (`int`, *optional*, defaults to 768):
         Dimensionality of the encoder embeddings, used as the hidden size of the vision encoder (ViT backbone).
+    encoder_output_channels (`int`, *optional*, defaults to 256):
+        Number of output channels produced by the vision encoder's neck (projection layer after the transformer
+        blocks).
+    encoder_num_channels (`int`, *optional*, defaults to 3):
+        Number of input image channels for the vision encoder (e.g., 3 for RGB).
+    encoder_patch_size (`int`, *optional*, defaults to 16):
+        Size of each image patch for the vision encoder's patch embedding.
+    encoder_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function used in the vision encoder.
+    encoder_layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        The epsilon value used by the layer normalization layers in the vision encoder.
+    encoder_attention_dropout (`float`, *optional*, defaults to 0.0):
+        The dropout ratio for the attention probabilities in the vision encoder.
+    encoder_qkv_bias (`bool`, *optional*, defaults to `True`):
+        Whether to add a bias to the query, key, and value projections in the vision encoder's attention layers.
+    encoder_use_abs_pos (`bool`, *optional*, defaults to `True`):
+        Whether to use absolute position in the vision encoder's attention layers.
+    encoder_use_rel_pos(`bool`, *optional*, defaults to `True`):
+        Whether to use relative position in the vision encoder's attention layers.
+    encoder_window_size (`int`, *optional*, defaults to 14):
+        Window size for windowed (local) attention in the vision encoder layers.
     encoder_depth (`int`, *optional*, defaults to 12):
         Number of transformer encoder layers in the vision backbone.
+    encoder_num_heads (`int`, *optional*, defaults to 12):
+        Number of attention heads for each attention layer in the vision encoder.
     encoder_global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
         Indexes of the encoder layers that use global (non-windowed) attention instead of local window attention.
+    post_conv_in_channels (`int`, *optional*, defaults to 256):
+        Number of input channels for the post-encoder convolution layer.
+    post_conv_out_channels (`int`, *optional*, defaults to 512):
+        Number of output channels for the post-encoder convolution layer.
     out_channels (`int`, *optional*, defaults to 50):
         Number of output token classes for the structure prediction head (i.e., vocabulary size for table structure
         tokens).
@@ -71,25 +100,59 @@ class SLANeXtVisionAttention(GotOcr2VisionAttention):
 class SLANeXtConfig(PreTrainedConfig):
 
     model_type = "slanext"
+    sub_configs = {"vision_config": SLANeXtVisionConfig}
 
     def __init__(
         self,
+        vision_config=None,
+        image_size: int = 512,
         encoder_embed_dim: int = 768,
+        encoder_output_channels: int=256,
+        encoder_num_channels: int=3,
+        encoder_patch_size: int=16,
+        encoder_hidden_act: str="gelu",
+        encoder_layer_norm_eps: float=1e-6,
+        encoder_attention_dropout: float=0.0,
+        encoder_qkv_bias: bool=True,
+        encoder_use_abs_pos: bool=True,
+        encoder_use_rel_pos: bool=True,
+        encoder_window_size: int=14,
         encoder_depth: int = 12,
         encoder_num_heads: int = 12,
         encoder_global_attn_indexes: list[int] = [2, 5, 8, 11],
+        post_conv_in_channels: int=256,
+        post_conv_out_channels: int=512,
         out_channels: int = 50,
         hidden_size: int = 512,
         max_text_length: int = 500,
         loc_reg_num: int = 8,
         **kwargs,
     ) -> None:
+        if vision_config is None:
+            vision_config = SLANeXtVisionConfig(
+                hidden_size=encoder_embed_dim,
+                output_channels=encoder_output_channels,
+                num_hidden_layers=encoder_depth,
+                num_attention_heads=encoder_num_heads,
+                num_channels=encoder_num_channels,
+                image_size=image_size,
+                patch_size=encoder_patch_size,
+                hidden_act=encoder_hidden_act,
+                layer_norm_eps=encoder_layer_norm_eps,
+                attention_dropout=encoder_attention_dropout,
+                qkv_bias=encoder_qkv_bias,
+                use_abs_pos=encoder_use_abs_pos,
+                use_rel_pos=encoder_use_rel_pos,
+                window_size=encoder_window_size,
+                global_attn_indexes=encoder_global_attn_indexes,
+                mlp_dim=int(encoder_embed_dim * 4),
+            )
+        elif isinstance(vision_config, dict):
+            vision_config = SLANeXtVisionConfig(**vision_config)
+        self.vision_config = vision_config
         super().__init__(**kwargs)
-
-        self.encoder_embed_dim = encoder_embed_dim
-        self.encoder_depth = encoder_depth
-        self.encoder_num_heads = encoder_num_heads
-        self.encoder_global_attn_indexes = encoder_global_attn_indexes
+        self.post_conv_in_channels = post_conv_in_channels
+        self.post_conv_out_channels= post_conv_out_channels
         self.out_channels = out_channels
         self.hidden_size = hidden_size
         self.max_text_length = max_text_length
@@ -103,7 +166,7 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
     """
 
     config: SLANeXtConfig
-    base_model_prefix = "slanext"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 
@@ -126,8 +189,12 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
         # Initialize GRUCell (replicates PyTorch default reset_parameters)
         if isinstance(module, nn.GRUCell):
             stdv = 1.0 / math.sqrt(module.hidden_size) if module.hidden_size > 0 else 0
-            for weight in module.parameters():
-                init.uniform_(weight, -stdv, stdv)
+            init.uniform_(module.weight_ih, -stdv, stdv)
+            init.uniform_(module.weight_hh, -stdv, stdv)
+            if module.bias_ih is not None:
+                init.uniform_(module.bias_ih, -stdv, stdv)
+            if module.bias_hh is not None:
+                init.uniform_(module.bias_hh, -stdv, stdv)
 
         # Initialize SLAHead layers
         if isinstance(module, SLANeXtSLAHead):
@@ -148,44 +215,27 @@ class SLANeXtVisionEncoder(GotOcr2VisionEncoder):
 class SLANeXtVary_VIT_B(nn.Module):
     def __init__(
         self,
-        in_channels=3,
-        image_size=768,
-        encoder_embed_dim=768,
-        encoder_depth=12,
-        encoder_num_heads=12,
-        encoder_global_attn_indexes=[2, 5, 8, 11],
+        vision_config: SLANeXtConfig,
+        post_conv_in_channels: int=256,
+        post_conv_out_channels: int=512,
     ):
         super().__init__()
 
-        vision_config = SLANeXtVisionConfig(
-            hidden_size=encoder_embed_dim,
-            output_channels=256,
-            num_hidden_layers=encoder_depth,
-            num_attention_heads=encoder_num_heads,
-            num_channels=in_channels,
-            image_size=image_size,
-            patch_size=16,
-            hidden_act="gelu",
-            layer_norm_eps=1e-6,
-            attention_dropout=0.0,
-            qkv_bias=True,
-            use_abs_pos=True,
-            use_rel_pos=True,
-            window_size=14,
-            global_attn_indexes=encoder_global_attn_indexes,
-            mlp_dim=int(encoder_embed_dim * 4),
+        self.vision_tower = SLANeXtVisionEncoder(vision_config)
+        self.post_conv = nn.Conv2d(
+            post_conv_in_channels,
+            post_conv_out_channels,
+            kernel_size=3,
+            stride=2,
+            padding=1,
+            bias=False
         )
-        # Reuse GotOcr2VisionEncoder directly (replaces SLANeXtImageEncoderViT.encoder)
-        self.vision_tower_high = nn.Module()
-        self.vision_tower_high.encoder = SLANeXtVisionEncoder(vision_config)
-        self.vision_tower_high.net_2 = nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1, bias=False)
-        self.out_channels = 1024
 
     def forward(self, hidden_states):
         if hidden_states.shape[1] == 1:
             hidden_states = torch.repeat_interleave(hidden_states, repeats=3, dim=1)
-        hidden_states = self.vision_tower_high.encoder(hidden_states).last_hidden_state
-        hidden_states = self.vision_tower_high.net_2(hidden_states)
+        hidden_states = self.vision_tower(hidden_states).last_hidden_state
+        hidden_states = self.post_conv(hidden_states)
         hidden_states = hidden_states.flatten(2).permute(0, 2, 1)
         return hidden_states
 
@@ -194,17 +244,15 @@ class SLANeXtAttentionGRUCell(nn.Module):
     def __init__(self, input_size, hidden_size, num_embeddings, use_gru=False):
         super().__init__()
 
-        self.i2h = nn.Linear(input_size, hidden_size, bias=False)
-        self.h2h = nn.Linear(hidden_size, hidden_size)
+        self.input_to_hidden = nn.Linear(input_size, hidden_size, bias=False)
+        self.hidden_to_hidden = nn.Linear(hidden_size, hidden_size)
         self.score = nn.Linear(hidden_size, 1, bias=False)
 
         self.rnn = nn.GRUCell(input_size + num_embeddings, hidden_size)
 
-        self.hidden_size = hidden_size
-
     def forward(self, prev_hidden, batch_hidden, char_onehots):
-        batch_hidden_proj = self.i2h(batch_hidden)
-        prev_hidden_proj = self.h2h(prev_hidden).unsqueeze(1)
+        batch_hidden_proj = self.input_to_hidden(batch_hidden)
+        prev_hidden_proj = self.hidden_to_hidden(prev_hidden).unsqueeze(1)
 
         attention_scores = batch_hidden_proj + prev_hidden_proj
         attention_scores = torch.tanh(attention_scores)
@@ -268,79 +316,15 @@ def windows2img(img_splits_hw, H_sp, W_sp, H, W):
     return img
 
 
-class SLANeXtHead_Block(nn.Module):
-    def __init__(
-        self,
-        dim,
-        num_heads,
-        split_h=4,
-        split_w=4,
-        h_num_heads=None,
-        w_num_heads=None,
-        mlp_ratio=4.0,
-        qkv_bias=False,
-        qk_scale=None,
-        drop=0.0,
-        attn_drop=0.0,
-        drop_path=0.0,
-        act_layer=nn.GELU,
-        norm_layer=nn.LayerNorm,
-        eps=1e-6,
-    ):
-        super().__init__()
-
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.proj = nn.Linear(dim, dim)
-        self.split_h = split_h
-        self.split_w = split_w
-        mlp_hidden_dim = int(dim * mlp_ratio)
-        self.norm1 = norm_layer(dim, eps=eps)
-        self.h_num_heads = h_num_heads if h_num_heads is not None else num_heads // 2
-        self.w_num_heads = w_num_heads if w_num_heads is not None else num_heads // 2
-        self.head_dim = dim // num_heads
-        self.mixer = SLANeXtHWAttention(head_dim=dim // num_heads, qk_scale=qk_scale, attn_drop=attn_drop)
-        self.drop_path = nn.Identity()
-        self.norm2 = norm_layer(dim, eps=eps)
-        self.mlp = SLANeXtMlp(
-            type("_MlpConfig", (), {"hidden_act": "gelu"})(),
-            in_features=dim,
-            hidden_features=mlp_hidden_dim,
-            drop=drop,
-        )
-
-    def forward(self, hidden_states):
-        batch_size, channels, height, width = hidden_states.shape
-        hidden_states = hidden_states.flatten(2).permute(0, 2, 1)
-
-        qkv = self.qkv(hidden_states).reshape(batch_size, height, width, 3 * channels)
-
-        hidden_h = qkv[:, :, :, : 3 * self.h_num_heads * self.head_dim]
-        hidden_w = qkv[:, :, :, 3 * self.h_num_heads * self.head_dim :]
-
-        hidden_h = self.mixer(img2windows(hidden_h, self.split_h, width))
-        hidden_w = self.mixer(img2windows(hidden_w, height, self.split_w))
-        hidden_h = windows2img(hidden_h, self.split_h, width, height, width)
-        hidden_w = windows2img(hidden_w, height, self.split_w, height, width)
-
-        attended = torch.cat([hidden_h, hidden_w], 2)
-        attended = self.proj(attended)
-
-        hidden_states = self.norm1(hidden_states + self.drop_path(attended))
-        hidden_states = self.norm2(hidden_states + self.drop_path(self.mlp(hidden_states)))
-        hidden_states = hidden_states.permute(0, 2, 1).reshape(-1, channels, height, width)
-        return hidden_states
-
-
 class SLANeXtSLAHead(nn.Module):
     def __init__(
         self,
-        in_channels,
-        hidden_size,
+        in_channels=512,
+        hidden_size=512,
         out_channels=30,
         max_text_length=500,
         loc_reg_num=4,
         fc_decay=0.0,
-        use_attn=False,
         **kwargs,
     ):
         """
@@ -351,12 +335,6 @@ class SLANeXtSLAHead(nn.Module):
         """
         super().__init__()
 
-        if isinstance(in_channels, int):
-            self.is_next = True
-            in_channels = 512
-        else:
-            self.is_next = False
-            in_channels = in_channels[-1]
         self.hidden_size = hidden_size
         self.max_text_length = max_text_length
         self.emb = self._char_to_onehot
@@ -372,21 +350,6 @@ class SLANeXtSLAHead(nn.Module):
 
         dpr = np.linspace(0, 0.1, 2)
 
-        self.use_attn = use_attn
-        if use_attn:
-            self.cross_atten = nn.Sequential(
-                *[
-                    SLANeXtHead_Block(
-                        in_channels,
-                        num_heads=2,
-                        mlp_ratio=4.0,
-                        qkv_bias=True,
-                        drop_path=dpr[i],
-                    )
-                    for i in range(2)
-                ]
-            )
-
         self.loc_generator = nn.Sequential(
             nn.Linear(self.hidden_size, self.hidden_size),
             nn.Linear(self.hidden_size, loc_reg_num),
@@ -394,16 +357,8 @@ class SLANeXtSLAHead(nn.Module):
         )
 
     def forward(self, inputs, targets=None):
-        if self.is_next:
-            features = inputs
-            batch_size = features.shape[0]
-        else:
-            features = inputs[-1]
-            batch_size = features.shape[0]
-            if self.use_attn:
-                features = features + self.cross_atten(features)
-            features = features.reshape(features.shape[0], features.shape[1], -1)
-            features = features.permute(0, 2, 1)
+        features = inputs
+        batch_size = features.shape[0]
 
         hidden = torch.zeros((batch_size, self.hidden_size), device=features.device)
         structure_preds = torch.zeros(
@@ -412,34 +367,23 @@ class SLANeXtSLAHead(nn.Module):
         loc_preds = torch.zeros((batch_size, self.max_text_length + 1, self.loc_reg_num), device=features.device)
         structure_preds.requires_grad = False
         loc_preds.requires_grad = False
+        structure_ids = torch.zeros(
+            (batch_size, self.max_text_length + 1), dtype=torch.long, device=features.device
+        )
+        pre_chars = torch.zeros(size=[batch_size], dtype=torch.long, device=features.device)
+        for i in range(self.max_text_length + 1):
+            hidden, structure_step, loc_step = self._decode(pre_chars, features, hidden)
+            pre_chars = structure_step.argmax(dim=1)
+            structure_preds[:, i, :] = structure_step
+            loc_preds[:, i, :] = loc_step
 
-        if self.training and targets is not None:
-            structure = targets[0]
-            max_len = targets[-2].max().int()
-            for i in range(max_len + 1):
-                hidden, structure_step, loc_step = self._decode(structure[:, i], features, hidden)
-                structure_preds[:, i, :] = structure_step
-                loc_preds[:, i, :] = loc_step
-            structure_preds = structure_preds[:, : max_len + 1]
-            loc_preds = loc_preds[:, : max_len + 1]
-        else:
-            structure_ids = torch.zeros(
-                (batch_size, self.max_text_length + 1), dtype=torch.long, device=features.device
-            )
-            pre_chars = torch.zeros(size=[batch_size], dtype=torch.long, device=features.device)
-            for i in range(self.max_text_length + 1):
-                hidden, structure_step, loc_step = self._decode(pre_chars, features, hidden)
-                pre_chars = structure_step.argmax(dim=1)
-                structure_preds[:, i, :] = structure_step
-                loc_preds[:, i, :] = loc_step
+            structure_ids[:, i] = pre_chars
+            if (structure_ids == self.eos).any(-1).all():
+                break
+        structure_preds = F.softmax(structure_preds[:, : i + 1], dim=-1)
+        loc_preds = loc_preds[:, : i + 1]
 
-                structure_ids[:, i] = pre_chars
-                if (structure_ids == self.eos).any(-1).all():
-                    break
-        if not self.training:
-            structure_preds = F.softmax(structure_preds[:, : i + 1], dim=-1)
-            loc_preds = loc_preds[:, : i + 1]
-        return {"structure_probs": structure_preds, "loc_preds": loc_preds}
+        return structure_preds
 
     def _decode(self, pre_chars, features, hidden):
         """
@@ -470,14 +414,11 @@ class SLANeXtModel(SLANeXtPreTrainedModel):
     def __init__(self, config: SLANeXtConfig):
         super().__init__(config)
         self.backbone = SLANeXtVary_VIT_B(
-            image_size=512,
-            encoder_embed_dim=config.encoder_embed_dim,
-            encoder_depth=config.encoder_depth,
-            encoder_num_heads=config.encoder_num_heads,
-            encoder_global_attn_indexes=config.encoder_global_attn_indexes,
+            vision_config=config.vision_config,
+            post_conv_in_channels=config.post_conv_in_channels,
+            post_conv_out_channels=config.post_conv_out_channels,
         )
         self.head = SLANeXtSLAHead(
-            in_channels=self.backbone.out_channels,
             out_channels=config.out_channels,
             hidden_size=config.hidden_size,
             max_text_length=config.max_text_length,
@@ -634,11 +575,6 @@ class SLANeXtImageProcessor(BaseImageProcessor):
 
         return img
 
-    def post_process_table_recognition(self, hidden_states):
-        return self.decode(
-            hidden_states["last_hidden_state"]["structure_probs"].detach().cpu()
-        )[0]
-
     def init_decoder(self, merge_no_span_structure=True):
         dict_character = [
             "<thead>",
@@ -675,8 +611,8 @@ class SLANeXtImageProcessor(BaseImageProcessor):
             assert False, "unsupported type %s in get_beg_end_flag_idx" % beg_or_end
         return idx
 
-    def decode(self, pred):
-        self.pred = pred
+    def post_process_table_recognition(self, outputs):
+        self.pred = outputs.last_hidden_state.detach().cpu()
         structure_probs = np.array([list(self.pred[0])])
         """convert text-label into text-index."""
         ignored_tokens = [self.get_beg_end_flag_idx("beg"), self.get_beg_end_flag_idx("end")]
@@ -707,7 +643,7 @@ class SLANeXtImageProcessor(BaseImageProcessor):
             for structure in structure_str_list
         ]
 
-        return [{"structure": structure, "structure_score": structure_score} for structure in structure_str_list]
+        return [{"structure": structure, "structure_score": structure_score} for structure in structure_str_list][0]
 
 
 @auto_docstring(custom_intro="TableRecognition for the SLANeXt model.")
@@ -730,7 +666,7 @@ class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
         outputs = self.model(pixel_values)
 
         return BaseModelOutputWithNoAttention(
-            last_hidden_state=outputs.last_hidden_state["structure"],
+            last_hidden_state=outputs.last_hidden_state,
             hidden_states=outputs.hidden_states,
         )
 

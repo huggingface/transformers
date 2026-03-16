@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-03-13.*
+*This model was released on 2025-03-07 and added to Hugging Face Transformers on 2026-03-16.*
 
 # SLANeXt
 

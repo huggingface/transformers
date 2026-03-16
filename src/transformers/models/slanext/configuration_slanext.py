@@ -88,12 +88,41 @@ class SLANeXtVisionConfig(PreTrainedConfig):
     checkpoint="PaddlePaddle/SLANeXt_wired",
     custom_intro="Configuration for the SLANeXt model.",
     custom_args=r"""
+    vision_config (`SLANeXtVisionConfig` or `dict`, *optional*):
+        Configuration for the vision encoder. If not provided, default values will be used.
     encoder_embed_dim (`int`, *optional*, defaults to 768):
         Dimensionality of the encoder embeddings, used as the hidden size of the vision encoder (ViT backbone).
+    encoder_output_channels (`int`, *optional*, defaults to 256):
+        Number of output channels produced by the vision encoder's neck (projection layer after the transformer
+        blocks).
+    encoder_num_channels (`int`, *optional*, defaults to 3):
+        Number of input image channels for the vision encoder (e.g., 3 for RGB).
+    encoder_patch_size (`int`, *optional*, defaults to 16):
+        Size of each image patch for the vision encoder's patch embedding.
+    encoder_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function used in the vision encoder.
+    encoder_layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        The epsilon value used by the layer normalization layers in the vision encoder.
+    encoder_attention_dropout (`float`, *optional*, defaults to 0.0):
+        The dropout ratio for the attention probabilities in the vision encoder.
+    encoder_qkv_bias (`bool`, *optional*, defaults to `True`):
+        Whether to add a bias to the query, key, and value projections in the vision encoder's attention layers.
+    encoder_use_abs_pos (`bool`, *optional*, defaults to `True`):
+        Whether to use absolute position in the vision encoder's attention layers.
+    encoder_use_rel_pos(`bool`, *optional*, defaults to `True`):
+        Whether to use relative position in the vision encoder's attention layers.
+    encoder_window_size (`int`, *optional*, defaults to 14):
+        Window size for windowed (local) attention in the vision encoder layers.
     encoder_depth (`int`, *optional*, defaults to 12):
         Number of transformer encoder layers in the vision backbone.
+    encoder_num_heads (`int`, *optional*, defaults to 12):
+        Number of attention heads for each attention layer in the vision encoder.
     encoder_global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
         Indexes of the encoder layers that use global (non-windowed) attention instead of local window attention.
+    post_conv_in_channels (`int`, *optional*, defaults to 256):
+        Number of input channels for the post-encoder convolution layer.
+    post_conv_out_channels (`int`, *optional*, defaults to 512):
+        Number of output channels for the post-encoder convolution layer.
     out_channels (`int`, *optional*, defaults to 50):
         Number of output token classes for the structure prediction head (i.e., vocabulary size for table structure
         tokens).
@@ -106,25 +135,59 @@ class SLANeXtVisionConfig(PreTrainedConfig):
 )
 class SLANeXtConfig(PreTrainedConfig):
     model_type = "slanext"
+    sub_configs = {"vision_config": SLANeXtVisionConfig}
 
     def __init__(
         self,
+        vision_config=None,
+        image_size: int = 512,
         encoder_embed_dim: int = 768,
+        encoder_output_channels: int = 256,
+        encoder_num_channels: int = 3,
+        encoder_patch_size: int = 16,
+        encoder_hidden_act: str = "gelu",
+        encoder_layer_norm_eps: float = 1e-6,
+        encoder_attention_dropout: float = 0.0,
+        encoder_qkv_bias: bool = True,
+        encoder_use_abs_pos: bool = True,
+        encoder_use_rel_pos: bool = True,
+        encoder_window_size: int = 14,
         encoder_depth: int = 12,
         encoder_num_heads: int = 12,
         encoder_global_attn_indexes: list[int] = [2, 5, 8, 11],
+        post_conv_in_channels: int = 256,
+        post_conv_out_channels: int = 512,
         out_channels: int = 50,
         hidden_size: int = 512,
         max_text_length: int = 500,
         loc_reg_num: int = 8,
         **kwargs,
     ) -> None:
+        if vision_config is None:
+            vision_config = SLANeXtVisionConfig(
+                hidden_size=encoder_embed_dim,
+                output_channels=encoder_output_channels,
+                num_hidden_layers=encoder_depth,
+                num_attention_heads=encoder_num_heads,
+                num_channels=encoder_num_channels,
+                image_size=image_size,
+                patch_size=encoder_patch_size,
+                hidden_act=encoder_hidden_act,
+                layer_norm_eps=encoder_layer_norm_eps,
+                attention_dropout=encoder_attention_dropout,
+                qkv_bias=encoder_qkv_bias,
+                use_abs_pos=encoder_use_abs_pos,
+                use_rel_pos=encoder_use_rel_pos,
+                window_size=encoder_window_size,
+                global_attn_indexes=encoder_global_attn_indexes,
+                mlp_dim=int(encoder_embed_dim * 4),
+            )
+        elif isinstance(vision_config, dict):
+            vision_config = SLANeXtVisionConfig(**vision_config)
+        self.vision_config = vision_config
         super().__init__(**kwargs)
-
-        self.encoder_embed_dim = encoder_embed_dim
-        self.encoder_depth = encoder_depth
-        self.encoder_num_heads = encoder_num_heads
-        self.encoder_global_attn_indexes = encoder_global_attn_indexes
+        self.post_conv_in_channels = post_conv_in_channels
+        self.post_conv_out_channels = post_conv_out_channels
         self.out_channels = out_channels
         self.hidden_size = hidden_size
         self.max_text_length = max_text_length

@@ -161,9 +161,6 @@ class SLANeXtImageProcessor(BaseImageProcessor):
 
         return img
 
-    def post_process_table_recognition(self, hidden_states):
-        return self.decode(hidden_states["last_hidden_state"]["structure_probs"].detach().cpu())[0]
-
     def init_decoder(self, merge_no_span_structure=True):
         dict_character = [
             "<thead>",
@@ -200,8 +197,8 @@ class SLANeXtImageProcessor(BaseImageProcessor):
             assert False, "unsupported type %s in get_beg_end_flag_idx" % beg_or_end
         return idx
 
-    def decode(self, pred):
-        self.pred = pred
+    def post_process_table_recognition(self, outputs):
+        self.pred = outputs.last_hidden_state.detach().cpu()
         structure_probs = np.array([list(self.pred[0])])
         """convert text-label into text-index."""
         ignored_tokens = [self.get_beg_end_flag_idx("beg"), self.get_beg_end_flag_idx("end")]
@@ -232,7 +229,7 @@ class SLANeXtImageProcessor(BaseImageProcessor):
             for structure in structure_str_list
         ]
 
-        return [{"structure": structure, "structure_score": structure_score} for structure in structure_str_list]
+        return [{"structure": structure, "structure_score": structure_score} for structure in structure_str_list][0]
 
 
 __all__ = ["SLANeXtImageProcessor"]
