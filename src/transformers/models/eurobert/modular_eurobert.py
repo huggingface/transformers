@@ -34,6 +34,8 @@ class EuroBertConfig(LlamaConfig):
         Mask token id.
     classifier_pooling (`str`, *optional*, defaults to `"late"`):
         The pooling strategy to use for the classifier. Can be one of ['bos', 'mean', 'late'].
+    is_causal (`bool`, *optional*, defaults to `False`):
+        Whether to use causal attention masking. Set to `False` for bidirectional attention.
 
     ```python
     >>> from transformers import EuroBertModel, EuroBertConfig
