@@ -1,5 +1,5 @@
 # coding = utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PP-LCNet model."""
+"""Testing suite for the UVDoc model."""
 
 import inspect
 import unittest
@@ -112,13 +112,12 @@ class UVDocModelTester:
 
 
 @require_torch
-class UVDocModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class UVDocModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (UVDocForDocumentRectification,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-feature-extraction": UVDocForDocumentRectification} if is_torch_available() else {}
 
     has_attentions = False
     test_resize_embeddings = False
-    
+
     def setUp(self):
         self.model_tester = UVDocModelTester(
             batch_size=3,
@@ -156,41 +155,6 @@ class UVDocModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="UVDoc does not support hidden_states")
     def test_hidden_states_output(self):
         pass
-    # def test_hidden_states_output(self):
-    #     def check_hidden_states_output(inputs_dict, config, model_class):
-    #         model = model_class(config)
-    #         model.to(torch_device)
-    #         model.eval()
-
-    #         with torch.no_grad():
-    #             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-    #         hidden_states = outputs.hidden_states
-
-    #         expected_num_stages = self.model_tester.num_stages
-
-    #         self.assertEqual(len(hidden_states), expected_num_stages + 1)
-
-    #         self.assertEqual(hidden_states[0].shape[1], self.model_tester.image_size)
-    #         expected_hidden_states_output_shape = [3, 128, 45, 31]
-    #         self.assertListEqual(list(hidden_states[0].shape), expected_hidden_states_output_shape)
-    #         self.assertListEqual(list(hidden_states[1].shape), expected_hidden_states_output_shape)
-    #         self.assertListEqual(list(hidden_states[2].shape), expected_hidden_states_output_shape)
-    #         self.assertListEqual(list(hidden_states[3].shape), expected_hidden_states_output_shape)
-    #         self.assertListEqual(list(hidden_states[4].shape), expected_hidden_states_output_shape)
-    #         self.assertListEqual(list(hidden_states[5].shape), expected_hidden_states_output_shape)
-    #         self.assertListEqual(list(hidden_states[6].shape), expected_hidden_states_output_shape)
-
-    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-    #     for model_class in self.all_model_classes:
-    #         inputs_dict["output_hidden_states"] = True
-    #         check_hidden_states_output(inputs_dict, config, model_class)
-
-    #         # check that output_hidden_states also work using config
-    #         del inputs_dict["output_hidden_states"]
-    #         config.output_hidden_states = True
-
-    #         check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -223,10 +187,11 @@ class UVDocModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     inputs_dict[key] = tensor.to(dtype)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
-    
+
     @unittest.skip(reason="UVDoc does not support training")
     def test_retain_grad_hidden_states_attentions(self):
         pass
+
 
 @require_torch
 @require_vision

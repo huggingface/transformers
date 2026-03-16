@@ -17,21 +17,20 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import SizeDict
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple, TransformersKwargs
-
-from ...image_utils import SizeDict
-
-from ...utils.output_capturing import capture_outputs
-from ...utils.generic import TensorType
 from ...processing_utils import Unpack
-from ...image_transforms import group_images_by_shape, reorder_images
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import TensorType
+from ...utils.output_capturing import capture_outputs
 
 
 @auto_docstring(
@@ -81,7 +80,6 @@ from ...image_transforms import group_images_by_shape, reorder_images
     """,
 )
 class UVDocConfig(PreTrainedConfig):
-
     model_type = "uvdoc"
 
     def __init__(
@@ -118,7 +116,6 @@ class UVDocConfig(PreTrainedConfig):
 
 @auto_docstring
 class UVDocImageProcessorFast(BaseImageProcessorFast):
-
     image_mean = [0, 0, 0]
     image_std = [1, 1, 1]
     do_rescale = True
@@ -139,7 +136,6 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -165,9 +161,7 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
             tensor_type=return_tensors,
         )
 
-
     def post_process_document_rectification(self, images, scale=None):
-        
         if isinstance(scale, (str, float, int)):
             scale = torch.tensor(float(scale), device=images.device)
         else:
@@ -186,23 +180,21 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
                     "labels": torch.zeros(1, dtype=torch.long, device=image.device),  # Single class: image
                 }
             )
-        
+
         return results
 
 
 class UVDocResidualBlockWithDilation(nn.Module):
-
     def __init__(
         self,
         in_channels: int,
         out_channels: int,
         kernel_size: int,
         stride: int = 1,
-        downsample: Optional[bool] = None,
+        downsample: bool | None = None,
         block_index: bool = False,
         activation: str = "relu",
     ):
-        
         super().__init__()
 
         self.conv_down = None
@@ -242,9 +234,8 @@ class UVDocResidualBlockWithDilation(nn.Module):
             dilation=dilation,
             activation=None,
         )
-        
+
         self.act_fn = ACT2FN[activation] if activation is not None else nn.Identity()
-        
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         residual = hidden_state
@@ -259,13 +250,14 @@ class UVDocResidualBlockWithDilation(nn.Module):
 
 
 class UVDocResNetStraight(nn.Module):
-
     def __init__(self, config):
         super().__init__()
         self.in_channels = config.num_filter * config.feature_map_multipliers[0]
 
         self.stages = nn.ModuleList([])
-        for feature_map_multipliers, block_count, block_stride in zip(config.feature_map_multipliers[:3], config.block_counts_per_stage[:3], config.block_stride_values[:3]):
+        for feature_map_multipliers, block_count, block_stride in zip(
+            config.feature_map_multipliers[:3], config.block_counts_per_stage[:3], config.block_stride_values[:3]
+        ):
             stage_layers = nn.ModuleList([])
             out_channels = config.num_filter * feature_map_multipliers
 
@@ -280,7 +272,7 @@ class UVDocResNetStraight(nn.Module):
                     kernel_size=config.kernel_size,
                     stride=block_stride if index == 0 else 1,
                     downsample=downsample if index == 0 else None,
-                    block_index = index,
+                    block_index=index,
                 )
                 stage_layers.append(layer)
             self.stages.append(stage_layers)
@@ -308,7 +300,7 @@ class UVDocResNetHead(nn.Module):
             out_channels=out_channels,
             kernel_size=kernel_size,
             stride=2,
-            padding=kernel_size // 2
+            padding=kernel_size // 2,
         )
 
         self.conv_up = UVDocConvLayer(
@@ -316,7 +308,7 @@ class UVDocResNetHead(nn.Module):
             out_channels=out_channels,
             kernel_size=kernel_size,
             stride=2,
-            padding=kernel_size // 2
+            padding=kernel_size // 2,
         )
 
     def forward(self, hidden_state):
@@ -327,12 +319,18 @@ class UVDocResNetHead(nn.Module):
 
 @auto_docstring
 class UVDocPreTrainedModel(PreTrainedModel):
-
     config: UVDocConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        """Initialize the weights."""
+        if isinstance(module, nn.PReLU):
+            module.reset_parameters()
 
 
 class UVDocConvLayer(nn.Module):
@@ -416,8 +414,8 @@ class UVDocPointPositions2D(nn.Module):
         super().__init__()
 
         self.conv_down = UVDocConvLayer(
-            in_channels = config.num_filter * config.feature_map_multipliers[2],
-            out_channels = config.num_filter * config.feature_map_multipliers[0],
+            in_channels=config.num_filter * config.feature_map_multipliers[2],
+            out_channels=config.num_filter * config.feature_map_multipliers[0],
             kernel_size=config.kernel_size,
             stride=1,
             padding=config.kernel_size // 2,
@@ -442,7 +440,6 @@ class UVDocPointPositions2D(nn.Module):
 
 @auto_docstring
 class UVDocModel(UVDocPreTrainedModel):
-
     def __init__(self, config: UVDocConfig):
         super().__init__(config)
 
@@ -477,7 +474,6 @@ class UVDocModel(UVDocPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
-        
         residual = pixel_values
         original_height, original_width = pixel_values.shape[2:]
         hidden_state = F.interpolate(
@@ -513,9 +509,10 @@ class UVDocModel(UVDocPreTrainedModel):
             last_hidden_state=rectified_image_output,
         )
 
+
 @auto_docstring(
     custom_intro=r"""
-    The model takes raw document images (pixel values) as input, processes them through the UVDoc backbone to predict spatial transformation parameters, 
+    The model takes raw document images (pixel values) as input, processes them through the UVDoc backbone to predict spatial transformation parameters,
     and outputs the rectified (corrected) document image tensor.
     """
 )
@@ -533,7 +530,6 @@ class UVDocForDocumentRectification(UVDocPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
-
         return self.model(pixel_values)
 
 

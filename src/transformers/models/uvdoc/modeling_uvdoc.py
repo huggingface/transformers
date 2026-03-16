@@ -173,6 +173,13 @@ class UVDocPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     _can_compile_fullgraph = True
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        """Initialize the weights."""
+        if isinstance(module, nn.PReLU):
+            module.reset_parameters()
+
 
 class UVDocConvLayer(nn.Module):
     def __init__(
@@ -353,7 +360,7 @@ class UVDocModel(UVDocPreTrainedModel):
 
 @auto_docstring(
     custom_intro=r"""
-    The model takes raw document images (pixel values) as input, processes them through the UVDoc backbone to predict spatial transformation parameters, 
+    The model takes raw document images (pixel values) as input, processes them through the UVDoc backbone to predict spatial transformation parameters,
     and outputs the rectified (corrected) document image tensor.
     """
 )

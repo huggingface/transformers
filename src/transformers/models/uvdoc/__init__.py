@@ -21,8 +21,8 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_uvdoc import *
-    from .modeling_uvdoc import *
     from .image_processing_uvdoc_fast import *
+    from .modeling_uvdoc import *
 else:
     import sys
 
