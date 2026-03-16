@@ -23,6 +23,8 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput, SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.generic import can_return_tuple
+from ...utils.output_capturing import capture_outputs
 from .configuration_segformer import SegformerConfig
 
 
@@ -412,6 +414,10 @@ class SegformerPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 
+    @property
+    def _can_record_outputs(self) -> dict[str, str]:
+        return {"hidden_states": "SegformerEncoder", "attentions": "SegformerEncoder"}
+
 
 @auto_docstring
 class SegformerModel(SegformerPreTrainedModel):
@@ -465,6 +471,11 @@ class SegformerModel(SegformerPreTrainedModel):
     """
 )
 class SegformerForImageClassification(SegformerPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": "SegformerForImageClassification",
+        "attentions": "SegformerForImageClassification",
+    }
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -477,7 +488,8 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring
+    @can_return_tuple
+    @capture_outputs
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -493,7 +505,6 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.segformer(
             pixel_values,
@@ -519,10 +530,6 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
         loss = None
         if labels is not None:
             loss = self.loss_function(labels, logits, self.config)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return SegFormerImageClassifierOutput(
             loss=loss,
