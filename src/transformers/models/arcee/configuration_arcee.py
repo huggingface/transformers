@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from huggingface_hub.dataclasses import strict
 
 from transformers.utils import auto_docstring
