@@ -42,7 +42,7 @@ def flash_attn_supports_top_left_mask():
     warnings.warn(
         "Top-left mask alignment with FA has been deprecated! This is no longer supported "
         "as we default to the normal causal alignment (of the most recent FA versions `2.3.3+`).",
-        FutureWarning
+        FutureWarning,
     )
     return False
 
