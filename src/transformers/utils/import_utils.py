@@ -2236,11 +2236,10 @@ class _LazyModule(ModuleType):
                         f"use `{fallback_name}` instead."
                     )
                     if fallback_name in self._object_missing_backend:
-                        # The base processor requires backends that are not installed.
-                        # Do NOT silently fall back to PIL here — the PIL fallback is only
-                        # for backward compat when the base name is imported directly.
-                        # Return a Placeholder that raises at instantiation, consistent with
-                        # how missing backends are handled everywhere else.
+                        # The Fast alias has no entry in the import structure, so `requires_backends` on
+                        # the real class never runs. Handle the missing backend explicitly here, otherwise
+                        # `_get_module` swallows the ImportError and the caller gets an AttributeError.
+                        # Do not fall through to the PIL fallback since a legacy "Fast" image processor was explicitly requested.
                         missing_backends = self._object_missing_backend[fallback_name]
 
                         class Placeholder(metaclass=DummyObject):

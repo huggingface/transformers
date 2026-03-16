@@ -26,12 +26,12 @@ Image processors use a backend-based architecture. The class hierarchy is:
 
 Both backends expose the same API. Use the `backend` attribute to inspect which backend a loaded processor uses (e.g. `processor.backend == "torchvision"`).
 
-Use [`AutoImageProcessor.from_pretrained`] with the `backend` argument to select a backend. The default (`backend="auto"`) picks torchvision when it is installed, and falls back to PIL otherwise:
+Use [`AutoImageProcessor.from_pretrained`] with the `backend` argument to select a backend. When `backend` is omitted (the default), torchvision is picked when it is installed and PIL is used otherwise. Pass an explicit string to override that choice:
 
 ```python
 from transformers import AutoImageProcessor
 
-# "auto" selects torchvision if available, otherwise pil (default)
+# Default: picks torchvision if available, otherwise pil
 processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50")
 
 # Explicitly request torchvision

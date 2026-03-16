@@ -58,12 +58,14 @@ There are two ways you can load an image processor: with [`AutoImageProcessor`] 
 
 The [AutoClass](./model_doc/auto) API provides a convenient method to load an image processor without directly specifying the model the image processor is associated with.
 
-Use [`~AutoImageProcessor.from_pretrained`] with the `backend` argument to select the backend. The default (`backend="auto"`) picks torchvision when it is installed and falls back to PIL otherwise. Note that `backend="pil"` is only supported for older models; newer models only expose the torchvision backend.
+Use [`~AutoImageProcessor.from_pretrained`] with the `backend` argument to select the backend. When `backend` is omitted (the default), torchvision is picked when it is installed and PIL is used otherwise. Note that `backend="pil"` is only supported for older models; newer models only expose the torchvision backend.
+
+> **Note:** a small set of older models (Chameleon, Flava, Idefics3, SmolVLM) use Lanczos interpolation that torchvision does not support, so they always default to the PIL backend regardless of torchvision availability. Pass `backend="torchvision"` explicitly to override this.
 
 ```py
 from transformers import AutoImageProcessor
 
-# "auto" selects torchvision if available, otherwise pil (default)
+# Default: picks torchvision if available, otherwise pil
 image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
 
 # Explicitly request the torchvision backend
@@ -99,7 +101,7 @@ image_processor = ViTImageProcessorPil.from_pretrained("google/vit-base-patch16-
 
 ## Torchvision backend processors
 
-[`TorchvisionBackend`] is the **default** backend. Make sure [torchvision](https://pytorch.org/get-started/locally/#mac-installation) is installed, then load it with `backend="torchvision"` (or rely on `backend="auto"`, the default).
+[`TorchvisionBackend`] is the **default** backend. Make sure [torchvision](https://pytorch.org/get-started/locally/#mac-installation) is installed, then load it with `backend="torchvision"` (or simply omit `backend`, since torchvision is selected automatically when available).
 
 ```py
 from transformers import AutoImageProcessor

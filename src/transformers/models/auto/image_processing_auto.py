@@ -30,7 +30,6 @@ from ...utils import (
     is_timm_config_dict,
     is_timm_local_checkpoint,
     is_torchvision_available,
-    is_vision_available,
     logging,
     safe_load_json_file,
 )
@@ -112,7 +111,7 @@ else:
                 {"torchvision": "EfficientLoFTRImageProcessor", "pil": "EfficientLoFTRImageProcessorPil"},
             ),
             ("efficientnet", {"torchvision": "EfficientNetImageProcessor", "pil": "EfficientNetImageProcessorPil"}),
-            ("emu3", {"torchvision": "Emu3ImageProcessor"}),
+            ("emu3", {"pil": "Emu3ImageProcessor"}),
             ("eomt", {"torchvision": "EomtImageProcessor", "pil": "EomtImageProcessorPil"}),
             ("eomt_dinov3", {"torchvision": "EomtImageProcessor", "pil": "EomtImageProcessorPil"}),
             (
@@ -235,14 +234,14 @@ else:
             ("t5gemma2_encoder", {"torchvision": "Gemma3ImageProcessor", "pil": "Gemma3ImageProcessorPil"}),
             ("table-transformer", {"torchvision": "DetrImageProcessor", "pil": "DetrImageProcessorPil"}),
             ("textnet", {"torchvision": "TextNetImageProcessor", "pil": "TextNetImageProcessorPil"}),
-            ("timesformer", {"pil": "VideoMAEImageProcessorPil"}),
-            ("timm_wrapper", {"torchvision": "TimmWrapperImageProcessor"}),
+            ("timesformer", {"pil": "VideoMAEImageProcessorPil", "torchvision": "VideoMAEImageProcessor"}),
+            ("timm_wrapper", {"pil": "TimmWrapperImageProcessor"}),
             ("trocr", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("tvp", {"torchvision": "TvpImageProcessor", "pil": "TvpImageProcessorPil"}),
             ("udop", {"torchvision": "LayoutLMv3ImageProcessor", "pil": "LayoutLMv3ImageProcessorPil"}),
             ("upernet", {"torchvision": "SegformerImageProcessor", "pil": "SegformerImageProcessorPil"}),
             ("video_llama_3", {"torchvision": "VideoLlama3ImageProcessor", "pil": "VideoLlama3ImageProcessorPil"}),
-            ("video_llava", {"torchvision": "VideoLlavaImageProcessor"}),
+            ("video_llava", {"pil": "VideoLlavaImageProcessor"}),
             ("videomae", {"torchvision": "VideoMAEImageProcessor", "pil": "VideoMAEImageProcessorPil"}),
             ("vilt", {"torchvision": "ViltImageProcessor", "pil": "ViltImageProcessorPil"}),
             ("vipllava", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
@@ -257,19 +256,12 @@ else:
         ]
     )
 
-# Override to None if the packages are not available
-for model_type, mapping_dict in IMAGE_PROCESSOR_MAPPING_NAMES.items():
-    if not is_vision_available():
-        mapping_dict.pop("pil", None)
-    if not is_torchvision_available():
-        mapping_dict.pop("torchvision", None)
-
-    IMAGE_PROCESSOR_MAPPING_NAMES[model_type] = mapping_dict
-
 IMAGE_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, IMAGE_PROCESSOR_MAPPING_NAMES)
 
 
 def get_image_processor_class_from_name(class_name: str):
+    """Resolve an image processor class name to its class. Handles both base names (e.g. CLIPImageProcessor)
+    and PIL backend names (e.g. CLIPImageProcessorPil). No recursion needed since names are direct."""
     if class_name == "BaseImageProcessorFast":
         # kept for backward compatibility - return TorchvisionBackend
         from ...image_processing_backends import TorchvisionBackend
@@ -277,41 +269,22 @@ def get_image_processor_class_from_name(class_name: str):
         return TorchvisionBackend
 
     # First, check registered extra content (user-registered classes)
-    for extractors in IMAGE_PROCESSOR_MAPPING._extra_content.values():
-        if isinstance(extractors, dict):
-            # Check if class_name matches any registered class directly
-            for extractor_class in extractors.values():
-                if extractor_class is not None:
-                    # If it's already a class object, check its name
-                    if isinstance(extractor_class, type):
-                        if getattr(extractor_class, "__name__", None) == class_name:
-                            return extractor_class
-                    # If it's a string, try to resolve it
-                    elif isinstance(extractor_class, str):
-                        if extractor_class == class_name:
-                            # Try to find the class
-                            resolved = get_image_processor_class_from_name(extractor_class)
-                            if resolved is not None:
-                                return resolved
-        else:
-            # Handle legacy tuple format for backward compatibility
-            for extractor in extractors:
-                if isinstance(extractor, type) and getattr(extractor, "__name__", None) == class_name:
-                    return extractor
+    for mapping in IMAGE_PROCESSOR_MAPPING._extra_content.values():
+        for extractor_class in mapping.values():
+            if isinstance(extractor_class, type) and getattr(extractor_class, "__name__", None) == class_name:
+                return extractor_class
 
-    # Then check the mapping names
-    for module_name, extractors_dict in IMAGE_PROCESSOR_MAPPING_NAMES.items():
+    # Check the mapping names - class names are either base (torchvision) or base+Pil (pil)
+    for model_type, extractors_dict in IMAGE_PROCESSOR_MAPPING_NAMES.items():
         if class_name in extractors_dict.values():
-            module_name = model_type_to_module_name(module_name)
-
+            module_name = model_type_to_module_name(model_type)
             module = importlib.import_module(f".{module_name}", "transformers.models")
             try:
                 return getattr(module, class_name)
             except AttributeError:
                 continue
 
-    # We did not find the class, but maybe it's because a dep is missing. In that case, the class will be in the main
-    # init and we return the proper dummy to get an appropriate error message.
+    # Fallback: class may be in main init (e.g. when dep is missing, returns dummy)
     main_module = importlib.import_module("transformers")
     if hasattr(main_module, class_name):
         return getattr(main_module, class_name)
@@ -430,10 +403,30 @@ def get_image_processor_config(
     return image_processor_dict
 
 
-def _resolve_backend(backend):
-    """Resolve 'auto' backend to a concrete backend name."""
-    if backend == "auto":
+def _resolve_backend(backend: str | None, use_fast: bool | None, base_class_name: str | None) -> str:
+    """Resolve raw backend inputs to a concrete backend name ('torchvision' or 'pil').
+
+    Handles, in order:
+    - Deprecated ``use_fast`` flag: warns and converts to an explicit backend string when no
+      explicit backend is given.
+    - Explicit backend string: returned as-is.
+    - None resolution: forces 'pil' for processors in DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS
+      (Lanczos interpolation, unsupported by torchvision); otherwise picks 'torchvision' when
+      available, falling back to 'pil'.
+    """
+    if use_fast is not None:
+        logger.warning_once(
+            "The `use_fast` parameter is deprecated and will be removed in a future version. "
+            'Use `backend="torchvision"` instead of `use_fast=True`, or `backend="pil"` instead of `use_fast=False`.'
+        )
+        if backend is None:
+            backend = "torchvision" if use_fast else "pil"
+
+    if backend is None:
+        if base_class_name in DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS:
+            return "pil"
         return "torchvision" if is_torchvision_available() else "pil"
+
     return backend
 
 
@@ -444,6 +437,11 @@ def _load_class_with_fallback(mapping, backend):
     Tries the requested backend first, then the opposite standard backend,
     then any remaining backends. Works with both string class names and resolved class objects.
 
+    Unavailable backends are detected via DummyObject: classes whose required libraries are missing
+    are represented as DummyObject subclasses (is_dummy=True). When the torchvision backend is
+    missing but a PIL variant exists, _LazyModule transparently returns the PIL class with its own
+    warning, so _load_class_with_fallback naturally receives a usable class without extra gating.
+
     Args:
         mapping: dict mapping backend names (str) to class names (str) or class objects (type).
         backend: the preferred backend name (e.g. "torchvision", "pil").
@@ -451,16 +449,11 @@ def _load_class_with_fallback(mapping, backend):
     Returns:
         The loaded class, or None if no class could be loaded.
     """
-    fallback = "pil" if backend == "torchvision" else "torchvision"
-    backends_to_try = [backend, fallback]
-    # Append any non-standard backends (e.g. custom registered ones)
-    backends_to_try.extend(k for k in mapping if k not in backends_to_try)
+    backends_to_try = [backend] + [k for k in mapping if k != backend]
 
-    is_first = True
     for b in backends_to_try:
         value = mapping.get(b)
         if value is None:
-            is_first = False
             continue
 
         # Value can be a class object (from resolved mapping) or a string class name
@@ -469,24 +462,55 @@ def _load_class_with_fallback(mapping, backend):
         else:
             processor_class = get_image_processor_class_from_name(value)
 
-        if processor_class is not None:
-            if not is_first:
-                logger.warning_once(f"Requested {backend} backend is not available. Falling back to {b} backend.")
-            return processor_class
-        is_first = False
+        if processor_class is None or getattr(processor_class, "is_dummy", False):
+            continue
+
+        if b != backend:
+            logger.warning_once(f"Requested {backend} backend is not available. Falling back to {b} backend.")
+        return processor_class
+
+    return None
+
+
+def _find_mapping_for_image_processor(base_class_name: str) -> dict | None:
+    """
+    Find the backend->class mapping that contains base_class_name in its values.
+    Returns the mapping dict (including any custom registered backends) or None.
+    """
+
+    def _value_matches(val, name: str) -> bool:
+        if val is None:
+            return False
+        if isinstance(val, str):
+            return val == name
+        if isinstance(val, type):
+            return getattr(val, "__name__", None) == name
+        return False
+
+    for mapping_dict in IMAGE_PROCESSOR_MAPPING_NAMES.values():
+        if any(_value_matches(v, base_class_name) for v in mapping_dict.values()):
+            return mapping_dict
+
+    for content in IMAGE_PROCESSOR_MAPPING._extra_content.values():
+        if any(_value_matches(v, base_class_name) for v in content.values()):
+            return content
 
     return None
 
 
 def _load_backend_class(base_class_name, backend, is_legacy_fast=False):
     """
-    Load image processor class for a given backend by constructing class names
-    from the base name, with fallback logic.
+    Load image processor class for a given backend. Uses the mapping from
+    IMAGE_PROCESSOR_MAPPING when base_class_name is found in its values (so config
+    overrides and custom backends are respected). Falls back to base+Pil convention
+    for remote code / unknown processors.
     """
-    mapping = {
-        "torchvision": base_class_name,
-        "pil": base_class_name + "Pil",
-    }
+    mapping = _find_mapping_for_image_processor(base_class_name)
+    if mapping is None:
+        mapping = {
+            "torchvision": base_class_name,
+            "pil": base_class_name + "Pil",
+        }
     processor_class = _load_class_with_fallback(mapping, backend)
 
     # For legacy Fast classes, try the original Fast class name as last resort
@@ -497,7 +521,14 @@ def _load_backend_class(base_class_name, backend, is_legacy_fast=False):
 
 
 def _resolve_auto_map_class_ref(auto_map, backend):
-    """Extract the class reference string from an auto_map entry based on backend preference."""
+    """Extract the class reference string from an auto_map entry based on backend preference.
+
+    Returns:
+        A string that may be:
+        - A simple class name (e.g. `"MyImageProcessor"`)
+        - A Hub reference in the form `upstream_repo--path/to/file.py::ClassName`, where the part before
+          `--` is the upstream repo ID (used for trust_remote_code resolution).
+    """
     if isinstance(auto_map, dict):
         return auto_map.get(backend) or next(iter(auto_map.values()))
     if isinstance(auto_map, (list, tuple)):
@@ -567,9 +598,9 @@ class AutoImageProcessor:
                 Use a fast torchvision-based image processor if it is supported for a given model.
                 If a fast image processor is not available for a given model, a normal numpy-based image processor
                 is returned instead.
-            backend (`str`, *optional*, defaults to `"auto"`):
+            backend (`str`, *optional*, defaults to `None`):
                 The backend to use for image processing. Can be:
-                - `"auto"`: Automatically select the best available backend (torchvision if available, otherwise pil)
+                - `None`: Automatically select the best available backend (torchvision if available, otherwise pil)
                 - `"torchvision"`: Use Torchvision backend (GPU-accelerated, faster)
                 - `"pil"`: Use PIL backend (portable, CPU-only)
                 - Any custom backend name registered via `register()` method
@@ -608,19 +639,9 @@ class AutoImageProcessor:
         ```"""
         config = kwargs.pop("config", None)
         use_fast = kwargs.pop("use_fast", None)
-        if use_fast is not None:
-            logger.warning_once(
-                "The `use_fast` parameter is deprecated and will be removed in a future version. "
-                'Use `backend="torchvision"` instead of `use_fast=True`, or `backend="pil"` instead of `use_fast=False`.'
-            )
-        backend = kwargs.pop("backend", None)
+        backend_kwarg = kwargs.pop("backend", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
-
-        # Normalize backend: convert deprecated use_fast, then resolve "auto" to a concrete value
-        if use_fast is not None and backend is None:
-            backend = "torchvision" if use_fast else "pil"
-        backend = _resolve_backend(backend or "auto")
 
         # Resolve the image processor config filename
         if "image_processor_filename" in kwargs:
@@ -674,11 +695,17 @@ class AutoImageProcessor:
             if hasattr(config, "auto_map") and "AutoImageProcessor" in config.auto_map:
                 image_processor_auto_map = config.auto_map["AutoImageProcessor"]
 
-        # Resolve image processor class from the type name
-        image_processor_class = None
+        # Derive base_class_name from image_processor_type
+        is_legacy_fast = False
+        base_class_name = None
         if image_processor_type is not None:
             is_legacy_fast = image_processor_type.endswith("Fast")
             base_class_name = image_processor_type[:-4] if is_legacy_fast else image_processor_type
+
+        backend = _resolve_backend(backend_kwarg, use_fast, base_class_name)
+
+        image_processor_class = None
+        if base_class_name is not None:
             image_processor_class = _load_backend_class(base_class_name, backend, is_legacy_fast)
 
         # Handle remote code
@@ -701,12 +728,6 @@ class AutoImageProcessor:
         # Last try: we use the IMAGE_PROCESSOR_MAPPING.
         elif type(config) in IMAGE_PROCESSOR_MAPPING:
             image_processor_mapping = IMAGE_PROCESSOR_MAPPING[type(config)]
-
-            # Normalize legacy tuple format (pil, torchvision) to dict
-            if isinstance(image_processor_mapping, (list, tuple)):
-                pil_class, torchvision_class = image_processor_mapping
-                image_processor_mapping = {"pil": pil_class, "torchvision": torchvision_class}
-
             image_processor_class = _load_class_with_fallback(image_processor_mapping, backend)
 
             if image_processor_class is not None:
@@ -762,24 +783,8 @@ class AutoImageProcessor:
         # Avoid resetting existing processors if we are passing partial updates
         if config_class in IMAGE_PROCESSOR_MAPPING._extra_content:
             existing_mapping = IMAGE_PROCESSOR_MAPPING[config_class]
-            # Handle dictionary format (new) or tuple format (legacy)
-            if isinstance(existing_mapping, dict):
-                # Merge with existing mapping
-                for backend_key, processor_class in image_processor_classes.items():
-                    if processor_class is None:
-                        # Remove backend if None is explicitly passed
-                        if backend_key in existing_mapping:
-                            del existing_mapping[backend_key]
-                    else:
-                        existing_mapping[backend_key] = processor_class
-                image_processor_classes = existing_mapping
-            else:
-                # Legacy tuple format: convert to dict
-                existing_slow, existing_fast = existing_mapping
-                if existing_slow is not None:
-                    image_processor_classes.setdefault("pil", existing_slow)
-                if existing_fast is not None:
-                    image_processor_classes.setdefault("torchvision", existing_fast)
+            existing_mapping.update(image_processor_classes)
+            image_processor_classes = existing_mapping
 
         # Validate that all classes are proper image processor classes
         from ...image_processing_utils import BaseImageProcessor
@@ -790,8 +795,6 @@ class AutoImageProcessor:
                     f"Image processor class for backend '{backend_key}' must inherit from `BaseImageProcessor`. "
                     f"Got: {processor_class}"
                 )
-        print("image_processor_classes", image_processor_classes)
-        print("config_class", config_class)
         IMAGE_PROCESSOR_MAPPING.register(config_class, image_processor_classes, exist_ok=exist_ok)
 
 
