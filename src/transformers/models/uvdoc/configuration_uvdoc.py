@@ -47,7 +47,7 @@ from ...utils import auto_docstring
     dilation_values (`Dict[str, Union[int, List[int]]]`, *optional*, defaults to `None`):
         A dictionary of dilation rates for dilated convolutional layers in bridge modules.
         Dilated convolution expands the receptive field without increasing kernel size,
-        critical for capturing long-range geometric dependencies in distorted documents. 
+        critical for capturing long-range geometric dependencies in distorted documents.
     padding_mode (`str`, *optional*, defaults to `"reflect"`):
         The padding mode for convolutional layers, used to handle boundary pixels of document images. Supported
         modes include `"reflect"` (recommended for document rectification to avoid edge artifacts), `"constant"`,
