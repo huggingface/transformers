@@ -226,8 +226,8 @@ class Kosmos2ModelTester:
 
     def get_config(self):
         return Kosmos2Config(
-            self.text_model_tester.get_config().to_dict(),
-            self.vision_model_tester.get_config().to_dict(),
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
             latent_query_num=self.latent_query_num,
         )
 

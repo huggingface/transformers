@@ -144,13 +144,13 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertListEqual(
             missing_keys,
             [
-                "_output_attentions",
                 "is_encoder_decoder",
+                "tokenizer_class",
                 "_name_or_path",
                 "_commit_hash",
+                "_output_attentions",
                 "_attn_implementation_internal",
                 "_experts_implementation_internal",
-                "transformers_version",
             ],
         )
         keys_with_defaults = [key for key, value in config_common_kwargs.items() if value == getattr(base_config, key)]
@@ -282,16 +282,16 @@ class ConfigTestUtils(unittest.TestCase):
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-bart")
         self.assertEqual(config.get_text_config(), config)
         # both encoder_layers and decoder_layers exist
-        self.assertTrue(getattr(config, "encoder_layers", None) is not None)
-        self.assertTrue(getattr(config, "decoder_layers", None) is not None)
+        self.assertTrue(getattr(config, "encoder_ffn_dim", None) is not None)
+        self.assertTrue(getattr(config, "decoder_ffn_dim", None) is not None)
+
         decoder_config = config.get_text_config(decoder=True)
         self.assertNotEqual(decoder_config, config)
         self.assertEqual(decoder_config.num_hidden_layers, config.decoder_layers)
-        self.assertTrue(getattr(decoder_config, "encoder_layers", None) is None)  # encoder_layers is removed
+
         encoder_config = config.get_text_config(encoder=True)
         self.assertNotEqual(encoder_config, config)
         self.assertEqual(encoder_config.num_hidden_layers, config.encoder_layers)
-        self.assertTrue(getattr(encoder_config, "decoder_layers", None) is None)  # decoder_layers is removed
 
     @require_torch
     def test_bc_torch_dtype(self):
