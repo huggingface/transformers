@@ -146,7 +146,7 @@ def valid_videos(videos):
 
 def is_batched_video(videos):
     if isinstance(videos, (list, tuple)):
-        return is_valid_video(videos[0])
+        return len(videos) > 0 and is_valid_video(videos[0])
     elif (is_numpy_array(videos) or is_torch_tensor(videos)) and videos.ndim == 5:
         return True
     return False
@@ -169,6 +169,8 @@ def convert_pil_frames_to_video(videos: list[VideoInput]) -> list[Union[np.ndarr
         videos (`VideoInput`):
             Video inputs to turn into a list of videos.
     """
+    if not videos:
+        return []
 
     if not (isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0])):
         return videos
