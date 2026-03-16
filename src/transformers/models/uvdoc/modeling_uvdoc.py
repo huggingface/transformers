@@ -58,15 +58,15 @@ class UVDocResidualBlockWithDilation(nn.Module):
             )
 
         if stride != 1 or block_index == 0:
-            stride1, padding, dilation = stride, kernel_size // 2, 1
+            stride, padding, dilation = stride, kernel_size // 2, 1
         else:
-            stride1, padding, dilation = 1, 3 * (kernel_size // 2), 3
+            stride, padding, dilation = 1, 3 * (kernel_size // 2), 3
 
         self.conv_start = UVDocConvLayer(
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=kernel_size,
-            stride=stride1,
+            stride=stride,
             padding=padding,
             dilation=dilation,
             bias=True,
@@ -139,9 +139,9 @@ class UVDocResNetHead(nn.Module):
         super().__init__()
         in_channels = config.in_channels
         num_filter = config.num_filter
-        feature_map_multipliers_0 = config.feature_map_multipliers[0]
+        map_number = config.feature_map_multipliers[0]
         kernel_size = config.kernel_size
-        out_channels = num_filter * feature_map_multipliers_0
+        out_channels = num_filter * map_number
 
         self.conv_down = UVDocConvLayer(
             in_channels=in_channels,
@@ -168,9 +168,10 @@ class UVDocResNetHead(nn.Module):
 @auto_docstring
 class UVDocPreTrainedModel(PreTrainedModel):
     config: UVDocConfig
-    base_model_prefix = "uvdoc"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
+    _can_compile_fullgraph = True
 
 
 class UVDocConvLayer(nn.Module):

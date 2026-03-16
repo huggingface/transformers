@@ -35,6 +35,9 @@ from ...utils import auto_docstring
     kernel_size (`int`, *optional*, defaults to 5):
         The size of convolutional kernels used in the backbone network, typically an odd integer to ensure
         symmetric padding and preserve spatial dimensions of feature maps.
+    block_stride_values (`List[int]`, *optional*, defaults to `[1, 2, 2, 2]`):
+        The strides for downsampling operations in the backbone network, corresponding to the scale factor between
+        consecutive stages of the model. Smaller strides reduce the spatial dimension of feature maps while retaining
     feature_map_multipliers (`List[int]`, *optional*, defaults to `[1, 2, 4, 8, 16]`):
         The scaling factors for feature map dimensions in multi-scale feature fusion modules, used to align
         feature maps of different resolutions for document structure restoration.
@@ -93,6 +96,7 @@ class UVDocConfig(PreTrainedConfig):
         self.upsample_size = upsample_size
         self.upsample_mode = upsample_mode
 
+        # For image feature extraction pipeline compatibility: single class "image"
         self.id2label = {0: "image"}
         self.num_labels = 1
 

@@ -47,6 +47,9 @@ from ...image_transforms import group_images_by_shape, reorder_images
     kernel_size (`int`, *optional*, defaults to 5):
         The size of convolutional kernels used in the backbone network, typically an odd integer to ensure
         symmetric padding and preserve spatial dimensions of feature maps.
+    block_stride_values (`List[int]`, *optional*, defaults to `[1, 2, 2, 2]`):
+        The strides for downsampling operations in the backbone network, corresponding to the scale factor between
+        consecutive stages of the model. Smaller strides reduce the spatial dimension of feature maps while retaining
     feature_map_multipliers (`List[int]`, *optional*, defaults to `[1, 2, 4, 8, 16]`):
         The scaling factors for feature map dimensions in multi-scale feature fusion modules, used to align
         feature maps of different resolutions for document structure restoration.
@@ -106,6 +109,7 @@ class UVDocConfig(PreTrainedConfig):
         self.upsample_size = upsample_size
         self.upsample_mode = upsample_mode
 
+        # For image feature extraction pipeline compatibility: single class "image"
         self.id2label = {0: "image"}
         self.num_labels = 1
 
@@ -178,8 +182,8 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
 
             results.append(
                 {
-                    "image": image,
-                    "label": 0,  # Single class: text
+                    "images": image,
+                    "labels": torch.zeros(1, dtype=torch.long, device=image.device),  # Single class: image
                 }
             )
         
@@ -214,15 +218,15 @@ class UVDocResidualBlockWithDilation(nn.Module):
             )
 
         if stride != 1 or block_index == 0:
-            stride1, padding, dilation = stride, kernel_size // 2, 1
+            stride, padding, dilation = stride, kernel_size // 2, 1
         else:
-            stride1, padding, dilation = 1, 3 * (kernel_size // 2), 3
+            stride, padding, dilation = 1, 3 * (kernel_size // 2), 3
 
         self.conv_start = UVDocConvLayer(
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=kernel_size,
-            stride=stride1,
+            stride=stride,
             padding=padding,
             dilation=dilation,
             bias=True,
@@ -295,9 +299,9 @@ class UVDocResNetHead(nn.Module):
         super().__init__()
         in_channels = config.in_channels
         num_filter = config.num_filter
-        feature_map_multipliers_0 = config.feature_map_multipliers[0]
+        map_number = config.feature_map_multipliers[0]
         kernel_size = config.kernel_size
-        out_channels = num_filter * feature_map_multipliers_0
+        out_channels = num_filter * map_number
 
         self.conv_down = UVDocConvLayer(
             in_channels=in_channels,
@@ -328,6 +332,7 @@ class UVDocPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
+    _can_compile_fullgraph = True
 
 
 class UVDocConvLayer(nn.Module):

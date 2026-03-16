@@ -92,8 +92,8 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
 
             results.append(
                 {
-                    "image": image,
-                    "label": 0,  # Single class: text
+                    "images": image,
+                    "labels": torch.zeros(1, dtype=torch.long, device=image.device),  # Single class: image
                 }
             )
 

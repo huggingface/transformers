@@ -22,7 +22,7 @@ from parameterized import parameterized
 from transformers import (
     UVDocConfig,
     UVDocForDocumentRectification,
-    UVDocImageProcessor,
+    UVDocImageProcessorFast,
     is_torch_available,
     is_vision_available,
 )
@@ -36,6 +36,7 @@ from transformers.testing_utils import (
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -73,12 +74,12 @@ class UVDocModelTester:
 
     def get_config(self) -> UVDocConfig:
         dilation_values = {
-            "bridge_1": 1,
-            "bridge_2": 2,
-            "bridge_3": 5,
-            "bridge_4": [8, 3, 2],
-            "bridge_5": [12, 7, 4],
-            "bridge_6": [18, 12, 6],
+            "bridge_block_1": 1,
+            "bridge_block_2": 2,
+            "bridge_block_3": 5,
+            "bridge_block_4": [8, 3, 2],
+            "bridge_block_5": [12, 7, 4],
+            "bridge_block_6": [18, 12, 6],
         }
 
         self.dilation_values = dilation_values
@@ -87,9 +88,9 @@ class UVDocModelTester:
             num_filter=32,
             in_channels=3,
             kernel_size=5,
-            stride=[1, 2, 2, 2],
-            map_num=[1, 2, 4, 8, 16],
-            block_nums=[3, 4, 6, 3],
+            block_stride_values=[1, 2, 2, 2],
+            feature_map_multipliers=[1, 1, 1, 2, 2],
+            block_counts_per_stage=[1, 1, 1, 1],
             dilation_values=dilation_values,
             padding_mode="reflect",
             upsample_size=[712, 488],
@@ -98,7 +99,7 @@ class UVDocModelTester:
 
         return config
 
-    def create_and_check_pp_lcnet_image_classification(self, config, pixel_values):
+    def create_and_check_uvdoc_document_rectification(self, config, pixel_values):
         model = UVDocForDocumentRectification(config=config)
         model.to(torch_device)
         model.eval()
@@ -106,16 +107,18 @@ class UVDocModelTester:
         result = model(pixel_values)
 
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
+            result.last_hidden_state.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
         )
 
 
 @require_torch
-class UVDocModelTest(ModelTesterMixin, unittest.TestCase):
+class UVDocModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (UVDocForDocumentRectification,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-feature-extraction": UVDocForDocumentRectification} if is_torch_available() else {}
 
     has_attentions = False
-
+    test_resize_embeddings = False
+    
     def setUp(self):
         self.model_tester = UVDocModelTester(
             batch_size=3,
@@ -131,51 +134,63 @@ class UVDocModelTest(ModelTesterMixin, unittest.TestCase):
         )
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        # Skip create_and_test_config_with_num_labels: UVDoc has fixed single class (image)
+        self.config_tester.create_and_test_config_common_properties()
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_from_and_save_pretrained_subfolder()
+        self.config_tester.create_and_test_config_from_and_save_pretrained_composite()
+        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.check_config_arguments_init()
+        self.config_tester.create_and_test_config_from_pretrained_custom_kwargs()
 
-    def test_pp_lcnet_image_classification(self):
+    def test_uvdoc_document_rectification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_pp_lcnet_image_classification(*config_and_inputs)
-
-    @unittest.skip(reason="UVDoc does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="UVDoc does not use test_inputs_embeds_matches_input_ids")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
+        self.model_tester.create_and_check_uvdoc_document_rectification(*config_and_inputs)
 
     @unittest.skip(reason="UVDoc does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="UVDoc does not support input and output embeddings")
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="UVDoc does not support hidden_states")
+    def test_hidden_states_output(self):
         pass
+    # def test_hidden_states_output(self):
+    #     def check_hidden_states_output(inputs_dict, config, model_class):
+    #         model = model_class(config)
+    #         model.to(torch_device)
+    #         model.eval()
 
-    @unittest.skip(reason="UVDoc does not use token embeddings")
-    def test_resize_tokens_embeddings(self):
-        pass
+    #         with torch.no_grad():
+    #             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-    @unittest.skip(reason="Feed forward chunking is not implemented")
-    def test_feed_forward_chunking(self):
-        pass
+    #         hidden_states = outputs.hidden_states
 
-    @unittest.skip(reason="UVDoc does not support this test")
-    def test_model_is_small(self):
-        pass
+    #         expected_num_stages = self.model_tester.num_stages
 
-    @unittest.skip(reason="UVDoc does not support attention")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
+    #         self.assertEqual(len(hidden_states), expected_num_stages + 1)
 
-    @unittest.skip(reason="UVDoc does not support attention")
-    def test_attention_outputs(self):
-        pass
+    #         self.assertEqual(hidden_states[0].shape[1], self.model_tester.image_size)
+    #         expected_hidden_states_output_shape = [3, 128, 45, 31]
+    #         self.assertListEqual(list(hidden_states[0].shape), expected_hidden_states_output_shape)
+    #         self.assertListEqual(list(hidden_states[1].shape), expected_hidden_states_output_shape)
+    #         self.assertListEqual(list(hidden_states[2].shape), expected_hidden_states_output_shape)
+    #         self.assertListEqual(list(hidden_states[3].shape), expected_hidden_states_output_shape)
+    #         self.assertListEqual(list(hidden_states[4].shape), expected_hidden_states_output_shape)
+    #         self.assertListEqual(list(hidden_states[5].shape), expected_hidden_states_output_shape)
+    #         self.assertListEqual(list(hidden_states[6].shape), expected_hidden_states_output_shape)
 
-    @unittest.skip(reason="UVDoc does not support train")
-    def test_problem_types(self):
-        pass
+    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    #     for model_class in self.all_model_classes:
+    #         inputs_dict["output_hidden_states"] = True
+    #         check_hidden_states_output(inputs_dict, config, model_class)
+
+    #         # check that output_hidden_states also work using config
+    #         del inputs_dict["output_hidden_states"]
+    #         config.output_hidden_states = True
+
+    #         check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -208,71 +223,53 @@ class UVDocModelTest(ModelTesterMixin, unittest.TestCase):
                     inputs_dict[key] = tensor.to(dtype)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
-
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.hidden_states
-
-            expected_num_stages = self.model_tester.num_stages
-
-            self.assertEqual(len(hidden_states), expected_num_stages + 1)
-
-            self.assertEqual(hidden_states[0].shape[1], self.model_tester.image_size)
-            expected_hidden_states_output_shape = [3, 128, 45, 31]
-            self.assertListEqual(list(hidden_states[0].shape), expected_hidden_states_output_shape)
-            self.assertListEqual(list(hidden_states[1].shape), expected_hidden_states_output_shape)
-            self.assertListEqual(list(hidden_states[2].shape), expected_hidden_states_output_shape)
-            self.assertListEqual(list(hidden_states[3].shape), expected_hidden_states_output_shape)
-            self.assertListEqual(list(hidden_states[4].shape), expected_hidden_states_output_shape)
-            self.assertListEqual(list(hidden_states[5].shape), expected_hidden_states_output_shape)
-            self.assertListEqual(list(hidden_states[6].shape), expected_hidden_states_output_shape)
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            check_hidden_states_output(inputs_dict, config, model_class)
-
+    
+    @unittest.skip(reason="UVDoc does not support training")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
 
 @require_torch
 @require_vision
 @slow
 class UVDocModelIntegrationTest(unittest.TestCase):
     def setUp(self):
-        model_path = "/workspace/model_weight_torch/PP-LCNet_x1_0_doc_ori"
-
+        model_path = "/workspace/model_weight_torch/UVDoc"
         self.model = UVDocForDocumentRectification.from_pretrained(model_path).to(torch_device)
-        self.image_processor = UVDocImageProcessor.from_pretrained(model_path) if is_vision_available() else None
+        self.image_processor = UVDocImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
         path = "/workspace/PaddleX/paddlex/inference/models/image_unwarping/modeling/doc_test.jpg"
         self.image = Image.open(path)
 
-    def test_inference_image_classification_head(self):
+    def test_inference_document_rectification(self):
         inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)
-        bs, c, h, w = inputs["pixel_values"].shape
+        bs = inputs["pixel_values"].shape[0]
 
         with torch.no_grad():
             outputs = self.model(**inputs)
 
-        expected_shape_logits = torch.Size((bs, 4))
+        results = self.image_processor.post_process_document_rectification(outputs.last_hidden_state)
 
-        expected_logits = torch.tensor([[0.0511, 0.0259, 0.8973, 0.0257]]).to(torch_device)
+        expected_shape_logits = torch.Size((bs, 3, 708, 1100))
+        expected_logits = torch.tensor(
+            [
+                [0.5279, 0.5213, 0.5157],
+                [0.5331, 0.5261, 0.5187],
+                [0.5330, 0.5291, 0.5239],
+            ],
+            device=torch_device,
+        )
 
-        self.assertEqual(outputs.logits.shape, expected_shape_logits)
-        torch.testing.assert_close(outputs.logits, expected_logits, rtol=2e-4, atol=2e-4)
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape_logits)
+        torch.testing.assert_close(outputs.last_hidden_state[0, 0, :3, :3], expected_logits, rtol=2e-4, atol=2e-4)
 
-        expected_labels = torch.tensor([2]).to(torch_device)
-        predicted_label = outputs.logits.argmax(-1).item()
-
-        self.assertEqual(predicted_label, expected_labels)
+        expected_images = torch.tensor(
+            [
+                [131, 130, 128],
+                [131, 129, 127],
+                [130, 129, 127],
+            ],
+            device=torch_device,
+            dtype=torch.uint8,
+        )
+        torch.testing.assert_close(results[0]["images"][:3, :3, 0], expected_images, rtol=2e-4, atol=2e-4)
+        self.assertEqual(results[0]["labels"].shape, (1,))
+        self.assertTrue((results[0]["labels"] == 0).all())
