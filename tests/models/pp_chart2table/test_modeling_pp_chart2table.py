@@ -180,19 +180,20 @@ class PPChart2TableModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
 @require_torch
 class PPChart2TableIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("PaddlePaddle/PP-Chart2Table_safetensors")
+        model_path = "PaddlePaddle/PP-Chart2Table_safetensors"
+        self.model = PPChart2TableForConditionalGeneration.from_pretrained(model_path).to(torch_device)
+        self.processor = AutoProcessor.from_pretrained("PaddlePaddle/PP-Chart2Table_safetensors").to(torch_device)
+        url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png"
+        self.image = load_image(url)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_small_model_integration_test_pp_chart2table(self):
-        model_id = "PaddlePaddle/PP-Chart2Table_safetensors"
-        model = PPChart2TableForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
-        image = load_image("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png")
-
-        inputs = self.processor(image, return_tensors="pt").to(torch_device)
-        generate_ids = model.generate(
+        
+        inputs = self.processor(self.image, return_tensors="pt").to(torch_device)
+        generate_ids = self.model.generate(
             **inputs,
             use_cache=True,
             do_sample=False,
@@ -206,13 +207,9 @@ class PPChart2TableIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_pp_chart2table_batched(self):
-        model_id = "PaddlePaddle/PP-Chart2Table_safetensors"
-        model = PPChart2TableForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
-        image1 = load_image("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png")
-        image2 = load_image("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png")
 
-        inputs = self.processor([image1, image2], return_tensors="pt").to(torch_device)
-        generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=6)
+        inputs = self.processor([self.image, self.image], return_tensors="pt").to(torch_device)
+        generate_ids = self.model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=6)
         decoded_output = self.processor.batch_decode(
             generate_ids[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
         )
