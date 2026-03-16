@@ -284,10 +284,22 @@ class StreamingTqdmWrapper:
         return self._wrapped.__exit__(exc_type, exc_value, traceback)
 
     def __iter__(self):
-        # tqdm's __iter__ calls its own update() which doesn't trigger SSE
-        # We need to manually call our wrapper's update() to stream progress
+        # tqdm's __iter__ calls _wrapped.update() internally (after each yield), so we
+        # must NOT call self.update() here — that would double-increment _wrapped.n and
+        # report 2× the real iteration count.  Instead, track the count ourselves and
+        # enqueue SSE events directly.
+        count = 0
         for item in self._wrapped:
-            self.update(1)
+            count += 1
+            self.enqueue(
+                {
+                    "stage": "tqdm:update",
+                    "model": self.model_id_and_revision,
+                    "desc": self.desc,
+                    "n": count,
+                    "total": getattr(self._wrapped, "total", self.total),
+                }
+            )
             yield item
 
 
@@ -2129,6 +2141,7 @@ class Serve:
         _mid = model_id_and_revision
 
         if _callback is not None:
+            _open_byte_bars = [0]  # count of currently-open unit="B" bars
 
             class _SseTqdm(base_tqdm):
                 """Thin tqdm subclass that forwards progress events to the SSE stream."""
@@ -2141,6 +2154,8 @@ class Serve:
                     kwargs["disable"] = True  # suppress server-side display
                     super().__init__(*args, **kwargs)
                     self._n = 0
+                    if self._sse_unit == "B":
+                        _open_byte_bars[0] += 1
                     # self.total IS set by the disabled path, so read it after super().__init__
                     _callback(
                         {
@@ -2169,6 +2184,10 @@ class Serve:
 
                 def close(self):
                     _callback({"stage": "tqdm:close", "model": _mid, "desc": self._sse_desc})
+                    if self._sse_unit == "B":
+                        _open_byte_bars[0] -= 1
+                        if _open_byte_bars[0] == 0:
+                            _callback({"stage": "model:weights_loading", "model": _mid})
                     super().close()
 
             tqdm_class: type | None = _SseTqdm

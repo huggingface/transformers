@@ -239,15 +239,29 @@ class RichInterface:
             TimeRemainingColumn(),
             console=self._console,
         )
+        weights_progress = Progress(
+            TextColumn("[bold]{task.description}"),
+            BarColumn(bar_width=40),
+            MofNCompleteColumn(),
+            TimeElapsedColumn(),
+            console=self._console,
+        )
 
         stage_task = stage_progress.add_task(model, total=len(stages))
 
         dl_task_name = " " * len(model) + "  ↳  Downloading files"
         dl_task = dl_progress.add_task(dl_task_name + " " * (size_of_tqdm - len(dl_task_name)), total=None, visible=False)
-        bar_last_n: dict[str, int] = {}
-        byte_descs: set[str] = set()  # only track byte-unit bars in dl_progress
 
-        with Live(Group(stage_progress, dl_progress), console=self._console, transient=True):
+        weights_task_name = " " * len(model) + "  ↳  Loading into memory"
+        weights_task = weights_progress.add_task(
+            weights_task_name + " " * (size_of_tqdm - len(weights_task_name)), total=None, visible=False
+        )
+
+        bar_last_n: dict[str, int] = {}
+        byte_descs: set[str] = set()   # only track byte-unit bars in dl_progress
+        weight_descs: set[str] = set() # tqdm bars for weight loading (from _tqdm_hook)
+
+        with Live(Group(stage_progress, dl_progress, weights_progress), console=self._console, transient=True):
             for line in response.iter_lines():
                 if not line or not line.startswith(b"data: "):
                     continue
@@ -277,6 +291,22 @@ class RichInterface:
                             if total > current_total:
                                 dl_progress.update(dl_task, total=total)
 
+                    elif stage == "tqdm:start" and desc == "Loading weights":
+                        # Captured via _tqdm_hook from core_model_loading.py
+                        weight_descs.add(desc)
+                        dl_progress.update(dl_task, visible=False)
+                        weights_progress.update(weights_task, visible=True, total=total)
+
+                    elif stage == "tqdm:update" and n is not None and desc in weight_descs:
+                        delta = n - bar_last_n.get(desc, 0)
+                        bar_last_n[desc] = n
+                        weights_progress.advance(weights_task, delta)
+
+                    continue
+
+                if stage == "model:weights_loading":
+                    dl_progress.update(dl_task, visible=False)
+                    weights_progress.update(weights_task, visible=True)
                     continue
 
                 if stage in stage_labels:
