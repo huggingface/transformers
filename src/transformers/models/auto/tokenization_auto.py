@@ -161,8 +161,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("internvl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("jais2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("kosmos-2", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
-        ("lasr_ctc", "ParakeetTokenizer" if is_tokenizers_available() else None),
-        ("lasr_encoder", "ParakeetTokenizer" if is_tokenizers_available() else None),
+        ("lasr_ctc", "LasrTokenizer" if is_tokenizers_available() else None),
+        ("lasr_encoder", "LasrTokenizer" if is_tokenizers_available() else None),
         ("layoutlm", "BertTokenizer" if is_tokenizers_available() else None),
         ("layoutlmv2", "LayoutLMv2Tokenizer" if is_tokenizers_available() else None),
         ("layoutlmv3", "LayoutLMv3Tokenizer" if is_tokenizers_available() else None),
@@ -341,6 +341,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
 # These models will be forced to use TokenizersBackend.
 MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "arctic",
+    "chameleon",
     "deepseek_vl",
     "deepseek_vl_v2",
     "deepseek_vl_hybrid",
@@ -654,7 +655,7 @@ class AutoTokenizer:
                 config = AutoConfig.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                 )
-            except Exception:
+            except (ValueError, OSError):
                 config = PreTrainedConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         config_model_type = config.model_type

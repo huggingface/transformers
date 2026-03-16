@@ -287,7 +287,6 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
         encoder_decoder_position_bias=None,
         past_key_values=None,
         use_cache=False,
-        cache_position=None,
         **kwargs,
     ):
         hidden_states, _ = self.layer[0](
@@ -296,7 +295,6 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
             position_bias=position_bias,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
         )
 
         # clamp inf values to enable fp16 training
@@ -312,9 +310,6 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
                 past_key_values=past_key_values,
-                query_length=cache_position[-1] + 1,
-                use_cache=use_cache,
-                cache_position=cache_position,
             )
 
             # clamp inf values to enable fp16 training
@@ -442,7 +437,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         inputs_embeds=None,
         past_key_values=None,
         use_cache=None,
-        cache_position=None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MoEModelOutputWithPastAndCrossAttentions:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -473,11 +467,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
             past_key_values = None
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
-            )
-
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past cache
             mask_seq_length = past_key_values_length + seq_length
@@ -488,7 +477,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                 config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                cache_position=cache_position,
                 past_key_values=past_key_values,
             )
         else:
@@ -522,7 +510,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                 encoder_decoder_position_bias,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -576,7 +563,6 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | Seq2SeqMoEModelOutput:
         if encoder_outputs is None:
@@ -592,7 +578,6 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
             past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -666,7 +651,6 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         output_router_logits: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | Seq2SeqMoEOutput:
         if encoder_outputs is None:
@@ -692,7 +676,6 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
-            cache_position=cache_position,
             output_router_logits=output_router_logits,
             **kwargs,
         )

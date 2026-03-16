@@ -19,6 +19,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ...activations import ACT2FN
 from ...masking_utils import create_causal_mask
@@ -51,6 +52,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/timesfm-2.5-200m-transformers")
+@strict(accept_kwargs=True)
 class TimesFm2_5Config(TimesFmConfig):
     r"""
     patch_length (`int`, *optional*, defaults to 32):
@@ -85,74 +87,26 @@ class TimesFm2_5Config(TimesFmConfig):
     ```
     """
 
-    model_type = "timesfm2_5"
+    context_length: int = 16384
+    num_key_value_heads: int = 16
+    num_hidden_layers: int = 20
+    attention_bias: bool = False
+    output_quantile_len: int = 1024
+    decode_index: int = 5
+    use_bias: bool = False
+    activation: str = "swish"
+    use_continuous_quantile_head: bool = True
+    force_flip_invariance: bool = True
+    infer_is_positive: bool = True
+    max_position_embeddings: int = 16384
+    rope_parameters: RopeParameters | dict | None = None
 
-    def __init__(
-        self,
-        patch_length: int = 32,
-        context_length: int = 16384,
-        horizon_length: int = 128,
-        quantiles: list = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        hidden_size: int = 1280,
-        intermediate_size: int = 1280,
-        head_dim: int = 80,
-        num_attention_heads: int = 16,
-        num_key_value_heads: int = 16,
-        num_hidden_layers: int = 20,
-        rms_norm_eps: float = 1e-6,
-        attention_dropout: float = 0.0,
-        attention_bias: bool = False,
-        initializer_range: float = 0.02,
-        output_quantile_len: int = 1024,
-        decode_index: int = 5,
-        use_bias: bool = False,
-        activation: str = "swish",
-        use_continuous_quantile_head: bool = True,
-        force_flip_invariance: bool = True,
-        infer_is_positive: bool = True,
-        max_position_embeddings: int = 16384,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        **kwargs,
-    ):
-        self.num_key_value_heads = num_key_value_heads
-        self.attention_bias = attention_bias
-        self.output_quantile_len = output_quantile_len
-        self.decode_index = decode_index
-        self.use_bias = use_bias
-        self.activation = activation
-        self.use_continuous_quantile_head = use_continuous_quantile_head
-        self.force_flip_invariance = force_flip_invariance
-        self.infer_is_positive = infer_is_positive
-        self.max_position_embeddings = max_position_embeddings
-        self.rope_parameters = rope_parameters
-
-        super().__init__(
-            patch_length=patch_length,
-            context_length=context_length,
-            horizon_length=horizon_length,
-            quantiles=quantiles,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            head_dim=head_dim,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            rms_norm_eps=rms_norm_eps,
-            attention_dropout=attention_dropout,
-            attention_bias=attention_bias,
-            initializer_range=initializer_range,
-            num_hidden_layers=num_hidden_layers,
-            use_positional_embedding=False,
-            **kwargs,
-        )
-        # Delete inherited attributes that TimesFM 2.5 does not use
-        del self.freq_size
-        del self.pad_val
-        del self.tolerance
-        del self.normalize_inputs
-        del self.use_positional_embedding
-        del self.use_rotary_embeddings
-        del self.min_timescale
-        del self.max_timescale
+    freq_size = AttributeError()
+    pad_val = AttributeError()
+    tolerance = AttributeError()
+    use_positional_embedding = AttributeError()
+    min_timescale = AttributeError()
+    max_timescale = AttributeError()
 
 
 @dataclass
@@ -230,7 +184,6 @@ class TimesFm2_5Attention(ApertusAttention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values=None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         input_shape = hidden_states.shape[:-1]
@@ -250,8 +203,7 @@ class TimesFm2_5Attention(ApertusAttention):
         query_states = query_states * scale[None, None, None, :]
 
         if past_key_values is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -478,10 +430,7 @@ class TimesFm2_5Model(TimesFm2_5PreTrainedModel):
         position_ids = torch.arange(sequence_length, device=input_embeddings.device).unsqueeze(0) - num_masked
 
         padding_mask = (~patch_padding).to(torch.int64)
-        cache_position = torch.arange(sequence_length, device=input_embeddings.device)
-        attention_mask = create_causal_mask(
-            self.config, input_embeddings, padding_mask, cache_position, past_key_values=None
-        )
+        attention_mask = create_causal_mask(self.config, input_embeddings, padding_mask, past_key_values=None)
         position_embeddings = self.rotary_emb(input_embeddings, position_ids)
 
         hidden_states = input_embeddings

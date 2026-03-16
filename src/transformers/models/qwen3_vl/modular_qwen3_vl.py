@@ -21,6 +21,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -79,6 +80,7 @@ class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
+@strict(accept_kwargs=True)
 class Qwen3VLVisionConfig(PreTrainedConfig):
     r"""
     num_position_embeddings (`int`, *optional*, defaults to 2304):
@@ -92,41 +94,23 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
     model_type = "qwen3_vl"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        depth=27,
-        hidden_size=1152,
-        hidden_act="gelu_pytorch_tanh",
-        intermediate_size=4304,
-        num_heads=16,
-        in_channels=3,
-        patch_size=16,
-        spatial_merge_size=2,
-        temporal_patch_size=2,
-        out_hidden_size=3584,
-        num_position_embeddings=2304,
-        deepstack_visual_indexes=[8, 16, 24],
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.depth = depth
-        self.hidden_size = hidden_size
-        self.hidden_act = hidden_act
-        self.intermediate_size = intermediate_size
-        self.num_heads = num_heads
-        self.in_channels = in_channels
-        self.patch_size = patch_size
-        self.spatial_merge_size = spatial_merge_size
-        self.temporal_patch_size = temporal_patch_size
-        self.out_hidden_size = out_hidden_size
-        self.num_position_embeddings = num_position_embeddings
-        self.initializer_range = initializer_range
-        self.deepstack_visual_indexes = deepstack_visual_indexes
+    depth: int = 27
+    hidden_size: int = 1152
+    hidden_act: str = "gelu_pytorch_tanh"
+    intermediate_size: int = 4304
+    num_heads: int = 16
+    in_channels: int = 3
+    patch_size: int | list[int] | tuple[int, int] = 16
+    spatial_merge_size: int = 2
+    temporal_patch_size: int | list[int] | tuple[int, int] = 2
+    out_hidden_size: int = 3584
+    num_position_embeddings: int = 2304
+    deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
+    initializer_range: float = 0.02
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
+@strict(accept_kwargs=True)
 class Qwen3VLTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -147,56 +131,34 @@ class Qwen3VLTextConfig(PreTrainedConfig):
     model_type = "qwen3_vl_text"
     base_config_key = "text_config"
     default_theta = 500000.0
+    ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
 
-    def __init__(
-        self,
-        vocab_size: int | None = 151936,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 22016,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = 32,
-        head_dim: int | None = 128,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 128000,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: float | None = 1e-6,
-        use_cache: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        pad_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vocab_size: int = 151936
+    hidden_size: int = 4096
+    intermediate_size: int = 22016
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = 32
+    head_dim: int = 128
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 128000
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
+    pad_token_id: int | None = None
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.head_dim = head_dim
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.rope_parameters = rope_parameters
-        self.pad_token_id = pad_token_id
-
-        super().__init__(
-            ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},
-            **kwargs,
-        )
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
+@strict(accept_kwargs=True)
 class Qwen3VLConfig(PreTrainedConfig):
     r"""
     Example:
@@ -218,33 +180,26 @@ class Qwen3VLConfig(PreTrainedConfig):
     sub_configs = {"vision_config": Qwen3VLVisionConfig, "text_config": Qwen3VLTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        image_token_id=151655,
-        video_token_id=151656,
-        vision_start_token_id=151652,
-        vision_end_token_id=151653,
-        tie_word_embeddings=False,
-        **kwargs,
-    ):
-        if isinstance(vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif vision_config is None:
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 151655
+    video_token_id: int = 151656
+    vision_start_token_id: int = 151652
+    vision_end_token_id: int = 151653
+    tie_word_embeddings: bool = False
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+        elif self.vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
 
-        if isinstance(text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**text_config)
-        elif text_config is None:
+        if isinstance(self.text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**self.text_config)
+        elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"]()
 
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.vision_start_token_id = vision_start_token_id
-        self.vision_end_token_id = vision_end_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 class Qwen3VLVisionMLP(nn.Module):
@@ -779,6 +734,43 @@ class Qwen3VLModel(Qwen2VLModel):
         super().__init__(config)
         self.visual = Qwen3VLVisionModel._from_config(config.vision_config)
         self.language_model = Qwen3VLTextModel._from_config(config.text_config)
+
+    def get_rope_index(
+        self,
+        video_grid_thw: torch.LongTensor | None = None,
+        **super_kwargs,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Difference from Qwen2VL/Qwen2.5VL's get_rope_index:
+        - Since Qwen3.5 use timestamps to seperate videos, like <t1> <vision_start> <frame1> <vision_end> <t2> <vision_start> <frame2> <vision_end>, the video_grid_thw should also be split too.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+                it.
+            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
+                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+                The temporal, height and width of feature shape of each video in LLM.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+        Returns:
+            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
+            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
+        """
+
+        # Separate video grid thw into multiple grids because timestamps are used to seperate videos.
+        if video_grid_thw is not None:
+            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
+            video_grid_thw[:, 0] = 1
+
+        return super().get_rope_index(video_grid_thw=video_grid_thw, **super_kwargs)
 
     @can_return_tuple
     @auto_docstring

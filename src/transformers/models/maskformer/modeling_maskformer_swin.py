@@ -24,12 +24,13 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...file_utils import ModelOutput
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, torch_int
+from ...utils.generic import can_return_tuple
 from .configuration_maskformer_swin import MaskFormerSwinConfig
 
 
@@ -745,7 +746,7 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -810,6 +811,8 @@ class MaskFormerSwinBackbone(BackboneMixin, MaskFormerSwinPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
+    @filter_output_hidden_states
     def forward(
         self,
         pixel_values: Tensor,
@@ -818,7 +821,7 @@ class MaskFormerSwinBackbone(BackboneMixin, MaskFormerSwinPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> BackboneOutput:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

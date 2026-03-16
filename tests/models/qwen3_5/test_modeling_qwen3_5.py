@@ -13,11 +13,14 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen3.5 model."""
 
+import copy
 import unittest
 
-from transformers import is_torch_available
+from transformers import AutoProcessor, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
+    cleanup,
     require_torch,
+    slow,
     torch_device,
 )
 
@@ -404,6 +407,460 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 list(self_attentions[0].shape[-3:]), [config.text_config.num_attention_heads, seq_len, seq_len]
             )
 
+    def test_mismatching_num_image_tokens(self):
+        """
+        Tests that VLMs throw an explicit error when image count mismatches image-token count in text.
+        Also checks multi-image cases where one prompt has multiple image tokens.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            _ = model(**input_dict)
+            curr_input_dict = copy.deepcopy(input_dict)
+
+            patch_size = config.vision_config.patch_size
+            one_img_length = (self.model_tester.image_size**2) // (patch_size**2)
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-one_img_length:, ...]
+            curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
+            with self.assertRaises(ValueError):
+                _ = model(**curr_input_dict)
+
+            if hasattr(model.base_model, "rope_deltas"):
+                model.base_model.rope_deltas = None
+
+            input_ids = curr_input_dict["input_ids"][:1]
+            mm_token_type_ids = curr_input_dict["mm_token_type_ids"][:1]
+            pixel_values = curr_input_dict["pixel_values"][:one_img_length]
+            image_grid_thw = curr_input_dict["image_grid_thw"][:1]
+            input_ids = torch.cat([input_ids, input_ids], dim=0)
+            mm_token_type_ids = torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0)
+
+            with self.assertRaises(ValueError):
+                _ = model(
+                    input_ids=input_ids,
+                    pixel_values=pixel_values,
+                    image_grid_thw=image_grid_thw,
+                    mm_token_type_ids=mm_token_type_ids,
+                )
+
+            if hasattr(model.base_model, "rope_deltas"):
+                model.base_model.rope_deltas = None
+
+            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
+            image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
+            _ = model(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                image_grid_thw=image_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+
+    def test_image_forward(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        bsz = self.model_tester.batch_size
+        channels = config.vision_config.in_chans
+        temporal_patch = config.vision_config.temporal_patch_size
+        patch_size = config.vision_config.patch_size
+        num_images = 2
+
+        input_ids = ids_tensor([bsz, self.model_tester.seq_length], self.model_tester.vocab_size)
+        input_ids[:, -1] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.video_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.image_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.vision_start_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.vision_end_token_id] = self.model_tester.pad_token_id
+
+        patches_per_image = 1
+        pixel_values = floats_tensor(
+            [
+                bsz * num_images * patches_per_image,
+                channels * temporal_patch * (patch_size**2),
+            ]
+        )
+        image_grid_thw = torch.tensor([[1, 1, 1]] * (bsz * num_images))
+        self.assertEqual(pixel_values.shape[0], image_grid_thw.prod(dim=1).sum().item())
+
+        insertion_point = 0
+        tokens_per_image = 3  # vision_start + image_token + vision_end
+        required_seq_length = insertion_point + num_images * tokens_per_image
+        self.assertLessEqual(required_seq_length, input_ids.shape[1])
+
+        for b in range(bsz):
+            for image_idx in range(num_images):
+                image_start = insertion_point + image_idx * tokens_per_image
+                input_ids[b, image_start] = self.model_tester.vision_start_token_id
+                input_ids[b, image_start + 1] = self.model_tester.image_token_id
+                input_ids[b, image_start + 2] = self.model_tester.vision_end_token_id
+
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.model_tester.image_token_id] = 1
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            outputs = model(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                image_grid_thw=image_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+            self.assertIsNotNone(outputs)
+
+    def test_video_forward(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        bsz = self.model_tester.batch_size
+        channels = config.vision_config.in_chans
+        temporal_patch = config.vision_config.temporal_patch_size
+        patch_size = config.vision_config.patch_size
+
+        input_ids = ids_tensor([bsz, self.model_tester.seq_length], self.model_tester.vocab_size)
+
+        frames = 4
+        num_video = 2
+        frame_timestamp_tokens = 5
+        patch_h = self.model_tester.image_size // patch_size
+        patch_w = self.model_tester.image_size // patch_size
+        patch_t = frames // temporal_patch
+        patches_per_video = patch_t * patch_h * patch_w
+        patches_per_frame = patch_h * patch_w
+        pixel_values_videos = floats_tensor(
+            [
+                bsz * num_video * patches_per_video,
+                channels * temporal_patch * (patch_size**2),
+            ]
+        )
+
+        video_grid_thw = torch.tensor([[patch_t, patch_h, patch_w]] * (bsz * num_video))
+        self.assertEqual(pixel_values_videos.shape[0], video_grid_thw.prod(dim=1).sum().item())
+
+        input_ids[:, -1] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.video_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.image_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.vision_start_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.vision_end_token_id] = self.model_tester.pad_token_id
+
+        insertion_point = 0
+        tokens_per_frame = frame_timestamp_tokens + 1 + patches_per_frame + 1
+        tokens_per_video = patch_t * tokens_per_frame
+        required_seq_length = insertion_point + num_video * tokens_per_video
+        if required_seq_length > input_ids.shape[1]:
+            pad_extension = torch.full(
+                (bsz, required_seq_length - input_ids.shape[1]),
+                self.model_tester.pad_token_id,
+                dtype=input_ids.dtype,
+                device=input_ids.device,
+            )
+            input_ids = torch.cat([input_ids, pad_extension], dim=1)
+
+        timestamp_start_token_id = self.model_tester.vision_end_token_id + 1
+        self.assertLessEqual(timestamp_start_token_id + frame_timestamp_tokens, self.model_tester.vocab_size)
+        timestamp_token_ids = torch.arange(
+            timestamp_start_token_id,
+            timestamp_start_token_id + frame_timestamp_tokens,
+            device=input_ids.device,
+            dtype=input_ids.dtype,
+        )
+
+        self.assertLessEqual(required_seq_length, input_ids.shape[1])
+        for b in range(bsz):
+            for video_idx in range(num_video):
+                video_start = insertion_point + video_idx * tokens_per_video
+                for frame_idx in range(patch_t):
+                    frame_start = video_start + frame_idx * tokens_per_frame
+                    input_ids[b, frame_start : frame_start + frame_timestamp_tokens] = timestamp_token_ids
+
+                    vision_start_pos = frame_start + frame_timestamp_tokens
+                    input_ids[b, vision_start_pos] = self.model_tester.vision_start_token_id
+
+                    frame_token_start = vision_start_pos + 1
+                    frame_token_end = frame_token_start + patches_per_frame
+                    input_ids[b, frame_token_start:frame_token_end] = self.model_tester.video_token_id
+                    input_ids[b, frame_token_end] = self.model_tester.vision_end_token_id
+
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.model_tester.video_token_id] = 2
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            outputs = model(
+                input_ids=input_ids,
+                pixel_values_videos=pixel_values_videos,
+                video_grid_thw=video_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+            self.assertIsNotNone(outputs)
+
     @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
     def test_multi_gpu_data_parallel_forward(self):
         pass
+
+
+@require_torch
+class Qwen3_5IntegrationTest(unittest.TestCase):
+    model_id = "Qwen/Qwen3.5-0.8B"
+
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    @slow
+    def test_model_logits(self):
+        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
+        model = Qwen3_5ForCausalLM.from_pretrained(self.model_id, device_map="auto")
+        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
+
+        with torch.no_grad():
+            logits = model(input_ids).logits.float().cpu()
+
+        self.assertEqual(logits.shape[0], 1)
+        self.assertEqual(logits.shape[1], len(input_ids[0]))
+        self.assertTrue(torch.isfinite(logits).all().item())
+
+        # Greedy token picks on each position should remain stable for this checkpoint.
+        expected_argmax = torch.tensor([[198, 74, 9230, 198, 1, 264, 1, 198]])
+        torch.testing.assert_close(logits.argmax(-1), expected_argmax)
+
+    @slow
+    def test_model_generation(self):
+        expected_text_completion = "My favourite condiment is 100% real.\nThe 100% real is the only one that is"
+        prompt = "My favourite condiment is "
+
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, use_fast=False)
+        model = Qwen3_5ForCausalLM.from_pretrained(self.model_id, device_map="auto")
+        prompt_inputs = tokenizer(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+
+        generated_ids = model.generate(
+            **prompt_inputs,
+            max_new_tokens=20,
+            do_sample=False,
+        )
+        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+
+        self.assertEqual(expected_text_completion, text)
+
+    @slow
+    def test_model_vision_generation(self):
+        message = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                    },
+                    {"type": "text", "text": "What kind of animal is this?"},
+                ],
+            }
+        ]
+
+        processor = AutoProcessor.from_pretrained(self.model_id)
+        model = Qwen3_5ForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
+
+        inputs = processor.apply_chat_template(
+            message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        )
+
+        expected_input_ids = [248045, 846, 198, 248053, 248056, 248056, 248056, 248056, 248056, 248056]
+        self.assertListEqual(expected_input_ids, inputs.input_ids[0].tolist()[:10])
+
+        expected_pixel_slice = torch.tensor(
+            [
+                [-0.0902, -0.0824, -0.0824],
+                [-0.2627, -0.2627, -0.2627],
+                [-0.0824, -0.0902, -0.0902],
+                [-0.0118, -0.0510, -0.1137],
+            ],
+            dtype=torch.float32,
+            device="cpu",
+        )
+        self.assertListEqual(
+            [round(x, 3) for x in expected_pixel_slice.flatten().tolist()],
+            [round(x, 3) for x in inputs.pixel_values[:4, :3].flatten().tolist()],
+        )
+
+        inputs = inputs.to(model.device)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        decoded_text = processor.decode(output[0], skip_special_tokens=True)
+        self.assertIn("What kind of animal is this?", decoded_text)
+        self.assertIn("cat", decoded_text.lower())
+
+    @slow
+    def test_model_video_generation(self):
+        message = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                        "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+                    },
+                    {"type": "text", "text": "Describe the video in short."},
+                ],
+            }
+        ]
+
+        processor = AutoProcessor.from_pretrained(self.model_id, max_image_size={"longest_edge": 50176})
+        model = Qwen3_5ForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
+
+        inputs = processor.apply_chat_template(
+            message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        )
+        expected_input_ids = [248045, 846, 198, 27, 15, 13, 18, 6283, 29, 248053]
+        self.assertListEqual(expected_input_ids, inputs.input_ids[0].tolist()[:10])
+
+        expected_video_slice = torch.tensor(
+            [
+                [-0.757, -0.757, -0.757],
+                [-0.694, -0.639, -0.498],
+                [-0.773, -0.773, -0.773],
+                [-0.373, -0.357, -0.373],
+            ],
+            dtype=torch.float32,
+            device="cpu",
+        )
+        self.assertListEqual(
+            [round(x, 3) for x in expected_video_slice.flatten().tolist()],
+            [round(x, 3) for x in inputs.pixel_values_videos[:4, :3].flatten().tolist()],
+        )
+
+        inputs = inputs.to(model.device)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        decoded_text = processor.decode(output[0], skip_special_tokens=True)
+        self.assertIn("Describe the video in short.", decoded_text)
+        self.assertIn("seconds>", decoded_text)
+        self.assertIn("assistant", decoded_text)
+
+    @slow
+    def test_model_video_generation_batch(self):
+        message = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                        "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+                    },
+                    {"type": "text", "text": "Describe the video in short."},
+                ],
+            }
+        ]
+        batch_messages = [message, message]
+
+        processor = AutoProcessor.from_pretrained(self.model_id, max_image_size={"longest_edge": 50176})
+        model = Qwen3_5ForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
+
+        inputs = processor.apply_chat_template(
+            batch_messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+        )
+        expected_input_ids = [248045, 846, 198, 27, 15, 13, 18, 6283, 29, 248053]
+        self.assertListEqual(expected_input_ids, inputs.input_ids[0].tolist()[:10])
+        self.assertListEqual(expected_input_ids, inputs.input_ids[1].tolist()[:10])
+
+        inputs = inputs.to(model.device)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        decoded_text = processor.batch_decode(output, skip_special_tokens=True)
+
+        expected_decoded_text = [
+            "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\n<think>\n\n</think>\n\nA toddler is sitting on a bed and reading a book.\n",
+            "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\n<think>\n\n</think>\n\nA toddler is sitting on a bed and reading a book.\n",
+        ]
+        self.assertEqual(expected_decoded_text, decoded_text)
+
+    @slow
+    def test_model_video_generation_batch_mixed(self):
+        video_message = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                        "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+                    },
+                    {"type": "text", "text": "Describe the video in short."},
+                ],
+            }
+        ]
+        text_only_message = [{"role": "user", "content": [{"type": "text", "text": "Who are you?"}]}]
+        batch_messages = [video_message, text_only_message]
+
+        processor = AutoProcessor.from_pretrained(self.model_id, max_image_size={"longest_edge": 50176})
+        processor.tokenizer.padding_side = "left"
+        model = Qwen3_5ForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
+
+        inputs = processor.apply_chat_template(
+            batch_messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+        ).to(model.device)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        decoded_text = processor.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(len(decoded_text), 2)
+        self.assertIn("Describe the video in short.", decoded_text[0])
+        self.assertIn("seconds>", decoded_text[0])
+        self.assertIn("toddler", decoded_text[0].lower())
+
+        self.assertIn("Who are you?", decoded_text[1])
+        self.assertIn("qwen", decoded_text[1].lower())
+
+    @slow
+    def test_model_video_generation_batch_different_videos(self):
+        message_1 = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                        "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+                    },
+                    {"type": "text", "text": "Describe the video in short."},
+                ],
+            }
+        ]
+        message_2 = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+                    },
+                    {"type": "text", "text": "Describe the video in short."},
+                ],
+            }
+        ]
+        batch_messages = [message_1, message_2]
+
+        processor = AutoProcessor.from_pretrained(self.model_id, max_image_size={"longest_edge": 50176})
+        processor.tokenizer.padding_side = "left"
+        model = Qwen3_5ForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
+
+        inputs = processor.apply_chat_template(
+            batch_messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+        ).to(model.device)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        decoded_text = processor.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(len(decoded_text), 2)
+        self.assertIn("Describe the video in short.", decoded_text[0])
+        self.assertIn("seconds>", decoded_text[0])
+        self.assertIn("Describe the video in short.", decoded_text[1])
+        self.assertIn("seconds>", decoded_text[1])
+        self.assertIn("tennis", decoded_text[1].lower())

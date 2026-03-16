@@ -13,16 +13,16 @@
 # limitations under the License.
 """Deformable DETR model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-logger = logging.get_logger(__name__)
-
-
 @auto_docstring(checkpoint="SenseTime/deformable-detr")
+@strict(accept_kwargs=True)
 class DeformableDetrConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 300):
@@ -51,6 +51,8 @@ class DeformableDetrConfig(PreTrainedConfig):
     with_box_refine (`bool`, *optional*, defaults to `False`):
         Whether to apply iterative bounding box refinement, where each decoder layer refines the bounding boxes
         based on the predictions from the previous layer.
+    return_intermediate (`bool`, *optional*, defaults to True):
+        Whether to return the intermediate state or not
 
     Examples:
 
@@ -74,61 +76,60 @@ class DeformableDetrConfig(PreTrainedConfig):
         "num_attention_heads": "encoder_attention_heads",
     }
 
-    def __init__(
-        self,
-        backbone_config=None,
-        num_channels=3,
-        num_queries=300,
-        max_position_embeddings=1024,
-        encoder_layers=6,
-        encoder_ffn_dim=1024,
-        encoder_attention_heads=8,
-        decoder_layers=6,
-        decoder_ffn_dim=1024,
-        decoder_attention_heads=8,
-        encoder_layerdrop=0.0,
-        is_encoder_decoder=True,
-        activation_function="relu",
-        d_model=256,
-        dropout=0.1,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        init_std=0.02,
-        init_xavier_std=1.0,
-        auxiliary_loss=False,
-        position_embedding_type="sine",
-        dilation=False,
-        num_feature_levels=4,
-        encoder_n_points=4,
-        decoder_n_points=4,
-        two_stage=False,
-        two_stage_num_proposals=300,
-        with_box_refine=False,
-        class_cost=1,
-        bbox_cost=5,
-        giou_cost=2,
-        mask_loss_coefficient=1,
-        dice_loss_coefficient=1,
-        bbox_loss_coefficient=5,
-        giou_loss_coefficient=2,
-        eos_coefficient=0.1,
-        focal_alpha=0.25,
-        disable_custom_kernels=False,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
+    backbone_config: dict | PreTrainedConfig | None = None
+    num_channels: int = 3
+    num_queries: int = 300
+    max_position_embeddings: int = 1024
+    encoder_layers: int = 6
+    encoder_ffn_dim: int = 1024
+    encoder_attention_heads: int = 8
+    decoder_layers: int = 6
+    decoder_ffn_dim: int = 1024
+    decoder_attention_heads: int = 8
+    encoder_layerdrop: float | int = 0.0
+    is_encoder_decoder: bool = True
+    activation_function: str = "relu"
+    d_model: int = 256
+    dropout: float | int = 0.1
+    attention_dropout: float | int = 0.0
+    activation_dropout: float | int = 0.0
+    init_std: float = 0.02
+    init_xavier_std: float = 1.0
+    return_intermediate: bool = True
+    auxiliary_loss: bool = False
+    position_embedding_type: str = "sine"
+    dilation: bool = False
+    num_feature_levels: int = 4
+    encoder_n_points: int = 4
+    decoder_n_points: int = 4
+    two_stage: bool = False
+    two_stage_num_proposals: int = 300
+    with_box_refine: bool = False
+    class_cost: int = 1
+    bbox_cost: int = 5
+    giou_cost: int = 2
+    mask_loss_coefficient: int = 1
+    dice_loss_coefficient: int = 1
+    bbox_loss_coefficient: int = 5
+    giou_loss_coefficient: int = 2
+    eos_coefficient: float = 0.1
+    focal_alpha: float = 0.25
+    disable_custom_kernels: bool = False
+    tie_word_embeddings: bool = True
+
+    def __post_init__(self, **kwargs):
         # Init timm backbone with hardcoded values for BC
         timm_default_kwargs = {
             "num_channels": 3,
             "features_only": True,
             "use_pretrained_backbone": False,
-            "out_indices": [2, 3, 4] if num_feature_levels > 1 else [4],
+            "out_indices": [2, 3, 4] if self.num_feature_levels > 1 else [4],
         }
-        if dilation:
+        if self.dilation:
             timm_default_kwargs["output_stride"] = 16
 
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_backbone="resnet50",
             default_config_type="resnet50",
             default_config_kwargs={"out_features": ["stage4"]},
@@ -136,51 +137,12 @@ class DeformableDetrConfig(PreTrainedConfig):
             **kwargs,
         )
 
-        self.backbone_config = backbone_config
-        self.num_channels = num_channels
-        self.num_queries = num_queries
-        self.max_position_embeddings = max_position_embeddings
-        self.d_model = d_model
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.encoder_layers = encoder_layers
-        self.encoder_attention_heads = encoder_attention_heads
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.activation_function = activation_function
-        self.init_std = init_std
-        self.init_xavier_std = init_xavier_std
-        self.encoder_layerdrop = encoder_layerdrop
-        self.auxiliary_loss = auxiliary_loss
-        self.position_embedding_type = position_embedding_type
-        self.dilation = dilation
-        # deformable attributes
-        self.num_feature_levels = num_feature_levels
-        self.encoder_n_points = encoder_n_points
-        self.decoder_n_points = decoder_n_points
-        self.two_stage = two_stage
-        self.two_stage_num_proposals = two_stage_num_proposals
-        self.with_box_refine = with_box_refine
-        if two_stage is True and with_box_refine is False:
-            raise ValueError("If two_stage is True, with_box_refine must be True.")
-        # Hungarian matcher
-        self.class_cost = class_cost
-        self.bbox_cost = bbox_cost
-        self.giou_cost = giou_cost
-        # Loss coefficients
-        self.mask_loss_coefficient = mask_loss_coefficient
-        self.dice_loss_coefficient = dice_loss_coefficient
-        self.bbox_loss_coefficient = bbox_loss_coefficient
-        self.giou_loss_coefficient = giou_loss_coefficient
-        self.eos_coefficient = eos_coefficient
-        self.focal_alpha = focal_alpha
-        self.disable_custom_kernels = disable_custom_kernels
-        self.tie_word_embeddings = tie_word_embeddings
+        super().__post_init__(**kwargs)
 
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.two_stage is True and self.with_box_refine is False:
+            raise ValueError("If two_stage is True, with_box_refine must be True.")
 
 
 __all__ = ["DeformableDetrConfig"]

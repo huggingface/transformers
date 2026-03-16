@@ -646,7 +646,7 @@ class WeightTransform:
         - saving: the tensors are already torch.Tensor instances (the existing model weights)
         """
         collected_tensors = {}
-        for key in set(self.collected_tensors.keys()):
+        for key in list(self.collected_tensors.keys()):
             # Remove from internal attribute
             tensors = self.collected_tensors.pop(key)
             # Async loading
@@ -791,7 +791,10 @@ def _materialize_copy(tensor: torch.Tensor, device=None, dtype=None) -> torch.Te
 
 
 def spawn_materialize(
-    thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, device=None, dtype=None
+    thread_pool: ThreadPoolExecutor | None,
+    tensor: torch.Tensor,
+    device=None,
+    dtype=None,
 ) -> Future | Callable:
     """Materialize a tensor from file asynchronously if `thread_pool` is provided, or return a Callable that will
     load the tensor synchronously when called."""
@@ -1110,8 +1113,15 @@ def convert_and_load_state_dict_in_model(
     )
 
     # We use threading by default, if not explicitly deactivated via env variable. If we have to offload,
-    # we cannot use it either to control the memory as we are under memory constraints, so we need to be sequential
-    if is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD") or "disk" in device_map.values():
+    # we cannot use it either to control the memory as we are under memory constraints, so we need to be sequential.
+    # When doing on-the-fly quantization, we also use sync loading to avoid worker threads loading full-precision
+    # tensors to GPU faster than the main thread can quantize them, which would cause a large memory spike.
+    has_on_the_fly_quantization = hf_quantizer is not None and not hf_quantizer.pre_quantized
+    if (
+        is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD")
+        or "disk" in device_map.values()
+        or has_on_the_fly_quantization
+    ):
         thread_pool = None
     else:
         thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
@@ -1153,18 +1163,26 @@ def convert_and_load_state_dict_in_model(
                 source_pattern = original_key
 
             # 3. Handle dtype casting
-            if (
+            needs_quantization = (
                 hf_quantizer
                 and not hf_quantizer.pre_quantized
                 and hf_quantizer.param_needs_quantization(model, renamed_key)
-            ):
+            )
+            if needs_quantization:
                 mapping.quantization_operation = hf_quantizer.get_quantize_ops()
 
             _dtype = dtype
             if (
                 hf_quantizer
                 and hf_quantizer.pre_quantized
-                and (original_key != renamed_key or not tensor.get_dtype().startswith(("F", "BF")))
+                and (
+                    original_key != renamed_key
+                    or not (
+                        tensor.get_dtype().startswith(("F", "BF"))
+                        if hasattr(tensor, "get_dtype")
+                        else tensor.is_floating_point()
+                    )
+                )
             ):
                 # if the key was renamed as it is not available in the state dict otherwise, it means that we are deserializing it,
                 # so we need to make sure to load the tensor with the same dtype from the checkpoint
@@ -1179,7 +1197,7 @@ def convert_and_load_state_dict_in_model(
 
             # 4. Handle TP sharding or device_map placement
             future_or_tensor = None
-            if device_mesh:
+            if device_mesh and tp_plan:
                 if matched_tp_pattern := tp_plan_alt.search(renamed_key):
                     matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
                     if getattr(mapping, "distributed_operation", None) is None:
