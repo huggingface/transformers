@@ -38,7 +38,7 @@ if is_vision_available():
 
 
 if is_torchvision_available():
-    from transformers import VitPoseImageProcessorFast
+    from transformers import VitPoseImageProcessor
 
 
 class VitPoseModelTester:
@@ -233,7 +233,7 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            VitPoseImageProcessorFast.from_pretrained("usyd-community/vitpose-base-simple")
+            VitPoseImageProcessor.from_pretrained("usyd-community/vitpose-base-simple")
             if is_vision_available()
             else None
         )

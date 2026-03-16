@@ -19,7 +19,7 @@ import requests
 from PIL import Image
 
 from transformers import TextNetConfig
-from transformers.models.textnet.image_processing_textnet import TextNetImageProcessor
+from transformers.models.textnet.image_processing_textnet import TextNetImageProcessorPil
 from transformers.testing_utils import (
     require_torch,
     require_vision,
@@ -294,7 +294,7 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 class TextNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        processor = TextNetImageProcessor.from_pretrained("czczup/textnet-base")
+        processor = TextNetImageProcessorPil.from_pretrained("czczup/textnet-base")
         model = TextNetModel.from_pretrained("czczup/textnet-base").to(torch_device)
 
         # prepare image
