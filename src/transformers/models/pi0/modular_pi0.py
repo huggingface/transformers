@@ -504,16 +504,16 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         **kwargs,
     ) -> CausalLMOutputWithPast:
         r"""
-        actions (`torch.Tensor`, *optional*):
-            Input actions that need to be predicted. Used only when training to compiute loss.
+        state (`torch.Tensor`, *optional*):
+            Current robot state.
+        noise (`torch.Tensor`, *optional*):
+            Random noise at current timestep that needs to be denoised
+        timestep (`torch.Tensor`, *optional*):
+            Current denoising timestep.
         pixel_attention_mask (`torch.Tensor`, *optional*):
             The mask indicating padded positions in the input image.
-        state  (`torch.Tensor`, *optional*):
-            Current robot state.
-        noise  (`torch.Tensor`, *optional*):
-            Random noise at current timestep that needs to be denoised
-        timestep  (`torch.Tensor`, *optional*):
-            Current denoising timestep.
+        actions (`torch.Tensor`, *optional*):
+            Input actions that need to be predicted. Used only when training to compiute loss.
         """
         batch_size = state.shape[0]
 

@@ -361,4 +361,3 @@ class AutoImageProcessorTest(unittest.TestCase):
         finally:
             if CustomConfig in IMAGE_PROCESSOR_MAPPING._extra_content:
                 del IMAGE_PROCESSOR_MAPPING._extra_content[CustomConfig]
-
