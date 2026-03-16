@@ -83,7 +83,7 @@ def flatten(arr: list):
     res = []
     if len(arr) > 0:
         for sub_arr in arr:
-            if isinstance(arr[0], (list, tuple)):
+            if isinstance(sub_arr, (list, tuple)):
                 res.extend(flatten(sub_arr))
             else:
                 res.append(sub_arr)
