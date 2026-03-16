@@ -2969,6 +2969,8 @@ class GenerationMixin(ContinuousMixin):
             cache_position.unsqueeze(0).expand(batch_size, 1) if model_kwargs.get("position_ids") is not None else None
         )
 
+        # StaticCache updates in-place (index_copy_), so the object reference never changes.
+        # We grab it once and reuse it — no need to re-read outputs.past_key_values each step.
         past_key_values = model_kwargs["past_key_values"]
         attention_mask = model_kwargs.get("attention_mask")
 
@@ -2997,8 +2999,6 @@ class GenerationMixin(ContinuousMixin):
             }
             with self._optimize_model_for_decode():
                 outputs = model_forward(**model_inputs, return_dict=True)
-
-            past_key_values = outputs.past_key_values
 
             # Copy is needed to avoid keeping a hanging ref to outputs.logits
             next_token_logits = outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=device)
