@@ -18,7 +18,7 @@ def _prepare_varlen_fa(
         module.config._attn_implementation
     )
 
-    # .update changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
+    # .update changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [seqlen_kv, num_kv_heads, head_dim]
     k, v = cache.update(
         key_states=k,
         value_states=v,
@@ -28,10 +28,17 @@ def _prepare_varlen_fa(
     )
     k = k.contiguous()
     v = v.contiguous()
-    # [1, num_q_heads, seqlen_q, head_dim] to [1, seqlen_q, num_q_heads, head_dim] (we reshape during the base fa forward)
-    q = q.transpose(1, 2).contiguous()
 
-    # Prepare relevant kwargs
+    # [1, num_q_heads, seqlen_q, head_dim] to [seqlen_q, num_q_heads, head_dim]
+    q = q.transpose(1, 2).squeeze(0).contiguous()
+
+    # Prepare relevant args and kwargs
+    flash_args = (
+        q,
+        k,
+        v,
+    )
+
     flash_kwargs = process_flash_kwargs_fn(
         query_length=42,  # arbitrary just needs to be >1 to avoid `top_left_mask` workarounds
         flash_fn_name="flash_varlen_fn",
@@ -41,11 +48,6 @@ def _prepare_varlen_fa(
         "cu_seqlens_q": cu_seq_lens_q.to(torch.int32),
         "cu_seqlens_k": cu_seq_lens_k.to(torch.int32),
     }
-    flash_args = (
-        q,
-        k,
-        v,
-    )
 
     return flash_attn_varlen_func, flash_args, flash_kwargs
 
@@ -81,14 +83,7 @@ def _prepare_kvcache_fa(
     batch_size = k.size(0)
     cache_seq_lens = cu_seq_lens_k[1 : batch_size + 1] - cu_seq_lens_k[:batch_size] - 1
 
-    # Prepare relevant kwargs
-    flash_kwargs = process_flash_kwargs_fn(
-        query_length=42,  # arbitrary just needs to be >1 to avoid `top_left_mask` workarounds
-        block_table=block_table[group_idx],
-        flash_fn_name="flash_with_kvcache_fn",
-        **kwargs,
-    )
-    flash_kwargs = flash_kwargs | {"cache_seqlens": cache_seq_lens.to(torch.int32)}
+    # Prepare relevant args and kwargs
     flash_args = (
         q,
         k_cache,
@@ -96,6 +91,14 @@ def _prepare_kvcache_fa(
         k,
         v,
     )
+
+    flash_kwargs = process_flash_kwargs_fn(
+        query_length=42,  # arbitrary just needs to be >1 to avoid `top_left_mask` workarounds
+        block_table=block_table[group_idx],
+        flash_fn_name="flash_with_kvcache_fn",
+        **kwargs,
+    )
+    flash_kwargs = flash_kwargs | {"cache_seqlens": cache_seq_lens.to(torch.int32)}
 
     return flash_attn_with_kvcache, flash_args, flash_kwargs
 

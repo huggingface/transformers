@@ -392,22 +392,6 @@ class PagedAttentionCache:
         # Return the new KV values
         return key_states_with_cache, value_states_with_cache
 
-    def get_block_table_key(self, flash_attn_with_kvcache_fn: Any) -> str:
-        """A function to get the name of the block table key for the given flash_attn_with_kvcache_fn. The function's
-        signature is only inspected once. This is necessary because different version of flash have different names for
-        the block table key."""
-        if self._block_table_key is None:
-            kwarg_names = inspect.signature(flash_attn_with_kvcache_fn).parameters.keys()
-            if "block_table" in kwarg_names:
-                self._block_table_key = "block_table"
-            elif "page_table" in kwarg_names:
-                self._block_table_key = "page_table"
-            else:
-                raise ValueError(
-                    f"flash_attn_with_kvcache_fn does not have a block_table or page_table argument: {inspect.signature(flash_attn_with_kvcache_fn)}"
-                )
-        return self._block_table_key
-
     def search_prefix_match(self, request_id: str, prompt_ids: list[int]) -> int:
         """Searches for a prefix match in the cache for the given (prompts_ids). If one is found, we reference the
         matching blocks in the (request_id), increase the reference count of the blocks and return the number of blocks
