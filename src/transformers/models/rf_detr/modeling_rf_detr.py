@@ -2013,21 +2013,21 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
     _checkpoint_conversion_mapping = {
         # rf_detr (RfDetrForObjectDetection)
         # backbone RfDetrConvEncoder
-        "backbone.0.encoder.encoder": "rf_detr.model.backbone.backbone",
-        "backbone.0.projector": "rf_detr.model.backbone.projector",
+        "backbone.0.encoder.encoder": "model.model.backbone.backbone",
+        "backbone.0.projector": "model.model.backbone.projector",
         # RfDetrDecoder
-        "transformer.decoder": "rf_detr.model.decoder",
+        "transformer.decoder": "model.model.decoder",
         # RfDetrForObjectDetection
-        "transformer.enc_out_bbox_embed": "rf_detr.model.enc_out_bbox_embed",
+        "transformer.enc_out_bbox_embed": "model.model.enc_out_bbox_embed",
         # Regex mappings for variable length strings
-        r"transformer.enc_output.(\d+)": r"rf_detr.model.enc_output.\1",
-        r"transformer.enc_output_norm.(\d+)": r"rf_detr.model.enc_output_norm.\1",
-        r"transformer.enc_out_class_embed.(\d+)": r"rf_detr.model.enc_out_class_embed.\1",
-        r"refpoint_embed.weight$": r"rf_detr.model.reference_point_embed.weight",
+        r"transformer.enc_output.(\d+)": r"model.model.enc_output.\1",
+        r"transformer.enc_output_norm.(\d+)": r"model.model.enc_output_norm.\1",
+        r"transformer.enc_out_class_embed.(\d+)": r"model.model.enc_out_class_embed.\1",
+        r"refpoint_embed.weight$": r"model.model.reference_point_embed.weight",
         # Regex mappings for variable length strings
-        r"^bbox_embed.layers": "rf_detr.bbox_embed.layers",
-        r"^class_embed.(weight|bias)": r"rf_detr.class_embed.\1",
-        r"^query_feat.(weight|bias)": r"rf_detr.model.query_feat.\1",
+        r"^bbox_embed.layers": "model.model.bbox_embed.layers",
+        r"^class_embed.(weight|bias)": r"model.model.class_embed.\1",
+        r"^query_feat.(weight|bias)": r"model.model.query_feat.\1",
         # segmentation head (specific rules first)
         r"segmentation_head.query_features_block.layers.0": "query_features_block.mlp.fc1",
         r"segmentation_head.query_features_block.layers.2": "query_features_block.mlp.fc2",
@@ -2045,7 +2045,7 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
     def __init__(self, config: RfDetrConfig):
         super().__init__(config)
 
-        self.rf_detr = RfDetrForObjectDetection(config)
+        self.model = RfDetrForObjectDetection(config)
 
         num_blocks = config.decoder_layers
         self.downsample_ratio = config.mask_downsample_ratio
@@ -2129,7 +2129,7 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         image_size = pixel_values.shape[-2:]
 
         # Step 1.
-        outputs = self.rf_detr.model(pixel_values, pixel_mask=pixel_mask, **kwargs)
+        outputs = self.model.model(pixel_values, pixel_mask=pixel_mask, **kwargs)
 
         spatial_features = outputs.backbone_features
         last_hidden_states = outputs.last_hidden_state
@@ -2137,13 +2137,11 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         enc_outputs_class = outputs.enc_outputs_class
 
         # Step 2.
-        enc_outputs_class_logits = self.rf_detr.predict_encoder_class_logits(enc_outputs_class)
+        enc_outputs_class_logits = self.model.predict_encoder_class_logits(enc_outputs_class)
         enc_outputs_masks = self.segmentation_head(spatial_features, enc_outputs_class, image_size, skip_blocks=True)
 
         # Step 3.
-        logits, pred_boxes = self.rf_detr.predict_class_and_boxes(
-            last_hidden_states, intermediate_reference_points[-1]
-        )
+        logits, pred_boxes = self.model.predict_class_and_boxes(last_hidden_states, intermediate_reference_points[-1])
 
         # Step 4.
         outputs_masks = self.segmentation_head(spatial_features, outputs.intermediate_hidden_states, image_size)
@@ -2153,7 +2151,7 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         if labels is not None:
             outputs_class, outputs_coord = None, None
             if self.config.auxiliary_loss:
-                outputs_class, outputs_coord = self.rf_detr.predict_class_and_boxes(
+                outputs_class, outputs_coord = self.model.predict_class_and_boxes(
                     outputs.intermediate_hidden_states, intermediate_reference_points
                 )
             loss, loss_dict, auxiliary_outputs = self.loss_function(
