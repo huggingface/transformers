@@ -30,6 +30,7 @@ from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_
 from ...image_utils import SizeDict
 from ...utils import auto_docstring, is_cv2_available, requires_backends
 from ...utils.generic import TensorType
+from ...utils.import_utils import requires
 from .image_processing_pp_ocrv5_server_det import PPOCRV5ServerDetImageProcessorKwargs
 
 
@@ -38,6 +39,7 @@ if is_cv2_available():
 
 
 @auto_docstring
+@requires(backends=("torch",))
 class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
     resample = 2
     image_mean = [0.406, 0.456, 0.485]
@@ -69,8 +71,6 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        requires_backends(self, ["torch"])
-
         target_sizes = []
 
         # Group images by their original spatial shape to enable batched resizing (optimization for efficiency)

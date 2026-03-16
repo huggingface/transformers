@@ -45,6 +45,7 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.generic import TensorType
+from ...utils.import_utils import requires
 from ..auto import AutoConfig
 
 
@@ -148,6 +149,7 @@ class PPOCRV5ServerDetImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
+@requires(backends=("torch",))
 class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
     resample = 2
     image_mean = [0.406, 0.456, 0.485]
@@ -179,8 +181,6 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        requires_backends(self, ["torch"])
-
         target_sizes = []
 
         # Group images by their original spatial shape to enable batched resizing (optimization for efficiency)
@@ -771,11 +771,12 @@ class PPOCRV5ServerDetSegmentationHead(nn.Module):
 
     def __init__(
         self,
-        in_channels: int,
-        kernel_list: list[int] = [3, 2, 2],
+        config: PPOCRV5ServerDetConfig,
     ):
         super().__init__()
 
+        in_channels = config.neck_out_channels
+        kernel_list = config.kernel_list
         self.conv_down = PPOCRV5ServerDetConvBatchnormLayer(
             in_channels=in_channels,
             out_channels=in_channels // 4,
@@ -846,9 +847,7 @@ class PPOCRV5ServerDetHead(nn.Module):
 
     def __init__(self, config: PPOCRV5ServerDetConfig):
         super().__init__()
-        self.binarize_head = PPOCRV5ServerDetSegmentationHead(
-            in_channels=config.neck_out_channels, kernel_list=config.kernel_list
-        )
+        self.binarize_head = PPOCRV5ServerDetSegmentationHead(config)
         self.upsample_convolution = nn.Upsample(scale_factor=config.scale_factor, mode=config.interpolate_mode)
 
         self.local_refinement_module = PPOCRV5ServerDetLocalModule(
