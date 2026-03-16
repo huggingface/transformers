@@ -126,6 +126,28 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns=r"timm_model.\1",
             )
         ],
+        "pi0": [
+            WeightRenaming(source_patterns=r"state_proj", target_patterns="embed_action_time.state_proj"),
+            WeightRenaming(source_patterns=r"action_in_proj", target_patterns="embed_action_time.action_in_proj"),
+            WeightRenaming(
+                source_patterns=r"action_time_mlp_in", target_patterns="embed_action_time.action_time_mlp_in"
+            ),
+            WeightRenaming(
+                source_patterns=r"action_time_mlp_out", target_patterns="embed_action_time.action_time_mlp_out"
+            ),
+            WeightRenaming(source_patterns=r"^paligemma_with_expert.paligemma.model", target_patterns="model.vlm"),
+            WeightRenaming(source_patterns=r"^paligemma_with_expert.gemma_expert.model", target_patterns="model.dit"),
+            # Weight on the hub have only `lm_head` saved, but PI0 doesn't create any lm-head initialized!
+            WeightRenaming(
+                source_patterns=r"^paligemma_with_expert.gemma_expert.lm_head",
+                target_patterns="model.dit.embed_tokens",
+            ),
+            WeightRenaming(
+                source_patterns=r"^paligemma_with_expert.paligemma.lm_head",
+                target_patterns="model.vlm.language_model.embed_tokens",
+            ),
+        ],
+        ],
         "chmv2": [WeightRenaming(r"backbone.layer.", r"backbone.model.layer.")],
         "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
         "dinov3_vit": [WeightRenaming(r"(?<!model\.)layer.", r"model.layer.")],

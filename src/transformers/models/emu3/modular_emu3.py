@@ -879,7 +879,9 @@ class Emu3PreTrainedModel(ChameleonPreTrainedModel):
 
 
 class Emu3TextModel(LlamaModel, Emu3PreTrainedModel):
-    def __init__(self, config: Emu3Config):
+    config: Emu3TextConfig
+
+    def __init__(self, config: Emu3TextConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
             [Emu3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]

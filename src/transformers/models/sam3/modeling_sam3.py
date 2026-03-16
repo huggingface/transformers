@@ -792,6 +792,7 @@ class Sam3PreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Sam3ViTModel(Sam3PreTrainedModel):
+    config: Sam3ViTConfig
     _can_record_outputs = {
         "hidden_states": Sam3ViTLayer,
         "attentions": Sam3ViTRoPEAttention,
