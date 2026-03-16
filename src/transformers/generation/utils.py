@@ -2519,6 +2519,12 @@ class GenerationMixin(ContinuousMixin):
             generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
         )
 
+        # Auto-dispatch to _static_sample when StaticCache is detected (issue #44742).
+        # Only activates when no custom_generate was explicitly provided by the caller.
+        if custom_generate is None and generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
+            if isinstance(model_kwargs.get("past_key_values"), StaticCache):
+                decoding_method = getattr(type(self), "_static_sample")
+
         if self.device.type != input_ids.device.type:
             warnings.warn(
                 "You are calling .generate() with the `input_ids` being on a device type different"
