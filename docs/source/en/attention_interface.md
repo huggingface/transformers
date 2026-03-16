@@ -210,3 +210,35 @@ def custom_attention_mask(
 The `mask_function` argument is a `Callable` that mimics PyTorch's [mask_mod](https://pytorch.org/blog/flexattention/) functions. It takes 4 indices as input and returns a boolean. This boolean indicates if the position contributes to the attention computation.
 
 Use this [workaround](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/executorch.py) for torch export if `mask_function` fails to create a mask.
+
+## Bidirectional attention
+
+Decoder-only models use causal (unidirectional) attention by default, where each token only attends to itself and previous tokens. Set `is_causal=False` to switch to bidirectional attention, where every token attends to every other token. This lets you use decoder-only models as text encoders, for example, to generate embeddings.
+
+Set `is_causal=False` in the model config to make bidirectional attention the default for every forward pass.
+
+```py
+from transformers import AutoModel, AutoConfig
+
+config = AutoConfig.from_pretrained("meta-llama/Llama-3.2-1B")
+config.is_causal = False
+
+model = AutoModel.from_pretrained("meta-llama/Llama-3.2-1B", config=config)
+
+# all forward passes now use bidirectional attention
+outputs = model(**inputs)
+```
+
+Pass `is_causal` in the forward call instead of the model config to switch between causal and bidirectional attention without loading the model twice. The kwarg temporarily overrides the config and is restored after the call.
+
+```py
+from transformers import AutoModel
+
+model = AutoModel.from_pretrained("meta-llama/Llama-3.2-1B")
+
+# run with bidirectional attention
+outputs = model(**inputs, is_causal=False)
+
+# run with default causal attention
+outputs = model(**inputs)
+```
