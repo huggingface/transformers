@@ -105,7 +105,7 @@ class MultiHeadAttention(nn.Module):
         attention_mask=None,
         use_cache=False,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         batch_size = q.shape[0]
 
@@ -118,7 +118,7 @@ class MultiHeadAttention(nn.Module):
         v = self.split_into_heads(v, batch_size)
 
         if layer_past is not None:
-            k, v = layer_past.update(k, v, self.layer_idx, {"cache_position": cache_position})
+            k, v = layer_past.update(k, v, self.layer_idx)
 
         output = scaled_dot_product_attention(q, k, v, mask, attention_mask)
         scaled_attention = output[0].permute([0, 2, 1, 3])
@@ -153,7 +153,7 @@ class EncoderLayer(nn.Module):
         attention_mask=None,
         use_cache=False,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         normed = self.layernorm1(x)
         attn_outputs = self.multi_head_attention(
@@ -165,7 +165,6 @@ class EncoderLayer(nn.Module):
             attention_mask=attention_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         attn_output = attn_outputs[0]
         attn_output = self.dropout1(attn_output)
@@ -238,7 +237,6 @@ class CTRLModel(CTRLPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,  # NOOP kwargs, for now
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPast:
         r"""
@@ -346,7 +344,6 @@ class CTRLModel(CTRLPreTrainedModel):
                 attention_mask=attention_mask,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
             hidden_states = outputs[0]
             if output_attentions:
@@ -400,7 +397,6 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple[torch.Tensor] | CausalLMOutputWithPast:
@@ -448,7 +444,6 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         hidden_states = transformer_outputs[0]
