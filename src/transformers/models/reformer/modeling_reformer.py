@@ -1983,7 +1983,7 @@ class ReformerModel(ReformerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -2209,7 +2209,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
             config.vocab_size - 1]`. All labels set to `-100` are ignored (masked), the loss is only computed for
             labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         reformer_outputs = self.reformer(
             input_ids,
@@ -2375,7 +2375,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         >>> loss = round(outputs.loss.item(), 2)
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         reformer_outputs = self.reformer(
             input_ids,
@@ -2492,7 +2492,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         >>> loss = model(**inputs, labels=labels).loss
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.reformer(
             input_ids,
@@ -2609,7 +2609,7 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
 
             For more information, see `num_hashes` in [`ReformerConfig`].
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         reformer_outputs = self.reformer(
             input_ids,

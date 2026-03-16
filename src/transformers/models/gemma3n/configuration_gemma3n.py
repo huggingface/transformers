@@ -19,10 +19,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Any
 
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, is_timm_available, logging, requires_backends
 
 
@@ -34,10 +35,9 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
+@strict(accept_kwargs=True)
 class Gemma3nTextConfig(PreTrainedConfig):
     r"""
-    query_pre_attn_scalar (`float`, *optional*, defaults to 256):
-        scaling factor used on the attention scores
     vocab_size_per_layer_input (`int`, *optional*, defaults to 262144):
         Vocabulary size of the per-layer text embeddings that augment the standard embeddings.
     hidden_size_per_layer_input (`int`, *optional*, defaults to 256):
@@ -95,110 +95,80 @@ class Gemma3nTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-    default_theta = {"global": 1_000_000.0, "local": 10_000.0}
 
-    def __init__(
-        self,
-        vocab_size: int = 262_400,
-        vocab_size_per_layer_input: int = 262_144,
-        hidden_size: int = 2048,
-        hidden_size_per_layer_input: int = 256,
-        intermediate_size: int | Sequence[int] = 16_384,
-        num_hidden_layers: int = 35,
-        num_attention_heads: int = 8,
-        num_key_value_heads: int = 2,
-        head_dim: int = 256,
-        hidden_activation: str = "gelu_pytorch_tanh",
-        max_position_embeddings: int = 32_768,
-        initializer_range: float = 0.02,
-        rms_norm_eps: float = 1e-6,
-        use_cache: bool = True,
-        pad_token_id: int = 0,
-        eos_token_id: int = 1,
-        bos_token_id: int = 2,
-        rope_parameters: dict[Literal["sliding_attention", "full_attention"], RopeParameters] | None = None,
-        attention_bias: bool = False,
-        attention_dropout: float = 0.0,
-        sliding_window: int = 512,
-        layer_types: Sequence[str] | None = None,
-        final_logit_softcapping: float = 30.0,
-        altup_active_idx: int = 0,
-        altup_coef_clip: float = 120.0,
-        altup_correct_scale: bool = True,
-        altup_num_inputs: int = 4,
-        num_kv_shared_layers: int = 15,
-        laurel_rank: int = 64,
-        activation_sparsity_pattern: float | Sequence[float] | None = None,
-        tie_word_embeddings: bool | None = True,
-        **kwargs,
-    ):
-        if isinstance(intermediate_size, Sequence) and (intsize_len := len(intermediate_size)) != num_hidden_layers:
+    vocab_size: int = 262_400
+    hidden_size: int = 2048
+    intermediate_size: int | list[int] = 16_384
+    num_hidden_layers: int = 35
+    num_attention_heads: int = 8
+    num_key_value_heads: int = 2
+    head_dim: int = 256
+    hidden_activation: str = "gelu_pytorch_tanh"
+    max_position_embeddings: int = 32_768
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    pad_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 1
+    bos_token_id: int | None = 2
+    tie_word_embeddings: bool = True
+    rope_parameters: dict | None = None
+    attention_bias: bool = False
+    attention_dropout: int | float | None = 0.0
+    sliding_window: int = 512
+    layer_types: list[str] | None = None
+    final_logit_softcapping: float = 30.0
+    default_theta = {"global": 1_000_000.0, "local": 10_000.0}
+    vocab_size_per_layer_input: int = 262_144
+    hidden_size_per_layer_input: int = 256
+    altup_active_idx: int = 0
+    altup_coef_clip: float = 120.0
+    altup_correct_scale: bool = True
+    altup_num_inputs: int = 4
+    num_kv_shared_layers: int = 15
+    laurel_rank: int = 64
+    activation_sparsity_pattern: float | list[float] | None = None
+
+    def __post_init__(self, **kwargs):
+        if (
+            isinstance(self.intermediate_size, Sequence)
+            and (intsize_len := len(self.intermediate_size)) != self.num_hidden_layers
+        ):
             raise ValueError(
                 "intermediate_size must have an explicit intermediate size for every layer or one for all layers. "
-                f"Expected {num_hidden_layers} values but got {intsize_len}."
+                f"Expected {self.num_hidden_layers} values but got {intsize_len}."
             )
-        elif not isinstance(intermediate_size, Sequence):
-            intermediate_size = [intermediate_size] * num_hidden_layers
+        elif not isinstance(self.intermediate_size, Sequence):
+            self.intermediate_size = [self.intermediate_size] * self.num_hidden_layers
 
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.vocab_size = vocab_size
-        self.vocab_size_per_layer_input = vocab_size_per_layer_input
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.head_dim = head_dim
-        self.num_key_value_heads = num_key_value_heads
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.hidden_activation = hidden_activation
-        self.sliding_window = sliding_window
-        self.final_logit_softcapping = final_logit_softcapping
-        self.layer_types = layer_types
-
-        if layer_types is None:
+        if self.layer_types is None:
             self.layer_types = [
                 "full_attention" if (i + 1) % 5 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
             ]
-        else:
-            self.layer_types = layer_types
 
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
+        if self.activation_sparsity_pattern is None:
+            num_sparse_layers = 10 if self.num_hidden_layers > 10 else 0
+            self.activation_sparsity_pattern = [0.95] * num_sparse_layers + [0.0] * (
+                self.num_hidden_layers - num_sparse_layers
+            )
 
-        self.hidden_size_per_layer_input = hidden_size_per_layer_input
-        self.num_kv_shared_layers = num_kv_shared_layers
-
-        self.altup_active_idx = altup_active_idx
-        self.altup_coef_clip = altup_coef_clip
-        self.altup_correct_scale = altup_correct_scale
-        self.altup_num_inputs = altup_num_inputs
-
-        self.laurel_rank = laurel_rank
-
-        if activation_sparsity_pattern is None:
-            num_sparse_layers = 10 if num_hidden_layers > 10 else 0
-            activation_sparsity_pattern = [0.95] * num_sparse_layers + [0.0] * (num_hidden_layers - num_sparse_layers)
-
-        if (len_asp := len(activation_sparsity_pattern)) != num_hidden_layers:
+        if (len_asp := len(self.activation_sparsity_pattern)) != self.num_hidden_layers:
             raise ValueError(
                 "activation_sparsity_pattern must have an explicit activation sparsity value for every layer."
-                f"Expected {num_hidden_layers} values but got {len_asp}."
+                f"Expected {self.num_hidden_layers} values but got {len_asp}."
             )
-        self.activation_sparsity_pattern = activation_sparsity_pattern
-        self.rope_parameters = rope_parameters
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({self.num_attention_heads})."
+            )
+
+    def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
 
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
@@ -225,11 +195,11 @@ class Gemma3nTextConfig(PreTrainedConfig):
 
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.standardize_rope_params()
-        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
 
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
+@strict(accept_kwargs=True)
 class Gemma3nAudioConfig(PreTrainedConfig):
     r"""
     vocab_offset (`int`, *optional*, defaults to 262272):
@@ -301,58 +271,35 @@ class Gemma3nAudioConfig(PreTrainedConfig):
 
     model_type = "gemma3n_audio"
 
-    def __init__(
-        self,
-        vocab_size: int = 128,
-        vocab_offset: int = 262_144 + 128,  # text vocab size + vision vocab size
-        input_feat_size: int = 128,
-        hidden_size: int = 1536,
-        rms_norm_eps: float = 1e-6,
-        gradient_clipping: float = 10_000_000_000.0,
-        conf_attention_chunk_size: int = 12,
-        conf_attention_context_left: int = 13,
-        conf_attention_context_right: int = 0,
-        conf_attention_logit_cap: float = 50.0,
-        conf_num_attention_heads: int = 8,
-        conf_num_hidden_layers: int = 12,
-        conf_conv_kernel_size: int = 5,
-        conf_reduction_factor: int = 4,
-        conf_residual_weight: float = 0.5,
-        sscp_conv_channel_size: tuple[int, int] = (128, 32),
-        sscp_conv_group_norm_eps: float = 1e-3,
-        sscp_conv_kernel_size: tuple[tuple[int, int], tuple[int, int]] = (
-            (3, 3),
-            (3, 3),
-        ),
-        sscp_conv_stride_size: tuple[tuple[int, int], tuple[int, int]] = (
-            (2, 2),
-            (2, 2),
-        ),
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.input_feat_size = input_feat_size
-        self.hidden_size = hidden_size
-        self.rms_norm_eps = rms_norm_eps
-        self.vocab_size = vocab_size
-        self.vocab_offset = vocab_offset
-        self.gradient_clipping = gradient_clipping
-        self.conf_attention_chunk_size = conf_attention_chunk_size
-        self.conf_attention_context_left = conf_attention_context_left
-        self.conf_attention_context_right = conf_attention_context_right
-        self.conf_attention_logit_cap = conf_attention_logit_cap
-        self.conf_num_attention_heads = conf_num_attention_heads
-        self.conf_num_hidden_layers = conf_num_hidden_layers
-        self.conf_conv_kernel_size = conf_conv_kernel_size
-        self.conf_reduction_factor = conf_reduction_factor
-        self.conf_residual_weight = conf_residual_weight
-        self.sscp_conv_channel_size = sscp_conv_channel_size
-        self.sscp_conv_group_norm_eps = sscp_conv_group_norm_eps
-        self.sscp_conv_kernel_size = sscp_conv_kernel_size
-        self.sscp_conv_stride_size = sscp_conv_stride_size
+    vocab_size: int = 128
+    vocab_offset: int = 262_144 + 128  # text vocab size + vision vocab size
+    input_feat_size: int = 128
+    hidden_size: int = 1536
+    rms_norm_eps: float = 1e-6
+    gradient_clipping: float = 10_000_000_000.0
+    conf_attention_chunk_size: int = 12
+    conf_attention_context_left: int = 13
+    conf_attention_context_right: int = 0
+    conf_attention_logit_cap: float = 50.0
+    conf_num_attention_heads: int = 8
+    conf_num_hidden_layers: int = 12
+    conf_conv_kernel_size: int = 5
+    conf_reduction_factor: int = 4
+    conf_residual_weight: float = 0.5
+    sscp_conv_channel_size: list[int] | tuple[int, int] = (128, 32)
+    sscp_conv_group_norm_eps: float = 1e-3
+    sscp_conv_kernel_size: list | tuple[tuple[int, int], tuple[int, int]] = (
+        (3, 3),
+        (3, 3),
+    )
+    sscp_conv_stride_size: list | tuple[tuple[int, int], tuple[int, int]] = (
+        (2, 2),
+        (2, 2),
+    )
 
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
+@strict(accept_kwargs=True)
 class Gemma3nVisionConfig(PreTrainedConfig):
     r"""
     architecture (`str`, *optional*, defaults to `"resnet50"`):
@@ -382,31 +329,15 @@ class Gemma3nVisionConfig(PreTrainedConfig):
     """
 
     model_type = "gemma3n_vision"
+    architecture: str = "mobilenetv5_300m_enc"
 
-    def __init__(
-        self,
-        initializer_range: float = 0.02,
-        do_pooling: bool = False,
-        architecture: str = "mobilenetv5_300m_enc",
-        hidden_size: int = 2048,
-        vocab_size: int = 128,
-        vocab_offset: int = 262_144,
-        rms_norm_eps: float = 1e-06,
-        model_args: dict | None = None,
-        **kwargs,
-    ):
-        self.architecture = architecture
-        self.initializer_range = initializer_range
-        self.do_pooling = do_pooling
-        self.hidden_size = hidden_size
-        self.vocab_size = vocab_size
-        self.vocab_offset = vocab_offset
-        self.rms_norm_eps = rms_norm_eps
-        self.architecture = architecture
-        self.initializer_range = initializer_range
-        self.do_pooling = do_pooling
-        self.model_args = model_args  # named "model_args" for BC with timm
-        super().__init__(**kwargs)
+    initializer_range: float = 0.02
+    do_pooling: bool = False
+    model_args: dict | None = None
+    hidden_size: int = 2048
+    vocab_size: int = 128
+    vocab_offset: int = 262_144
+    rms_norm_eps: float = 1e-06
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any], **kwargs):
@@ -461,6 +392,7 @@ class Gemma3nVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
+@strict(accept_kwargs=True)
 class Gemma3nConfig(PreTrainedConfig):
     r"""
     audio_soft_tokens_per_image (`int`, *optional*, defaults to 188):
@@ -507,56 +439,40 @@ class Gemma3nConfig(PreTrainedConfig):
         "audio_config": Gemma3nAudioConfig,
     }
 
-    def __init__(
-        self,
-        text_config: Gemma3nTextConfig | dict[str, Any] | None = None,
-        vision_config: Gemma3nVisionConfig | dict[str, Any] | None = None,
-        audio_config: Gemma3nAudioConfig | dict[str, Any] | None = None,
-        audio_soft_tokens_per_image: int | None = 188,
-        vision_soft_tokens_per_image: int | None = 256,
-        boi_token_id: int | None = 255_999,
-        eoi_token_id: int | None = 262_144,
-        image_token_id: int | None = 262_145,
-        boa_token_id: int | None = 256_000,
-        eoa_token_id: int | None = 262_272,
-        audio_token_id: int | None = 262_273,
-        initializer_range: float | None = 0.02,
-        tie_word_embeddings: bool | None = True,
-        **kwargs,
-    ):
-        if isinstance(text_config, dict):
-            text_config = Gemma3nTextConfig(**text_config)
-        elif text_config is None:
-            text_config = Gemma3nTextConfig()
-            logger.info("text_config is None. Using default Gemma3nTextConfig.")
+    text_config: Gemma3nTextConfig | dict[str, Any] | None = None
+    vision_config: Gemma3nVisionConfig | dict[str, Any] | None = None
+    audio_config: Gemma3nAudioConfig | dict[str, Any] | None = None
+    audio_soft_tokens_per_image: int | None = 188
+    vision_soft_tokens_per_image: int | None = 256
+    boi_token_id: int | None = 255_999
+    eoi_token_id: int | None = 262_144
+    image_token_id: int | None = 262_145
+    boa_token_id: int | None = 256_000
+    eoa_token_id: int | None = 262_272
+    audio_token_id: int | None = 262_273
+    initializer_range: float | None = 0.02
+    tie_word_embeddings: bool | None = True
 
-        if isinstance(vision_config, dict):
-            vision_config = Gemma3nVisionConfig(**vision_config)
-        elif vision_config is None:
-            vision_config = Gemma3nVisionConfig()
-            logger.info("vision_config is None. Using default Gemma3nVisionConfig.")
+    def __post_init__(self, **kwargs):
+        if self.text_config is None:
+            self.text_config = Gemma3nTextConfig()
+            logger.info("text_config is None, using default Gemma3nTextConfig text config.")
+        elif isinstance(self.text_config, dict):
+            self.text_config = Gemma3nTextConfig(**self.text_config)
 
-        if isinstance(audio_config, dict):
-            audio_config = Gemma3nAudioConfig(**audio_config)
-        elif audio_config is None:
-            audio_config = Gemma3nAudioConfig()
+        if isinstance(self.vision_config, dict):
+            self.vision_config = Gemma3nVisionConfig(**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = Gemma3nVisionConfig()
+            logger.info("vision_config is None, using default Gemma3nVisionConfig vision config.")
+
+        if isinstance(self.audio_config, dict):
+            self.audio_config = Gemma3nAudioConfig(**self.audio_config)
+        elif self.audio_config is None:
+            self.audio_config = Gemma3nAudioConfig()
             logger.info("audio_config is None. Using default Gemma3nAudioConfig.")
 
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.audio_config = audio_config
-
-        self.audio_soft_tokens_per_image = audio_soft_tokens_per_image
-        self.vision_soft_tokens_per_image = vision_soft_tokens_per_image
-        self.boi_token_id = boi_token_id
-        self.eoi_token_id = eoi_token_id
-        self.image_token_id = image_token_id
-        self.boa_token_id = boa_token_id
-        self.eoa_token_id = eoa_token_id
-        self.audio_token_id = audio_token_id
-        self.initializer_range = initializer_range
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Gemma3nAudioConfig", "Gemma3nConfig", "Gemma3nTextConfig", "Gemma3nVisionConfig"]

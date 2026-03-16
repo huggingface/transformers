@@ -18,6 +18,7 @@ import tempfile
 import unittest
 
 import pytest
+from huggingface_hub.errors import StrictDataclassClassValidationError
 from parameterized import parameterized
 from pytest import mark
 
@@ -350,7 +351,7 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
 
     def test_config_requires_mamba_or_attention_layers(self):
         """Ensure we can't create a config with disallowed layers."""
-        with pytest.raises(ValueError):
+        with pytest.raises(StrictDataclassClassValidationError):
             GraniteMoeHybridConfig(layer_types=["not allowed!"])
 
 
