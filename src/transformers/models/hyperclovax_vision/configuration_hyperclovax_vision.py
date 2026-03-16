@@ -79,9 +79,6 @@ class HyperClovaXConfig(PretrainedConfig):
                 Whether to include a learnable bias term in the query, key, value, and output projection layers.
             attention_dropout (`float`, *optional*, defaults to 0.0):
                 Dropout probability applied to attention weights.
-            mlp_bias (`bool`, *optional*, defaults to `False`):
-                Whether to include a learnable bias term in the MLP up-projection, gate-projection, and
-                down-projection layers.
             head_dim (`int | None`, *optional*):
                 Dimension of each attention head. Defaults to `hidden_size // num_attention_heads`.
             embedding_multiplier (`float`, *optional*, defaults to 1.0):
@@ -226,9 +223,6 @@ class HCXVisionConfig(PretrainedConfig):
             Configuration for the text (LLM) component. Defaults to a standard [`HyperClovaXConfig`].
         vision_config (`dict` or [`Qwen2_5_VLVisionConfig`], *optional*):
             Configuration for the vision encoder component (Qwen2.5-VL ViT).
-        use_nth_layer (`int`, *optional*, defaults to -2):
-            Index of the vision encoder layer whose features are used as input to the projector.
-            Negative indices count from the end (e.g., -2 = second-to-last layer).
         img_start_id (`int`, *optional*, defaults to 128060):
             Token ID used as a placeholder for image content in the input token sequence.
             Each image position in the text should contain this token ID. Also accessible as
@@ -236,42 +230,6 @@ class HCXVisionConfig(PretrainedConfig):
         video_start_id (`int`, *optional*, defaults to 128061):
             Token ID used as a placeholder for video content in the input token sequence.
             Also accessible as `video_token_id`.
-        freeze_encoder (`bool`, *optional*, defaults to `False`):
-            If `True`, the vision encoder weights are frozen during training.
-        freeze_decoder (`bool`, *optional*, defaults to `False`):
-            If `True`, the language model weights are frozen during training.
-        freeze_mm_projector (`bool`, *optional*, defaults to `False`):
-            If `True`, the multimodal projector weights are frozen during training.
-        anyres (`bool`, *optional*, defaults to `False`):
-            If `True`, enables any-resolution image processing where images are divided into
-            variable-size grids based on their aspect ratio to minimize spatial information loss.
-        unpad (`bool`, *optional*, defaults to `False`):
-            If `True`, removes padding visual tokens from any-resolution processed features
-            before passing to the language model, reducing unnecessary computation.
-        max_num_grids (`int`, *optional*, defaults to -1):
-            Maximum number of grid cells allowed when `anyres=True`. -1 means no limit.
-        num_queries_vis_abstractor (`int`, *optional*, defaults to -1):
-            Number of visual query tokens per grid for the CAbstractor projector. -1 means
-            not used (CAbstractor not active).
-        video_num_queries_fast (`int`, *optional*):
-            Number of visual query tokens for fast (sub-sampled) video frames.
-        video_num_queries_slow (`int`, *optional*):
-            Number of visual query tokens for slow (full-resolution) video frames in SlowFast mode.
-        video_first_last_frames_slows (`bool`, *optional*):
-            If `True`, applies slow (full-resolution) processing only to the first and last frames.
-        video_max_num_frames (`int`, *optional*):
-            Maximum number of video frames to process. Frames beyond this limit are sub-sampled.
-        ignore_index (`int`, *optional*, defaults to -100):
-            Label index to ignore in the cross-entropy loss computation. Used to mask visual token
-            positions in the labels tensor.
-        proj_pos_emb (`bool`, *optional*, defaults to `True`):
-            If `True`, learnable positional embeddings are added within the multimodal projector.
-        proj_prenorm (`bool`, *optional*, defaults to `False`):
-            If `True`, applies layer normalization before the multimodal projector.
-        use_1x1_grid (`bool`, *optional*, defaults to `False`):
-            If `True`, includes a 1×1 grid (single patch) as a possible resolution in anyres mode.
-        possible_resolutions (`list`, *optional*, defaults to `[]`):
-            Pre-computed list of `[height, width]` resolution pairs for anyres processing.
 
     Example:
 
@@ -297,25 +255,8 @@ class HCXVisionConfig(PretrainedConfig):
         self,
         text_config: AutoConfig | dict | None = None,
         vision_config: AutoConfig | dict | None = None,
-        use_nth_layer: int = -2,
         img_start_id: int = 128060,
         video_start_id: int = 128061,
-        freeze_encoder: bool = False,
-        freeze_decoder: bool = False,
-        freeze_mm_projector: bool = False,
-        anyres: bool = False,
-        unpad: bool = False,
-        max_num_grids: int = -1,
-        num_queries_vis_abstractor: int = -1,
-        video_num_queries_fast: int | None = None,
-        video_num_queries_slow: int | None = None,
-        video_first_last_frames_slows: bool | None = None,
-        video_max_num_frames: int | None = None,
-        ignore_index: int = -100,
-        proj_pos_emb: bool = True,
-        proj_prenorm: bool = False,
-        use_1x1_grid: bool = False,
-        possible_resolutions: list | None = None,
         **kwargs,
     ):
         if isinstance(text_config, dict):
@@ -335,32 +276,11 @@ class HCXVisionConfig(PretrainedConfig):
             vision_config = Qwen2_5_VLVisionConfig()
         self.vision_config = vision_config
 
-        self.use_nth_layer = use_nth_layer
-        self.freeze_encoder = freeze_encoder
-        self.freeze_decoder = freeze_decoder
-        self.freeze_mm_projector = freeze_mm_projector
-        self.anyres = anyres
-        self.unpad = unpad
-        self.max_num_grids = max_num_grids
-        self.num_queries_vis_abstractor = num_queries_vis_abstractor
-
-        # Video
-        self.video_num_queries_fast = video_num_queries_fast
-        self.video_num_queries_slow = video_num_queries_slow
-        self.video_first_last_frames_slows = video_first_last_frames_slows
-        self.video_max_num_frames = video_max_num_frames
-
         # Placeholder token IDs
         self.img_start_id = img_start_id
         self.image_token_id = img_start_id
         self.video_start_id = video_start_id
         self.video_token_id = video_start_id
-
-        self.ignore_index = ignore_index
-        self.proj_pos_emb = proj_pos_emb
-        self.proj_prenorm = proj_prenorm
-        self.use_1x1_grid = use_1x1_grid
-        self.possible_resolutions = possible_resolutions if possible_resolutions is not None else []
 
         # Expose initializer_range at top level for _init_weights
         self.initializer_range = self.text_config.initializer_range
