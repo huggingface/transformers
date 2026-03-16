@@ -2971,10 +2971,8 @@ class Trainer:
             return (loss, None, None)
 
         logits = nested_detach(logits)
-        if len(logits) == 1:
-            if isinstance(logits, (list, tuple)):
-                logits = logits[0] if len(logits) == 1 else torch.stack(logits, dim=0)
-
+        if isinstance(logits, (list, tuple)):
+            logits = logits[0] if len(logits) == 1 else torch.stack(logits, dim=0)
         return (loss, logits, labels)
 
     def _evaluate(
