@@ -942,53 +942,6 @@ class RfDetrDinov2ModelTester:
             num_windows=self.num_windows,
         )
 
-    def create_and_check_backbone(self, config, pixel_values):
-        model = RfDetrDinov2Backbone(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-
-        # verify hidden states
-        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
-        expected_size = self.image_size // config.patch_size
-        self.parent.assertListEqual(
-            list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], expected_size, expected_size]
-        )
-
-        # verify channels
-        self.parent.assertEqual(len(model.channels), len(config.out_features))
-
-        # verify backbone works with out_features=None
-        config.out_features = None
-        model = RfDetrDinov2Backbone(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-
-        # verify feature maps
-        self.parent.assertEqual(len(result.feature_maps), 1)
-        self.parent.assertListEqual(
-            list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], expected_size, expected_size]
-        )
-
-        # verify channels
-        self.parent.assertEqual(len(model.channels), 1)
-
-        # verify backbone works with apply_layernorm=False and reshape_hidden_states=False
-        config.apply_layernorm = False
-        config.reshape_hidden_states = False
-
-        model = RfDetrDinov2Backbone(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-
-        # verify feature maps
-        self.parent.assertEqual(len(result.feature_maps), 1)
-        self.parent.assertListEqual(
-            list(result.feature_maps[0].shape), [self.batch_size, self.seq_length, self.hidden_size]
-        )
-
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values = self.prepare_config_and_inputs()
         inputs_dict = {"pixel_values": pixel_values}
