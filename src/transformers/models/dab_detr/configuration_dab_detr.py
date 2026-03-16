@@ -13,8 +13,6 @@
 # limitations under the License.
 """DAB-DETR model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
@@ -25,7 +23,6 @@ from ..auto import AutoConfig
 
 @auto_docstring(checkpoint="IDEA-Research/dab-detr-resnet-50")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class DabDetrConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 300):

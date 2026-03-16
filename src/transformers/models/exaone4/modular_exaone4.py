@@ -15,7 +15,6 @@
 """LG AI Research EXAONE Lab"""
 
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -57,7 +56,6 @@ _CONFIG_FOR_DOC = "Exaone4Config"
 
 @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.0-32B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Exaone4Config(PreTrainedConfig):
     r"""
     sliding_window_pattern (`str`, *optional*):

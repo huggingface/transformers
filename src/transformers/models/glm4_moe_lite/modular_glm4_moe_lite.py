@@ -13,8 +13,6 @@
 # limitations under the License.
 
 
-from dataclasses import dataclass
-
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
@@ -38,7 +36,6 @@ from ..glm4_moe.modeling_glm4_moe import (
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Glm4MoeLiteConfig(PreTrainedConfig):
     r"""
     rope_interleave (`bool`, *optional*, defaults to `True`):

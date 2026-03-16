@@ -13,8 +13,6 @@
 # limitations under the License.
 """VitPose backbone configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import BackboneConfigMixin
@@ -24,7 +22,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="usyd-community/vitpose-base-simple")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class VitPoseBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     part_features (`int`, *optional*):

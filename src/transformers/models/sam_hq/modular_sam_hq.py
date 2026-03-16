@@ -43,21 +43,18 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class SamHQPromptEncoderConfig(SamPromptEncoderConfig):
     pass
 
 
 @auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class SamHQVisionConfig(SamVisionConfig):
     pass
 
 
 @auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class SamHQMaskDecoderConfig(SamMaskDecoderConfig):
     r"""
     vit_dim (`int`, *optional*, defaults to 768):
@@ -79,7 +76,6 @@ class SamHQMaskDecoderConfig(SamMaskDecoderConfig):
 
 @auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class SamHQConfig(SamConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `SamHQPromptEncoderConfig`], *optional*):

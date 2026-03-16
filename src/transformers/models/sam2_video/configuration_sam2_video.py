@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -28,7 +27,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="facebook/sam2_video.1-hiera-tiny")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Sam2VideoPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -53,7 +51,6 @@ class Sam2VideoPromptEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="facebook/sam2_video.1-hiera-tiny")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Sam2VideoMaskDecoderConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*, defaults to 2048):
@@ -92,7 +89,6 @@ class Sam2VideoMaskDecoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Sam2VideoConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `Sam2PromptEncoderConfig`], *optional*):

@@ -19,8 +19,6 @@
 # limitations under the License.
 
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -31,7 +29,6 @@ from ...utils.type_validators import interval
 
 @auto_docstring(checkpoint="bosonai/higgs-audio-v2-generation-3B-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class HiggsAudioV2Config(PreTrainedConfig):
     r"""
     audio_bos_token_id (`int`, *optional*, defaults to 128013):

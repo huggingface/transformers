@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -24,7 +23,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="facebook/pe-av-large")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class PeAudioVideoEncoderConfig(PreTrainedConfig):
     r"""
     video_config (`Union[PreTrainedConfig, dict]`, *optional*):
@@ -87,7 +85,6 @@ class PeAudioVideoEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="facebook/pe-av-large")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class PeAudioVideoConfig(PretrainedConfig):
     r"""
     audio_video_config (`dict` or `PreTrainedConfig`, *optional*):

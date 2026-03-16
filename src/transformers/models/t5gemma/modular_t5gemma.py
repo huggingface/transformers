@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any
 
 import torch
@@ -66,7 +65,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="google/t5_gemma_module-7b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class T5GemmaModuleConfig(Gemma2Config):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):
@@ -92,7 +90,6 @@ class T5GemmaModuleConfig(Gemma2Config):
 
 @auto_docstring(checkpoint="google/t5_gemma_module-7b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class T5GemmaConfig(PreTrainedConfig):
     r"""
     encoder (`Union[T5GemmaModuleConfig, dict]`, optional, *optional*):

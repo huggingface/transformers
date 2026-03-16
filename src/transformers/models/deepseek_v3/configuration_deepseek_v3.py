@@ -15,8 +15,6 @@
 # limitations under the License.
 """DeepSeekV3 model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -26,7 +24,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="bzantium/tiny-deepseek-v3")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class DeepseekV3Config(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 8):

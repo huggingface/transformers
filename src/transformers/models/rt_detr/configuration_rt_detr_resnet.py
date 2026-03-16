@@ -13,8 +13,6 @@
 # limitations under the License.
 """RT-DETR ResNet model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import BackboneConfigMixin
@@ -24,7 +22,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/resnet-50")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class RTDetrResNetConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     depths (`list[int]`, *optional*, defaults to `[3, 4, 6, 3]`):

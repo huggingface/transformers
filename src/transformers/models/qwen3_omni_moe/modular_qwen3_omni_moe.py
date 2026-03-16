@@ -142,14 +142,12 @@ class Qwen3OmniMoeAudioEncoderConfig(Qwen2_5OmniAudioEncoderConfig):
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Qwen3OmniMoeVisionEncoderConfig(Qwen3VLMoeVisionConfig):
     pass
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Qwen3OmniMoeTextConfig(PreTrainedConfig):
     r"""
     decoder_sparse_step (`int`, *optional*, defaults to 1):
@@ -230,7 +228,6 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
     r"""
     position_id_per_seconds (`int`, *optional*, defaults to 25):
@@ -312,7 +309,6 @@ class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     r"""
     code_predictor_config (`dict`, *optional*):
@@ -407,7 +403,6 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
     r"""
     num_quantizers (`int`, *optional*, defaults to 16):
@@ -464,7 +459,6 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Qwen3OmniMoeConfig(PreTrainedConfig):
     r"""
     thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.

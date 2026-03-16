@@ -13,8 +13,6 @@
 # limitations under the License.
 """AyaVision model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -24,7 +22,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="CohereForAI/aya-vision-8b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class AyaVisionConfig(PreTrainedConfig):
     r"""
     downsample_factor (`int`, *optional*, defaults to 2):

@@ -13,8 +13,6 @@
 # limitations under the License.
 """SegFormer model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="ByteDance-Seed/Seed-OSS-36B-Instruct")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class SegformerConfig(PreTrainedConfig):
     r"""
     num_encoder_blocks (`int`, *optional*, defaults to 4):

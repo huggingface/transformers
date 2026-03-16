@@ -13,8 +13,6 @@
 # limitations under the License.
 """mT5 model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/mt5-small")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MT5Config(PreTrainedConfig):
     r"""
     relative_attention_num_buckets (`int`, *optional*, defaults to 32):

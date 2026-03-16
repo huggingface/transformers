@@ -13,8 +13,6 @@
 # limitations under the License.
 """Mixtral model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -24,7 +22,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="mistralai/Mixtral-8x7B-v0.1")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MixtralConfig(PreTrainedConfig):
     r"""
     Example:

@@ -13,8 +13,6 @@
 # limitations under the License.
 """M2M100 model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/m2m100_418M")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class M2M100Config(PreTrainedConfig):
     r"""
     Example:

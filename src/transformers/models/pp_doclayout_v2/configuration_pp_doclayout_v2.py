@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -30,7 +29,6 @@ from ..auto import AutoConfig
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV2_safetensors")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
     r"""
     has_relative_attention_bias (`bool`, *optional*, defaults to `True`):
@@ -107,7 +105,6 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV2_safetensors")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class PPDocLayoutV2Config(PreTrainedConfig):
     r"""
     initializer_bias_prior_prob (`float`, *optional*):

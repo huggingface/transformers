@@ -12,8 +12,6 @@
 # limitations under the License.
 """VipLlava model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="llava-hf/vip-llava-7b-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class VipLlavaConfig(PreTrainedConfig):
     r"""
     projector_layernorm_eps (`float`, *optional*, defaults to 1e-05):

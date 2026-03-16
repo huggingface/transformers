@@ -14,8 +14,6 @@
 
 """xLSTM configuration."""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -57,7 +55,6 @@ else:
 
 @auto_docstring(checkpoint="NX-AI/xLSTM-7b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class xLSTMConfig(PreTrainedConfig):
     """
     num_blocks (int, optional, *optional*, defaults to 32):

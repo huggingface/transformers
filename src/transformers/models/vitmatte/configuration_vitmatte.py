@@ -13,8 +13,6 @@
 # limitations under the License.
 """VitMatte model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
@@ -25,7 +23,6 @@ from ..auto.configuration_auto import AutoConfig
 
 @auto_docstring(checkpoint="hustvl/vitmatte-small-composition-1k")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class VitMatteConfig(PreTrainedConfig):
     r"""
     batch_norm_eps (`float`, *optional*, defaults to 1e-05):

@@ -13,8 +13,6 @@
 # limitations under the License.
 """Siglip model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -26,7 +24,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="google/siglip-base-patch16-224")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class SiglipTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -70,7 +67,6 @@ class SiglipTextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="google/siglip-base-patch16-224")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class SiglipVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -105,7 +101,6 @@ class SiglipVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="google/siglip-base-patch16-224")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class SiglipConfig(PreTrainedConfig):
     r"""
     Example:

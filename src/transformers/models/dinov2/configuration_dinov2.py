@@ -13,8 +13,6 @@
 # limitations under the License.
 """DINOv2 model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import BackboneConfigMixin
@@ -24,7 +22,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/dinov2-base-patch16-224")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Dinov2Config(BackboneConfigMixin, PreTrainedConfig):
     r"""
     layerscale_value (`float`, *optional*, defaults to 1.0):

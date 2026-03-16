@@ -19,7 +19,6 @@
 """PyTorch Qwen2.5-VL model."""
 
 import itertools
-from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -64,7 +63,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Qwen2_5_VLVisionConfig(PreTrainedConfig):
     r"""
     tokens_per_second (`int`, *optional*, defaults to 41):

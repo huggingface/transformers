@@ -13,8 +13,6 @@
 # limitations under the License.
 """X-CLIP model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -26,7 +24,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="microsoft/xclip-base-patch32")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class XCLIPTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -65,7 +62,6 @@ class XCLIPTextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="microsoft/xclip-base-patch32")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class XCLIPVisionConfig(PreTrainedConfig):
     r"""
     num_frames (`int`, *optional*, defaults to 8):
@@ -120,7 +116,6 @@ class XCLIPVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="microsoft/xclip-base-patch32")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class XCLIPConfig(PreTrainedConfig):
     r"""
     prompt_layers (`int`, *optional*, defaults to 2):

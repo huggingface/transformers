@@ -13,8 +13,6 @@
 # limitations under the License.
 """InstructBLIP model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -28,7 +26,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class InstructBlipVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -64,7 +61,6 @@ class InstructBlipVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class InstructBlipQFormerConfig(PreTrainedConfig):
     r"""
     cross_attention_frequency (`int`, *optional*, defaults to 2):
@@ -107,7 +103,6 @@ class InstructBlipQFormerConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class InstructBlipConfig(PreTrainedConfig):
     r"""
     qformer_config (`dict`, *optional*):

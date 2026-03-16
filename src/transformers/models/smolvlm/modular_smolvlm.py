@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -42,7 +41,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="HuggingFaceTB/SmolVLM2-2.2B-Instruct")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class SmolVLMVisionConfig(Idefics3VisionConfig):
     r"""
     Example:
@@ -74,7 +72,6 @@ class SmolVLMVisionTransformer(Idefics3VisionTransformer):
 
 @auto_docstring(checkpoint="HuggingFaceTB/SmolVLM2-2.2B-Instruct")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class SmolVLMConfig(Idefics3Config):
     r"""
     scale_factor (`int`, *optional*, defaults to 2):

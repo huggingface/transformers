@@ -15,7 +15,6 @@
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -174,7 +173,6 @@ class PI0Processor(PaligemmaProcessor):
 
 @auto_docstring(checkpoint="lerobot/pi0_base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class PI0Config(PreTrainedConfig):
     r"""
     vlm_config (`dict`, *optional*):

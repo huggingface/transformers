@@ -13,8 +13,6 @@
 # limitations under the License.
 """openai model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="openai/gpt-oss-20b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class GptOssConfig(PreTrainedConfig):
     model_type = "gpt_oss"
     default_theta = 150000.0

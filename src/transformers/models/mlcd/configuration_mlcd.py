@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -27,7 +26,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="DeepGlint-AI/mlcd-vit-bigG-patch14-336")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MLCDVisionConfig(PreTrainedConfig):
     r"""
     num_key_value_groups (`int`, *optional*, defaults to 1):

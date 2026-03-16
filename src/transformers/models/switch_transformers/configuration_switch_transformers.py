@@ -13,7 +13,6 @@
 # limitations under the License.
 """Switch Transformers model configuration"""
 
-from dataclasses import dataclass
 from typing import Literal
 
 from huggingface_hub.dataclasses import strict
@@ -24,7 +23,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/switch-base-8")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class SwitchTransformersConfig(PreTrainedConfig):
     r"""
     num_sparse_encoder_layers (`int`, *optional*, defaults to 3):

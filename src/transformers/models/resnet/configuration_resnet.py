@@ -13,7 +13,6 @@
 # limitations under the License.
 """ResNet model configuration"""
 
-from dataclasses import dataclass
 from typing import ClassVar
 
 from huggingface_hub.dataclasses import strict
@@ -25,7 +24,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/resnet-50")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class ResNetConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     layer_type (`str`, *optional*, defaults to `"bottleneck"`):

@@ -14,7 +14,6 @@
 
 """Configuration for TimmWrapper models"""
 
-from dataclasses import dataclass
 from typing import Any
 
 from huggingface_hub.dataclasses import strict
@@ -29,7 +28,6 @@ if is_timm_available():
 
 @auto_docstring(checkpoint="resnet50")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class TimmWrapperConfig(PreTrainedConfig):
     r"""
     architecture (`str`, *optional*, defaults to `"resnet50"`):

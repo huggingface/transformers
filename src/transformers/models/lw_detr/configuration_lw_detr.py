@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -30,7 +29,6 @@ from ..auto import AutoConfig
 
 @auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     pretrain_image_size (`int`, *optional*, defaults to 224):
@@ -105,7 +103,6 @@ class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
 
 @auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class LwDetrConfig(PreTrainedConfig):
     r"""
     projector_scale_factors (`list[float]`, *optional*, defaults to `[]`):

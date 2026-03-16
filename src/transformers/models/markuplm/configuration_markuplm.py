@@ -13,8 +13,6 @@
 # limitations under the License.
 """MarkupLM model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/markuplm-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MarkupLMConfig(PreTrainedConfig):
     r"""
     max_tree_id_unit_embeddings (`int`, *optional*, defaults to 1024):

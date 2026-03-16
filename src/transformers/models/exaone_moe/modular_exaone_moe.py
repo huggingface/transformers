@@ -14,8 +14,6 @@
 # limitations under the License.
 """LG AI Research EXAONE Lab"""
 
-from dataclasses import dataclass
-
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
@@ -46,7 +44,6 @@ from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 @auto_docstring(checkpoint="LGAI-EXAONE/K-EXAONE-236B-A23B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class ExaoneMoeConfig(Exaone4Config):
     r"""
     n_group (`int`, *optional*, defaults to 1):

@@ -14,7 +14,6 @@
 
 
 import math
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -24,7 +23,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
     r"""
     channels (`int`, *optional*, defaults to 1):
@@ -91,7 +89,6 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
 
 @auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class VibeVoiceAcousticTokenizerEncoderConfig(VibeVoiceAcousticTokenizerConfig):
     r"""
     channels (`int`, *optional*, defaults to 1):
@@ -122,7 +119,6 @@ class VibeVoiceAcousticTokenizerEncoderConfig(VibeVoiceAcousticTokenizerConfig):
 
 @auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class VibeVoiceAcousticTokenizerDecoderConfig(VibeVoiceAcousticTokenizerConfig):
     r"""
     channels (`int`, *optional*, defaults to 1):

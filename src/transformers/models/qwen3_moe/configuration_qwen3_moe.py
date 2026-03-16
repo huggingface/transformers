@@ -13,8 +13,6 @@
 # limitations under the License.
 """Qwen3MoE model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -24,7 +22,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Qwen3MoeConfig(PreTrainedConfig):
     r"""
     decoder_sparse_step (`int`, *optional*, defaults to 1):

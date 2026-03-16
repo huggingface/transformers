@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -29,7 +28,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="facebook/sam-vit-huge")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class GotOcr2VisionConfig(PreTrainedConfig):
     r"""
     output_channels (`int`, *optional*, defaults to 256):
@@ -68,7 +66,6 @@ class GotOcr2VisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="facebook/sam-vit-huge")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class GotOcr2Config(PreTrainedConfig):
     r"""
     Example:

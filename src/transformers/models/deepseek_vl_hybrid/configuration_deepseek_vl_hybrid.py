@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -32,7 +31,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="deepseek-community/deepseek-vl-7b-chat")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class DeepseekVLHybridConfig(PreTrainedConfig):
     r"""
     high_res_vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SamVisionConfig`):

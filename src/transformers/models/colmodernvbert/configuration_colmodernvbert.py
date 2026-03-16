@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -32,7 +31,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="ModernVBERT/colmodernvbert-merged")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class ColModernVBertConfig(PreTrainedConfig):
     r"""
     Example:

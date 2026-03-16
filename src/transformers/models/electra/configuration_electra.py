@@ -14,8 +14,6 @@
 # limitations under the License.
 """ELECTRA model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -24,7 +22,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/electra-small-discriminator")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class ElectraConfig(PreTrainedConfig):
     r"""
     summary_type (`str`, *optional*, defaults to `"first"`):

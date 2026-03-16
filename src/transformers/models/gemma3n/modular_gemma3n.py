@@ -65,7 +65,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Gemma3nTextConfig(Gemma3TextConfig):
     r"""
     vocab_size_per_layer_input (`int`, *optional*, defaults to 262144):
@@ -206,7 +205,6 @@ class Gemma3nTextConfig(Gemma3TextConfig):
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Gemma3nAudioConfig(PreTrainedConfig):
     r"""
     vocab_offset (`int`, *optional*, defaults to 262272):
@@ -307,7 +305,6 @@ class Gemma3nAudioConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Gemma3nVisionConfig(TimmWrapperConfig):
     r"""
     architecture (`str`, *optional*, defaults to `"resnet50"`):
@@ -350,7 +347,6 @@ class Gemma3nVisionConfig(TimmWrapperConfig):
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Gemma3nConfig(PreTrainedConfig):
     r"""
     audio_soft_tokens_per_image (`int`, *optional*, defaults to 188):

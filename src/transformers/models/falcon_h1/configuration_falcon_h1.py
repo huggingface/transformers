@@ -13,8 +13,6 @@
 # limitations under the License.
 """FalconH1 model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -24,7 +22,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="tiiuae/Falcon-H1-1.5B-Deep-Instruct")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class FalconH1Config(PreTrainedConfig):
     r"""
     num_logits_to_keep (`int` or `None`, *optional*, defaults to 1):

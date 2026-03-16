@@ -13,8 +13,6 @@
 # limitations under the License.
 """DeBERTa model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/deberta-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class DebertaConfig(PreTrainedConfig):
     r"""
     max_relative_positions (`int`, *optional*, defaults to -1):

@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -31,7 +30,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Aimv2VisionConfig(PreTrainedConfig):
     r"""
     use_head (`str`, *optional*, defaults to `True`):
@@ -76,7 +74,6 @@ class Aimv2VisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Aimv2TextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -116,7 +113,6 @@ class Aimv2TextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Aimv2Config(PreTrainedConfig):
     r"""
     max_logit_scale (`float`, *optional*, defaults to `100.0`):

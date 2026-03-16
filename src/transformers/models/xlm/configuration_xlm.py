@@ -13,8 +13,6 @@
 # limitations under the License.
 """XLM configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="FacebookAI/xlm-mlm-en-2048")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class XLMConfig(PreTrainedConfig):
     r"""
     gelu_activation (`bool`, *optional*, defaults to `True`):

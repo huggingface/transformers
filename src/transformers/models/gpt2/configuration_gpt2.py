@@ -14,8 +14,6 @@
 # limitations under the License.
 """OpenAI GPT-2 configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -24,7 +22,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="openai-community/gpt2")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class GPT2Config(PreTrainedConfig):
     r"""
     summary_type (`string`, *optional*, defaults to `"cls_index"`):

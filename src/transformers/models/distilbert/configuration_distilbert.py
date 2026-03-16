@@ -13,8 +13,6 @@
 # limitations under the License.
 """DistilBERT model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/distilbert-base-uncased")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class DistilBertConfig(PreTrainedConfig):
     r"""
     sinusoidal_pos_embds (`boolean`, *optional*, defaults to `False`):

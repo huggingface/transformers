@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -30,7 +29,6 @@ class VoxtralRealtimeTextConfig(MistralConfig):
 
 @auto_docstring(checkpoint="mistralai/Voxtral-Mini-4B-Realtime-2602")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class VoxtralRealtimeEncoderConfig(PreTrainedConfig):
     r"""
     Example:
@@ -82,7 +80,6 @@ class VoxtralRealtimeEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="mistralai/Voxtral-Mini-4B-Realtime-2602")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class VoxtralRealtimeConfig(PreTrainedConfig):
     r"""
     audio_length_per_tok (`int`, *optional*, defaults to 8):

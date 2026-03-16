@@ -14,7 +14,6 @@
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -63,7 +62,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class GlmImageVQVAEConfig(PreTrainedConfig):
     r"""
     num_embeddings (`int`, *optional*, defaults to 16384):
@@ -82,7 +80,6 @@ class GlmImageVQVAEConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class GlmImageVisionConfig(Glm4vVisionConfig):
     model_type = "glm_image_vision"
     base_config_key = "vision_config"
@@ -104,7 +101,6 @@ class GlmImageVisionConfig(Glm4vVisionConfig):
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class GlmImageTextConfig(Glm4vTextConfig):
     r"""
     vision_vocab_size (`int`, *optional*, defaults to 16512):
@@ -136,7 +132,6 @@ class GlmImageTextConfig(Glm4vTextConfig):
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class GlmImageConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 16384):

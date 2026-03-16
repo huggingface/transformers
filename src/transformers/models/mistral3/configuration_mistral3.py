@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -24,7 +23,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="mistralai/Mistral-Small-3.1-24B-Instruct-2503")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Mistral3Config(PreTrainedConfig):
     r"""
     Example:

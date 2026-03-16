@@ -14,8 +14,6 @@
 # limitations under the License.
 
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -25,7 +23,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="Zyphra/Zamba2-2.7B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Zamba2Config(PreTrainedConfig):
     r"""
     mamba_ngroups (`int`, *optional*, defaults to 1):

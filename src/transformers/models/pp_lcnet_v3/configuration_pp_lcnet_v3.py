@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -29,7 +28,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="PaddlePaddle/Not_yet_released")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class PPLCNetV3Config(BackboneConfigMixin, PreTrainedConfig):
     r"""
     scale (`float`, *optional*, defaults to 1.0):

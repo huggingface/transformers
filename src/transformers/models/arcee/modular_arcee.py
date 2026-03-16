@@ -13,8 +13,6 @@
 # limitations under the License.
 """PyTorch Arcee model."""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from transformers.utils import auto_docstring, logging
@@ -35,7 +33,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="arcee-ai/AFM-4.5B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class ArceeConfig(LlamaConfig):
     r"""
     ```python

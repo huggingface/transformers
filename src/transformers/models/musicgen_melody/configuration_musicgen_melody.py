@@ -13,8 +13,6 @@
 # limitations under the License.
 """Musicgen Melody model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -24,7 +22,6 @@ from ..auto.configuration_auto import AutoConfig
 
 @auto_docstring(checkpoint="facebook/musicgen-melody")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MusicgenMelodyDecoderConfig(PreTrainedConfig):
     r"""
     audio_channels (`int`, *optional*, defaults to 1):
@@ -67,7 +64,6 @@ class MusicgenMelodyDecoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="facebook/musicgen-melody")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MusicgenMelodyConfig(PreTrainedConfig):
     r"""
     text_encoder (`Union[dict, `PretrainedConfig`]`):

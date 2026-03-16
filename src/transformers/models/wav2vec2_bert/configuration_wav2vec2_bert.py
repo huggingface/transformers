@@ -13,7 +13,6 @@
 # limitations under the License.
 """Wav2Vec2Bert model configuration"""
 
-from dataclasses import dataclass
 from typing import Literal
 
 from huggingface_hub.dataclasses import strict
@@ -24,7 +23,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/wav2vec2-bert-rel-pos-large")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Wav2Vec2BertConfig(PreTrainedConfig):
     r"""
     feature_projection_input_dim (`int`, *optional*, defaults to 160):

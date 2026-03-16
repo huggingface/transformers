@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as F
@@ -46,7 +45,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V2-Lite")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class DeepseekV2Config(LlamaConfig):
     r"""
     first_k_dense_replace (`int`, *optional*, defaults to 0):

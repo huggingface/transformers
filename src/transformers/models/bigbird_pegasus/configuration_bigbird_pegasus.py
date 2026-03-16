@@ -13,8 +13,6 @@
 # limitations under the License.
 """BigBirdPegasus model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/bigbird-pegasus-large-arxiv")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class BigBirdPegasusConfig(PreTrainedConfig):
     r"""
     attention_type (`str`, *optional*, defaults to `"block_sparse"`):

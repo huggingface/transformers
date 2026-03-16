@@ -13,8 +13,6 @@
 # limitations under the License.
 """VisionTextDualEncoder model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -34,7 +32,6 @@ VISION_MODEL_CONFIGS = {
 
 @auto_docstring
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class VisionTextDualEncoderConfig(PreTrainedConfig):
     r"""
     Examples:

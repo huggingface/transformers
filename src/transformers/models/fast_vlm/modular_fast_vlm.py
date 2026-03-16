@@ -13,8 +13,6 @@
 # limitations under the License.
 
 
-from dataclasses import dataclass
-
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
@@ -40,7 +38,6 @@ from ..llava.modeling_llava import (
 
 @auto_docstring(checkpoint="KamilaMila/FastVLM-7B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class FastVlmConfig(LlavaConfig):
     r"""
     Example:

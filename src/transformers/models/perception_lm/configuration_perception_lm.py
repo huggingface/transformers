@@ -12,8 +12,6 @@
 # limitations under the License.
 """PerceptionLM model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -24,7 +22,6 @@ from ..timm_wrapper.configuration_timm_wrapper import TimmWrapperConfig
 
 @auto_docstring(checkpoint="facebook/Perception-LM-1B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class PerceptionLMConfig(PreTrainedConfig):
     r"""
     vision_use_cls_token (`bool`, *optional*, defaults to `True`):

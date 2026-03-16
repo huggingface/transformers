@@ -13,8 +13,6 @@
 # limitations under the License.
 """MaskFormer model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
@@ -29,7 +27,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="facebook/maskformer-swin-base-ade")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MaskFormerConfig(PreTrainedConfig):
     r"""
     cross_entropy_weight (`float`, *optional*, defaults to 1.0):

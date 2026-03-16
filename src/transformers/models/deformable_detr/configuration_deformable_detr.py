@@ -13,8 +13,6 @@
 # limitations under the License.
 """Deformable DETR model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
@@ -25,7 +23,6 @@ from ..auto import AutoConfig
 
 @auto_docstring(checkpoint="SenseTime/deformable-detr")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class DeformableDetrConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 300):

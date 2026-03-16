@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -30,7 +29,6 @@ from ...modeling_rope_utils import RopeParameters
 
 @auto_docstring(checkpoint="arcee-ai/AFM-4.5B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class ArceeConfig(PreTrainedConfig):
     r"""
     ```python

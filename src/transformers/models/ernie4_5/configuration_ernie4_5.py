@@ -13,8 +13,6 @@
 # limitations under the License.
 """Ernie 4.5 model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -24,7 +22,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-0.3B-PT")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Ernie4_5Config(PreTrainedConfig):
     r"""
     use_bias (`bool`, *optional*, defaults to `False`):

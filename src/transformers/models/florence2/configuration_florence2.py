@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -31,7 +30,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="florence-community/Florence-2-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Florence2VisionConfig(PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 12):
@@ -88,7 +86,6 @@ class Florence2VisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="florence-community/Florence-2-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Florence2Config(PreTrainedConfig):
     r"""
     Example:

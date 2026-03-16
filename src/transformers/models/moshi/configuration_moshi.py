@@ -13,8 +13,6 @@
 # limitations under the License.
 """Moshi model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -25,7 +23,6 @@ from ..auto.configuration_auto import AutoConfig
 
 @auto_docstring(checkpoint="kmhf/hf-moshiko")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MoshiDepthConfig(PreTrainedConfig):
     r"""
     input_size (`int`, *optional*, defaults to 4096):
@@ -93,7 +90,6 @@ class MoshiDepthConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="kmhf/hf-moshiko")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MoshiConfig(PreTrainedConfig):
     """
     depth_decoder_config (`PreTrainedConfig | dict`, *optional*):

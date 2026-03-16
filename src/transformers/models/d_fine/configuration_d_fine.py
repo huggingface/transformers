@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -31,7 +30,6 @@ from ..auto import AutoConfig
 # as well as super() call parsing because otherwise we cannot re-write args after initialization
 @auto_docstring(checkpoint="ustc-community/dfine-xlarge-coco")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class DFineConfig(PreTrainedConfig):
     """
     initializer_bias_prior_prob (`float`, *optional*):

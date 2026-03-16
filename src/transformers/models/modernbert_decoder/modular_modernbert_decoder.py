@@ -14,7 +14,6 @@
 # limitations under the License.
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Literal
 
 import torch
@@ -50,7 +49,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="blab-jhu/test-32m-dec")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class ModernBertDecoderConfig(PreTrainedConfig):
     r"""
     initializer_cutoff_factor (`float`, *optional*, defaults to 2.0):

@@ -13,8 +13,6 @@
 # limitations under the License.
 """Longformer configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="allenai/longformer-base-4096")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class LongformerConfig(PreTrainedConfig):
     r"""
     attention_window (`int` or `list[int]`, *optional*, defaults to 512):

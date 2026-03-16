@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -77,7 +76,6 @@ def apply_rotary_pos_emb(
 
 @auto_docstring(checkpoint="zai-org/GLM-5")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class GlmMoeDsaConfig(Glm4MoeLiteConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):

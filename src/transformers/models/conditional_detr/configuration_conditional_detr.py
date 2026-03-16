@@ -13,8 +13,6 @@
 # limitations under the License.
 """Conditional DETR model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
@@ -25,7 +23,6 @@ from ..auto import AutoConfig
 
 @auto_docstring(checkpoint="microsoft/conditional-detr-resnet-50")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class ConditionalDetrConfig(PreTrainedConfig):
     r"""
     auxiliary_loss (`bool`, *optional*, defaults to `False`):

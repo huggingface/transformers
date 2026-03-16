@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -28,7 +27,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Glm4vVisionConfig(PreTrainedConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 4096):
@@ -71,7 +69,6 @@ class Glm4vVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Glm4vTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -132,7 +129,6 @@ class Glm4vTextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Glm4vConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 151339):

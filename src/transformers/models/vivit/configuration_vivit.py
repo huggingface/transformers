@@ -13,8 +13,6 @@
 # limitations under the License.
 """ViViT model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/vivit-b-16x2-kinetics400")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class VivitConfig(PreTrainedConfig):
     r"""
     num_frames (`int`, *optional*, defaults to 32):

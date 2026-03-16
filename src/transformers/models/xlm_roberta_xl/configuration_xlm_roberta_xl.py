@@ -13,8 +13,6 @@
 # limitations under the License.
 """XLM_ROBERTa_XL configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="FacebookAI/xlm-roberta-xl")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class XLMRobertaXLConfig(PreTrainedConfig):
     r"""
     Examples:

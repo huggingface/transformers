@@ -13,8 +13,6 @@
 # limitations under the License.
 """Config class for Granite Speech."""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -24,7 +22,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-3.2-8b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class GraniteSpeechEncoderConfig(PreTrainedConfig):
     r"""
     feedforward_mult (`int`, *optional*, defaults to 4):
@@ -73,7 +70,6 @@ class GraniteSpeechEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-3.2-8b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class GraniteSpeechConfig(PreTrainedConfig):
     r"""
     has_lora_adapter (`bool`, *optional*, defaults to `True`):

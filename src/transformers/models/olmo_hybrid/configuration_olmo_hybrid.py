@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -30,7 +29,6 @@ from ...utils.type_validators import interval
 
 @auto_docstring(checkpoint="allenai/Olmo-Hybrid-7B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class OlmoHybridConfig(PreTrainedConfig):
     r"""
     linear_num_key_heads (`int`, *optional*):

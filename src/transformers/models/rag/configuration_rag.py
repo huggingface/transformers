@@ -13,8 +13,6 @@
 # limitations under the License.
 """RAG model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -24,7 +22,6 @@ from ..auto.configuration_auto import AutoConfig
 
 @auto_docstring(checkpoint="")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class RagConfig(PreTrainedConfig):
     r"""
     title_sep (`str`, *optional*, defaults to  `" / "`):

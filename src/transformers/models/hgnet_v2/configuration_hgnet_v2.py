@@ -19,8 +19,6 @@
 # limitations under the License.
 
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import BackboneConfigMixin
@@ -32,7 +30,6 @@ from ...utils import auto_docstring
 # it provides incorrect import for configuration like resnet_resnet
 @auto_docstring(checkpoint="ustc-community/dfine_x_coco")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class HGNetV2Config(BackboneConfigMixin, PreTrainedConfig):
     """
     stem_channels (`list[int]`, *optional*, defaults to `[3, 32, 48]`):

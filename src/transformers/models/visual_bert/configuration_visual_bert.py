@@ -13,8 +13,6 @@
 # limitations under the License.
 """VisualBERT model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="uclanlp/visualbert-vqa-coco-pre")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class VisualBertConfig(PreTrainedConfig):
     r"""
     visual_embedding_dim (`int`, *optional*, defaults to 512):

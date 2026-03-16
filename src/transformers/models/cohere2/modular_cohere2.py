@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -49,7 +48,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="CohereForAI/c4ai-command-r-v01")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Cohere2Config(PreTrainedConfig):
     r"""
     logit_scale (`float`, *optional*, defaults to 0.0625):

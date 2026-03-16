@@ -14,7 +14,6 @@
 """Mimi model configuration"""
 
 import math
-from dataclasses import dataclass
 
 import numpy as np
 from huggingface_hub.dataclasses import strict
@@ -26,7 +25,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="kyutai/mimi")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MimiConfig(PreTrainedConfig):
     r"""
     num_quantizers (`int`, *optional*, defaults to 32):

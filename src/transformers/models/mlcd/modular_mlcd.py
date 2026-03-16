@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -42,7 +41,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="DeepGlint-AI/mlcd-vit-bigG-patch14-336")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MLCDVisionConfig(PreTrainedConfig):
     r"""
     num_key_value_groups (`int`, *optional*, defaults to 1):

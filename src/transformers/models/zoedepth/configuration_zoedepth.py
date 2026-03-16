@@ -13,7 +13,6 @@
 # limitations under the License.
 """ZoeDepth model configuration"""
 
-from dataclasses import dataclass
 from typing import Literal
 
 from huggingface_hub.dataclasses import strict
@@ -31,7 +30,6 @@ ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 @auto_docstring(checkpoint="Intel/zoedepth-nyu")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class ZoeDepthConfig(PreTrainedConfig):
     r"""
     batch_norm_eps (`float`, *optional*, defaults to 1e-05):

@@ -18,8 +18,6 @@
 # limitations under the License.
 """OLMo model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -29,7 +27,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="allenai/OLMo-7B-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class OlmoConfig(PreTrainedConfig):
     r"""
     clip_qkv (`float`, *optional*):

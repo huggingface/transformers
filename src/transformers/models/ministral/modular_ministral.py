@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -44,7 +43,6 @@ from ..qwen2.modeling_qwen2 import (
 
 @auto_docstring(checkpoint="mistralai/Ministral-8B-Instruct-2410")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MinistralConfig(MistralConfig):
     r"""
     Example:

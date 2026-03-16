@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 from typing import Literal
 
 from huggingface_hub.dataclasses import strict
@@ -30,7 +29,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="ModernVBERT/modernvbert")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class ModernVBertConfig(PreTrainedConfig):
     r"""
     pixel_shuffle_factor (`int | None`, *optional*, defaults to 4): Scale factor used by any pixel-shuffle / upsampling operations in the vision head.

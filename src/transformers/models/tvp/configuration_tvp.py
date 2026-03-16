@@ -13,8 +13,6 @@
 # limitations under the License.
 """TVP model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
@@ -25,7 +23,6 @@ from ..auto import AutoConfig
 
 @auto_docstring(checkpoint="Intel/tvp-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class TvpConfig(PreTrainedConfig):
     r"""
     distance_loss_weight (`float`, *optional*, defaults to 1.0):

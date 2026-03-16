@@ -13,8 +13,6 @@
 # limitations under the License.
 
 
-from dataclasses import dataclass
-
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -49,7 +47,6 @@ from ..mixtral.modeling_mixtral import (
 
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-Text-01-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MiniMaxM2Config(PreTrainedConfig):
     r"""
     Example:

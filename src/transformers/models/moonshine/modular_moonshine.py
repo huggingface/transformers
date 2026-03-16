@@ -49,7 +49,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="UsefulSensors/moonshine-tiny")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MoonshineConfig(PreTrainedConfig):
     r"""
     encoder_hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):

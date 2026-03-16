@@ -13,8 +13,6 @@
 # limitations under the License.
 """HunYuanMoEV1 model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -24,7 +22,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="tencent/Hunyuan-A13B-Instruct")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class HunYuanMoEV1Config(PreTrainedConfig):
     r"""
     eod_token_id (int, *optional*, defaults to 3):

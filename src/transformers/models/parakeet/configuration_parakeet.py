@@ -13,8 +13,6 @@
 # limitations under the License.
 """Parakeet model configuration."""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="nvidia/parakeet-ctc-1.1b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class ParakeetEncoderConfig(PreTrainedConfig):
     r"""
     convolution_bias (`bool`, *optional*, defaults to `True`):
@@ -95,7 +92,6 @@ class ParakeetEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="nvidia/parakeet-ctc-1.1b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class ParakeetCTCConfig(PreTrainedConfig):
     r"""
     ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):

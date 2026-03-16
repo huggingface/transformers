@@ -13,7 +13,6 @@
 # limitations under the License.
 """OmDet-Turbo model configuration"""
 
-from dataclasses import dataclass
 from typing import Literal
 
 from huggingface_hub.dataclasses import strict
@@ -29,7 +28,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="omlab/omdet-turbo-swin-tiny-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class OmDetTurboConfig(PreTrainedConfig):
     r"""
     apply_layernorm_after_vision_backbone (`bool`, *optional*, defaults to `True`):

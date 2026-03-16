@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 from typing import Literal
 
 from huggingface_hub.dataclasses import strict
@@ -31,7 +30,6 @@ from ..auto import AutoConfig
 
 @auto_docstring(checkpoint="facebook/dinov3-vitl16-chmv2-dpt-head")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class CHMv2Config(PreTrainedConfig):
     r"""
     backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):

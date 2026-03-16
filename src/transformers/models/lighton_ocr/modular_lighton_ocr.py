@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -44,7 +43,6 @@ from ..pixtral.image_processing_pixtral import get_resize_output_image_size
 
 @auto_docstring(checkpoint="lightonai/LightOnOCR-1B-1025")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class LightOnOcrConfig(PretrainedConfig):
     r"""
     Example:

@@ -13,8 +13,6 @@
 # limitations under the License.
 """Mistral model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -27,7 +25,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="mistralai/Mistral-7B-v0.1")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MistralConfig(PreTrainedConfig):
     r"""
     Example:

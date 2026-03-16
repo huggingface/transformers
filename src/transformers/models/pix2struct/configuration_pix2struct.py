@@ -13,8 +13,6 @@
 # limitations under the License.
 """Pix2Struct model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -26,7 +24,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="google/pix2struct-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Pix2StructTextConfig(PreTrainedConfig):
     r"""
     relative_attention_num_buckets (`int`, *optional*, defaults to 32):
@@ -87,7 +84,6 @@ class Pix2StructTextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="google/pix2struct-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Pix2StructVisionConfig(PreTrainedConfig):
     r"""
     dense_act_fn (`Union[Callable, str]`, *optional*, defaults to `"gelu_new"`):
@@ -143,7 +139,6 @@ class Pix2StructVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="google/pix2struct-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Pix2StructConfig(PreTrainedConfig):
     r"""
     is_vqa (`bool`, *optional*, defaults to `False`):

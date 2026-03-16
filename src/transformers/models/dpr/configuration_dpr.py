@@ -13,8 +13,6 @@
 # limitations under the License.
 """DPR model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/dpr-ctx_encoder-single-nq-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class DPRConfig(PreTrainedConfig):
     r"""
     Example:

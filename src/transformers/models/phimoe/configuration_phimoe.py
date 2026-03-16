@@ -14,8 +14,6 @@
 
 """PyTorch Phi-MoE model."""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -25,7 +23,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/Phi-3.5-MoE-instruct")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class PhimoeConfig(PreTrainedConfig):
     r"""
     num_local_experts (`int`, *optional*, defaults to 16):

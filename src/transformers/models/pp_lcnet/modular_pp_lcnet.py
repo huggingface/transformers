@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import math
-from dataclasses import dataclass
 from typing import Optional
 
 import torch
@@ -50,7 +49,6 @@ from ..resnet.modeling_resnet import ResNetConvLayer
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     scale (`float`, *optional*, defaults to 1.0):

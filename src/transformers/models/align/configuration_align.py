@@ -13,8 +13,6 @@
 # limitations under the License.
 """ALIGN model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -26,7 +24,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="kakaobrain/align-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class AlignTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -66,7 +63,6 @@ class AlignTextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="kakaobrain/align-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class AlignVisionConfig(PreTrainedConfig):
     r"""
     width_coefficient (`float`, *optional*, defaults to 2.0):
@@ -160,7 +156,6 @@ class AlignVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="kakaobrain/align-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class AlignConfig(PreTrainedConfig):
     r"""
     temperature_init_value (`float`, *optional*, defaults to 1.0):

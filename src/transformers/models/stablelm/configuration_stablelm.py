@@ -13,8 +13,6 @@
 # limitations under the License.
 """StableLM model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -24,7 +22,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="stabilityai/stablelm-3b-4e1t")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class StableLmConfig(PreTrainedConfig):
     r"""
     use_parallel_residual (`bool`, *optional*, defaults to `False`):

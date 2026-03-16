@@ -14,8 +14,6 @@
 # limitations under the License.
 
 
-from dataclasses import dataclass
-
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
@@ -41,7 +39,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="facebook/dinov2-with-registers-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Dinov2WithRegistersConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     layerscale_value (`float`, *optional*, defaults to 1.0):

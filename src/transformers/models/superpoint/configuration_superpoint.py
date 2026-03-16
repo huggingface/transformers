@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -22,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="magic-leap-community/superpoint")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class SuperPointConfig(PreTrainedConfig):
     r"""
     encoder_hidden_sizes (`List`, *optional*, defaults to `[64, 64, 128, 128]`):

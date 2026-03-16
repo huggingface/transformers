@@ -19,8 +19,6 @@
 # limitations under the License.
 
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -30,7 +28,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="KamilaMila/FastVLM-7B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class FastVlmConfig(PreTrainedConfig):
     r"""
     Example:

@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -44,7 +43,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="HuggingFaceTB/SmolLM3-3B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class SmolLM3Config(PreTrainedConfig):
     r"""
     no_rope_layers (`List[int]`, *optional*):

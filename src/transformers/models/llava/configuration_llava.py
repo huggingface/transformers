@@ -12,7 +12,6 @@
 # limitations under the License.
 """Llava model configuration"""
 
-from dataclasses import dataclass
 from typing import Literal
 
 from huggingface_hub.dataclasses import strict
@@ -24,7 +23,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="llava-hf/llava-1.5-7b-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class LlavaConfig(PreTrainedConfig):
     r"""
     Example:

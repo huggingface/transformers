@@ -13,8 +13,6 @@
 # limitations under the License.
 """MobileNetV2 model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/mobilenet_v2_1.0_224")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MobileNetV2Config(PreTrainedConfig):
     r"""
     depth_divisible_by (`int`, *optional*, defaults to 8):

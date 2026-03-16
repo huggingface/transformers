@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -23,7 +22,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="mistralai/Voxtral-Mini-3B-2507")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class VoxtralEncoderConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
@@ -74,7 +72,6 @@ class VoxtralEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="mistralai/Voxtral-Mini-3B-2507")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class VoxtralConfig(PreTrainedConfig):
     r"""
     Example:

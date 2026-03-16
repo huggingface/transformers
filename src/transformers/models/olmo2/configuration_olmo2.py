@@ -23,7 +23,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -34,7 +33,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="allenai/Olmo2-7B-1124-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Olmo2Config(PreTrainedConfig):
     r"""
     Example:

@@ -13,8 +13,6 @@
 # limitations under the License.
 
 
-from dataclasses import dataclass
-
 import torch
 from huggingface_hub.dataclasses import strict
 
@@ -40,7 +38,6 @@ from ..olmoe.modeling_olmoe import (
 
 @auto_docstring(checkpoint="allenai/FlexOlmo-7x7B-1T")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class FlexOlmoConfig(PreTrainedConfig):
     r"""
     Example:

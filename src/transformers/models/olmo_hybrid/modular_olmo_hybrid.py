@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -77,7 +76,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="allenai/Olmo-Hybrid-7B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class OlmoHybridConfig(LlamaConfig):
     r"""
     linear_num_key_heads (`int`, *optional*):

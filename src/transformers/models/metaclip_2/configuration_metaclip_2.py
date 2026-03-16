@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -31,7 +30,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MetaClip2TextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -82,7 +80,6 @@ class MetaClip2TextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MetaClip2VisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -128,7 +125,6 @@ class MetaClip2VisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MetaClip2Config(PreTrainedConfig):
     r"""
     Example:

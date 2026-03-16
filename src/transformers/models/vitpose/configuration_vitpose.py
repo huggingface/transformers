@@ -13,8 +13,6 @@
 # limitations under the License.
 """VitPose model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
@@ -25,7 +23,6 @@ from ..auto.configuration_auto import AutoConfig
 
 @auto_docstring(checkpoint="usyd-community/vitpose-base-simple")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class VitPoseConfig(PreTrainedConfig):
     r"""
     scale_factor (`int`, *optional*, defaults to 4):

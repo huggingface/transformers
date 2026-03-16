@@ -14,8 +14,6 @@
 # limitations under the License.
 """ERNIE model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -24,7 +22,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="nghuyong/ernie-3.0-base-zh")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class ErnieConfig(PreTrainedConfig):
     r"""
     task_type_vocab_size (`int`, *optional*, defaults to 3):

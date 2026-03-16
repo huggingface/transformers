@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 from typing import Literal
 
 from huggingface_hub.dataclasses import strict
@@ -24,7 +23,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="llava-hf/llava-onevision-qwen2-7b-ov-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class LlavaOnevisionConfig(PreTrainedConfig):
     r"""
     vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):

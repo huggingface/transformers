@@ -21,8 +21,6 @@ Hyperparameters are taken from run_task_main.py and hparam_utils.py of the origi
 
 """
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -31,7 +29,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/tapas-base-finetuned-sqa")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class TapasConfig(PreTrainedConfig):
     r"""
     type_vocab_sizes (`list[int]`, *optional*, defaults to `[3, 256, 256, 2, 256, 256, 10]`):

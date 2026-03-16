@@ -18,7 +18,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dataclasses import dataclass
 from typing import Literal
 
 from huggingface_hub.dataclasses import strict
@@ -29,7 +28,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="blab-jhu/test-32m-dec")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class ModernBertDecoderConfig(PreTrainedConfig):
     r"""
     initializer_cutoff_factor (`float`, *optional*, defaults to 2.0):

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -23,7 +22,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="zai-org/GLM-ASR-Nano-2512")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class GlmAsrEncoderConfig(PreTrainedConfig):
     r"""
     Example:
@@ -65,7 +63,6 @@ class GlmAsrEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="zai-org/GLM-ASR-Nano-2512")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class GlmAsrConfig(PreTrainedConfig):
     r"""
     Example:

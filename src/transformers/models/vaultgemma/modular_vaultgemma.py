@@ -13,8 +13,6 @@
 # limitations under the License.
 
 
-from dataclasses import dataclass
-
 import torch
 from huggingface_hub.dataclasses import strict
 
@@ -26,7 +24,6 @@ from ..gemma2.modeling_gemma2 import Gemma2Attention, Gemma2DecoderLayer, Gemma2
 
 @auto_docstring(checkpoint="google/vaultgemma-1b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class VaultGemmaConfig(Gemma2Config):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):

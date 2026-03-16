@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -30,7 +29,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/gemma-7b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class GemmaConfig(PreTrainedConfig):
     r"""
     use_bidirectional_attention (`bool`, *optional*):

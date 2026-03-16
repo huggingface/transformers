@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -29,7 +28,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Glm4MoeConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):

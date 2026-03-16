@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -46,7 +45,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="swiss-ai/Apertus-8B-Instruct-2509")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class ApertusConfig(PreTrainedConfig):
     r"""
     ```python

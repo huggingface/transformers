@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -29,7 +28,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class GlmOcrVisionConfig(PreTrainedConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 4096):
@@ -72,7 +70,6 @@ class GlmOcrVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class GlmOcrTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -133,7 +130,6 @@ class GlmOcrTextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class GlmOcrConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 59256):

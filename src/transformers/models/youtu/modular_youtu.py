@@ -17,7 +17,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -44,7 +43,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="tencent/Youtu-LLM-2B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class YoutuConfig(DeepseekV3Config):
     r"""
     embedding_initializer_range (`float`, *optional*):

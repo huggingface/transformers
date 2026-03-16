@@ -13,8 +13,6 @@
 # limitations under the License.
 """OWL-ViT model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -26,7 +24,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="google/owlvit-base-patch16")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class OwlViTTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -65,7 +62,6 @@ class OwlViTTextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="google/owlvit-base-patch16")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class OwlViTVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -102,7 +98,6 @@ class OwlViTVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="google/owlvit-base-patch16")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class OwlViTConfig(PreTrainedConfig):
     model_type = "owlvit"
     sub_configs = {"text_config": OwlViTTextConfig, "vision_config": OwlViTVisionConfig}

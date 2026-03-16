@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -42,7 +41,6 @@ from ..olmo2.modeling_olmo2 import (
 
 @auto_docstring(checkpoint="allenai/Olmo-3-7B-Instruct")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Olmo3Config(Olmo2Config):
     r"""
     Example:

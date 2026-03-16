@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -29,7 +28,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="facebook/sam3")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Sam3TrackerPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -55,7 +53,6 @@ class Sam3TrackerPromptEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="facebook/sam3")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Sam3TrackerMaskDecoderConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*, defaults to 2048):
@@ -94,7 +91,6 @@ class Sam3TrackerMaskDecoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="facebook/sam3")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Sam3TrackerConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `Sam3TrackerPromptEncoderConfig`], *optional*):

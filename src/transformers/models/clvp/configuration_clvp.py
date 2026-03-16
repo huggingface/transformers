@@ -14,7 +14,6 @@
 """CLVP model configuration"""
 
 import os
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -27,7 +26,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="susnato/clvp_dev")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class ClvpEncoderConfig(PreTrainedConfig):
     r"""
     use_rotary_embedding (`bool`, *optional*, defaults to `True`):
@@ -101,7 +99,6 @@ class ClvpEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="susnato/clvp_dev")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class ClvpDecoderConfig(PreTrainedConfig):
     r"""
     resid_pdrop (`float`, *optional*, defaults to 0.1):
@@ -188,7 +185,6 @@ class ClvpDecoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="susnato/clvp_dev")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class ClvpConfig(PreTrainedConfig):
     r"""
     speech_config (`dict`, *optional*):

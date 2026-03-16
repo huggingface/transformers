@@ -13,8 +13,6 @@
 # limitations under the License.
 
 
-from dataclasses import dataclass
-
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
@@ -31,7 +29,6 @@ from ..nemotron.modeling_nemotron import NemotronMLP
 
 @auto_docstring(checkpoint="inceptionai/Jais-2-8B-Chat")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Jais2Config(LlamaConfig):
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

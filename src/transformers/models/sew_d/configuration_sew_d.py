@@ -15,7 +15,6 @@
 
 import functools
 import operator
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -25,7 +24,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="BAAI/seggpt-vit-large")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class SEWDConfig(PreTrainedConfig):
     r"""
     squeeze_factor (`int`, *optional*, defaults to 2):

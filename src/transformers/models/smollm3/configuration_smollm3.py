@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -29,7 +28,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="HuggingFaceTB/SmolLM3-3B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class SmolLM3Config(PreTrainedConfig):
     r"""
     no_rope_layers (`List[int]`, *optional*):

@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -30,7 +29,6 @@ from ..auto import AutoConfig
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5-server-det")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class PPOCRV5ServerDetConfig(PreTrainedConfig):
     r"""
     interpolate_mode (`str`, *optional*, defaults to `"nearest"`):

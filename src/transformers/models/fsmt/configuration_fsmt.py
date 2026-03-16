@@ -13,8 +13,6 @@
 # limitations under the License.
 """FSMT configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/wmt19-en-ru")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class FSMTConfig(PreTrainedConfig):
     r"""
     langs (`list[str]`):

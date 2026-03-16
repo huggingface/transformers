@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -29,7 +28,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class EdgeTamVisionConfig(PreTrainedConfig):
     r"""
     backbone_channel_list (`List[int]`, *optional*, defaults to `[384, 192, 96, 48]`):
@@ -91,7 +89,6 @@ class EdgeTamVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class EdgeTamPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -116,7 +113,6 @@ class EdgeTamPromptEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class EdgeTamMaskDecoderConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*, defaults to 2048):
@@ -155,7 +151,6 @@ class EdgeTamMaskDecoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class EdgeTamConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `EdgeTamPromptEncoderConfig`], *optional*):

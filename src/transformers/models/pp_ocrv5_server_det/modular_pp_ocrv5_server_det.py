@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import math
-from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -60,7 +59,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5-server-det")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class PPOCRV5ServerDetConfig(PreTrainedConfig):
     r"""
     interpolate_mode (`str`, *optional*, defaults to `"nearest"`):

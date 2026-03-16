@@ -13,8 +13,6 @@
 # limitations under the License.
 
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -26,7 +24,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="microsoft/git-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class GitVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -62,7 +59,6 @@ class GitVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="microsoft/git-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class GitConfig(PreTrainedConfig):
     r"""
     num_image_with_embedding (`int`, *optional*):

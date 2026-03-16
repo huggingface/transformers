@@ -14,8 +14,6 @@
 # limitations under the License.
 """PyTorch MiniMax model."""
 
-from dataclasses import dataclass
-
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -55,7 +53,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-Text-01-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MiniMaxConfig(PreTrainedConfig):
     r"""
     block_size (`int`, *optional*, defaults to 256):

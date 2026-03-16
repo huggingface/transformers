@@ -13,8 +13,6 @@
 # limitations under the License.
 """TrOCR model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/trocr-base-handwritten")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class TrOCRConfig(PreTrainedConfig):
     r"""
     use_learned_position_embeddings (`bool`, *optional*, defaults to `True`):

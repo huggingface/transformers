@@ -13,8 +13,6 @@
 # limitations under the License.
 """UnivNetModel model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="dg845/univnet-dev")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class UnivNetConfig(PreTrainedConfig):
     r"""
     model_in_channels (`int`, *optional*, defaults to 64):

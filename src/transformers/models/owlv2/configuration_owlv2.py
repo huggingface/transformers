@@ -13,8 +13,6 @@
 # limitations under the License.
 """OWLv2 model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -25,7 +23,6 @@ logger = logging.get_logger(__name__)
 
 
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 @auto_docstring(checkpoint="google/owlv2-base-patch16")
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTTextConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
 class Owlv2TextConfig(PreTrainedConfig):
@@ -65,7 +62,6 @@ class Owlv2TextConfig(PreTrainedConfig):
 
 
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 @auto_docstring(checkpoint="google/owlv2-base-patch16")
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTVisionConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2, 32->16
 class Owlv2VisionConfig(PreTrainedConfig):
@@ -103,7 +99,6 @@ class Owlv2VisionConfig(PreTrainedConfig):
 
 
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 @auto_docstring(checkpoint="google/owlv2-base-patch16")
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
 class Owlv2Config(PreTrainedConfig):

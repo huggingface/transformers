@@ -14,8 +14,6 @@
 # limitations under the License.
 """RWKV configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -24,7 +22,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="RWKV/rwkv-4-169m-pile")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class RwkvConfig(PreTrainedConfig):
     """
     context_length (`int`, *optional*, defaults to 1024):

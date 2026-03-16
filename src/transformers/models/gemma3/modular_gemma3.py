@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any, Optional
 
 import torch
@@ -62,7 +61,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="google/gemma-3-4b-it")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
     r"""
     final_logit_softcapping (`float`, *optional*):
@@ -155,7 +153,6 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
 
 @auto_docstring(checkpoint="google/gemma-3-4b-it")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Gemma3Config(PreTrainedConfig):
     r"""
     mm_tokens_per_image (`int`, *optional*, defaults to 256):

@@ -12,7 +12,6 @@
 # limitations under the License.
 """VideoLlava model configuration"""
 
-from dataclasses import dataclass
 from typing import Literal
 
 from huggingface_hub.dataclasses import strict
@@ -27,7 +26,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="LanguageBind/Video-LLaVA-7B-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class VideoLlavaConfig(PreTrainedConfig):
     r"""
     Example:

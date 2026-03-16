@@ -12,8 +12,6 @@
 # limitations under the License.
 """Qwen2Audio model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="Qwen/Qwen2-Audio-7B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Qwen2AudioEncoderConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
@@ -64,7 +61,6 @@ class Qwen2AudioEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="Qwen/Qwen2-Audio-7B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Qwen2AudioConfig(PreTrainedConfig):
     r"""
     Example:

@@ -13,7 +13,6 @@
 # limitations under the License.
 """CHMv2 model — Canopy Height Model v2, adapted from DPT."""
 
-from dataclasses import dataclass
 from typing import Literal
 
 import torch
@@ -37,7 +36,6 @@ from ..dpt.modeling_dpt import DPTReassembleLayer, _get_backbone_hidden_size
 
 @auto_docstring(checkpoint="facebook/dinov3-vitl16-chmv2-dpt-head")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class CHMv2Config(PreTrainedConfig):
     r"""
     backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):

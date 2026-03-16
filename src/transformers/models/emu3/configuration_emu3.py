@@ -14,8 +14,6 @@
 # limitations under the License.
 
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -25,7 +23,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="Emu3-community/Emu3-Chat-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Emu3VQVAEConfig(PreTrainedConfig):
     r"""
     out_channels (`int`, *optional*, defaults to 3):
@@ -77,7 +74,6 @@ class Emu3VQVAEConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="Emu3-community/Emu3-Chat-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Emu3TextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -123,7 +119,6 @@ class Emu3TextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="Emu3-community/Emu3-Chat-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Emu3Config(PreTrainedConfig):
     r"""
     vocabulary_map (`dict`, *optional*):

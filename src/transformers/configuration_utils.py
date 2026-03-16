@@ -71,7 +71,6 @@ ALLOWED_LAYER_TYPES = (
 
 
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     # no-format
     r"""
@@ -244,6 +243,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 except AttributeError as err:
                     logger.error(f"Can't set {key} with value {value} for {self}")
                     raise err
+
+    def __init_subclass__(cls, *args, **kwargs):
+        super().__init_subclass__(*args, **kwargs)
+        cls = dataclass(cls, repr=False)
 
     @property
     def name_or_path(self) -> str | None:

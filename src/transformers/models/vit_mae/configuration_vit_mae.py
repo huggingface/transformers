@@ -13,8 +13,6 @@
 # limitations under the License.
 """ViT MAE model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/vit-mae-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class ViTMAEConfig(PreTrainedConfig):
     r"""
     mask_ratio (`float`, *optional*, defaults to 0.75):

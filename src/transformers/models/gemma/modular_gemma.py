@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -49,7 +48,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="google/gemma-7b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class GemmaConfig(PreTrainedConfig):
     r"""
     use_bidirectional_attention (`bool`, *optional*):

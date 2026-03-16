@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -25,7 +24,6 @@ from ..timm_wrapper import TimmWrapperConfig
 
 @auto_docstring(checkpoint="facebook/pe-av-large")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class PeVideoEncoderConfig(PreTrainedConfig):
     r"""
     Example:
@@ -90,7 +88,6 @@ class PeVideoEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="facebook/pe-av-large")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class PeVideoConfig(PretrainedConfig):
     r"""
     video_config (`dict` or `PreTrainedConfig`, *optional*):

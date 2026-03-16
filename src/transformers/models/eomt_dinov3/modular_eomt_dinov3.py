@@ -14,7 +14,6 @@
 """PyTorch EoMT model backed by DINOv3."""
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Optional
 
 import torch
@@ -50,7 +49,6 @@ from ..eomt.modeling_eomt import (
 
 @auto_docstring(checkpoint="tue-mps/coco_panoptic_eomt_large_640_dinov3")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class EomtDinov3Config(EomtConfig):
     r"""
     layerscale_value (`float`, *optional*, defaults to 1.0):

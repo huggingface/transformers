@@ -13,8 +13,6 @@
 # limitations under the License.
 """PyTorch GLM-4-MOE model."""
 
-from dataclasses import dataclass
-
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
@@ -41,7 +39,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Glm4MoeConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):

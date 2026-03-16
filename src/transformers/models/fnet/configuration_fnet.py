@@ -13,8 +13,6 @@
 # limitations under the License.
 """FNet model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="google/fnet-base")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class FNetConfig(PreTrainedConfig):
     r"""
     use_tpu_fourier_optimizations (`bool`, *optional*, defaults to `False`):

@@ -14,7 +14,6 @@
 """Dac model configuration"""
 
 import math
-from dataclasses import dataclass
 
 import numpy as np
 from huggingface_hub.dataclasses import strict
@@ -25,7 +24,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="descript/dac_16khz")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class DacConfig(PreTrainedConfig):
     r"""
     downsampling_ratios (`list[int]`, *optional*, defaults to `[2, 4, 8, 8]`):

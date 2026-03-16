@@ -14,7 +14,6 @@
 """Zamba model configuration"""
 
 import math
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -24,7 +23,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="Zyphra/Zamba-7B-v1")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class ZambaConfig(PreTrainedConfig):
     r"""
     attention_hidden_size (`int`, *optional*):

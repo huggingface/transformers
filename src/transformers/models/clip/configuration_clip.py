@@ -13,8 +13,6 @@
 # limitations under the License.
 """CLIP model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -26,7 +24,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="openai/clip-vit-base-patch32")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class CLIPTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -77,7 +74,6 @@ class CLIPTextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="openai/clip-vit-base-patch32")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class CLIPVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -123,7 +119,6 @@ class CLIPVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="openai/clip-vit-base-patch32")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class CLIPConfig(PreTrainedConfig):
     r"""
     [`CLIPConfig`] is the configuration class to store the configuration of a [`CLIPModel`]. It is used to instantiate

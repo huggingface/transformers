@@ -14,7 +14,6 @@
 """EnCodec model configuration"""
 
 import math
-from dataclasses import dataclass
 
 import numpy as np
 from huggingface_hub.dataclasses import strict
@@ -25,7 +24,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/encodec_24khz")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class EncodecConfig(PreTrainedConfig):
     r"""
     chunk_length_s (`float`, *optional*):

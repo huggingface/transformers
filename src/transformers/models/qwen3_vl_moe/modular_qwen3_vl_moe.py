@@ -13,8 +13,6 @@
 # limitations under the License.
 """PyTorch Qwen3-VL-MOE model."""
 
-from dataclasses import dataclass
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -57,7 +55,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Qwen3VLMoeTextConfig(Qwen3MoeConfig):
     r"""
     decoder_sparse_step (`int`, *optional*, defaults to 1):
@@ -128,14 +125,12 @@ class Qwen3VLMoeTextConfig(Qwen3MoeConfig):
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Qwen3VLMoeVisionConfig(Qwen3VLVisionConfig):
     pass
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Qwen3VLMoeConfig(Qwen3VLConfig):
     r"""
     Example:

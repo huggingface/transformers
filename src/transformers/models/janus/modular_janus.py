@@ -82,7 +82,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class JanusVisionConfig(SiglipVisionConfig):
     r"""
     num_image_tokens (`int`, *optional*, defaults to 576):
@@ -110,7 +109,6 @@ class JanusVisionConfig(SiglipVisionConfig):
 
 @auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class JanusVQVAEConfig(ChameleonVQVAEConfig):
     r"""
     image_token_embed_dim (`int`, *optional*, defaults to 2048):
@@ -151,7 +149,6 @@ class JanusVQVAEConfig(ChameleonVQVAEConfig):
 
 @auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class JanusConfig(PreTrainedConfig):
     r"""
     Example:

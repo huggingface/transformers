@@ -13,8 +13,6 @@
 # limitations under the License.
 """AFMoE model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 @auto_docstring(
     custom_intro="""
     AFMoE is an Adaptive Feedforward MoE (Mixture of Experts) model with token-choice routing, shared experts, and a

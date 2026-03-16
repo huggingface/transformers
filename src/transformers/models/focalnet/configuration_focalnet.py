@@ -13,8 +13,6 @@
 # limitations under the License.
 """FocalNet model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import BackboneConfigMixin
@@ -24,7 +22,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="microsoft/focalnet-tiny")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class FocalNetConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     use_conv_embed (`bool`, *optional*, defaults to `False`):

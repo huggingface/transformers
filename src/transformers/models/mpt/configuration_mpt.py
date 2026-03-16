@@ -13,7 +13,6 @@
 # limitations under the License.
 """Mpt configuration"""
 
-from dataclasses import dataclass
 from typing import Literal
 
 from huggingface_hub.dataclasses import strict
@@ -24,7 +23,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="mosaicml/mpt-7b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MptAttentionConfig(PreTrainedConfig):
     """
     attn_type (`str`, *optional*, defaults to `"multihead_attention"`):
@@ -70,7 +68,6 @@ class MptAttentionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="mosaicml/mpt-7b")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class MptConfig(PreTrainedConfig):
     """
     expansion_ratio (`int`, *optional*, defaults to 4):

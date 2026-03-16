@@ -13,8 +13,6 @@
 # limitations under the License.
 """CodeGen model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +21,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="Salesforce/codegen-2B-mono")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class CodeGenConfig(PreTrainedConfig):
     r"""
     n_ctx (`int`, *optional*, defaults to 2048):

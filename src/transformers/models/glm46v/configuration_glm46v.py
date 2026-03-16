@@ -19,8 +19,6 @@
 # limitations under the License.
 
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -30,7 +28,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class Glm46VConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 151339):

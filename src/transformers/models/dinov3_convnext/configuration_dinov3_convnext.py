@@ -13,8 +13,6 @@
 # limitations under the License.
 """ConvNeXT model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import BackboneConfigMixin
@@ -24,7 +22,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="facebook/dinov3-convnext-tiny-pretrain-lvd1689m")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class DINOv3ConvNextConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     Example:

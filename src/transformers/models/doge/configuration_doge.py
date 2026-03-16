@@ -19,7 +19,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
 
@@ -30,7 +29,6 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="SmallDoge/Doge-320M")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class DogeConfig(PreTrainedConfig):
     r"""
     keep_window_size (`int`, *optional*, defaults to 2048):

@@ -18,8 +18,6 @@
 # limitations under the License.
 """LLaMA model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -30,7 +28,6 @@ from ...utils.type_validators import interval
 
 @auto_docstring(checkpoint="meta-llama/Llama-2-7b-hf")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class LlamaConfig(PreTrainedConfig):
     r"""
     ```python
@@ -64,7 +61,7 @@ class LlamaConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    vocab_size: int = 32000
+    vocab_size: float = 32000
     hidden_size: int = 4096
     intermediate_size: int = 11008
     num_hidden_layers: int = 32

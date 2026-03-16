@@ -13,8 +13,6 @@
 # limitations under the License.
 """OneFormer model configuration"""
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
@@ -25,7 +23,6 @@ from ..auto import AutoConfig
 
 @auto_docstring(checkpoint="shi-labs/oneformer_ade20k_swin_tiny")
 @strict(accept_kwargs=True)
-@dataclass(repr=False)
 class OneFormerConfig(PreTrainedConfig):
     r"""
     ignore_value (`int`, *optional*, defaults to 255):
