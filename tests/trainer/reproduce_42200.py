@@ -1,7 +1,13 @@
 # Swapping to google collab
-# Install transformers, Uncomment line below to recreate the problem.
-# !pip install transformers torch datasets -q
+# CELL 1 : 
+# !pip install huggingface
 
+# CELL 2 : 
+# !pip uninstall transformers -y
+# !pip install git+https://github.com/JonusClapshaw/transformers.git@issue-prediction_step-42200 -q
+
+# CELL 3 : COPY AND PASTE THE CODE BELOW
+# Reproduces issue #42200 - prediction_step returns tuple instead of torch.Tensor
 import torch
 import numpy as np
 from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
@@ -33,7 +39,11 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16)
 
 train_dataset = DummyDataset(tokenizer, size=10,  seq_len=16)
-eval_dataset  = DummyDataset(tokenizer, size=900, seq_len=16)
+# 850 rows or greater causes OOM if logits is a tuple instead of a tensor
+# Have to pass 100 through google collab or else it breaks but with trainers.py
+# changes it no longer breaks at 100 rows. If we pay for google collab premium or have a better 
+# GPU this code should run fine with 900 rows as originally intended.
+eval_dataset  = DummyDataset(tokenizer, size=100, seq_len=16)
 
 args = TrainingArguments(
     output_dir="./tmp_reproduce",
