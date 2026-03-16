@@ -13,14 +13,14 @@
 # limitations under the License.
 """Parakeet model configuration."""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="nvidia/parakeet-ctc-1.1b")
+@strict(accept_kwargs=True)
 class ParakeetEncoderConfig(PreTrainedConfig):
     r"""
     convolution_bias (`bool`, *optional*, defaults to `True`):
@@ -63,63 +63,35 @@ class ParakeetEncoderConfig(PreTrainedConfig):
     model_type = "parakeet_encoder"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        hidden_size=1024,
-        num_hidden_layers=24,
-        num_attention_heads=8,
-        intermediate_size=4096,
-        hidden_act="silu",
-        attention_bias=True,
-        convolution_bias=True,
-        conv_kernel_size=9,
-        subsampling_factor=8,
-        subsampling_conv_channels=256,
-        num_mel_bins=80,
-        subsampling_conv_kernel_size=3,
-        subsampling_conv_stride=2,
-        dropout=0.1,
-        dropout_positions=0.0,
-        layerdrop=0.1,
-        activation_dropout=0.1,
-        attention_dropout=0.1,
-        max_position_embeddings=5000,
-        scale_input=True,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_attention_heads  # LlamaAttention compatibility
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.attention_bias = attention_bias
-        self.convolution_bias = convolution_bias
+    hidden_size: int = 1024
+    num_hidden_layers: int = 24
+    num_attention_heads: int = 8
+    intermediate_size: int = 4096
+    hidden_act: str = "silu"
+    attention_bias: bool = True
+    convolution_bias: bool = True
+    conv_kernel_size: int = 9
+    subsampling_factor: int = 8
+    subsampling_conv_channels: int = 256
+    num_mel_bins: int = 80
+    subsampling_conv_kernel_size: int = 3
+    subsampling_conv_stride: int = 2
+    dropout: float | int = 0.1
+    dropout_positions: float = 0.0
+    layerdrop: float | int = 0.1
+    activation_dropout: float | int = 0.1
+    attention_dropout: float | int = 0.1
+    max_position_embeddings: int = 5000
+    scale_input: bool = True
+    initializer_range: float = 0.02
 
-        self.conv_kernel_size = conv_kernel_size
-        self.subsampling_conv_kernel_size = subsampling_conv_kernel_size
-        self.subsampling_conv_stride = subsampling_conv_stride
-
-        self.subsampling_factor = subsampling_factor
-        self.subsampling_conv_channels = subsampling_conv_channels
-        self.num_mel_bins = num_mel_bins
-
-        self.dropout = dropout
-        self.dropout_positions = dropout_positions
-        self.layerdrop = layerdrop
-        self.activation_dropout = activation_dropout
-        self.attention_dropout = attention_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.scale_input = scale_input
-        self.initializer_range = initializer_range
-
-        super().__init__(
-            **kwargs,
-        )
+    def __post_init__(self, **kwargs):
+        self.num_key_value_heads = self.num_attention_heads
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="nvidia/parakeet-ctc-1.1b")
+@strict(accept_kwargs=True)
 class ParakeetCTCConfig(PreTrainedConfig):
     r"""
     ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
@@ -148,40 +120,19 @@ class ParakeetCTCConfig(PreTrainedConfig):
     model_type = "parakeet_ctc"
     sub_configs = {"encoder_config": ParakeetEncoderConfig}
 
-    def __init__(
-        self,
-        vocab_size=1025,
-        ctc_loss_reduction="mean",
-        ctc_zero_infinity=True,
-        encoder_config: dict | ParakeetEncoderConfig = None,
-        pad_token_id=1024,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.ctc_loss_reduction = ctc_loss_reduction
-        self.ctc_zero_infinity = ctc_zero_infinity
+    vocab_size: int = 1025
+    ctc_loss_reduction: str = "mean"
+    ctc_zero_infinity: bool = True
+    encoder_config: dict | PreTrainedConfig | None = None
+    pad_token_id: int | None = 1024
 
-        if isinstance(encoder_config, dict):
-            self.encoder_config = ParakeetEncoderConfig(**encoder_config)
-        elif encoder_config is None:
+    def __post_init__(self, **kwargs):
+        if isinstance(self.encoder_config, dict):
+            self.encoder_config = ParakeetEncoderConfig(**self.encoder_config)
+        elif self.encoder_config is None:
             self.encoder_config = ParakeetEncoderConfig()
-
-        self.encoder_config = self.encoder_config
         self.initializer_range = self.encoder_config.initializer_range
-        self.pad_token_id = pad_token_id
-
-        super().__init__(**kwargs)
-
-    @classmethod
-    def from_encoder_config(cls, encoder_config: ParakeetEncoderConfig, **kwargs):
-        r"""
-        Instantiate a [`ParakeetCTCConfig`] (or a derived class) from parakeet encoder model configuration.
-
-        Returns:
-            [`ParakeetCTCConfig`]: An instance of a configuration object
-        """
-
-        return cls(encoder_config=encoder_config.to_dict(), **kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["ParakeetCTCConfig", "ParakeetEncoderConfig"]

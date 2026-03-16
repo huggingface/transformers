@@ -830,7 +830,7 @@ class Ernie4_5VLVisionMLP(nn.Module):
 class Ernie4_5_VLMoePatchEmbed(nn.Module):
     def __init__(
         self,
-        patch_size: int = 14,
+        patch_size: int | list[int] | tuple[int, int] = 14,
         in_channels: int = 3,
         embed_dim: int = 1152,
     ) -> None:

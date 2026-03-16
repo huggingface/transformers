@@ -13,6 +13,8 @@
 # limitations under the License.
 """Pix2Struct model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
@@ -21,6 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/pix2struct-base")
+@strict(accept_kwargs=True)
 class Pix2StructTextConfig(PreTrainedConfig):
     r"""
     relative_attention_num_buckets (`int`, *optional*, defaults to 32):
@@ -57,60 +60,30 @@ class Pix2StructTextConfig(PreTrainedConfig):
         "decoder_layers": "num_layers",
     }
 
-    def __init__(
-        self,
-        vocab_size=50244,
-        hidden_size=768,
-        d_kv=64,
-        d_ff=2048,
-        num_layers=12,
-        num_heads=12,
-        relative_attention_num_buckets=32,
-        relative_attention_max_distance=128,
-        dropout_rate=0.1,
-        layer_norm_epsilon=1e-6,
-        initializer_factor=1.0,
-        dense_act_fn="gelu_new",
-        decoder_start_token_id=0,
-        use_cache=False,
-        pad_token_id=0,
-        eos_token_id=1,
-        bos_token_id=None,
-        tie_word_embeddings=False,
-        is_decoder=True,
-        add_cross_attention=False,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.d_kv = d_kv
-        self.d_ff = d_ff
-        self.num_layers = num_layers
-        self.num_heads = num_heads
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.relative_attention_max_distance = relative_attention_max_distance
-        self.dropout_rate = dropout_rate
-        self.layer_norm_epsilon = layer_norm_epsilon
-        self.initializer_factor = initializer_factor
-        self.use_cache = use_cache
-
-        self.eos_token_id = eos_token_id
-        self.bos_token_id = bos_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-
-        # for backwards compatibility
-        self.dense_act_fn = dense_act_fn
-
-        self.pad_token_id = pad_token_id
-        self.eos_token_id = eos_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.is_decoder = is_decoder
-        self.add_cross_attention = add_cross_attention
-        super().__init__(**kwargs)
+    vocab_size: int = 50244
+    hidden_size: int = 768
+    d_kv: int = 64
+    d_ff: int = 2048
+    num_layers: int = 12
+    num_heads: int = 12
+    relative_attention_num_buckets: int = 32
+    relative_attention_max_distance: int = 128
+    dropout_rate: float = 0.1
+    layer_norm_epsilon: float = 1e-6
+    initializer_factor: float = 1.0
+    dense_act_fn: str = "gelu_new"
+    decoder_start_token_id: int = 0
+    use_cache: bool = False
+    pad_token_id: int | None = 0
+    eos_token_id: int | None = 1
+    bos_token_id: int | None = None
+    tie_word_embeddings: bool = False
+    is_decoder: bool = True
+    add_cross_attention: bool = False
 
 
 @auto_docstring(checkpoint="google/pix2struct-base")
+@strict(accept_kwargs=True)
 class Pix2StructVisionConfig(PreTrainedConfig):
     r"""
     dense_act_fn (`Union[Callable, str]`, *optional*, defaults to `"gelu_new"`):
@@ -147,45 +120,25 @@ class Pix2StructVisionConfig(PreTrainedConfig):
 
     model_type = "pix2struct_vision_model"
 
-    def __init__(
-        self,
-        hidden_size=768,
-        patch_embed_hidden_size=768,
-        d_ff=2048,
-        d_kv=64,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        dense_act_fn="gelu_new",
-        layer_norm_eps=1e-6,
-        dropout_rate=0.0,
-        attention_dropout=0.0,
-        initializer_range=1e-10,
-        initializer_factor=1.0,
-        seq_len=4096,
-        relative_attention_num_buckets=32,
-        relative_attention_max_distance=128,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.patch_embed_hidden_size = patch_embed_hidden_size
-        self.d_ff = d_ff
-        self.dropout_rate = dropout_rate
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
-        self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.dense_act_fn = dense_act_fn
-        self.seq_len = seq_len
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.relative_attention_max_distance = relative_attention_max_distance
-        self.d_kv = d_kv
+    hidden_size: int = 768
+    patch_embed_hidden_size: int = 768
+    d_ff: int = 2048
+    d_kv: int = 64
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    dense_act_fn: str = "gelu_new"
+    layer_norm_eps: float = 1e-6
+    dropout_rate: float = 0.0
+    attention_dropout: float | int = 0.0
+    initializer_range: float = 1e-10
+    initializer_factor: float = 1.0
+    seq_len: int = 4096
+    relative_attention_num_buckets: int = 32
+    relative_attention_max_distance: int = 128
 
 
 @auto_docstring(checkpoint="google/pix2struct-base")
+@strict(accept_kwargs=True)
 class Pix2StructConfig(PreTrainedConfig):
     r"""
     is_vqa (`bool`, *optional*, defaults to `False`):
@@ -217,49 +170,40 @@ class Pix2StructConfig(PreTrainedConfig):
     model_type = "pix2struct"
     sub_configs = {"text_config": Pix2StructTextConfig, "vision_config": Pix2StructVisionConfig}
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        initializer_factor=1.0,
-        initializer_range=0.02,
-        is_vqa=False,
-        tie_word_embeddings=False,
-        is_encoder_decoder=True,
-        **kwargs,
-    ):
-        if text_config is None:
-            text_config = Pix2StructTextConfig(
-                {"is_encoder_decoder": is_encoder_decoder, "tie_word_embeddings": tie_word_embeddings}
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    initializer_factor: float = 1.0
+    initializer_range: float = 0.02
+    is_vqa: bool = False
+    tie_word_embeddings: bool = False
+    is_encoder_decoder: bool = True
+
+    def __post_init__(self, **kwargs):
+        if self.text_config is None:
+            self.text_config = Pix2StructTextConfig(
+                is_encoder_decoder=self.is_encoder_decoder,
+                tie_word_embeddings=self.tie_word_embeddings,
             )
             logger.info("`text_config` is `None`. initializing the `Pix2StructTextConfig` with default values.")
-        elif isinstance(text_config, dict):
-            text_config["is_encoder_decoder"] = is_encoder_decoder
-            text_config["tie_word_embeddings"] = tie_word_embeddings
-            text_config = Pix2StructTextConfig(**text_config)
+        elif isinstance(self.text_config, dict):
+            self.text_config["is_encoder_decoder"] = self.is_encoder_decoder
+            self.text_config["tie_word_embeddings"] = self.tie_word_embeddings
+            self.text_config = Pix2StructTextConfig(**self.text_config)
 
-        if vision_config is None:
-            vision_config = Pix2StructVisionConfig()
+        if self.vision_config is None:
+            self.vision_config = Pix2StructVisionConfig()
             logger.info("`vision_config` is `None`. initializing the `Pix2StructVisionConfig` with default values.")
-        elif isinstance(vision_config, dict):
-            vision_config = Pix2StructVisionConfig(**vision_config)
-
-        self.text_config = text_config
-        self.vision_config = vision_config
+        elif isinstance(self.vision_config, dict):
+            self.vision_config = Pix2StructVisionConfig(**self.vision_config)
 
         self.decoder_start_token_id = self.text_config.decoder_start_token_id
         self.pad_token_id = self.text_config.pad_token_id
         self.eos_token_id = self.text_config.eos_token_id
 
-        self.initializer_factor = initializer_factor
-        self.initializer_range = initializer_range
-
         self.text_config.initializer_range = self.initializer_range
         self.vision_config.initializer_range = self.initializer_range
 
-        self.is_vqa = is_vqa
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Pix2StructConfig", "Pix2StructTextConfig", "Pix2StructVisionConfig"]
