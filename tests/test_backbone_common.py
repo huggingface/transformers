@@ -58,7 +58,6 @@ class BackboneTesterMixin:
         self.assertEqual(config.out_indices, [0, 2])
 
         # Error raised when out_indices do not correspond to out_features
-        print("START")
         with self.assertRaises(ValueError):
             config = config_class(out_features=["stage1", "stage2"], out_indices=[0, 2])
 
