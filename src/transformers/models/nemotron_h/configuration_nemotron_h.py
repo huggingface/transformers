@@ -104,24 +104,24 @@ class NemotronHConfig(PreTrainedConfig):
     use_mamba_kernels: bool = True
     ssm_state_size: int = 128
     mamba_num_heads: int = 128
-    mamba_n_groups: int = 8
     mamba_head_dim: int = 64
-    mamba_d_conv: int = 4
-    mamba_expand: int = 2
     mamba_hidden_act: str = "silu"
-    mamba_dt_min: float = 0.001
-    mamba_dt_max: float = 0.1
-    mamba_dt_limit: list[float] | tuple[float, ...] = (0.0, float("inf"))
-    mamba_dt_init_floor: float = 1e-4
-    mamba_conv_bias: bool = True
+    n_groups: int = 8
+    conv_kernel: int = 4
+    expand: int = 2
+    time_step_min: float = 0.001
+    time_step_max: float = 0.1
+    time_step_limit: list[float] | tuple[float, ...] = (0.0, float("inf"))
+    time_step_floor: float = 1e-4
+    use_conv_bias: bool = True
+    chunk_size: int = 128
     mamba_proj_bias: bool = False
-    mamba_chunk_size: int = 128
     mamba_ssm_cache_dtype: str = "float32"
     n_routed_experts: int = 8
     n_shared_experts: int = 1
     moe_intermediate_size: int = 7688
     moe_shared_expert_intermediate_size: int = 7688
-    moe_latent_size: int = None
+    moe_latent_size: int | None = None
     moe_shared_expert_overlap: bool = True
     num_experts_per_tok: int = 2
     routed_scaling_factor: float | int = 1.0
@@ -129,7 +129,7 @@ class NemotronHConfig(PreTrainedConfig):
     topk_group: int = 1
     norm_topk_prob: bool = True
     num_nextn_predict_layers: int = 0
-    mtp_layers_block_type: list[str] = ["attention", "moe"]
+    mtp_layers_block_type: list[str] | None = None
     use_bias: bool = False
     initializer_range: float = 0.02
     layer_norm_epsilon: float = 1e-5
@@ -138,6 +138,20 @@ class NemotronHConfig(PreTrainedConfig):
     rescale_prenorm_residual: bool = True
 
     def __post_init__(self, **kwargs):
+        # Backward compatibility; configs expect different names for these fields when init
+        # but they have to be re-names when creating/saving the config.
+        self.n_groups = kwargs.pop("mamba_n_groups") if "mamba_n_groups" in kwargs else self.n_groups
+        self.conv_kernel = kwargs.pop("mamba_d_conv") if "mamba_d_conv" in kwargs else self.conv_kernel
+        self.expand = kwargs.pop("mamba_expand") if "mamba_expand" in kwargs else self.expand
+        self.time_step_min = kwargs.pop("mamba_dt_min") if "mamba_dt_min" in kwargs else self.time_step_min
+        self.time_step_max = kwargs.pop("mamba_dt_max") if "mamba_dt_max" in kwargs else self.time_step_max
+        self.time_step_limit = kwargs.pop("mamba_dt_limit") if "mamba_dt_limit" in kwargs else self.time_step_limit
+        self.time_step_floor = (
+            kwargs.pop("mamba_dt_init_floor") if "mamba_dt_init_floor" in kwargs else self.time_step_floor
+        )
+        self.use_conv_bias = kwargs.pop("mamba_conv_bias") if "mamba_conv_bias" in kwargs else self.use_conv_bias
+        self.chunk_size = kwargs.pop("mamba_chunk_size") if "mamba_chunk_size" in kwargs else self.chunk_size
+
         # Backward compatibility: convert hybrid_override_pattern to layers_block_type
         # Always pop hybrid_override_pattern from kwargs to prevent it from being set as an attribute
         if "hybrid_override_pattern" in kwargs:
@@ -160,9 +174,12 @@ class NemotronHConfig(PreTrainedConfig):
 
         # Backward compatibility: convert mtp_hybrid_override_pattern to mtp_layers_block_type
         # Always pop mtp_hybrid_override_pattern from kwargs to prevent it from being set as an attribute
+        if self.mtp_layers_block_type is None:
+            self.mtp_layers_block_type == ["attention", "moe"]
+
         if "mtp_hybrid_override_pattern" in kwargs:
             pattern = kwargs.pop("mtp_hybrid_override_pattern")
-            if self.mtp_layers_block_type is None or self.mtp_layers_block_type == ["attention", "moe"]:
+            if self.mtp_layers_block_type == ["attention", "moe"]:
                 self.mtp_layers_block_type = self._pattern_to_list(pattern)
 
         # for backward compatibility
