@@ -291,7 +291,7 @@ class HCXVisionConfig(PretrainedConfig):
 
     model_type = "hyperclovax_vision"
     keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"text_config": HyperClovaXConfig, "vision_config": Qwen2_5_VLVisionConfig}
+    sub_configs = {"text_config": AutoConfig, "vision_config": Qwen2_5_VLVisionConfig}
 
     def __init__(
         self,
@@ -319,13 +319,15 @@ class HCXVisionConfig(PretrainedConfig):
         **kwargs,
     ):
         if isinstance(text_config, dict):
+            text_config["model_type"] = text_config.get("model_type", "hyperclovax")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = HyperClovaXConfig()
         self.text_config = text_config
 
         if isinstance(vision_config, dict):
-            if vision_config["architectures"][0] == "Qwen2_5_VisionTransformerPretrainedModel":
+            vision_config["model_type"] = vision_config.get("model_type", "qwen2_5_vl")
+            if vision_config["model_type"] == "qwen2_5_vl":
                 vision_config = Qwen2_5_VLVisionConfig(**vision_config)
             else:
                 vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
