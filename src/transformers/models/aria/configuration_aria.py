@@ -81,6 +81,7 @@ class AriaTextConfig(PreTrainedConfig):
     moe_num_experts: int = 8
     moe_topk: int = 2
     moe_num_shared_experts: int = 2
+    dummy_kwarg: int | None = None
 
     def __post_init__(self, **kwargs):
         if self.head_dim is None:
