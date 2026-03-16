@@ -36,14 +36,14 @@ def get_config(checkpoint):
     return base_config
 
 
-def convert_nomic_hub_to_hf(original_model_id, output_hub_path, push_to_hub):
+def convert_nomic_hub_to_hf(original_model_id, output_hub_path, push_to_hub, private_repo):
     config = get_config(original_model_id)
 
     config.save_pretrained(output_hub_path)
     print(f"Config saved to {output_hub_path}")
 
     if push_to_hub:
-        config.push_to_hub(output_hub_path, private=True)
+        config.push_to_hub(output_hub_path, private=private_repo)
 
 
 def main():
@@ -66,8 +66,13 @@ def main():
         action="store_true",
         help="If set, the model will be pushed to the hub after conversion.",
     )
+    parser.add_argument(
+        "--private_repo",
+        action="store_true",
+        help="If set, the model will be pushed to the hub as a private repository.",
+    )
     args = parser.parse_args()
-    convert_nomic_hub_to_hf(args.original_model_id, args.output_hub_path, args.push_to_hub)
+    convert_nomic_hub_to_hf(args.original_model_id, args.output_hub_path, args.push_to_hub, args.private_repo)
 
 
 if __name__ == "__main__":

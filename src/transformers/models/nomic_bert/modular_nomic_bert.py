@@ -16,35 +16,36 @@ from collections.abc import Callable
 
 import torch
 import torch.nn as nn
+from torch.nn import CrossEntropyLoss
 
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    MaskedLMOutput,
 )
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..bert.configuration_bert import BertConfig
 from ..bert.modeling_bert import (
     BertEmbeddings,
-    BertForMaskedLM,
     BertForMultipleChoice,
     BertForNextSentencePrediction,
     BertForPreTraining,
     BertForPreTrainingOutput,
-    BertForQuestionAnswering,
     BertForSequenceClassification,
     BertForTokenClassification,
     BertModel,
+    BertOnlyMLMHead,
     BertPooler,
     BertPredictionHeadTransform,
     BertPreTrainedModel,
 )
+from ..gpt_neox.modeling_gpt_neox import GPTNeoXLayer
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaMLP,
@@ -177,8 +178,7 @@ class NomicBertConfig(BertConfig):
             **kwargs,
         )
 
-        # is_decoder not deleted as will cause errors if NomicBertForMaskedLM is called
-        self.is_decoder = False
+        del self.is_decoder
         del self.use_cache
         del self.add_cross_attention
 
@@ -195,12 +195,10 @@ class NomicBertEmbeddings(BertEmbeddings):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
     ) -> torch.Tensor:
-        if input_ids is not None:
-            input_shape = input_ids.size()
-        else:
-            input_shape = inputs_embeds.size()[:-1]
+        if inputs_embeds is None:
+            inputs_embeds = self.word_embeddings(input_ids)
 
-        batch_size, seq_length = input_shape
+        batch_size, seq_length = inputs_embeds.size()[:-1]
 
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
@@ -209,6 +207,7 @@ class NomicBertEmbeddings(BertEmbeddings):
                 buffered_token_type_ids = torch.gather(buffered_token_type_ids, dim=1, index=position_ids)
                 token_type_ids = buffered_token_type_ids.expand(batch_size, seq_length)
             else:
+                input_shape = inputs_embeds.size()[:-1]
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
         if inputs_embeds is None:
@@ -293,12 +292,11 @@ class NomicBertMLP(LlamaMLP):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
 
-class NomicBertLayer(GradientCheckpointingLayer):
+class NomicBertLayer(GPTNeoXLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
-        self.self_attn = NomicBertAttention(config, layer_idx=layer_idx)
-        self.mlp = NomicBertMLP(config)
-        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        del self.use_parallel_residual
+        del self.input_layernorm
         self.post_attention_dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.post_mlp_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_mlp_dropout = nn.Dropout(config.attention_probs_dropout_prob)
@@ -310,8 +308,9 @@ class NomicBertLayer(GradientCheckpointingLayer):
         position_embeddings: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
+        # Attention
         residual = hidden_states
-        hidden_states, _ = self.self_attn(
+        hidden_states, _ = self.attention(
             hidden_states,
             attention_mask,
             position_embeddings=position_embeddings,
@@ -320,6 +319,7 @@ class NomicBertLayer(GradientCheckpointingLayer):
 
         hidden_states = self.post_attention_layernorm(self.post_attention_dropout(residual) + hidden_states)
 
+        # MLP
         residual = hidden_states
         hidden_states = self.mlp(hidden_states)
 
@@ -378,6 +378,9 @@ class NomicBertModel(BertModel):
 
         self.rotary_emb = NomicBertRotaryEmbedding(config)
 
+        self.emb_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.emb_dropout = nn.Dropout(config.hidden_dropout_prob)
+
     @merge_with_config_defaults
     @capture_outputs
     def forward(
@@ -409,12 +412,14 @@ class NomicBertModel(BertModel):
             inputs_embeds=inputs_embeds,
         )
 
-        if attention_mask is not None:
-            attention_mask = create_bidirectional_mask(
-                config=self.config,
-                inputs_embeds=embedding_output,
-                attention_mask=attention_mask,
-            )
+        embedding_output = self.emb_layernorm(embedding_output)
+        embedding_output = self.emb_dropout(embedding_output)
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
 
         hidden_states = embedding_output
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -441,10 +446,6 @@ class NomicBertForPreTraining(BertForPreTraining):
     pass
 
 
-class NomicBertForMaskedLM(BertForMaskedLM):
-    pass
-
-
 class NomicBertForNextSentencePrediction(BertForNextSentencePrediction):
     pass
 
@@ -457,11 +458,81 @@ class NomicBertForMultipleChoice(BertForMultipleChoice):
     pass
 
 
-class NomicBertForTokenClassification(BertForTokenClassification):
+class NomicBertOnlyMLMHead(BertOnlyMLMHead):
     pass
 
 
-class NomicBertForQuestionAnswering(BertForQuestionAnswering):
+class NomicBertForMaskedLM(NomicBertPreTrainedModel):
+    _tied_weights_keys = {
+        "cls.predictions.decoder.weight": "nomic_bert.embeddings.word_embeddings.weight",
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+    }
+
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.nomic_bert = NomicBertModel(config, add_pooling_layer=False)
+        self.cls = NomicBertOnlyMLMHead(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_output_embeddings(self):
+        return self.cls.predictions.decoder
+
+    def set_output_embeddings(self, new_embeddings):
+        self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor] | MaskedLMOutput:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        """
+        outputs = self.nomic_bert(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            return_dict=True,
+            **kwargs,
+        )
+
+        sequence_output = outputs[0]
+        prediction_scores = self.cls(sequence_output)
+
+        masked_lm_loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()  # -100 index = padding token
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+
+        return MaskedLMOutput(
+            loss=masked_lm_loss,
+            logits=prediction_scores,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+class NomicBertForTokenClassification(BertForTokenClassification):
     pass
 
 
@@ -471,7 +542,6 @@ __all__ = [
     "NomicBertForMultipleChoice",
     "NomicBertForNextSentencePrediction",
     "NomicBertForPreTraining",
-    "NomicBertForQuestionAnswering",
     "NomicBertForSequenceClassification",
     "NomicBertForTokenClassification",
     "NomicBertLayer",

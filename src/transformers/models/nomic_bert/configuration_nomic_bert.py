@@ -126,9 +126,6 @@ class NomicBertConfig(PreTrainedConfig):
         self.num_key_value_heads = num_key_value_heads if num_key_value_heads is not None else num_attention_heads
         self.rope_parameters = rope_parameters
         self.pad_token_id = pad_token_id
-
-        # is_decoder not deleted as will cause errors if NomicBertForMaskedLM is called
-        self.is_decoder = False
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.tie_word_embeddings = tie_word_embeddings

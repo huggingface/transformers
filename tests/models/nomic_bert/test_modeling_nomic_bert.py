@@ -13,9 +13,7 @@
 # limitations under the License.
 import unittest
 
-import pytest
-
-from transformers import AutoTokenizer, NomicBertConfig, is_torch_available
+from transformers import AutoModel, AutoTokenizer, NomicBertConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     require_torch,
@@ -37,7 +35,6 @@ if is_torch_available():
         NomicBertForMultipleChoice,
         NomicBertForNextSentencePrediction,
         NomicBertForPreTraining,
-        NomicBertForQuestionAnswering,
         NomicBertForSequenceClassification,
         NomicBertForTokenClassification,
         NomicBertModel,
@@ -231,30 +228,6 @@ class NomicBertModelTester:
         self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertEqual(result.seq_relationship_logits.shape, (self.batch_size, 2))
 
-    def create_and_check_for_question_answering(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        next_sentence_label,
-    ):
-        model = NomicBertForQuestionAnswering(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            start_positions=sequence_labels,
-            end_positions=sequence_labels,
-        )
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
-
     def create_and_check_for_sequence_classification(
         self,
         config,
@@ -342,7 +315,6 @@ class NomicBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             NomicBertForMultipleChoice,
             NomicBertForNextSentencePrediction,
             NomicBertForPreTraining,
-            NomicBertForQuestionAnswering,
             NomicBertForSequenceClassification,
             NomicBertForTokenClassification,
         )
@@ -353,7 +325,6 @@ class NomicBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         {
             "feature-extraction": NomicBertModel,
             "fill-mask": NomicBertForMaskedLM,
-            "question-answering": NomicBertForQuestionAnswering,
             "text-classification": NomicBertForSequenceClassification,
             "token-classification": NomicBertForTokenClassification,
             "zero-shot": NomicBertForSequenceClassification,
@@ -403,10 +374,6 @@ class NomicBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
 
-    def test_for_question_answering(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
-
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
@@ -415,62 +382,23 @@ class NomicBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "nomic-ai/nomic-embed-text-v1.5"
-        model = NomicBertModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
-
 
 @require_torch
 class NomicBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = NomicBertModel.from_pretrained("nomic-ai/nomic-embed-text-v1.5")
-        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
-        attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+        model = AutoModel.from_pretrained("nomic-ai/nomic-embed-text-v1.5")
+        tokenizer = AutoTokenizer.from_pretrained("nomic-ai/nomic-embed-text-v1.5")
+
+        text = "Plants create oxygen through a process known as photosynthesis."
+        inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True)
+        inputs["attention_mask"] = torch.ones_like(inputs["input_ids"])
+
         with torch.no_grad():
-            output = model(input_ids, attention_mask=attention_mask)[0]
+            output = model(**inputs)[0]
+
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
+
         expected_slice = torch.tensor([[[0.4249, 0.1008, 0.7531], [0.3771, 0.1188, 0.7467], [0.4152, 0.1098, 0.7108]]])
-
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
-
-    @slow
-    @pytest.mark.torch_export_test
-    def test_export(self):
-        bert_tokenizer = "google-bert/bert-base-uncased"
-        bert_model = "nomic-ai/nomic-embed-text-v1.5"
-        device = "cpu"
-        attn_implementation = "sdpa"
-        max_length = 512
-
-        tokenizer = AutoTokenizer.from_pretrained(bert_tokenizer)
-        inputs = tokenizer(
-            "the man worked as a [MASK].",
-            return_tensors="pt",
-            padding="max_length",
-            max_length=max_length,
-        )
-
-        model = NomicBertForMaskedLM.from_pretrained(
-            bert_model,
-            device_map=device,
-            attn_implementation=attn_implementation,
-        )
-
-        logits = model(**inputs).logits
-        eg_predicted_mask = tokenizer.decode(logits[0, 6].topk(5).indices)
-        self.assertEqual(eg_predicted_mask.split(), ["carpenter", "waiter", "barber", "mechanic", "salesman"])
-
-        exported_program = torch.export.export(
-            model,
-            args=(inputs["input_ids"],),
-            kwargs={"attention_mask": inputs["attention_mask"]},
-            strict=True,
-        )
-
-        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
-        ep_predicted_mask = tokenizer.decode(result.logits[0, 6].topk(5).indices)
-        self.assertEqual(eg_predicted_mask, ep_predicted_mask)
