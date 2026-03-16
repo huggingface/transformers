@@ -1473,6 +1473,11 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             vision_image_attention_mask = (
                 image_attention_mask if vision_image_attention_mask is None else vision_image_attention_mask
             )
+        custom_position_ids = (
+            position_ids
+            if position_ids is not None and position_ids.ndim == 3 and vision_patches is not None
+            else None
+        )
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -1492,13 +1497,11 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             "vision_token_lengths": vision_token_lengths,
             "vision_image_attention_mask": vision_image_attention_mask,
         }
-        if not any(value is not None for value in multimodal_inputs.values()):
-            return model_inputs
-
-        first_step = is_first_iteration or not use_cache
+        is_prefill = is_first_iteration or not use_cache
         for key, value in multimodal_inputs.items():
-            model_inputs[key] = value if first_step else None
-        model_inputs["position_ids"] = position_ids if first_step else None
+            model_inputs[key] = value if is_prefill else None
+        if custom_position_ids is not None:
+            model_inputs["position_ids"] = custom_position_ids if is_prefill else None
 
         return model_inputs
 
