@@ -16,9 +16,10 @@ from collections.abc import Callable
 
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import (
@@ -46,6 +47,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="CohereForAI/c4ai-command-r-v01")
+@strict(accept_kwargs=True)
 class Cohere2Config(PreTrainedConfig):
     r"""
     logit_scale (`float`, *optional*, defaults to 0.0625):
@@ -82,75 +84,45 @@ class Cohere2Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 256000,
-        hidden_size: int | None = 8192,
-        intermediate_size: int | None = 22528,
-        logit_scale: float | None = 0.0625,
-        num_hidden_layers: int | None = 40,
-        num_attention_heads: int | None = 64,
-        num_key_value_heads: int | None = None,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 8192,
-        initializer_range: float | None = 0.02,
-        layer_norm_eps: int | None = 1e-5,
-        use_cache: int | None = True,
-        pad_token_id: int | None = 0,
-        bos_token_id: int | None = 5,
-        eos_token_id: int | None = 255001,
-        tie_word_embeddings: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        sliding_window: int | None = 4096,
-        layer_types: list[str] | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.logit_scale = logit_scale
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vocab_size: int = 256000
+    hidden_size: int = 8192
+    intermediate_size: int = 22528
+    logit_scale: float = 0.0625
+    num_hidden_layers: int = 40
+    num_attention_heads: int = 64
+    num_key_value_heads: int | None = None
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 8192
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-5
+    use_cache: int = True
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 5
+    eos_token_id: int | list[int] | None = 255001
+    tie_word_embeddings: bool = True
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
+    sliding_window: int | None = 4096
+    layer_types: list[str] | None = None
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.sliding_window = sliding_window
-        self.layer_types = layer_types
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
         # Need to specify head_dim in the config so it can be used in the attention forward functions
-        self.head_dim = hidden_size // num_attention_heads
-
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
+        self.head_dim = self.hidden_size // self.num_attention_heads
 
         # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
-        self._sliding_window_pattern = kwargs.get("sliding_window_pattern", 4)
-
         if self.layer_types is None:
             # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
-            self._sliding_window_pattern = getattr(self, "sliding_window_pattern", 4)
+            _sliding_window_pattern = kwargs.pop("sliding_window_pattern", 4)
             self.layer_types = [
-                "sliding_attention" if bool((i + 1) % self._sliding_window_pattern) else "full_attention"
+                "sliding_attention" if bool((i + 1) % _sliding_window_pattern) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        self.rope_parameters = rope_parameters
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 class Cohere2RotaryEmbedding(CohereRotaryEmbedding):

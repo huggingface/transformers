@@ -13,14 +13,14 @@
 # limitations under the License.
 """Perceiver model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="deepmind/language-perceiver")
+@strict(accept_kwargs=True)
 class PerceiverConfig(PreTrainedConfig):
     r"""
     num_latents (`int`, *optional*, defaults to 256):
@@ -84,70 +84,33 @@ class PerceiverConfig(PreTrainedConfig):
 
     model_type = "perceiver"
 
-    def __init__(
-        self,
-        num_latents=256,
-        d_latents=1280,
-        d_model=768,
-        num_blocks=1,
-        num_self_attends_per_block=26,
-        num_self_attention_heads=8,
-        num_cross_attention_heads=8,
-        qk_channels=None,
-        v_channels=None,
-        cross_attention_shape_for_attention="kv",
-        self_attention_widening_factor=1,
-        cross_attention_widening_factor=1,
-        hidden_act="gelu",
-        attention_probs_dropout_prob=0.1,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        use_query_residual=True,
-        vocab_size=262,
-        max_position_embeddings=2048,
-        image_size=56,
-        train_size=[368, 496],
-        num_frames=16,
-        audio_samples_per_frame=1920,
-        samples_per_patch=16,
-        output_shape=[1, 16, 224, 224],
-        output_num_channels=512,
-        _label_trainable_num_channels=1024,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.num_latents = num_latents
-        self.d_latents = d_latents
-        self.d_model = d_model
-        self.num_blocks = num_blocks
-        self.num_self_attends_per_block = num_self_attends_per_block
-        self.num_self_attention_heads = num_self_attention_heads
-        self.num_cross_attention_heads = num_cross_attention_heads
-        self.qk_channels = qk_channels
-        self.v_channels = v_channels
-        self.cross_attention_shape_for_attention = cross_attention_shape_for_attention
-        self.self_attention_widening_factor = self_attention_widening_factor
-        self.cross_attention_widening_factor = cross_attention_widening_factor
-        self.hidden_act = hidden_act
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.use_query_residual = use_query_residual
-        # masked language modeling attributes
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        # image classification attributes
-        self.image_size = image_size
-        # flow attributes
-        self.train_size = train_size
-        # multimodal autoencoding attributes
-        self.num_frames = num_frames
-        self.audio_samples_per_frame = audio_samples_per_frame
-        self.samples_per_patch = samples_per_patch
-        self.output_shape = output_shape
-        self.output_num_channels = output_num_channels
-        self._label_trainable_num_channels = _label_trainable_num_channels
+    num_latents: int = 256
+    d_latents: int = 1280
+    d_model: int = 768
+    num_blocks: int = 1
+    num_self_attends_per_block: int = 26
+    num_self_attention_heads: int = 8
+    num_cross_attention_heads: int = 8
+    qk_channels: int | None = None
+    v_channels: int | None = None
+    cross_attention_shape_for_attention: str = "kv"
+    self_attention_widening_factor: int = 1
+    cross_attention_widening_factor: int = 1
+    hidden_act: str = "gelu"
+    attention_probs_dropout_prob: float = 0.1
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    use_query_residual: bool = True
+    vocab_size: int = 262
+    max_position_embeddings: int = 2048
+    image_size: int | list[int] | tuple[int, int] = 56
+    train_size: list[int] | tuple[int, ...] = (368, 496)
+    num_frames: int = 16
+    audio_samples_per_frame: int = 1920
+    samples_per_patch: int = 16
+    output_shape: list[int] | tuple[int, ...] = (1, 16, 224, 224)
+    output_num_channels: int = 512
+    _label_trainable_num_channels: int = 1024
 
 
 __all__ = ["PerceiverConfig"]

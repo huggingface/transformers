@@ -15,14 +15,14 @@
 
 import math
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Zyphra/Zamba-7B-v1")
+@strict(accept_kwargs=True)
 class ZambaConfig(PreTrainedConfig):
     r"""
     attention_hidden_size (`int`, *optional*):
@@ -54,95 +54,53 @@ class ZambaConfig(PreTrainedConfig):
     model_type = "zamba"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        vocab_size=32000,
-        tie_word_embeddings=True,
-        hidden_size=3712,
-        attention_hidden_size=None,
-        intermediate_size=14848,
-        num_hidden_layers=76,
-        num_attention_heads=16,
-        attention_head_dim=None,
-        num_key_value_heads=16,
-        n_mamba_heads=2,
-        hidden_act="gelu",
-        hidden_mamba_act="silu",
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        num_logits_to_keep=1,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        max_position_embeddings=4096,
-        attention_dropout=0.0,
-        attn_layer_period=6,
-        attn_layer_offset=4,
-        use_mamba_kernels=True,
-        mamba_d_state=16,
-        mamba_d_conv=4,
-        mamba_expand=2,
-        mamba_dt_rank="auto",
-        time_step_min=0.001,
-        time_step_max=0.1,
-        time_step_floor=1e-4,
-        mamba_conv_bias=True,
-        mamba_proj_bias=False,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.tie_word_embeddings = tie_word_embeddings
-        self.hidden_size = hidden_size
-        if attention_hidden_size is None:
-            self.attention_hidden_size = 2 * hidden_size
-        else:
-            self.attention_hidden_size = attention_hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        if attention_head_dim is None:
-            self.attention_head_dim = 2 * self.hidden_size // self.num_attention_heads
-        else:
-            self.attention_head_dim = attention_head_dim
-        self.max_position_embeddings = max_position_embeddings
-        self.attention_dropout = attention_dropout
+    vocab_size: int = 32000
+    tie_word_embeddings: bool = True
+    hidden_size: int = 3712
+    attention_hidden_size: int | None = None
+    intermediate_size: int = 14848
+    num_hidden_layers: int = 76
+    num_attention_heads: int = 16
+    attention_head_dim: int | None = None
+    num_key_value_heads: int = 16
+    n_mamba_heads: int = 2
+    hidden_act: str = "gelu"
+    hidden_mamba_act: str = "silu"
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    num_logits_to_keep: int = 1
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 1
+    eos_token_id: int | None = 2
+    max_position_embeddings: int = 4096
+    attention_dropout: float | int = 0.0
+    attn_layer_period: int = 6
+    attn_layer_offset: int = 4
+    use_mamba_kernels: bool = True
+    mamba_d_state: int = 16
+    mamba_d_conv: int = 4
+    mamba_expand: int = 2
+    mamba_dt_rank: str | int = "auto"
+    time_step_min: float = 0.001
+    time_step_max: float = 0.1
+    time_step_floor: float = 1e-4
+    mamba_conv_bias: bool = True
+    mamba_proj_bias: bool = False
 
-        self.num_key_value_heads = num_key_value_heads
-        self.n_mamba_heads = n_mamba_heads
-        self.hidden_act = hidden_act
-        self.hidden_mamba_act = hidden_mamba_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-
-        self.use_cache = use_cache
-        self.num_logits_to_keep = num_logits_to_keep
-
-        self.attn_layer_period = attn_layer_period
-        self.attn_layer_offset = attn_layer_offset
-
-        self.use_mamba_kernels = use_mamba_kernels
-        self.mamba_d_state = mamba_d_state
-        self.mamba_d_conv = mamba_d_conv
-        self.mamba_expand = mamba_expand
-        self.mamba_dt_rank = math.ceil(self.hidden_size / 16) if mamba_dt_rank == "auto" else mamba_dt_rank
-        self.time_step_min = time_step_min
-        self.time_step_max = time_step_max
-        self.time_step_floor = time_step_floor
-        self.mamba_conv_bias = mamba_conv_bias
-        self.mamba_proj_bias = mamba_proj_bias
-
-        self.layers_block_type = self._layers_block_type(num_hidden_layers, attn_layer_period, attn_layer_offset)
-
-        assert (self.mamba_expand * self.hidden_size) % self.n_mamba_heads == 0, (
-            "`intermediate_size` should be divisible by `n_mamba_heads`."
+    def __post_init__(self, **kwargs):
+        self.attention_hidden_size = self.attention_hidden_size or 2 * self.hidden_size
+        self.attention_head_dim = self.attention_head_dim or 2 * self.hidden_size // self.num_attention_heads
+        self.mamba_dt_rank = math.ceil(self.hidden_size / 16) if self.mamba_dt_rank == "auto" else self.mamba_dt_rank
+        self.layers_block_type = self._layers_block_type(
+            self.num_hidden_layers, self.attn_layer_period, self.attn_layer_offset
         )
+        super().__post_init__(**kwargs)
 
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        super().__init__(**kwargs)
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if (self.mamba_expand * self.hidden_size) % self.n_mamba_heads != 0:
+            raise ValueError("`intermediate_size` should be divisible by `n_mamba_heads`.")
 
     def _layers_block_type(self, num_hidden_layers, attn_layer_period, attn_layer_offset):
         layers = [
