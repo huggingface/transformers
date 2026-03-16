@@ -45,7 +45,7 @@ class JanusTextKwargs(TextKwargs, total=False):
 class JanusProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: JanusTextKwargs
     _defaults = {
-        "text_kwargs": {"padding": False, "generation_mode": "text"},
+        "text_kwargs": {"padding": False, "padding_side": "left", "generation_mode": "text"},
         "common_kwargs": {"return_tensors": "pt"},
     }
 

@@ -35,6 +35,7 @@ from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from transformers.testing_utils import (
     Expectations,
+    require_deterministic_for_xpu,
     require_torch,
     slow,
     torch_device,
@@ -409,6 +410,7 @@ class JanusIntegrationTest(unittest.TestCase):
         self.model_id = "deepseek-community/Janus-Pro-1B"
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_text_generation(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         model.eval()
@@ -428,6 +430,7 @@ class JanusIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_text_generation_batched(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -447,15 +450,24 @@ class JanusIntegrationTest(unittest.TestCase):
             images=[image_1, image_2], text=prompts, generation_mode="text", padding=True, return_tensors="pt"
         ).to(model.device, torch.float16)
 
-        EXPECTED_TEXT_COMPLETION = [
-            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is part of the zodiac and the constellation",  # fmt: skip
-            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\nforming a constellation, the constellation of Orion is located in the constellation of Scorpius.\n",  # fmt: skip
-        ]
+        EXPECTED_TEXT_COMPLETION = Expectations(
+            {
+                ("xpu", None): [
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is part of the zodiac and the constellation",  # fmt: skip
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a constellation of a winged figure with a crown on its head. This constellation is",  # fmt: skip
+                ],
+                (None, None): [
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is part of the zodiac and the constellation",  # fmt: skip
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a constellation of a winged figure with a crown, which is the constellation of Peg",  # fmt: skip
+                ],
+            }
+        )
         generated_ids = model.generate(**inputs, max_new_tokens=20, generation_mode="text", do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION.get_expectation(), text)
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_text_generation_with_multi_image(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -478,6 +490,7 @@ class JanusIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_generate_images(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
