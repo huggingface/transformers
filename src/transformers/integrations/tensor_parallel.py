@@ -1388,7 +1388,10 @@ def gather_state_dict_for_save(
 
 
 def add_tensor_parallel_hooks_to_module(
-    model, module, tp_plan, layer_name, current_module_plan, device_mesh, parameter_name=None
+    model,
+    module,
+    current_module_plan,
+    device_mesh,
 ):
     r"""
     This function is called in `PretrainedModel.post_init()`. It is responsible of adding hooks
@@ -1397,14 +1400,23 @@ def add_tensor_parallel_hooks_to_module(
     This is the place where we add the `pre_forward` and `post_forwards` hooks. These are defined
     for each `TensorParallelLayer` as `_prepare_input_fn` and `_prepare_output_fn`.
 
+    Args:
+        model (`PretrainedModel`): The model containing the modules.
+        module (`nn.Module`): The current module to which we want to add the hooks.
+        current_module_plan (`str` or `None`): The tensor parallel plan for the current module, if any.
+        device_mesh (`dist.device_mesh.DeviceMesh`): The device mesh for distributed communication.
+
     """
     if current_module_plan is not None:
         tp_layer = ALL_PARALLEL_STYLES[current_module_plan]
         try:
             tp_layer.prepare_module_tp(module, device_mesh, config=model.config)
         except NotImplementedError as e:
-            print(
-                f"Trying to prepare {layer_name}, but it's not supported. Corresponding module: {module} Fix it's TP plan: {e}"
+            modules2names = {v: k for k, v in dict(model.named_modules()).items()}
+            layer_name = modules2names.get(module, "unknown")
+            logger.warning(
+                f"Trying to prepare {layer_name}, but it's not supported. Corresponding module: {module} Fix it's TP "
+                f"plan: {e}"
             )
 
         module._hf_tp_plan = current_module_plan
@@ -1514,12 +1526,10 @@ def distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size):
             if not getattr(module, "_is_hooked", False):
                 plan = _get_parameter_tp_plan(parameter_name=name, tp_plan=model_plan, is_weight=False)
                 add_tensor_parallel_hooks_to_module(
-                    model=model,
-                    module=module,
-                    tp_plan=model_plan,
-                    layer_name="",
-                    current_module_plan=plan,
-                    device_mesh=device_mesh,
+                    model,
+                    module,
+                    plan,
+                    device_mesh,
                 )
             module._is_hooked = True
     return model
