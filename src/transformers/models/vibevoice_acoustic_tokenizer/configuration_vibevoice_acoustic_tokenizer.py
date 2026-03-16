@@ -119,6 +119,7 @@ class VibeVoiceAcousticTokenizerEncoderConfig(VibeVoiceAcousticTokenizerConfig):
     def encoder_config(self):
         return None
 
+
 @auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)

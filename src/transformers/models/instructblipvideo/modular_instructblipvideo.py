@@ -34,7 +34,6 @@ from transformers.models.instructblip.modeling_instructblip import (
     TransformersKwargs,
 )
 
-from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple

@@ -22,7 +22,7 @@ from torch import nn
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, is_tracing, logging
+from ...utils import TransformersKwargs, auto_docstring, is_tracing
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..dinov2.configuration_dinov2 import Dinov2Config
