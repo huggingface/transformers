@@ -1117,7 +1117,11 @@ def convert_and_load_state_dict_in_model(
     # When doing on-the-fly quantization, we also use sync loading to avoid worker threads loading full-precision
     # tensors to GPU faster than the main thread can quantize them, which would cause a large memory spike.
     has_on_the_fly_quantization = hf_quantizer is not None and not hf_quantizer.pre_quantized
-    if is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD") or "disk" in device_map.values() or has_on_the_fly_quantization:
+    if (
+        is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD")
+        or "disk" in device_map.values()
+        or has_on_the_fly_quantization
+    ):
         thread_pool = None
     else:
         thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
