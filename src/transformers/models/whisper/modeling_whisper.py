@@ -40,7 +40,9 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_whisper import WhisperConfig
 from .generation_whisper import WhisperGenerationMixin
 
@@ -286,7 +288,6 @@ class WhisperAttention(nn.Module):
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-        cache_position: torch.Tensor | None = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -332,11 +333,7 @@ class WhisperAttention(nn.Module):
             key_states = key_states.transpose(1, 2).contiguous()
             value_states = value_states.transpose(1, 2).contiguous()
             if past_key_values is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -384,23 +381,20 @@ class WhisperEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        output_attentions: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
+            **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -417,7 +411,7 @@ class WhisperEncoderLayer(GradientCheckpointingLayer):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        return hidden_states, attn_weights
+        return hidden_states
 
 
 class WhisperDecoderLayer(GradientCheckpointingLayer):
@@ -459,9 +453,8 @@ class WhisperDecoderLayer(GradientCheckpointingLayer):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: EncoderDecoderCache | None = None,
-        output_attentions: bool | None = False,
         use_cache: bool | None = True,
-        cache_position: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
         Args:
@@ -473,35 +466,30 @@ class WhisperDecoderLayer(GradientCheckpointingLayer):
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             past_key_values (`Cache`): cached past key and value projection states
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
-            hidden_states=hidden_states,
+        hidden_states, _ = self.self_attn(
+            hidden_states,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            cache_position=cache_position,
+            **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
         # Cross-Attention Block
-        cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
-            hidden_states, cross_attn_weights = self.encoder_attn(
-                hidden_states=hidden_states,
+            hidden_states, _ = self.encoder_attn(
+                hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
-                output_attentions=output_attentions,
+                **kwargs,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
@@ -515,12 +503,7 @@ class WhisperDecoderLayer(GradientCheckpointingLayer):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights, cross_attn_weights)
-
-        return outputs
+        return hidden_states
 
 
 @auto_docstring
@@ -564,6 +547,10 @@ class WhisperEncoder(WhisperPreTrainedModel):
         config: WhisperConfig
     """
 
+    _can_record_outputs = {
+        "hidden_states": WhisperEncoderLayer,
+        "attentions": WhisperAttention,
+    }
     input_modalities = ("audio",)
 
     def __init__(self, config: WhisperConfig):
@@ -601,15 +588,14 @@ class WhisperEncoder(WhisperPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_features,
         attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        **kwargs,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
         r"""
         Args:
             input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
@@ -622,14 +608,6 @@ class WhisperEncoder(WhisperPreTrainedModel):
             attention_mask (`torch.Tensor`)`, *optional*):
                 Whisper does not support masking of the `input_features`, this argument is preserved for compatibility,
                 but it is not used. By default the silence in the input log mel spectrogram are ignored.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
 
         expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
@@ -638,11 +616,6 @@ class WhisperEncoder(WhisperPreTrainedModel):
                 f"Whisper expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
             )
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
 
@@ -652,12 +625,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
         hidden_states = inputs_embeds + self.embed_positions(all_positions)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
         for idx, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
             if self.training:
@@ -665,28 +633,17 @@ class WhisperEncoder(WhisperPreTrainedModel):
                 if dropout_probability < self.layerdrop:  # skip the layer
                     to_drop = True
 
-            if to_drop:
-                layer_outputs = (None, None)
-            else:
-                layer_outputs = encoder_layer(
+            if not to_drop:
+                hidden_states = encoder_layer(
                     hidden_states,
-                    attention_mask=None,
-                    output_attentions=output_attentions,
+                    None,
+                    **kwargs,
                 )
 
-                hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
         hidden_states = self.layer_norm(hidden_states)
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
         )
 
 
@@ -697,6 +654,12 @@ class WhisperDecoder(WhisperPreTrainedModel):
     Args:
         config: WhisperConfig
     """
+
+    _can_record_outputs = {
+        "hidden_states": WhisperDecoderLayer,
+        "attentions": OutputRecorder(WhisperAttention, index=1, layer_name="self_attn"),
+        "cross_attentions": OutputRecorder(WhisperAttention, index=1, layer_name="encoder_attn"),
+    }
 
     main_input_name = "input_ids"
     input_modalities = ("text",)
@@ -723,6 +686,8 @@ class WhisperDecoder(WhisperPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids=None,
@@ -732,12 +697,8 @@ class WhisperDecoder(WhisperPreTrainedModel):
         inputs_embeds=None,
         position_ids=None,
         use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        cache_position=None,
-        **kwargs,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -769,35 +730,9 @@ class WhisperDecoder(WhisperPreTrainedModel):
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
                 control over how to convert `input_ids` indices into associated vectors than the model's internal
                 embedding lookup matrix.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence. It is used to update the
-                cache in the correct position and to infer the complete sequence length.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
+        if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -809,19 +744,11 @@ class WhisperDecoder(WhisperPreTrainedModel):
                 else DynamicCache(config=self.config)
             )
 
-        past_key_values_length = 0
-        if cache_position is not None:
-            past_key_values_length = cache_position[0]
-        elif past_key_values is not None:
-            past_key_values_length = past_key_values.get_seq_length()
-
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + input_shape[1], device=inputs_embeds.device
-            )
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0).repeat(input_shape[0], 1)
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_key_values_length
+            position_ids = position_ids.unsqueeze(0).repeat(inputs_embeds.shape[0], 1)
 
         # embed positions
         if input_ids is not None:
@@ -840,67 +767,32 @@ class WhisperDecoder(WhisperPreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
 
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache = True` is incompatible with gradient checkpointing. Setting `use_cache = False`..."
-                )
-                use_cache = False
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
-
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
             if self.training:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:
                     continue
 
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
                 causal_mask,
                 encoder_hidden_states,
                 encoder_attention_mask=None,
                 past_key_values=past_key_values if use_cache else None,
-                output_attentions=output_attentions,
                 use_cache=use_cache,
-                cache_position=cache_position,
+                **kwargs,
             )
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-                if encoder_hidden_states is not None:
-                    all_cross_attentions += (layer_outputs[2],)
 
         hidden_states = self.layer_norm(hidden_states)
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
 
-        next_cache = past_key_values if use_cache else None
-        if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_cross_attentions]
-                if v is not None
-            )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-            cross_attentions=all_cross_attentions,
+            past_key_values=past_key_values,
         )
 
 
@@ -970,6 +862,7 @@ class WhisperModel(WhisperPreTrainedModel):
 
         return input_features
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -982,10 +875,6 @@ class WhisperModel(WhisperPreTrainedModel):
         decoder_inputs_embeds: tuple[torch.FloatTensor] | None = None,
         decoder_position_ids: tuple[torch.LongTensor] | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | Seq2SeqModelOutput:
         r"""
@@ -1029,24 +918,14 @@ class WhisperModel(WhisperPreTrainedModel):
          >>> list(last_hidden_state.shape)
          [1, 2, 512]
          ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if encoder_outputs is None:
             input_features = self._mask_input_features(input_features, attention_mask=attention_mask)
 
             encoder_outputs = self.encoder(
                 input_features,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                **kwargs,
             )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+        elif not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
@@ -1062,14 +941,8 @@ class WhisperModel(WhisperPreTrainedModel):
             inputs_embeds=decoder_inputs_embeds,
             position_ids=decoder_position_ids,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
+            **kwargs,
         )
-
-        if not return_dict:
-            return decoder_outputs + encoder_outputs
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1117,6 +990,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         """
         self.model.encoder._freeze_parameters()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1130,10 +1004,6 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         decoder_position_ids: tuple[torch.LongTensor] | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | Seq2SeqLMOutput:
         r"""
@@ -1186,8 +1056,6 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         >>> transcription
         ' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if labels is not None:
             if labels.shape[1] > self.max_target_positions:
                 raise ValueError(
@@ -1198,7 +1066,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
 
-        outputs = self.model(
+        outputs: Seq2SeqModelOutput = self.model(
             input_features,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
@@ -1208,12 +1076,9 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
             decoder_inputs_embeds=decoder_inputs_embeds,
             decoder_position_ids=decoder_position_ids,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
+            **kwargs,
         )
-        lm_logits = self.proj_out(outputs[0])
+        lm_logits = self.proj_out(outputs.last_hidden_state)
 
         loss = None
         if labels is not None:
@@ -1221,10 +1086,6 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
             # move labels to correct device to enable PP
             labels = labels.to(lm_logits.device)
             loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.reshape(-1))
-
-        if not return_dict:
-            output = (lm_logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return Seq2SeqLMOutput(
             loss=loss,
@@ -1292,6 +1153,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1302,10 +1164,6 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
@@ -1342,12 +1200,6 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
         >>> transcription
         ' Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.'
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         # If the user passed a tuple or `BaseModelOutput` for encoder_outputs, we extract only the hidden states
         if isinstance(encoder_outputs, (BaseModelOutput, tuple, list)):
             encoder_outputs = encoder_outputs[0]
@@ -1360,10 +1212,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
+            **kwargs,
         )
 
         logits = self.proj_out(outputs[0])
@@ -1373,10 +1222,6 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
             labels = labels.to(logits.device)
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
@@ -1421,15 +1266,13 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.encoder.set_input_embeddings(value)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_features: torch.LongTensor | None = None,
         encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
         r"""
@@ -1465,23 +1308,19 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
         'Afrikaans'
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         if self.config.use_weighted_layer_sum:
-            output_hidden_states = True
-        elif output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+            kwargs["output_hidden_states"] = True
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_features,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                **kwargs,
+            )
+        elif not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
         if self.config.use_weighted_layer_sum:
@@ -1498,16 +1337,11 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
         logits = self.classifier(pooled_output)
 
         loss = None
-
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             # move labels to correct device to enable PP
             labels = labels.to(logits.device)
             loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + encoder_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,

@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 class EdgeTamVisionConfig(PreTrainedConfig):
     r"""
     backbone_channel_list (`List[int]`, *optional*, defaults to `[384, 192, 96, 48]`):
@@ -98,7 +98,7 @@ class EdgeTamVisionConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 class EdgeTamPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -134,7 +134,7 @@ class EdgeTamPromptEncoderConfig(PreTrainedConfig):
         self.scale = scale
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 class EdgeTamMaskDecoderConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*, defaults to 2048):
@@ -192,7 +192,7 @@ class EdgeTamMaskDecoderConfig(PreTrainedConfig):
         self.attention_downsample_rate = attention_downsample_rate
 
 
-@auto_docstring(checkpoint="facebook/EdgeTAM")
+@auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
 class EdgeTamConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `EdgeTamPromptEncoderConfig`], *optional*):

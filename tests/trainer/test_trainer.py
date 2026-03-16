@@ -21,7 +21,6 @@ import math
 import os
 import tempfile
 from functools import partial
-from unittest.mock import patch
 
 import datasets
 import numpy as np
@@ -1068,83 +1067,97 @@ class TrainerEarlyStoppingTest(TestCasePlus):
 class TrainerLigerKernelTest(TestCasePlus):
     @require_liger_kernel
     def test_use_liger_kernel_patching(self):
-        # Ensure any monkey patching is cleaned up for subsequent tests
-        with patch("transformers.models.llama.modeling_llama"):
-            from liger_kernel.transformers import liger_rotary_pos_emb
+        import importlib
 
-            from transformers.models.llama import modeling_llama
+        from liger_kernel.transformers import liger_rotary_pos_emb
 
-            config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
-            tiny_llama = LlamaForCausalLM(config)
+        from transformers.integrations.liger import apply_liger_kernel
+        from transformers.models.llama import modeling_llama
 
-            # Spot check that modeling code and model instance variables are not yet patched
-            self.assertNotEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
-            self.assertFalse("LigerRMSNorm" in tiny_llama.model.norm.__repr__())
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
 
-            args = TrainingArguments(self.get_auto_remove_tmp_dir(), use_liger_kernel=True)
-            Trainer(tiny_llama, args)
+        # Spot check that modeling code and model instance variables are not yet patched
+        self.assertNotEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
+        self.assertFalse("LigerRMSNorm" in tiny_llama.model.norm.__repr__())
 
-            # Spot check that modeling code and model instance variables are patched
-            self.assertEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
-            self.assertTrue("LigerRMSNorm" in tiny_llama.model.norm.__repr__())
+        apply_liger_kernel(tiny_llama, {})
+
+        # Spot check that modeling code and model instance variables are patched
+        self.assertEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
+        self.assertTrue("LigerRMSNorm" in tiny_llama.model.norm.__repr__())
+
+        # Restore the original module to avoid leaking monkey patches to other tests
+        importlib.reload(modeling_llama)
 
     @require_liger_kernel
     def test_use_liger_kernel_custom_config_patching(self):
-        # Ensure any monkey patching is cleaned up for subsequent tests
-        with patch("transformers.models.llama.modeling_llama"):
-            from liger_kernel.transformers import LigerRMSNorm
+        import importlib
 
-            config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
-            tiny_llama = LlamaForCausalLM(config)
+        from liger_kernel.transformers import LigerRMSNorm
 
-            args = TrainingArguments(
-                self.get_auto_remove_tmp_dir(),
-                use_liger_kernel=True,
-                liger_kernel_config={"rms_norm": False},  # Don't apply Liger's RMSNorm
-            )
-            Trainer(tiny_llama, args)
+        from transformers.integrations.liger import apply_liger_kernel
+        from transformers.models.llama import modeling_llama
 
-            # Check that the RMSNorm kernel is not applied as specified in the config
-            self.assertFalse(isinstance(tiny_llama.model.norm, LigerRMSNorm))
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+
+        apply_liger_kernel(tiny_llama, {"rms_norm": False})
+
+        # Check that the RMSNorm kernel is not applied as specified in the config
+        self.assertFalse(isinstance(tiny_llama.model.norm, LigerRMSNorm))
+
+        # Restore the original module to avoid leaking monkey patches to other tests
+        importlib.reload(modeling_llama)
 
     @require_liger_kernel
     @require_torch_accelerator
     @require_torch_non_multi_accelerator  # Don't work with DP
     def test_use_liger_kernel_trainer(self):
-        # Ensure any monkey patching is cleaned up for subsequent tests
-        with patch("transformers.models.llama.modeling_llama"):
-            config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
-            tiny_llama = LlamaForCausalLM(config)
-            x = torch.randint(0, 100, (128,))
-            train_dataset = RepeatDataset(x)
-            args = TrainingArguments(
-                self.get_auto_remove_tmp_dir(),
-                learning_rate=1e-2,
-                logging_steps=5,
-                max_steps=20,
-                use_liger_kernel=True,
-            )
-            Trainer(tiny_llama, args, train_dataset=train_dataset).train()
+        import importlib
+
+        from transformers.models.llama import modeling_llama
+
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e-2,
+            logging_steps=5,
+            max_steps=20,
+            use_liger_kernel=True,
+        )
+        Trainer(tiny_llama, args, train_dataset=train_dataset).train()
+
+        # Restore the original module to avoid leaking monkey patches to other tests
+        importlib.reload(modeling_llama)
 
     @require_liger_kernel
     @require_torch_accelerator
     @require_torch_non_multi_accelerator  # don't work with DP
     def test_use_liger_kernel_custom_config_trainer(self):
-        # Ensure any monkey patching is cleaned up for subsequent tests
-        with patch("transformers.models.llama.modeling_llama"):
-            config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
-            tiny_llama = LlamaForCausalLM(config)
-            x = torch.randint(0, 100, (128,))
-            train_dataset = RepeatDataset(x)
-            args = TrainingArguments(
-                self.get_auto_remove_tmp_dir(),
-                learning_rate=1e-2,
-                logging_steps=5,
-                max_steps=20,
-                use_liger_kernel=True,
-                liger_kernel_config={"rms_norm": False, "cross_entropy": True, "fused_linear_cross_entropy": False},
-            )
-            Trainer(tiny_llama, args, train_dataset=train_dataset).train()
+        import importlib
+
+        from transformers.models.llama import modeling_llama
+
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e-2,
+            logging_steps=5,
+            max_steps=20,
+            use_liger_kernel=True,
+            liger_kernel_config={"rms_norm": False, "cross_entropy": True, "fused_linear_cross_entropy": False},
+        )
+        Trainer(tiny_llama, args, train_dataset=train_dataset).train()
+
+        # Restore the original module to avoid leaking monkey patches to other tests
+        importlib.reload(modeling_llama)
 
 
 # ---------------------------------------------------------------------------

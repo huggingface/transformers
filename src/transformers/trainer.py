@@ -2483,7 +2483,7 @@ class Trainer:
         else:
             input_tokens = inputs[main_input_name].numel()
 
-        input_tokens = torch.tensor(input_tokens, device=self.args.device, dtype=torch.int64)
+        input_tokens = torch.as_tensor(input_tokens, device=self.args.device, dtype=torch.int64)
         self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
 
     def _clip_grad_norm(self, model):
