@@ -228,16 +228,13 @@ class HCXVisionForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
                 )
             self.assertIsNotNone(outputs)
 
-    @unittest.skip(reason="Feedforward chunking is not yet supported")
-    def test_feed_forward_chunking(self):
-        pass
-
-    @unittest.skip(reason="CPU offload is not yet supported")
-    def test_cpu_offload(self):
-        pass
-
-
-torch_device = "cpu"
+    def test_reverse_loading_mapping(self):
+        orig_classes = self.all_model_classes
+        self.all_model_classes = (HCXVisionForConditionalGeneration,)
+        try:
+            super().test_reverse_loading_mapping()
+        finally:
+            self.all_model_classes = orig_classes
 
 
 @require_torch
