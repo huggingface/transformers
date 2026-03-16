@@ -169,6 +169,14 @@ The [`Scheduler`] selects requests for processing at each step based on the toke
 
 [`ContinuousBatchingManager`] runs the model forward pass for the scheduled requests. It then collects and returns the results.
 
+[`ContinuousBatchingConfig`] is the object used to store all parameters needed for continuous batching, that are not already in [`GenerationConfig`]
+
+## Continuous batching config
+
+[[autodoc]] ContinuousBatchingConfig
+    - __call__
+
+
 ## Resources
 
 The [Continuous batching](https://huggingface.co/blog/continuous_batching) blog post explains KV caching, chunked prefill, and ragged batching with dynamic scheduling in more detail.

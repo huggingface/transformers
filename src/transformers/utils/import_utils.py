@@ -212,7 +212,7 @@ def is_cuda_platform() -> bool:
     if is_torch_available():
         import torch
 
-        return torch.version.cuda is not None
+        return getattr(torch, "version").cuda is not None
     return False
 
 
@@ -221,7 +221,7 @@ def is_rocm_platform() -> bool:
     if is_torch_available():
         import torch
 
-        return torch.version.hip is not None
+        return getattr(torch, "version").hip is not None
     return False
 
 
@@ -465,6 +465,28 @@ def is_torch_hpu_available() -> bool:
 
 
 @lru_cache
+def is_torch_neuron_available(check_device: bool = False) -> bool:
+    import torch
+
+    if importlib.util.find_spec("torch_neuronx") is None:
+        return False
+
+    if check_device:
+        try:
+            import torch_neuronx  # noqa: F401
+
+            # Will raise a RuntimeError if no Neuron is found
+            if hasattr(torch, "neuron"):
+                _ = torch.neuron.device_count()
+                return torch.neuron.is_available()
+            return False
+        except RuntimeError:
+            return False
+
+    return hasattr(torch, "neuron") and torch.neuron.is_available()
+
+
+@lru_cache
 def is_torch_bf16_gpu_available() -> bool:
     if not is_torch_available():
         return False
@@ -477,13 +499,17 @@ def is_torch_bf16_gpu_available() -> bool:
         return torch.xpu.is_bf16_supported()
     if is_torch_hpu_available():
         return True
-    if is_torch_npu_available():
-        return torch.npu.is_bf16_supported() if hasattr(torch, "npu") else False
+    if is_torch_npu_available() and hasattr(torch, "npu"):
+        return torch.npu.is_bf16_supported()
     if is_torch_mps_available():
         # Note: Emulated in software by Metal using fp32 for hardware without native support (like M1/M2)
         return torch.backends.mps.is_macos_or_newer(14, 0)
-    if is_torch_musa_available():
-        return torch.musa.is_bf16_supported() if hasattr(torch, "musa") else False
+    if is_torch_musa_available() and hasattr(torch, "musa"):
+        return torch.musa.is_bf16_supported()
+    if is_torch_mlu_available() and hasattr(torch, "mlu"):
+        return torch.mlu.is_bf16_supported()
+    if is_torch_neuron_available() and hasattr(torch, "neuron"):
+        return torch.neuron.is_bf16_supported()
     return False
 
 
@@ -542,13 +568,13 @@ def is_torch_tf32_available() -> bool:
 
     import torch
 
-    if is_torch_musa_available():
-        if hasattr(torch, "musa"):
-            device_info = torch.musa.get_device_properties(torch.musa.current_device())
-            if f"{device_info.major}{device_info.minor}" >= "22":
-                return True
+    if is_torch_musa_available() and hasattr(torch, "musa"):
+        device_info = torch.musa.get_device_properties(torch.musa.current_device())
+        if f"{device_info.major}{device_info.minor}" >= "22":
+            return True
         return False
-    if not torch.cuda.is_available() or torch.version.cuda is None:
+    torch_version = getattr(torch, "version")
+    if not torch.cuda.is_available() or torch_version.cuda is None:
         return False
     if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
         return False
@@ -890,39 +916,53 @@ def is_bitsandbytes_available(min_version: str = BITSANDBYTES_MIN_VERSION) -> bo
 @lru_cache
 def is_flash_attn_2_available() -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
+    # FA4 is also distributed under "flash_attn", hence we need to check the naming here
+    is_available = is_available and "flash-attn" in [
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+    ]
+
     if not is_available or not (is_torch_cuda_available() or is_torch_mlu_available()):
         return False
 
-    import torch
-
+    # Only allow versions >= 2.3.3 to avoid very old legacy workarounds that are now 2+ years old
     try:
-        if torch.version.cuda:
-            return version.parse(flash_attn_version) >= version.parse("2.1.0")
-        elif torch.version.hip:
-            # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
-            return version.parse(flash_attn_version) >= version.parse("2.0.4")
-        elif is_torch_mlu_available():
-            return version.parse(flash_attn_version) >= version.parse("2.3.3")
-        else:
-            return False
+        return version.parse(flash_attn_version) >= version.parse("2.3.3")
     except packaging.version.InvalidVersion:
         return False
 
 
 @lru_cache
 def is_flash_attn_3_available() -> bool:
-    return is_torch_cuda_available() and _is_package_available("flash_attn_3")[0]
+    # Universally available under `flash_attn_interface`
+    is_available = _is_package_available("flash_attn_interface")[0]
+    # Resolving and ensuring the proper name of FA3 being associated
+    is_available = is_available and "flash-attn-3" in [
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn_interface"]
+    ]
+    return is_available and is_torch_cuda_available()
 
 
 @lru_cache
-def is_flash_attn_greater_or_equal_2_10() -> bool:
-    _, flash_attn_version = _is_package_available("flash_attn", return_version=True)
-    return is_flash_attn_2_available() and version.parse(flash_attn_version) >= version.parse("2.1.0")
+def is_flash_attn_4_available() -> bool:
+    is_available = _is_package_available("flash_attn")[0]
+    # FA2 is also distributed under "flash_attn", hence we need to check the naming here
+    # NOTE: FA2 seems to distribute the `cute` subdirectory even if only FA2 has been installed
+    #       -> check for the proper (normalized) distribution name
+    is_available = is_available and "flash-attn-4" in [
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+    ]
+
+    return is_available and is_torch_cuda_available()
 
 
 @lru_cache
 def is_flash_attn_greater_or_equal(library_version: str) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
+    # FA4 is also distributed under "flash_attn", hence we need to check the naming here
+    is_available = is_available and "flash-attn" in [
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+    ]
+
     if not is_available:
         return False
     try:
@@ -1315,7 +1355,9 @@ def is_torchdynamo_compiling() -> bool:
     try:
         import torch
 
-        return torch.compiler.is_compiling()
+        if hasattr(torch, "compiler"):
+            return torch.compiler.is_compiling()
+        return False
     except Exception:
         return False
 
@@ -1324,7 +1366,9 @@ def is_torchdynamo_exporting() -> bool:
     try:
         import torch
 
-        return torch.compiler.is_exporting()
+        if hasattr(torch, "compiler"):
+            return torch.compiler.is_exporting()
+        return False
     except Exception:
         return False
 
@@ -1342,7 +1386,7 @@ def is_fake_tensor(x) -> bool:
     try:
         import torch
 
-        return isinstance(x, torch._subclasses.FakeTensor)
+        return isinstance(x, getattr(torch, "_subclasses").FakeTensor)
     except Exception:
         return False
 
@@ -1370,7 +1414,7 @@ def is_jax_jitting(x):
     try:
         import jax
 
-        return isinstance(x.jax(), jax.core.Tracer)
+        return isinstance(x.jax(), getattr(jax, "core").Tracer)
     except Exception:
         return False
 
@@ -2589,15 +2633,16 @@ def create_import_structure_from_path(module_path):
     if os.path.isfile(module_path):
         module_path = os.path.dirname(module_path)
 
-    directory = module_path
     adjacent_modules = []
 
-    for f in os.listdir(module_path):
-        if f != "__pycache__" and os.path.isdir(os.path.join(module_path, f)):
-            import_structure[f] = create_import_structure_from_path(os.path.join(module_path, f))
-
-        elif not os.path.isdir(os.path.join(directory, f)):
-            adjacent_modules.append(f)
+    with os.scandir(module_path) as entries:
+        for entry in entries:
+            if entry.name == "__pycache__":
+                continue
+            if entry.is_dir():
+                import_structure[entry.name] = create_import_structure_from_path(entry.path)
+            elif not entry.name.startswith(("convert_", "modular_")):
+                adjacent_modules.append(entry.name)
 
     # We're only taking a look at files different from __init__.py
     # We could theoretically require things directly from the __init__.py
@@ -2605,20 +2650,13 @@ def create_import_structure_from_path(module_path):
     if "__init__.py" in adjacent_modules:
         adjacent_modules.remove("__init__.py")
 
-    # Modular files should not be imported
-    def find_substring(substring, list_):
-        return any(substring in x for x in list_)
-
-    if find_substring("modular_", adjacent_modules) and find_substring("modeling_", adjacent_modules):
-        adjacent_modules = [module for module in adjacent_modules if "modular_" not in module]
-
     module_requirements = {}
     for module_name in adjacent_modules:
         # Only modules ending in `.py` are accepted here.
         if not module_name.endswith(".py"):
             continue
 
-        with open(os.path.join(directory, module_name), encoding="utf-8") as f:
+        with open(os.path.join(module_path, module_name), encoding="utf-8") as f:
             file_content = f.read()
 
         # Remove the .py suffix

@@ -18,234 +18,92 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
+@strict(accept_kwargs=True)
 class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen3OmniMoeAudioEncoder`]. It is used to instantiate a
-    Qwen2.5-Omni-Thinker audio encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the audio encoder of the Qwen2-Audio
-    architecture.
-
-    e.g. [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        num_mel_bins (`int`, *optional*, defaults to 128):
-            Number of mel features used per input features. Should correspond to the value used in the
-            `Qwen3OmniMoeProcessor` class.
-        encoder_layers (`int`, *optional*, defaults to 32):
-            Number of encoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 20):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 5120):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in encoder.
-        d_model (`int`, *optional*, defaults to 1280):
-            Dimensionality of the layers.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        activation_function (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        scale_embedding (`bool`, *optional*, defaults to `False`):
-            Scale embeddings by diving by sqrt(d_model).
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        max_source_positions (`int`, *optional*, defaults to 1500):
-            The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
-        n_window (`int`, *optional*, defaults to 100):
-            The chunk for conv and flash attn in AudioEncoder.
-        output_dim (`int`, *optional*, defaults to 3584):
-            The output dimension of AudioEncoder.
-
-    Example:
-
-    ```python
-    >>> from transformers import Qwen3OmniMoeAudioEncoderConfig, Qwen3OmniMoeAudioEncoder
-
-    >>> # Initializing a Qwen3OmniMoeAudioEncoderConfig
-    >>> configuration = Qwen3OmniMoeAudioEncoderConfig()
-
-    >>> # Initializing a Qwen3OmniMoeAudioEncoder (with random weights)
-    >>> model = Qwen3OmniMoeAudioEncoder(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+    downsample_hidden_size ( `int`, *optional*, defaults to `480`): Hidden size in donwsampling layer
+    conv_chunksize ( `int`, *optional*, defaults to `500`): Chunk size of each input to convolutional layer
+    n_window_infer ( `int`, *optional*, defaults to `400`): Number of windows during inference
+    max_source_positions (`int`, *optional*, defaults to 1500): Maximum sequence length for the inputs
+    n_window (`int`, *optional*, defaults to 100):  Number of windwos
+    output_dim (`int`, *optional*, defaults to 3584):  Dimensionality of the output
+    """
 
     model_type = "qwen3_omni_moe_audio_encoder"
+    attribute_map = {"num_hidden_layers": "encoder_layers"}
 
-    def __init__(
-        self,
-        num_mel_bins: int | None = 128,
-        encoder_layers: int | None = 32,
-        encoder_attention_heads: int | None = 20,
-        encoder_ffn_dim: int | None = 5120,
-        d_model: int | None = 1280,
-        dropout: int | None = 0,
-        attention_dropout: int | None = 0,
-        activation_function: int | None = "gelu",
-        activation_dropout: int | None = 0,
-        scale_embedding: int | None = False,
-        initializer_range: int | None = 0.02,
-        max_source_positions: int | None = 1500,
-        n_window: int | None = 100,
-        output_dim: int | None = 3584,
-        n_window_infer: int | None = 400,
-        conv_chunksize: int | None = 500,
-        downsample_hidden_size: int | None = 480,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    num_mel_bins: int = 128
+    encoder_layers: int = 32
+    encoder_attention_heads: int = 20
+    encoder_ffn_dim: int = 5120
+    d_model: int = 1280
+    dropout: float | int = 0.0
+    attention_dropout: float | int = 0.0
+    activation_function: str = "gelu"
+    activation_dropout: float | int = 0.0
+    scale_embedding: bool = False
+    initializer_range: float = 0.02
+    max_source_positions: int = 1500
 
-        self.num_mel_bins = num_mel_bins
-        self.d_model = d_model
-        self.encoder_layers = encoder_layers
-        self.encoder_attention_heads = encoder_attention_heads
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_function = activation_function
-        self.activation_dropout = activation_dropout
-        self.num_hidden_layers = encoder_layers
-        self.initializer_range = initializer_range
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.max_source_positions = max_source_positions
-        self.n_window = n_window
-        self.output_dim = output_dim
-        self.n_window_infer = n_window_infer
-        self.conv_chunksize = conv_chunksize
-        self.downsample_hidden_size = downsample_hidden_size
+    n_window: int = 100
+    output_dim: int = 3584
+
+    n_window_infer: int = 400
+    conv_chunksize: int = 500
+    downsample_hidden_size: int = 480
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@strict(accept_kwargs=True)
 class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
+    r"""
+    num_position_embeddings (`int`, *optional*, defaults to 2304):
+        The maximum sequence length that this model might ever be used with
+    out_hidden_size (`int`, *optional*, defaults to 3584):
+        The output hidden size of the vision model.
+    deepstack_visual_indexes (`list[int]`, *optional*, defaults to `[8, 16, 24]`):
+        Indexed of layers for deepstack embeddings.
+    """
+
     model_type = "qwen3_omni_moe_vision_encoder"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        depth=27,
-        hidden_size=1152,
-        hidden_act="gelu_pytorch_tanh",
-        intermediate_size=4304,
-        num_heads=16,
-        in_channels=3,
-        patch_size=16,
-        spatial_merge_size=2,
-        temporal_patch_size=2,
-        out_hidden_size=3584,
-        num_position_embeddings=2304,
-        deepstack_visual_indexes=[8, 16, 24],
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.depth = depth
-        self.hidden_size = hidden_size
-        self.hidden_act = hidden_act
-        self.intermediate_size = intermediate_size
-        self.num_heads = num_heads
-        self.in_channels = in_channels
-        self.patch_size = patch_size
-        self.spatial_merge_size = spatial_merge_size
-        self.temporal_patch_size = temporal_patch_size
-        self.out_hidden_size = out_hidden_size
-        self.num_position_embeddings = num_position_embeddings
-        self.initializer_range = initializer_range
-        self.deepstack_visual_indexes = deepstack_visual_indexes
+    depth: int = 27
+    hidden_size: int = 1152
+    hidden_act: str = "gelu_pytorch_tanh"
+    intermediate_size: int = 4304
+    num_heads: int = 16
+    in_channels: int = 3
+    patch_size: int | list[int] | tuple[int, int] = 16
+    spatial_merge_size: int = 2
+    temporal_patch_size: int | list[int] | tuple[int, int] = 2
+    out_hidden_size: int = 3584
+    num_position_embeddings: int = 2304
+    deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
+    initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@strict(accept_kwargs=True)
 class Qwen3OmniMoeTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen3OmniMoeTextModel`]. It is used to instantiate a
-    Qwen3OmniMoeText model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of [Qwen/Qwen3-15B-A2B](https://huggingface.co/Qwen/Qwen3-15B-A2B).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 151936):
-            Vocabulary size of the Qwen3OmniMoeText model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Qwen3OmniMoeTextModel`]
-        hidden_size (`int`, *optional*, defaults to 2048):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 6144):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 4):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
-
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        use_sliding_window (`bool`, *optional*, defaults to `False`):
-            Whether to use sliding window attention.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        decoder_sparse_step (`int`, *optional*, defaults to 1):
-            The frequency of the MoE layer.
-        moe_intermediate_size (`int`, *optional*, defaults to 768):
-            Intermediate size of the routed expert.
-        num_experts_per_tok (`int`, *optional*, defaults to 8):
-            Number of selected experts.
-        num_experts (`int`, *optional*, defaults to 128):
-            Number of routed experts.
-        norm_topk_prob (`bool`, *optional*, defaults to `False`):
-            Whether to normalize the topk probabilities.
-        output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabling this will also
-            allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
-            The aux loss factor for the total loss.
-        mlp_only_layers (`list[int]`, *optional*, defaults to `[]`):
-            Indicate which layers use Qwen3OmniMoeTextMLP rather than Qwen3OmniMoeTextSparseMoeBlock
-            The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
-            If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
-        pad_token_id (`int`, *optional*):
-            Padding token id.
-        bos_token_id (`int`, *optional*):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*):
-            End of stream token id.
+    decoder_sparse_step (`int`, *optional*, defaults to 1):
+        The frequency of the MoE layer.
+    mlp_only_layers (`list[int]`, *optional*, defaults to `[]`):
+        Indicate which layers use Qwen3OmniMoeTextMLP rather than Qwen3OmniMoeTextSparseMoeBlock
+        The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
+        If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
 
     ```python
     >>> from transformers import Qwen3OmniMoeTextModel, Qwen3OmniMoeTextConfig
@@ -281,108 +139,51 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    ignore_keys_at_rope_validation = {"mrope_section", "interleaved", "mrope_interleaved"}
 
-    def __init__(
-        self,
-        vocab_size: int | None = 3584,
-        hidden_size: int | None = 2048,
-        intermediate_size: int | None = 18944,
-        num_hidden_layers: int | None = 28,
-        num_attention_heads: int | None = 28,
-        num_key_value_heads: int | None = 4,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 32768,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: float | None = 1e-6,
-        use_cache: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        sliding_window: int | None = None,
-        attention_dropout: int | None = 0,
-        decoder_sparse_step: int | None = 1,
-        moe_intermediate_size: int | None = 768,
-        num_experts_per_tok: int | None = 8,
-        num_experts: int | None = 128,
-        norm_topk_prob: bool | None = True,
-        output_router_logits: bool | None = False,
-        router_aux_loss_coef: float | None = 0.001,
-        mlp_only_layers: list[int] | None = None,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = None,
-        eos_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.sliding_window = sliding_window
+    vocab_size: int = 3584
+    hidden_size: int = 2048
+    intermediate_size: int = 18944
+    num_hidden_layers: int = 28
+    num_attention_heads: int = 28
+    num_key_value_heads: int = 4
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 32768
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    sliding_window: int | None = None
+    attention_dropout: float | int = 0.0
+    decoder_sparse_step: int = 1
+    moe_intermediate_size: int = 768
+    num_experts_per_tok: int = 8
+    num_experts: int = 128
+    norm_topk_prob: bool = True
+    output_router_logits: bool = False
+    router_aux_loss_coef: float = 0.001
+    mlp_only_layers: list[int] | None = None
+    pad_token_id: int | None = None
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.rope_parameters = rope_parameters
+    def __post_init__(self, **kwargs):
+        self.mlp_only_layers = [] if self.mlp_only_layers is None else self.mlp_only_layers
 
-        # MoE arguments
-        self.decoder_sparse_step = decoder_sparse_step
-        self.moe_intermediate_size = moe_intermediate_size
-        self.num_experts_per_tok = num_experts_per_tok
-        self.num_experts = num_experts
-        self.norm_topk_prob = norm_topk_prob
-        self.output_router_logits = output_router_logits
-        self.router_aux_loss_coef = router_aux_loss_coef
-        self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-
-        super().__init__(
-            ignore_keys_at_rope_validation={"mrope_section", "interleaved", "mrope_interleaved"},
-            **kwargs,
-        )
+        super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@strict(accept_kwargs=True)
 class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen3OmniMoeThinker`]. It is used to instantiate a
-    Qwen3-Omni-Thinker model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the thinker component of the Qwen3-Omni
-    architecture.
-
-    e.g. [Qwen/Qwen3-Omni-7B](https://huggingface.co/Qwen/Qwen3-Omni-7B)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        audio_config (`dict`, *optional*):
-            The config dictionary of the audio backbone.
-        vision_config (`dict`, *optional*):
-            The config dictionary of the vision backbone.
-        text_config (`dict`, *optional*):
-            The config dictionary of the text backbone.
-        audio_token_id (`int`, *optional*, defaults to 151646):
-            The audio token id to encode the audio prompt.
-        image_token_id (`int`, *optional*, defaults to 151655):
-            The image token id to encode the image prompt.
-        video_token_id (`int`, *optional*, defaults to 151656):
-            The video token id to encode the video prompt.
-        position_id_per_seconds (`int`, *optional*, defaults to 25):
-            The increment of position id per second.
-        audio_start_token_id (`int`, *optional*, defaults to 151647):
-            The audio start token id to encode the audio prompt.
-        user_token_id (`int`, *optional*, defaults to 872):
-            The user token id to encode the user token.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
+    position_id_per_seconds (`int`, *optional*, defaults to 25):
+        The increment of position id per second.
+    audio_start_token_id (`int`, *optional*, defaults to 151647):
+        The audio start token id to encode the audio prompt.
+    user_token_id (`int`, *optional*, defaults to 872):
+        The user token id to encode the user token.
 
     Example:
 
@@ -408,132 +209,48 @@ class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
         "text_config": Qwen3OmniMoeTextConfig,
     }
 
-    def __init__(
-        self,
-        audio_config=None,
-        vision_config=None,
-        text_config=None,
-        audio_token_id=151646,
-        image_token_id=151655,
-        video_token_id=151656,
-        position_id_per_seconds=25,
-        audio_start_token_id=151647,
-        user_token_id=872,
-        initializer_range=0.02,
-        tie_word_embeddings=False,
-        **kwargs,
-    ):
-        self.user_token_id = user_token_id
-        self.position_id_per_seconds = position_id_per_seconds
-        self.audio_start_token_id = audio_start_token_id
-        self.initializer_range = initializer_range
-        self.tie_word_embeddings = tie_word_embeddings
+    audio_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    position_id_per_seconds: int = 25
+    audio_start_token_id: int = 151647
+    user_token_id: int = 872
+    initializer_range: float = 0.02
+    tie_word_embeddings: bool = False
 
-        if isinstance(vision_config, dict):
-            vision_config = Qwen3OmniMoeVisionEncoderConfig(**vision_config)
-        elif vision_config is None:
-            vision_config = Qwen3OmniMoeVisionEncoderConfig()
-        self.vision_config = vision_config
+    audio_token_id: int = 151646
+    image_token_id: int = 151655
+    video_token_id: int = 151656
 
-        if isinstance(audio_config, dict):
-            audio_config = Qwen3OmniMoeAudioEncoderConfig(**audio_config)
-        elif audio_config is None:
-            audio_config = Qwen3OmniMoeAudioEncoderConfig()
-        self.audio_config = audio_config
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config = Qwen3OmniMoeVisionEncoderConfig(**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = Qwen3OmniMoeVisionEncoderConfig()
 
-        if isinstance(text_config, dict):
-            text_config = Qwen3OmniMoeTextConfig(**text_config)
-        elif text_config is None:
-            text_config = Qwen3OmniMoeTextConfig()
-        self.text_config = text_config
+        if isinstance(self.audio_config, dict):
+            self.audio_config = Qwen3OmniMoeAudioEncoderConfig(**self.audio_config)
+        elif self.audio_config is None:
+            self.audio_config = Qwen3OmniMoeAudioEncoderConfig()
 
-        super().__init__(**kwargs)
-        self.audio_token_id = audio_token_id
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
+        if isinstance(self.text_config, dict):
+            self.text_config = Qwen3OmniMoeTextConfig(**self.text_config)
+        elif self.text_config is None:
+            self.text_config = Qwen3OmniMoeTextConfig()
+
+        super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3OmniMoeTalkerCodePredictor-8B")
+@strict(accept_kwargs=True)
 class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen3OmniMoeTalkerCodePredictorModel`]. It is used to instantiate a
-    Qwen3OmniMoeTalkerCodePredictor model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of
-    Qwen3OmniMoeTalkerCodePredictor-8B [Qwen/Qwen3OmniMoeTalkerCodePredictor-8B](https://huggingface.co/Qwen/Qwen3OmniMoeTalkerCodePredictor-8B).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 151936):
-            Vocabulary size of the Qwen3OmniMoeTalkerCodePredictor model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Qwen3OmniMoeTalkerCodePredictorModel`]
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 22016):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 32):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
-        head_dim (`int`, *optional*, defaults to 128):
-            The attention head dimension.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        use_sliding_window (`bool`, *optional*, defaults to `False`):
-            Whether to use sliding window attention.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
-        max_window_layers (`int`, *optional*, defaults to 28):
-            The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
-            additional layer afterwards will use SWA (Sliding Window Attention).
-        layer_types (`list`, *optional*):
-            Attention pattern for each layer.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        pad_token_id (`int`, *optional*):
-            Padding token id.
-        bos_token_id (`int`, *optional*):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*):
-            End of stream token id.
-
-    ```python
-    >>> from transformers import Qwen3OmniMoeTalkerCodePredictorModel, Qwen3OmniMoeTalkerCodePredictorConfig
-
-    >>> # Initializing a Qwen3OmniMoeTalkerCodePredictor style configuration
-    >>> configuration = Qwen3OmniMoeTalkerCodePredictorConfig()
-
-    >>> # Initializing a model from the Qwen3OmniMoeTalkerCodePredictor-8B style configuration
-    >>> model = Qwen3OmniMoeTalkerCodePredictorModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+    max_window_layers (`int`, *optional*, defaults to 28):
+        The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
+        additional layer afterwards will use SWA (Sliding Window Attention).
+    num_code_groups (`int`, *optional*, defaults to 32):
+        Number of codebook groups used in the predicted acoustic token sequence, corresponding to multi-codebook VQ representation.
+    """
 
     model_type = "qwen3_omni_moe_talker_code_predictor"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -556,57 +273,35 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 2048,
-        hidden_size: int | None = 1024,
-        intermediate_size: int | None = 3072,
-        num_hidden_layers: int | None = 5,
-        num_attention_heads: int | None = 16,
-        num_key_value_heads: int | None = 8,
-        head_dim: int | None = 128,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 32768,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: float | None = 0.000001,
-        use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: int | None = None,
-        attention_bias: bool | None = False,
-        sliding_window: int | None = None,
-        max_window_layers: int | None = 28,
-        layer_types: list[str] | None = None,
-        attention_dropout: int | None = 0,
-        num_code_groups: int | None = 32,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = None,
-        eos_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.num_code_groups = num_code_groups
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.sliding_window = sliding_window
-        self.max_window_layers = max_window_layers
+    vocab_size: int = 2048
+    hidden_size: int = 1024
+    intermediate_size: int = 3072
+    num_hidden_layers: int = 5
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 8
+    head_dim: int = 128
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 32768
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    sliding_window: int | None = None
+    max_window_layers: int = 28
+    layer_types: list[str] | None = None
+    attention_dropout: float | int = 0.0
+    pad_token_id: int | None = None
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
+    num_code_groups: int = 32
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        self.sliding_window = self.sliding_window
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.head_dim = head_dim
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-
-        self.layer_types = layer_types
         if self.layer_types is None:
             self.layer_types = [
                 "sliding_attention"
@@ -614,97 +309,19 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
-
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.rope_parameters = rope_parameters
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@strict(accept_kwargs=True)
 class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen3OmniMoeTalkerTextModel`]. It is used to instantiate a
-    Qwen3OmniMoeTalkerText model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of [Qwen/Qwen3-15B-A2B](https://huggingface.co/Qwen/Qwen3-15B-A2B).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 151936):
-            Vocabulary size of the Qwen3OmniMoeTalkerText model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Qwen3OmniMoeTalkerTextModel`]
-        hidden_size (`int`, *optional*, defaults to 2048):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 6144):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 4):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
-
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        use_sliding_window (`bool`, *optional*, defaults to `False`):
-            Whether to use sliding window attention.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        decoder_sparse_step (`int`, *optional*, defaults to 1):
-            The frequency of the MoE layer.
-        moe_intermediate_size (`int`, *optional*, defaults to 768):
-            Intermediate size of the routed expert.
-        num_experts_per_tok (`int`, *optional*, defaults to 8):
-            Number of selected experts.
-        num_experts (`int`, *optional*, defaults to 128):
-            Number of routed experts.
-        norm_topk_prob (`bool`, *optional*, defaults to `False`):
-            Whether to normalize the topk probabilities.
-        output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabling this will also
-            allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
-            The aux loss factor for the total loss.
-        mlp_only_layers (`list[int]`, *optional*, defaults to `[]`):
-            Indicate which layers use Qwen3OmniMoeTalkerTextMLP rather than Qwen3OmniMoeTalkerTextSparseMoeBlock
-            The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
-            If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
-        pad_token_id (`int`, *optional*):
-            Padding token id.
-        bos_token_id (`int`, *optional*):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*):
-            End of stream token id.
+    decoder_sparse_step (`int`, *optional*, defaults to 1):
+        The frequency of the MoE layer.
+    mlp_only_layers (`list[int]`, *optional*, defaults to `[]`):
+        Indicate which layers use Qwen3OmniMoeTalkerTextMLP rather than Qwen3OmniMoeTalkerTextSparseMoeBlock
+        The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
+        If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
 
     ```python
     >>> from transformers import Qwen3OmniMoeTalkerTextModel, Qwen3OmniMoeTalkerTextConfig
@@ -746,124 +363,71 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    vocab_size: int = 3072
+    hidden_size: int = 1024
+    intermediate_size: int = 2048
+    num_hidden_layers: int = 20
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 2
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 32768
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    sliding_window: int | None = None
+    attention_dropout: float | int = 0.0
+    decoder_sparse_step: int = 1
+    moe_intermediate_size: int = 384
+    num_experts_per_tok: int = 8
+    num_experts: int = 128
+    norm_topk_prob: bool = False
+    output_router_logits: bool = False
+    router_aux_loss_coef: float = 0.001
+    mlp_only_layers: list[int] | None = None
+    pad_token_id: int | None = None
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
 
-    def __init__(
-        self,
-        vocab_size: int | None = 3072,
-        hidden_size: int | None = 1024,
-        intermediate_size: int | None = 2048,
-        num_hidden_layers: int | None = 20,
-        num_attention_heads: int | None = 16,
-        num_key_value_heads: int | None = 2,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 32768,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: float | None = 0.000001,
-        use_cache: int | None = True,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        sliding_window: int | None = None,
-        attention_dropout: int | None = 0,
-        decoder_sparse_step: int | None = 1,
-        moe_intermediate_size: int | None = 384,
-        num_experts_per_tok: int | None = 8,
-        num_experts: int | None = 128,
-        norm_topk_prob: bool | None = False,
-        output_router_logits: bool | None = False,
-        router_aux_loss_coef: float | None = 0.001,
-        mlp_only_layers: list[int] | None = None,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = None,
-        eos_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.sliding_window = sliding_window
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.rope_parameters = rope_parameters
-
-        # MoE arguments
-        self.decoder_sparse_step = decoder_sparse_step
-        self.moe_intermediate_size = moe_intermediate_size
-        self.num_experts_per_tok = num_experts_per_tok
-        self.num_experts = num_experts
-        self.norm_topk_prob = norm_topk_prob
-        self.output_router_logits = output_router_logits
-        self.router_aux_loss_coef = router_aux_loss_coef
-        self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
-
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+    def __post_init__(self, **kwargs):
+        self.sliding_window = self.sliding_window
+        self.mlp_only_layers = [] if self.mlp_only_layers is None else self.mlp_only_layers
+        super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@strict(accept_kwargs=True)
 class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen3OmniMoeTalker`]. It is used to instantiate a
-    Qwen3-Omni multi-modal talker model capable of handling text, audio, and vision modalities in a unified architecture.
-    The model integrates a text decoder with a code predictor for autoregressive generation of both semantic and acoustic
-    tokens, enabling speech and multimodal content generation. This configuration wraps sub-configurations for the text and
-    code predictor components, allowing modular setup and initialization.
-
-    e.g. [Qwen/Qwen3-Omni-7B](https://huggingface.co/Qwen/Qwen3-Omni-7B)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        code_predictor_config (`dict`, *optional*):
-            A dictionary of configuration parameters used to initialize a [`Qwen3OmniMoeTalkerCodePredictorConfig`].
-            If not provided, defaults will be used.
-        text_config (`dict`, *optional*):
-            A dictionary of configuration parameters used to initialize a [`Qwen3OmniMoeTalkerTextConfig`].
-            If not provided, defaults will be used.
-        num_code_groups (`int`, *optional*, defaults to 32):
-            Number of codebook groups used in the predicted acoustic token sequence, corresponding to multi-codebook VQ representation.
-        thinker_hidden_size (`int`, *optional*, defaults to 2048):
-            Hidden dimension size of the thinker module used for intermediate reasoning or latent planning before audio generation.
-        codec_eos_token_id (`int`, *optional*, defaults to 4198):
-            Token ID representing the end-of-speech token in the codec-generated sequence.
-        accept_hidden_layer (`int`, *optional*, defaults to 18):
-            Index of the hidden layer whose output is used for accepting or refining generated tokens during think-and-speak process.
-        codec_nothink_id (`int`, *optional*, defaults to 4203):
-            Token ID indicating no thinking step is required during generation.
-        codec_think_bos_id (`int`, *optional*, defaults to 4204):
-            Token ID marking the beginning of a thinking sequence.
-        codec_think_eos_id (`int`, *optional*, defaults to 4205):
-            Token ID marking the end of a thinking sequence.
-        codec_pad_id (`int`, *optional*, defaults to 4196):
-            Padding token ID used in codec input sequences.
-        codec_bos_id (`int`, *optional*, defaults to 4197):
-            Beginning-of-speech token ID in codec sequences.
-        audio_token_id (`int`, *optional*, defaults to 151646):
-            Special token ID used to indicate the position of audio tokens in the input sequence.
-        image_token_id (`int`, *optional*, defaults to 151655):
-            Special token ID used to represent image inputs in the multimodal context.
-        video_token_id (`int`, *optional*, defaults to 151656):
-            Special token ID used to represent video inputs.
-        vision_start_token_id (`int`, *optional*, defaults to 151652):
-            Token ID indicating the start of a visual input sequence (e.g., image or video embeddings).
-        position_id_per_seconds (`int`, *optional*, defaults to 25):
-            Number of position IDs allocated per second of audio content, used for temporal alignment in generation.
-        audio_start_token_id (`int`, *optional*, defaults to 151669):
-            Token ID that indicates the start of an audio generation segment in the output.
-        speaker_id (`dict`, *optional*):
-            Speaker name to speaker id dict.
+    code_predictor_config (`dict`, *optional*):
+        A dictionary of configuration parameters used to initialize a [`Qwen3OmniMoeTalkerCodePredictorConfig`].
+        If not provided, defaults will be used.
+    num_code_groups (`int`, *optional*, defaults to 32):
+        Number of codebook groups used in the predicted acoustic token sequence, corresponding to multi-codebook VQ representation.
+    thinker_hidden_size (`int`, *optional*, defaults to 2048):
+        Hidden dimension size of the thinker module used for intermediate reasoning or latent planning before audio generation.
+    codec_eos_token_id (`int`, *optional*, defaults to 4198):
+        Token ID representing the end-of-speech token in the codec-generated sequence.
+    accept_hidden_layer (`int`, *optional*, defaults to 18):
+        Index of the hidden layer whose output is used for accepting or refining generated tokens during think-and-speak process.
+    codec_nothink_id (`int`, *optional*, defaults to 4203):
+        Token ID indicating no thinking step is required during generation.
+    codec_think_bos_id (`int`, *optional*, defaults to 4204):
+        Token ID marking the beginning of a thinking sequence.
+    codec_think_eos_id (`int`, *optional*, defaults to 4205):
+        Token ID marking the end of a thinking sequence.
+    codec_pad_id (`int`, *optional*, defaults to 4196):
+        Padding token ID used in codec input sequences.
+    codec_bos_id (`int`, *optional*, defaults to 4197):
+        Beginning-of-speech token ID in codec sequences.
+    position_id_per_seconds (`int`, *optional*, defaults to 25):
+        Number of position IDs allocated per second of audio content, used for temporal alignment in generation.
+    audio_start_token_id (`int`, *optional*, defaults to 151669):
+        Token ID that indicates the start of an audio generation segment in the output.
+    speaker_id (`dict`, *optional*):
+        Speaker name to speaker id dict.
 
     Example:
 
@@ -890,116 +454,55 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
         "text_config": Qwen3OmniMoeTalkerTextConfig,
     }
 
-    def __init__(
-        self,
-        code_predictor_config=None,
-        text_config=None,
-        num_code_groups=32,
-        thinker_hidden_size=2048,
-        codec_eos_token_id=4198,
-        accept_hidden_layer=18,
-        codec_nothink_id=4203,
-        codec_think_bos_id=4204,
-        codec_think_eos_id=4205,
-        codec_pad_id=4196,
-        codec_bos_id=4197,
-        audio_token_id=151646,
-        image_token_id=151655,
-        video_token_id=151656,
-        vision_start_token_id=151652,
-        position_id_per_seconds=25,
-        audio_start_token_id=151669,
-        speaker_id=None,
-        **kwargs,
-    ):
-        if code_predictor_config is None:
-            code_predictor_config = {}
+    code_predictor_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    num_code_groups: int = 32
+    thinker_hidden_size: int = 2048
+    codec_eos_token_id: int = 4198
+    accept_hidden_layer: int = 18
+    codec_nothink_id: int = 4203
+    codec_think_bos_id: int = 4204
+    codec_think_eos_id: int = 4205
+    codec_pad_id: int = 4196
+    codec_bos_id: int = 4197
+    audio_token_id: int = 151646
+    image_token_id: int = 151655
+    video_token_id: int = 151656
+    vision_start_token_id: int = 151652
+    position_id_per_seconds: int = 25
+    audio_start_token_id: int = 151669
+    speaker_id: dict | None = None
+    initializer_range: float = 0.02
+
+    def __post_init__(self, **kwargs):
+        if self.code_predictor_config is None:
+            self.code_predictor_config = {}
             self.code_predictor_config = Qwen3OmniMoeTalkerCodePredictorConfig()
             logger.info("code_predictor_config is None. Initializing code_predictor_config model with default values")
-        elif isinstance(code_predictor_config, Qwen3OmniMoeTalkerCodePredictorConfig):
-            self.code_predictor_config = code_predictor_config
         else:
-            self.code_predictor_config = Qwen3OmniMoeTalkerCodePredictorConfig(**code_predictor_config)
+            self.code_predictor_config = Qwen3OmniMoeTalkerCodePredictorConfig(**self.code_predictor_config)
 
-        if text_config is None:
-            text_config = {}
+        if self.text_config is None:
+            self.text_config = {}
             self.text_config = Qwen3OmniMoeTalkerTextConfig()
             logger.info("talker text_config is None. Initializing talker text model with default values")
-        elif isinstance(text_config, Qwen3OmniMoeTalkerTextConfig):
-            self.text_config = text_config
         else:
-            self.text_config = Qwen3OmniMoeTalkerTextConfig(**text_config)
-        self.num_code_groups = num_code_groups
-        self.thinker_hidden_size = thinker_hidden_size
-        self.codec_eos_token_id = codec_eos_token_id
-        self.accept_hidden_layer = accept_hidden_layer
-        self.codec_nothink_id = codec_nothink_id
-        self.codec_think_bos_id = codec_think_bos_id
-        self.codec_think_eos_id = codec_think_eos_id
-        self.codec_pad_id = codec_pad_id
-        self.codec_bos_id = codec_bos_id
-        self.audio_token_id = audio_token_id
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.position_id_per_seconds = position_id_per_seconds
-        self.audio_start_token_id = audio_start_token_id
-        self.vision_start_token_id = vision_start_token_id
-        self.speaker_id = speaker_id
-        self.initializer_range = self.text_config.initializer_range
-        super().__init__(**kwargs)
+            self.text_config = Qwen3OmniMoeTalkerTextConfig(**self.text_config)
+        super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@strict(accept_kwargs=True)
 class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen3OmniMoeCode2WavConfig`]. It is used to instantiate a
-    Qwen3-Omni code-to-waveform decoder, responsible for converting discrete audio codes into high-fidelity waveforms.
-    The configuration defines the architecture of the decoder, including parameters for vector quantization, autoregressive modeling,
-    and upsampling layers.
-
-    e.g. [Qwen/Qwen3-Omni-7B](https://huggingface.co/Qwen/Qwen3-Omni-7B)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        codebook_size (`int`, *optional*, defaults to 2048):
-            Number of entries in each residual codebook used for acoustic token quantization.
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimensionality of the hidden states and embeddings in the autoregressive transformer decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 8000):
-            Maximum sequence length that the autoregressive decoder can handle. Determines positional embedding size.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the decoder.
-        num_key_value_heads (`int`, *optional*, defaults to 16):
-            Number of key and value attention heads used in grouped-query attention (if applicable).
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in the attention projection layers.
-        sliding_window (`int`, *optional*, defaults to 72):
-            Window size for local attention mechanism, limiting attention context to improve efficiency.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the feed-forward (intermediate) layer in each transformer block.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function used in the feed-forward layers. Supports `"silu"`, `"relu"`, `"gelu"`, etc.
-        layer_scale_initial_scale (`float`, *optional*, defaults to 0.01):
-            Initial value for LayerScale applied in transformer blocks, helping stabilize training.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-5):
-            Epsilon value for RMS normalization layers to prevent division by zero.
-        num_hidden_layers (`int`, *optional*, defaults to 8):
-            Number of transformer blocks in the autoregressive decoder.
-        num_quantizers (`int`, *optional*, defaults to 16):
-            Number of residual vector quantizers used in the vocoder for fine-grained audio reconstruction.
-        upsample_rates (`Tuple[int]`, *optional*, defaults to `(8, 5, 4, 3)`):
-            Rate at which features are upsampled in the final waveform synthesis stage.
-        upsampling_ratios (`Tuple[int]`, *optional*, defaults to `(2, 2)`):
-            Ratios used in transposed convolutional layers to progressively upsample feature maps to waveform.
-        decoder_dim (`int`, *optional*, defaults to 1536):
-            Final dimensionality of the decoder's output before waveform generation.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability applied to attention weights in the decoder.
+    num_quantizers (`int`, *optional*, defaults to 16):
+        Number of residual vector quantizers used in the vocoder for fine-grained audio reconstruction.
+    upsample_rates (`Tuple[int]`, *optional*, defaults to `(8, 5, 4, 3)`):
+        Rate at which features are upsampled in the final waveform synthesis stage.
+    upsampling_ratios (`Tuple[int]`, *optional*, defaults to `(2, 2)`):
+        Ratios used in transposed convolutional layers to progressively upsample feature maps to waveform.
+    decoder_dim (`int`, *optional*, defaults to 1536):
+        Final dimensionality of the decoder's output before waveform generation.
 
     Example:
 
@@ -1016,50 +519,25 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
     >>> config = model.config
     ```"""
 
-    def __init__(
-        self,
-        codebook_size=2048,
-        hidden_size=1024,
-        max_position_embeddings=8000,
-        rope_parameters: RopeParameters | dict[RopeParameters] | None = None,
-        num_attention_heads=16,
-        num_key_value_heads=16,
-        attention_bias=False,
-        sliding_window=72,
-        intermediate_size=3072,
-        hidden_act="silu",
-        layer_scale_initial_scale=0.01,
-        rms_norm_eps=1e-5,
-        num_hidden_layers=8,
-        num_quantizers=16,
-        upsample_rates=(8, 5, 4, 3),
-        upsampling_ratios=(2, 2),
-        decoder_dim=1536,
-        attention_dropout=0.0,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        self.codebook_size = codebook_size
-        self.hidden_size = hidden_size
-        self.max_position_embeddings = max_position_embeddings
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.attention_bias = attention_bias
-        self.sliding_window = sliding_window
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.layer_scale_initial_scale = layer_scale_initial_scale
-        self.rms_norm_eps = rms_norm_eps
-        self.num_hidden_layers = num_hidden_layers
-        self.num_quantizers = num_quantizers
-        self.upsample_rates = upsample_rates
-        self.upsampling_ratios = upsampling_ratios
-        self.decoder_dim = decoder_dim
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.rope_parameters = rope_parameters
-
-        super().__init__(**kwargs)
+    codebook_size: int = 2048
+    hidden_size: int = 1024
+    max_position_embeddings: int = 8000
+    rope_parameters: RopeParameters | dict | None = None
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 16
+    attention_bias: bool = False
+    sliding_window: int = 72
+    intermediate_size: int = 3072
+    hidden_act: str = "silu"
+    layer_scale_initial_scale: float = 0.01
+    rms_norm_eps: float = 1e-5
+    num_hidden_layers: int = 8
+    num_quantizers: int = 16
+    upsample_rates: list[int] | tuple[int, ...] = (8, 5, 4, 3)
+    upsampling_ratios: list[int] | tuple[int, ...] = (2, 2)
+    decoder_dim: int = 1536
+    attention_dropout: float | int = 0.0
+    initializer_range: float = 0.02
 
     @property
     def layer_types(self):
@@ -1069,22 +547,22 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         return ["sliding_attention"] * self.num_hidden_layers
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@strict(accept_kwargs=True)
 class Qwen3OmniMoeConfig(PreTrainedConfig):
-    """
-    This is the configuration class to store the configuration of a [`Qwen3OmniMoeForConditionalGeneration`]. It is used to instantiate a Qwen3Omni
-    model according to the specified sub-models configurations, defining the model architecture.
-
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
-        talker_config (`dict`, *optional*): Configuration of the underlying talker sub-model.
-        code2wav_config (`dict`, *optional*): Configuration of the underlying code2wav sub-model.
-        enable_audio_output (`bool`, *optional*, defaults to `True`): Whether enable audio output and load talker and code2wav module.
+    r"""
+    thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
+    talker_config (`dict`, *optional*): Configuration of the underlying talker sub-model.
+    code2wav_config (`dict`, *optional*): Configuration of the underlying code2wav sub-model.
+    enable_audio_output (`bool`, *optional*, defaults to `True`): Whether enable audio output and load talker and code2wav module.
+    im_start_token_id (`int`, *optional*, defaults to 151644): Token id for the start of image
+    im_end_token_id (`int`, *optional*, defaults to 151645): Token id for the end of image
+    tts_pad_token_id (`int`, *optional*, defaults to 151671): Token id for the padding in TTS
+    tts_bos_token_id (`int`, *optional*, defaults to 151672): Token id for the start of sequence in TTS
+    tts_eos_token_id (`int`, *optional*, defaults to 151673): Token id for the end of sequence in TTS of image
+    system_token_id (`int`, *optional*, defaults to 8948): Token id for the system prompt
+    user_token_id (`int`, *optional*, defaults to 872): Token id for the user prompt
+    assistant_token_id (`int`, *optional*, defaults to 77091): Token id for the assistant prompt
 
     Example:
 
@@ -1114,48 +592,39 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
         "code2wav_config": Qwen3OmniMoeCode2WavConfig,
     }
 
-    def __init__(
-        self,
-        thinker_config=None,
-        talker_config=None,
-        code2wav_config=None,
-        enable_audio_output=True,
-        im_start_token_id=151644,
-        im_end_token_id=151645,
-        tts_pad_token_id=151671,
-        tts_bos_token_id=151672,
-        tts_eos_token_id=151673,
-        system_token_id=8948,
-        user_token_id=872,
-        assistant_token_id=77091,
-        **kwargs,
-    ):
-        if thinker_config is None:
-            thinker_config = {}
+    thinker_config: dict | PreTrainedConfig | None = None
+    talker_config: dict | PreTrainedConfig | None = None
+    code2wav_config: dict | PreTrainedConfig | None = None
+    enable_audio_output: bool = True
+    im_start_token_id: int = 151644
+    im_end_token_id: int = 151645
+    tts_pad_token_id: int = 151671
+    tts_bos_token_id: int = 151672
+    tts_eos_token_id: int = 151673
+    system_token_id: int = 8948
+    user_token_id: int = 872
+    assistant_token_id: int = 77091
+
+    def __post_init__(self, **kwargs):
+        if self.thinker_config is None:
+            self.thinker_config = Qwen3OmniMoeThinkerConfig()
             logger.info("thinker_config is None. Initializing thinker model with default values")
+        elif isinstance(self.thinker_config, dict):
+            self.thinker_config = Qwen3OmniMoeThinkerConfig(**self.thinker_config)
 
-        if talker_config is None:
-            talker_config = {}
+        if self.talker_config is None:
+            self.talker_config = Qwen3OmniMoeTalkerConfig()
             logger.info("talker_config is None. Initializing talker model with default values")
+        elif isinstance(self.talker_config, dict):
+            self.talker_config = Qwen3OmniMoeTalkerConfig(**self.talker_config)
 
-        if code2wav_config is None:
-            code2wav_config = {}
-            logger.info("code2wav_config is None. Initializing code2wav model with default values")
+        if self.code2wav_config is None:
+            self.code2wav_config = Qwen3OmniMoeCode2WavConfig()
+            logger.info("code2wav_config is None. Initializing code2wav_config model with default values")
+        elif isinstance(self.code2wav_config, dict):
+            self.code2wav_config = Qwen3OmniMoeCode2WavConfig(**self.code2wav_config)
 
-        self.thinker_config = Qwen3OmniMoeThinkerConfig(**thinker_config)
-        self.talker_config = Qwen3OmniMoeTalkerConfig(**talker_config)
-        self.code2wav_config = Qwen3OmniMoeCode2WavConfig(**code2wav_config)
-        self.initializer_range = self.thinker_config.initializer_range
-        self.enable_audio_output = enable_audio_output
-        self.im_start_token_id = im_start_token_id
-        self.im_end_token_id = im_end_token_id
-        self.tts_pad_token_id = tts_pad_token_id
-        self.tts_bos_token_id = tts_bos_token_id
-        self.tts_eos_token_id = tts_eos_token_id
-        self.system_token_id = system_token_id
-        self.user_token_id = user_token_id
-        self.assistant_token_id = assistant_token_id
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
     def get_text_config(self, decoder=False) -> "PreTrainedConfig":
         """

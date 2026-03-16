@@ -34,8 +34,8 @@ from ...utils import (
     ModelOutput,
     TransformersKwargs,
     auto_docstring,
+    can_return_tuple,
 )
-from ...utils.generic import can_return_tuple
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from .configuration_lightglue import LightGlueConfig
 

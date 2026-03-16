@@ -18,42 +18,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="KamilaMila/FastVLM-7B")
+@strict(accept_kwargs=True)
 class FastVlmConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FastVlmForConditionalGeneration`]. It is used to instantiate a
-    FastVLM model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield the same configuration as the one of FastVLM-7B.
-
-    e.g. [KamilaMila/FastVLM-7B](https://huggingface.co/KamilaMila/FastVLM-7B)
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `TimmWrapperConfig` for `fastvit_mci3`):
-            The config object or dictionary of the vision backbone.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `Qwen2Config`):
-            The config object or dictionary of the text backbone.
-        image_token_id (`int`, *optional*, defaults to 151646):
-            The image token index to encode the image prompt.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"full"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Only "full" supported.
-        vision_feature_layer (`Union[int, list[int]]`, *optional*, defaults to -1):
-            The index of the layer to select the vision feature. If multiple indices are provided,
-            the vision feature of the corresponding indices will be concatenated to form the
-            vision features. Only -1 supported.
-        multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in the multimodal projector.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
-
     Example:
 
     ```python
@@ -75,39 +51,22 @@ class FastVlmConfig(PreTrainedConfig):
     }
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
-    def __init__(
-        self,
-        vision_config=None,
-        text_config=None,
-        image_token_id=151646,
-        projector_hidden_act="gelu",
-        vision_feature_select_strategy="full",
-        vision_feature_layer=-1,
-        multimodal_projector_bias=True,
-        tie_word_embeddings=False,
-        **kwargs,
-    ):
-        self.image_token_id = image_token_id
-        self.projector_hidden_act = projector_hidden_act
+    vision_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    image_token_index: int = 151646
+    image_seq_length: int = 576
+    projector_hidden_act: str = "gelu"
+    vision_feature_select_strategy: str = "full"
+    vision_feature_layer: int | list[int] = -1
+    multimodal_projector_bias: bool = True
+    tie_word_embeddings: bool = False
 
-        if vision_feature_select_strategy != "full":
-            raise ValueError(
-                f"Unexpected select feature strategy: {vision_feature_select_strategy}. Only 'full' is supported in FastVLM."
-            )
-
-        if vision_feature_layer != -1:
-            raise ValueError(
-                f"Unexpected vision feature layer: {vision_feature_layer}. Only -1 is supported in FastVLM."
-            )
-
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
-
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "timm_wrapper")
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        elif vision_config is None:
-            vision_config = CONFIG_MAPPING["timm_wrapper"](
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "timm_wrapper")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = CONFIG_MAPPING["timm_wrapper"](
                 architecture="fastvit_mci3",
                 do_pooling=True,
                 global_pool="avg",
@@ -116,13 +75,11 @@ class FastVlmConfig(PreTrainedConfig):
                 model_args={"inference_mode": True},
             )
 
-        self.vision_config = vision_config
-
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "qwen2")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["qwen2"](
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["qwen2"](
                 hidden_size=3584,
                 vocab_size=152128,
                 intermediate_size=18944,
@@ -130,18 +87,25 @@ class FastVlmConfig(PreTrainedConfig):
                 num_key_value_heads=4,
                 num_hidden_layers=28,
             )
-
-        self.text_config = text_config
-        self.multimodal_projector_bias = multimodal_projector_bias
-        self.tie_word_embeddings = tie_word_embeddings
-
         # The default value is `False` but this config is used with many model types
         # Attr `tie_word_embeddings` was saved in text config for those models, so we
         # need an ugly workaround and forward-pass the attr from text config
-        if not tie_word_embeddings and self.text_config.tie_word_embeddings:
+        if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
             self.tie_word_embeddings = self.text_config.tie_word_embeddings
 
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.vision_feature_select_strategy != "full":
+            raise ValueError(
+                f"Unexpected select feature strategy: {self.vision_feature_select_strategy}. Only 'full' is supported in FastVLM."
+            )
+
+        if self.vision_feature_layer != -1:
+            raise ValueError(
+                f"Unexpected vision feature layer: {self.vision_feature_layer}. Only -1 is supported in FastVLM."
+            )
 
 
 __all__ = ["FastVlmConfig"]

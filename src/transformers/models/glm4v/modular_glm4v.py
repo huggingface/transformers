@@ -18,6 +18,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch.nn import LayerNorm
 
 from ... import initialization as init
@@ -67,43 +68,13 @@ from ..qwen2_vl.processing_qwen2_vl import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
+@strict(accept_kwargs=True)
 class Glm4vVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Glm4vVisionModel`]. It is used to instantiate an Glm4vVisionModel
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield
-    a similar configuration to that of
-    GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
+    out_hidden_size (`int`, *optional*, defaults to 4096):
+        The output hidden size of the vision model.
 
-    Args:
-            depth (`int`, *optional*, defaults to 24):
-                Number of layers (depth) in the model.
-            hidden_size (`int`, *optional*, defaults to 1536):
-                Dimensionality of the encoder layers and the pooler layer.
-            hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-                The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-                `"relu"`, `"selu"` and `"gelu_new"` are supported.
-            attention_bias (`bool`, *optional*, defaults to `False`):
-                Whether to add a bias to the queries, keys and values.
-            attention_dropout (`float`, *optional*, defaults to 0.0):
-                Dropout probability for attention weights.
-            num_heads (`<fill_type>`, *optional*, defaults to 12): <fill_docstring>
-            in_channels (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
-            image_size (`int` or `list[int]`, *optional*, defaults to 336):
-                The size (resolution) of each image.
-            patch_size (`int`, *optional*, defaults to 14):
-                The size (resolution) of each patch.
-            rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-                The epsilon used by the rms normalization layers.
-            spatial_merge_size (`int`, *optional*, defaults to 2):
-                The size used for merging spatial dimensions.
-            temporal_patch_size (`int`, *optional*, defaults to 2):
-                The size used for patches along the temporal dimension.
-            out_hidden_size (`int`, *optional*, defaults to 4096):
-                The output hidden size of the vision model.
-            intermediate_size (`int`, *optional*, defaults to 13696):
-                Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-            initializer_range (`float`, *optional*, defaults to 0.02):
-                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     Example:
 
     ```python
@@ -122,93 +93,28 @@ class Glm4vVisionConfig(PreTrainedConfig):
     model_type = "glm4v_vision"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        depth=24,
-        hidden_size=1536,
-        hidden_act="silu",
-        attention_bias=False,
-        attention_dropout=0.0,
-        num_heads=12,
-        in_channels=3,
-        image_size=336,
-        patch_size=14,
-        rms_norm_eps=1e-05,
-        spatial_merge_size=2,
-        temporal_patch_size=2,
-        out_hidden_size=4096,
-        intermediate_size=13696,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.depth = depth
-        self.hidden_size = hidden_size
-        self.hidden_act = hidden_act
-        self.num_heads = num_heads
-        self.in_channels = in_channels
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.spatial_merge_size = spatial_merge_size
-        self.temporal_patch_size = temporal_patch_size
-        self.out_hidden_size = out_hidden_size
-        self.intermediate_size = intermediate_size
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
+    depth: int = 24
+    hidden_size: int = 1536
+    hidden_act: str = "silu"
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
+    num_heads: int = 12
+    in_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] = 336
+    patch_size: int | list[int] | tuple[int, int] = 14
+    rms_norm_eps: float = 1e-05
+    spatial_merge_size: int = 2
+    temporal_patch_size: int | list[int] | tuple[int, int] = 2
+    out_hidden_size: int = 4096
+    intermediate_size: int = 13696
+    initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
+@strict(accept_kwargs=True)
 class Glm4vTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
-    GLM-4.1V model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of
-    GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 151552):
-            Vocabulary size of the Glm4v model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Glm4vModel`]
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 13696):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 40):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 2):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        pad_token_id (`int`, *optional*):
-            The id of the padding token.
-
+    Example:
 
     ```python
     >>> from transformers import Glm4vTextModel, Glm4vConfig
@@ -240,78 +146,43 @@ class Glm4vTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    ignore_keys_at_rope_validation = {"mrope_section"}
 
-    def __init__(
-        self,
-        vocab_size: int | None = 151552,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 13696,
-        num_hidden_layers: int | None = 40,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = 2,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 32768,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-05,
-        use_cache: bool | None = True,
-        attention_dropout: float | None = 0.0,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        pad_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vocab_size: int = 151552
+    hidden_size: int = 4096
+    intermediate_size: int = 13696
+    num_hidden_layers: int = 40
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = 2
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 32768
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-05
+    use_cache: bool = True
+    attention_dropout: float | int = 0.0
+    rope_parameters: RopeParameters | dict | None = None
+    pad_token_id: int | None = None
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_dropout = attention_dropout
-        self.rope_parameters = rope_parameters
-        self.pad_token_id = pad_token_id
-
-        super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
+        super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
+@strict(accept_kwargs=True)
 class Glm4vConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
-    GLM-4.1V model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of
-    GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
+    image_start_token_id (`int`, *optional*, defaults to 151339):
+        The image start token index to encode the start of image.
+    image_end_token_id (`int`, *optional*, defaults to 151340):
+        The image end token index to encode the end of image.
+    video_start_token_id (`int`, *optional*, defaults to 151341):
+        The video start token index to encode the start of video.
+    video_end_token_id (`int`, *optional*, defaults to 151342):
+        The video end token index to encode the end of video.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Glm4vTextConfig`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Glm4vVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to 151343):
-            The image token index to encode the image prompt.
-        video_token_id (`int`, *optional*, defaults to 151344):
-            The video token index to encode the image prompt.
-        image_start_token_id (`int`, *optional*, defaults to 151339):
-            The image start token index to encode the start of image.
-        image_end_token_id (`int`, *optional*, defaults to 151340):
-            The image end token index to encode the end of image.
-        video_start_token_id (`int`, *optional*, defaults to 151341):
-            The video start token index to encode the start of video.
-        video_end_token_id (`int`, *optional*, defaults to 151342):
-            The video end token index to encode the end of video.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import Glm4vForConditionalGeneration, Glm4vConfig
@@ -330,38 +201,28 @@ class Glm4vConfig(PreTrainedConfig):
     sub_configs = {"vision_config": Glm4vVisionConfig, "text_config": Glm4vTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        image_token_id=151343,
-        video_token_id=151344,
-        image_start_token_id=151339,
-        image_end_token_id=151340,
-        video_start_token_id=151341,
-        video_end_token_id=151342,
-        tie_word_embeddings=False,
-        **kwargs,
-    ):
-        if isinstance(vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 151343
+    video_token_id: int = 151344
+    image_start_token_id: int = 151339
+    image_end_token_id: int = 151340
+    video_start_token_id: int = 151341
+    video_end_token_id: int = 151342
+    tie_word_embeddings: bool = False
 
-        if isinstance(text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**text_config)
-        elif text_config is None:
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"](**kwargs)
+
+        if isinstance(self.text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**self.text_config)
+        elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"](**kwargs)
 
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.video_start_token_id = video_start_token_id
-        self.video_end_token_id = video_end_token_id
-        self.image_start_token_id = image_start_token_id
-        self.image_end_token_id = image_end_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 # Will be used for both Text and Vision modalities
@@ -607,7 +468,6 @@ class Glm4vTextAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         bsz, q_len, _ = hidden_states.size()
@@ -624,8 +484,7 @@ class Glm4vTextAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -671,7 +530,6 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
@@ -686,7 +544,6 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -709,10 +566,6 @@ class Glm4vModelOutputWithPast(Qwen2_5_VLModelOutputWithPast):
 
 class Glm4vPreTrainedModel(Qwen2_5_VLPreTrainedModel):
     _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
-    _can_record_outputs = {
-        "hidden_states": Glm4vTextDecoderLayer,
-        "attentions": Glm4vTextAttention,
-    }
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
@@ -851,6 +704,11 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
 
 
 class Glm4vTextModel(Qwen2_5_VLTextModel):
+    _can_record_outputs = {
+        "hidden_states": Glm4vTextDecoderLayer,
+        "attentions": Glm4vTextAttention,
+    }
+
     def __init__(self, config: Glm4vTextConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
@@ -872,7 +730,6 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -885,15 +742,11 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
         # the hard coded `3` is for temporal, height and width.
         if position_ids is None:
-            position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
 
@@ -918,7 +771,6 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
             "config": self.config,
             "inputs_embeds": inputs_embeds,
             "attention_mask": attention_mask,
-            "cache_position": cache_position,
             "past_key_values": past_key_values,
             "position_ids": text_position_ids,
         }
@@ -934,7 +786,6 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
                 attention_mask=causal_mask,
                 position_ids=text_position_ids,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -1161,7 +1012,6 @@ class Glm4vModel(Qwen2VLModel):
         video_grid_thw: torch.LongTensor | None = None,
         rope_deltas: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Glm4vModelOutputWithPast:
         r"""
@@ -1207,7 +1057,6 @@ class Glm4vModel(Qwen2VLModel):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1237,7 +1086,6 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Glm4vCausalLMOutputWithPast:
@@ -1294,7 +1142,6 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1323,7 +1170,6 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         position_ids=None,
         use_cache=True,
         pixel_values=None,
@@ -1340,7 +1186,6 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             position_ids=position_ids,
             pixel_values=pixel_values,
             pixel_values_videos=pixel_values_videos,

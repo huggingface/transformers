@@ -80,13 +80,6 @@ print(f"The predicted token is: {predicted_token}")
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "巴黎是[MASK]国的首都。" | transformers run --task fill-mask --model nghuyong/ernie-3.0-xbase-zh --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 ## Notes

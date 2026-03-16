@@ -561,7 +561,6 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config = model.config
             model.to(torch_device)
             model.eval()
-            print(model.__class__, model._can_record_outputs)
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 

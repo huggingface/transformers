@@ -18,67 +18,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="google/timesfm-2.5-200m-transformers")
+@strict(accept_kwargs=True)
 class TimesFm2_5Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`TimesFm2_5ModelForPrediction`]. It is used to
-    instantiate a TimesFM 2.5 model according to the specified arguments, defining the model architecture. Instantiating
-    a configuration with the defaults will yield a similar configuration to that of the TimesFM 2.5
-    [google/timesfm-2.5-200m-transformers](https://huggingface.co/google/timesfm-2.5-200m-transformers) architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        patch_length (`int`, *optional*, defaults to 32):
-            The length of one patch in the input sequence.
-        context_length (`int`, *optional*, defaults to 16384):
-            The length of the input context.
-        horizon_length (`int`, *optional*, defaults to 128):
-            The length of the prediction horizon.
-        quantiles (`list[float]`, *optional*, defaults to `[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]`):
-            The quantiles to predict.
-        hidden_size (`int`, *optional*, defaults to 1280):
-            Size of the hidden layers.
-        intermediate_size (`int`, *optional*, defaults to 1280):
-            Dimension of the MLP representations.
-        head_dim (`int`, *optional*, defaults to 80):
-            Size of the key, query, value projections per attention head.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer.
-        num_key_value_heads (`int`, *optional*, defaults to 16):
-            Number of key-value heads. Set equal to `num_attention_heads` for full (non-grouped) attention.
-        num_hidden_layers (`int`, *optional*, defaults to 20):
-            Number of Transformer layers.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the RMS normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for the attention scores.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in the attention linear projections.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        output_quantile_len (`int`, *optional*, defaults to 1024):
-            Length of the quantile output projection dimension.
-        decode_index (`int`, *optional*, defaults to 5):
-            Index into the quantile dimension used to extract the point (median) forecast.
-        use_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in MLP and transformer linear layers.
-        activation (`str`, *optional*, defaults to `"swish"`):
-            Activation function used in MLP and residual block layers (any key from `ACT2FN`).
-        use_continuous_quantile_head (`bool`, *optional*, defaults to `True`):
-            Whether to use the continuous quantile head for non-median quantile predictions.
-        force_flip_invariance (`bool`, *optional*, defaults to `True`):
-            Whether to apply flip-invariance averaging during forecasting.
-        infer_is_positive (`bool`, *optional*, defaults to `True`):
-            Whether to clamp forecasts to non-negative values when the input minimum is non-negative.
-        max_position_embeddings (`int`, *optional*, defaults to 16384):
-            Maximum sequence length supported by the rotary position encoding.
-        rope_parameters (`RopeParameters` or `dict[str, RopeParameters]`, *optional*):
-            Dictionary containing the RoPE configuration. Uses default rope type with theta=10000.0 when not set.
+    patch_length (`int`, *optional*, defaults to 32):
+        The length of one patch in the input sequence.
+    context_length (`int`, *optional*, defaults to 16384):
+        The length of the input context.
+    horizon_length (`int`, *optional*, defaults to 128):
+        The length of the prediction horizon.
+    quantiles (`list[float]`, *optional*, defaults to `[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]`):
+        The quantiles to predict.
+    output_quantile_len (`int`, *optional*, defaults to 1024):
+        Length of the quantile output projection dimension.
+    decode_index (`int`, *optional*, defaults to 5):
+        Index into the quantile dimension used to extract the point (median) forecast.
+    use_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use bias in MLP and transformer linear layers.
+    use_continuous_quantile_head (`bool`, *optional*, defaults to `True`):
+        Whether to use the continuous quantile head for non-median quantile predictions.
+    force_flip_invariance (`bool`, *optional*, defaults to `True`):
+        Whether to apply flip-invariance averaging during forecasting.
+    infer_is_positive (`bool`, *optional*, defaults to `True`):
+        Whether to clamp forecasts to non-negative values when the input minimum is non-negative.
 
     Example:
 
@@ -95,59 +65,30 @@ class TimesFm2_5Config(PreTrainedConfig):
     keys_to_ignore_at_inference = []
     is_encoder_decoder = False
 
-    def __init__(
-        self,
-        patch_length: int = 32,
-        context_length: int = 16384,
-        horizon_length: int = 128,
-        quantiles: list = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        hidden_size: int = 1280,
-        intermediate_size: int = 1280,
-        head_dim: int = 80,
-        num_attention_heads: int = 16,
-        num_key_value_heads: int = 16,
-        num_hidden_layers: int = 20,
-        rms_norm_eps: float = 1e-6,
-        attention_dropout: float = 0.0,
-        attention_bias: bool = False,
-        initializer_range: float = 0.02,
-        output_quantile_len: int = 1024,
-        decode_index: int = 5,
-        use_bias: bool = False,
-        activation: str = "swish",
-        use_continuous_quantile_head: bool = True,
-        force_flip_invariance: bool = True,
-        infer_is_positive: bool = True,
-        max_position_embeddings: int = 16384,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        **kwargs,
-    ):
-        self.num_key_value_heads = num_key_value_heads
-        self.attention_bias = attention_bias
-        self.output_quantile_len = output_quantile_len
-        self.decode_index = decode_index
-        self.use_bias = use_bias
-        self.activation = activation
-        self.use_continuous_quantile_head = use_continuous_quantile_head
-        self.force_flip_invariance = force_flip_invariance
-        self.infer_is_positive = infer_is_positive
-        self.max_position_embeddings = max_position_embeddings
-        self.rope_parameters = rope_parameters
-        self.patch_length = patch_length
-        self.context_length = context_length
-        self.horizon_length = horizon_length
-        self.quantiles = quantiles
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.head_dim = head_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.rms_norm_eps = rms_norm_eps
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
+    patch_length: int = 32
 
-        kwargs["is_encoder_decoder"] = self.is_encoder_decoder
-        super().__init__(**kwargs)
+    context_length: int = 16384
+    horizon_length: int = 128
+    num_hidden_layers: int = 20
+    hidden_size: int = 1280
+    intermediate_size: int = 1280
+    head_dim: int = 80
+    num_attention_heads: int = 16
+    rms_norm_eps: float = 1e-6
+    quantiles: list[float] | tuple[float, ...] = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
+    attention_dropout: float | int = 0.0
+    initializer_range: float = 0.02
+    num_key_value_heads: int = 16
+    attention_bias: bool = False
+    output_quantile_len: int = 1024
+    decode_index: int = 5
+    use_bias: bool = False
+    activation: str = "swish"
+    use_continuous_quantile_head: bool = True
+    force_flip_invariance: bool = True
+    infer_is_positive: bool = True
+    max_position_embeddings: int = 16384
+    rope_parameters: RopeParameters | dict | None = None
 
 
 __all__ = ["TimesFm2_5Config"]
