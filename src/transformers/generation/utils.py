@@ -2979,7 +2979,7 @@ class GenerationMixin(ContinuousMixin):
         # which clones input_ids and position_ids every step (unnecessary overhead).
         # The 2D attention mask is kept as-is; the model's forward pass handles the
         # 2D→4D conversion internally when using a compileable cache.
-        for _ in range(max_new_tokens - 1):
+        for i in range(max_new_tokens - 1):
             # 3. position_ids: derived directly from cache_position, not concatenated
             if position_ids is not None:
                 position_ids = cache_position.unsqueeze(0).expand(batch_size, 1)
@@ -3003,9 +3003,8 @@ class GenerationMixin(ContinuousMixin):
             # Copy is needed to avoid keeping a hanging ref to outputs.logits
             next_token_logits = outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=device)
 
-            # next_pos: where the new token will be written in the output buffer
-            next_pos = cache_position + 1  # shape [1]
-            cur_len = next_pos.item() + 1
+            # Use loop index to derive current length (avoids .item() device→host sync)
+            cur_len = prefill_len + i + 2
             next_token_scores = logits_processor(output_ids[:, :cur_len], next_token_logits)
 
             if return_dict_in_generate:
@@ -3028,7 +3027,9 @@ class GenerationMixin(ContinuousMixin):
                 next_tokens = next_tokens * unfinished_sequences + pad_id * (1 - unfinished_sequences)
 
             # 1. In-place write to pre-allocated output buffer (no torch.cat)
-            output_ids.scatter_(1, next_pos.view(1, 1).expand(batch_size, 1), next_tokens.view(batch_size, 1))
+            output_ids.scatter_(
+                1, (cache_position + 1).view(1, 1).expand(batch_size, 1), next_tokens.view(batch_size, 1)
+            )
             # Update current token buffer for next decode step
             current_ids[:, 0] = next_tokens
 
@@ -3036,7 +3037,7 @@ class GenerationMixin(ContinuousMixin):
                 streamer.put(next_tokens.cpu())
 
             # 4. cache_position scalar increment (no torch.cat) — updated AFTER forward pass
-            cache_position = next_pos
+            cache_position = cache_position + 1
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(output_ids[:, :cur_len], scores)
             if unfinished_sequences.max() == 0:
