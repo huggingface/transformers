@@ -31,12 +31,12 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
-from ...siglip.image_processing_siglip import SiglipImageProcessor
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..paligemma.processing_paligemma import PaligemmaProcessor
+from ..siglip.image_processing_siglip import SiglipImageProcessor
 
 
 logger = logging.get_logger(__name__)
