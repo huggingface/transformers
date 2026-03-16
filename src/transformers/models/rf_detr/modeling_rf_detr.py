@@ -1479,15 +1479,9 @@ class RfDetrModel(RfDetrPreTrainedModel):
         return object_query, output_proposals, invalid_mask
 
     @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        pixel_mask: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> RfDetrModelOutput:
-        r"""
-        Forward pass of the model. The pipeline proceeds as follows:
+    @auto_docstring(
+        custom_intro="""
+    Forward pass of the RF-DETR model. The pipeline proceeds as follows:
 
         1. Generate an initial set of object query embeddings and spatial location proposals from the
            backbone's flattened output.
@@ -1501,7 +1495,15 @@ class RfDetrModel(RfDetrPreTrainedModel):
            the target query features to match the batch dimensions.
         5. Pass the refined queries and updated reference points through the transformer decoder to
             aggregate detailed spatial context from the multi-scale features.
-
+    """
+    )
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_mask: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> RfDetrModelOutput:
+        r"""
         Examples:
 
         ```python
@@ -1744,7 +1746,18 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @auto_docstring
+    @auto_docstring(
+        custom_intro="""
+    The forward pass proceeds as follows:
+
+        1. Process the visual input through the base RF-DETR model to obtain the transformer's last hidden state and
+           the final sequence of reference points.
+        2. First stage: Generate classification logits from the encoder's proposed object query embeddings.
+        3. Second stage: Predict the final classification labels and refined bounding boxes using the decoder's last hidden state
+           and the most recent reference points.
+
+    """
+    )
     def forward(
         self,
         pixel_values: torch.FloatTensor = None,
@@ -1758,14 +1771,6 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
             respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
             in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-
-        The forward pass proceeds as follows:
-
-        1. Process the visual input through the base RF-DETR model to obtain the transformer's last hidden state and
-           the final sequence of reference points.
-        2. First stage: Generate classification logits from the encoder's proposed object query embeddings.
-        3. Second stage: Predict the final classification labels and refined bounding boxes using the decoder's last hidden state
-           and the most recent reference points.
 
         Examples:
 
@@ -2095,16 +2100,9 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         return list_mask_logits
 
     @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor = None,
-        pixel_mask: torch.LongTensor | None = None,
-        labels: list[dict] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> dict[str, torch.Tensor]:
-        r"""
-        The forward pass proceeds as follows:
+    @auto_docstring(
+        custom_intro="""
+    Forward pass of the RF-DETR model for instance segmentation. The pipeline proceeds as follows:
 
         1. Process the visual input through the base RF-DETR model to obtain multi-scale spatial features,
            query embeddings, and their transformation history.
@@ -2114,6 +2112,21 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
            hidden state (second stage).
         4. Pass the high-resolution spatial features and query hidden states through the segmentation
            head to produce the final, detailed instance masks.
+    """
+    )
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor = None,
+        pixel_mask: torch.LongTensor | None = None,
+        labels: list[dict] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> dict[str, torch.Tensor]:
+        r"""
+        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
+            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
+            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
         """
         image_size = pixel_values.shape[-2:]
 
