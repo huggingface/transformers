@@ -180,7 +180,7 @@ class ContinuousBatchProcessor:
         )
 
     def __del__(self) -> None:
-        del self.inputs_and_outputs  # clean up CUDA graphs in priority
+        self.inputs_and_outputs = None  # clean up CUDA graphs in priority
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
