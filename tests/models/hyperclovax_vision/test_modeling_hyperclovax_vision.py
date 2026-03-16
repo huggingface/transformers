@@ -115,7 +115,6 @@ class HCXVisionModelTester:
             },
             img_start_id=self.img_start_id,
             video_start_id=self.video_start_id,
-            mm_projector_type="mlp",
         )
 
     def prepare_config_and_inputs(self):
