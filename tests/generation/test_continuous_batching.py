@@ -46,7 +46,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_flash_attn_2_available, is_kernels_available
+from transformers.utils import is_flash_attn_2_available, is_kernels_available, is_torch_xpu_available
 
 
 def flush_memory(flush_compile: bool = True) -> None:
@@ -77,7 +77,7 @@ def flush_memory(flush_compile: bool = True) -> None:
     gc.collect()
 
 
-class ContinuousBatchingNonGenerationTest(unittest.TestCase):
+class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
     @parameterized.expand(
         [
             (None, None, "0"),
@@ -341,9 +341,57 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
             f"Failed for {block_size=}, {block_table=}, {past_length=}, {query_length=}",
         )
 
+    @slow
+    def test_continuous_batching_no_accelerators(self) -> None:
+        """Test continuous batching generation when no accelerator is available. It uses a simulated CPU-only PyTorch
+        environment by mocking all acceleratoravailability checks to return False"""
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+
+        # Mock all accelerator availability checks to simulate CPU-only PyTorch
+        with (
+            patch("torch.cuda.is_available", return_value=False),
+            patch("transformers.utils.is_torch_xpu_available", return_value=False),
+            patch("torch.backends.mps.is_available", return_value=False),
+        ):
+            # Verify patches work
+            self.assertFalse(torch.cuda.is_available())
+            self.assertFalse(is_torch_xpu_available())
+            self.assertFalse(torch.backends.mps.is_available())
+
+            tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+            tokenizer.pad_token = tokenizer.eos_token
+
+            user_messages = [
+                "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?"
+            ]
+            chats = [[{"role": "user", "content": user_message}] for user_message in user_messages]
+            tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
+            input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
+
+            # Load model on CPU
+            model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="sdpa")
+            model = model.to("cpu").eval()
+            model.generation_config.max_new_tokens = 10
+            model.generation_config.do_sample = False
+
+            continuous_batching_config = ContinuousBatchingConfig(use_cuda_graph=False, use_async_batching=False)
+
+            # This should not crash even with all accelerators unavailable
+            outputs = model.generate_batch(
+                inputs=input_ids,
+                generation_config=model.generation_config,
+                continuous_batching_config=continuous_batching_config,
+            )
+
+            # Verify we got outputs
+            self.assertEqual(len(outputs), len(input_ids))
+            for output in outputs.values():
+                self.assertIsNotNone(output.generated_tokens)
+                self.assertGreater(len(output.generated_tokens), 0)
+
 
 @require_torch_accelerator
-class ContinuousBatchingGenerationTest(unittest.TestCase):
+class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     # -----------------------------------------------Parity tests----------------------------------------------- #
     #         Ensure continuous batching and non-continuous batching generation produce the same outputs         #
     # ---------------------------------------------------------------------------------------------------------- #

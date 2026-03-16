@@ -132,7 +132,7 @@ GGUF_MIN_VERSION = "0.10.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
 HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
-TORCHAO_MIN_VERSION = "0.4.0"
+TORCHAO_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
 KERNELS_MIN_VERSION = "0.10.2"
@@ -916,40 +916,53 @@ def is_bitsandbytes_available(min_version: str = BITSANDBYTES_MIN_VERSION) -> bo
 @lru_cache
 def is_flash_attn_2_available() -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
+    # FA4 is also distributed under "flash_attn", hence we need to check the naming here
+    is_available = is_available and "flash-attn" in [
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+    ]
+
     if not is_available or not (is_torch_cuda_available() or is_torch_mlu_available()):
         return False
 
-    import torch
-
+    # Only allow versions >= 2.3.3 to avoid very old legacy workarounds that are now 2+ years old
     try:
-        torch_version = getattr(torch, "version")
-        if torch_version.cuda:
-            return version.parse(flash_attn_version) >= version.parse("2.1.0")
-        elif torch_version.hip:
-            # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
-            return version.parse(flash_attn_version) >= version.parse("2.0.4")
-        elif is_torch_mlu_available():
-            return version.parse(flash_attn_version) >= version.parse("2.3.3")
-        else:
-            return False
+        return version.parse(flash_attn_version) >= version.parse("2.3.3")
     except packaging.version.InvalidVersion:
         return False
 
 
 @lru_cache
 def is_flash_attn_3_available() -> bool:
-    return is_torch_cuda_available() and _is_package_available("flash_attn_3")[0]
+    # Universally available under `flash_attn_interface`
+    is_available = _is_package_available("flash_attn_interface")[0]
+    # Resolving and ensuring the proper name of FA3 being associated
+    is_available = is_available and "flash-attn-3" in [
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn_interface"]
+    ]
+    return is_available and is_torch_cuda_available()
 
 
 @lru_cache
-def is_flash_attn_greater_or_equal_2_10() -> bool:
-    _, flash_attn_version = _is_package_available("flash_attn", return_version=True)
-    return is_flash_attn_2_available() and version.parse(flash_attn_version) >= version.parse("2.1.0")
+def is_flash_attn_4_available() -> bool:
+    is_available = _is_package_available("flash_attn")[0]
+    # FA2 is also distributed under "flash_attn", hence we need to check the naming here
+    # NOTE: FA2 seems to distribute the `cute` subdirectory even if only FA2 has been installed
+    #       -> check for the proper (normalized) distribution name
+    is_available = is_available and "flash-attn-4" in [
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+    ]
+
+    return is_available and is_torch_cuda_available()
 
 
 @lru_cache
 def is_flash_attn_greater_or_equal(library_version: str) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
+    # FA4 is also distributed under "flash_attn", hence we need to check the naming here
+    is_available = is_available and "flash-attn" in [
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+    ]
+
     if not is_available:
         return False
     try:

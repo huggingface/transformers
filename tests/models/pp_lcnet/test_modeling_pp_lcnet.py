@@ -52,6 +52,7 @@ if is_vision_available():
 class PPLCNetModelTester:
     def __init__(
         self,
+        parent,
         batch_size=3,
         image_size=128,
         num_channels=3,
@@ -68,6 +69,7 @@ class PPLCNetModelTester:
         out_indices=[2, 3, 4],
         stem_channels=16,
     ):
+        self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
@@ -134,7 +136,7 @@ class PPLCNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
     config_class = PPLCNetConfig
 
     def setUp(self):
-        self.model_tester = PPLCNetModelTester()
+        self.model_tester = PPLCNetModelTester(self)
         self.config_tester = ConfigTester(
             self,
             config_class=PPLCNetConfig,
@@ -153,7 +155,7 @@ class PPLCNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_resize_embeddings = False
 
     def setUp(self):
-        self.model_tester = PPLCNetModelTester()
+        self.model_tester = PPLCNetModelTester(self)
         self.config_tester = ConfigTester(
             self,
             config_class=PPLCNetConfig,

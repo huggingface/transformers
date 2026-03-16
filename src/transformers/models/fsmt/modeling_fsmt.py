@@ -867,7 +867,7 @@ class FSMTModel(PretrainedFSMTModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # make masks if user doesn't supply
         if not use_cache and input_ids is not None:
@@ -1017,7 +1017,7 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
         "Machine learning is great, isn't it?"
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None:
             use_cache = False
