@@ -1138,7 +1138,7 @@ class IsaacModel(Qwen3PreTrainedModel):
         self,
         *,
         position_ids: torch.Tensor | None = None,
-        attention_mask: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Prepare multimodal RoPE positions for the current prefill sequence.
@@ -1151,12 +1151,18 @@ class IsaacModel(Qwen3PreTrainedModel):
 
         device = inputs_embeds.device
         batch_size, seq_len = inputs_embeds.shape[:2]
-        attention_mask = attention_mask.to(device=device, dtype=torch.long)
+        if attention_mask is not None:
+            attention_mask = attention_mask.to(device=device, dtype=torch.long)
 
         if position_ids is None:
-            rope_position = attention_mask.cumsum(dim=-1) - 1
-            rope_position = rope_position.masked_fill(attention_mask == 0, 0)
-            rope_position = rope_position[:, -seq_len:]
+            if attention_mask is not None:
+                rope_position = attention_mask.cumsum(dim=-1) - 1
+                rope_position = rope_position.masked_fill(attention_mask == 0, 0)
+                rope_position = rope_position[:, -seq_len:]
+            else:
+                rope_position = (
+                    torch.arange(seq_len, device=device, dtype=torch.long).view(1, -1).expand(batch_size, -1)
+                )
             pos_3d = rope_position.unsqueeze(-1).expand(-1, -1, 3)
             rope_deltas = torch.zeros((batch_size, 1), device=device, dtype=torch.long)
             return pos_3d, rope_deltas
@@ -1171,7 +1177,10 @@ class IsaacModel(Qwen3PreTrainedModel):
             position_ids = position_ids.unsqueeze(-1).expand(-1, -1, 3)
 
         m_per_batch = position_ids.amax(dim=(1, 2))
-        seq_lens = attention_mask.eq(1).sum(dim=-1).to(dtype=m_per_batch.dtype, device=device)
+        if attention_mask is not None:
+            seq_lens = attention_mask.eq(1).sum(dim=-1).to(dtype=m_per_batch.dtype, device=device)
+        else:
+            seq_lens = torch.full((batch_size,), seq_len, device=device, dtype=m_per_batch.dtype)
         rope_deltas = (m_per_batch + 1 - seq_lens).to(dtype=position_ids.dtype).unsqueeze(1)
         return position_ids, rope_deltas
 
@@ -1179,7 +1188,7 @@ class IsaacModel(Qwen3PreTrainedModel):
         self,
         input_ids: torch.Tensor,
         inputs_embeds: torch.Tensor,
-        attention_mask: torch.Tensor,
+        attention_mask: torch.Tensor | None,
         position_ids: torch.Tensor | None = None,
         past_key_values: torch.Tensor | None = None,
     ) -> torch.Tensor:
@@ -1203,7 +1212,7 @@ class IsaacModel(Qwen3PreTrainedModel):
             else:
                 rope_deltas = rope_deltas[:1].expand(inputs_embeds.shape[0], -1)
 
-        if attention_mask.shape[-1] > inputs_embeds.shape[1]:
+        if attention_mask is not None and attention_mask.shape[-1] > inputs_embeds.shape[1]:
             rope_position = attention_mask.long().cumsum(dim=-1) - 1
             rope_position = rope_position.masked_fill(attention_mask == 0, 0)
             rope_position = rope_position[:, -inputs_embeds.shape[1] :]
@@ -1322,9 +1331,6 @@ class IsaacModel(Qwen3PreTrainedModel):
             mm_token_type_ids = torch.full(
                 (batch_size, seq_len), MM_TOKEN_TYPE_TEXT, device=inputs_embeds.device, dtype=torch.long
             )
-
-        if attention_mask is None:
-            attention_mask = torch.ones(inputs_embeds.shape[:2], device=inputs_embeds.device, dtype=torch.long)
 
         position_ids = self.compute_3d_position_ids(
             input_ids=input_ids,
