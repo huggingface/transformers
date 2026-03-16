@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import time
 import unittest
 
 import numpy as np
@@ -397,37 +396,6 @@ class EfficientLoFTRImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             tensor_post_processed_outputs = image_processor.post_process_keypoint_matching(outputs, tensor_image_sizes)
 
             check_post_processed_output(tensor_post_processed_outputs, tensor_image_sizes)
-
-    @unittest.skip(reason="Many failing cases. This test needs a more deep investigation.")
-    def test_fast_is_faster_than_slow(self):
-        """Override the generic test since EfficientLoFTR requires image pairs."""
-        if len(self.image_processing_classes) < 2:
-            self.skipTest(reason="Skipping slow/fast speed test as there are less than 2 backends")
-
-        if "pil" not in self.image_processing_classes or "torchvision" not in self.image_processing_classes:
-            self.skipTest(reason="Skipping slow/fast speed test as one of the image processors is not defined")
-
-        # Create image pairs for speed test
-        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=False)
-        image_processor_slow = self.image_processing_classes["pil"](**self.image_processor_dict)
-        image_processor_fast = self.image_processing_classes["torchvision"](**self.image_processor_dict)
-
-        # Time slow processor
-        start_time = time.time()
-        for _ in range(10):
-            _ = image_processor_slow(dummy_images, return_tensors="pt")
-        slow_time = time.time() - start_time
-
-        # Time fast processor
-        start_time = time.time()
-        for _ in range(10):
-            _ = image_processor_fast(dummy_images, return_tensors="pt")
-        fast_time = time.time() - start_time
-
-        # Fast should be faster (or at least not significantly slower)
-        self.assertLessEqual(
-            fast_time, slow_time * 1.2, "Fast processor should not be significantly slower than slow processor"
-        )
 
     @require_vision
     @require_torch

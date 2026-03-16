@@ -236,7 +236,7 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     @unittest.skip(
-        reason="LlavaOnevisionImageProcessorFast doesn't compile (infinitely) when using class transforms"
+        reason="LlavaOnevisionImageProcessor doesn't compile (infinitely) when using class transforms"
     )  # FIXME yoni
     @pytest.mark.torch_compile_test
     def test_can_compile_fast_image_processor(self):

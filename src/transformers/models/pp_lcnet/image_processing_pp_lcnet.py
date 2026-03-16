@@ -18,7 +18,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
+
+import torch
+import torchvision.transforms.v2.functional as tvF
+
+from ...feature_extraction_utils import BatchFeature
+from ...image_processing_backends import TorchvisionBackend
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs
+from ...utils import auto_docstring
+from ...utils.generic import TensorType
+from ...utils.import_utils import requires
 
 
 class PPLCNetImageProcessorKwargs(ImagesKwargs, total=False):
@@ -31,3 +43,91 @@ class PPLCNetImageProcessorKwargs(ImagesKwargs, total=False):
 
     resize_short: int
     size_divisor: int
+
+
+@auto_docstring
+@requires(backends=("torch",))
+class PPLCNetImageProcessor(TorchvisionBackend):
+    resample = 2
+    image_mean = [0.406, 0.456, 0.485]
+    image_std = [0.225, 0.224, 0.229]
+    size = {"height": 256, "width": 256}
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
+    do_center_crop = True
+    crop_size = 224
+    resize_short = 256
+    size_divisor = 1
+    valid_kwargs = PPLCNetImageProcessorKwargs
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resize_short: int,
+        size_divisor: int,
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None,
+        disable_grouping: bool | None = False,
+        **kwargs,
+    ) -> BatchFeature:
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                # Unlike TorchvisionBackend, which resizes to a fixed target,
+                # this implementation first calculates the target size dynamically to preserve
+                # the aspect ratio, using the shorter edge as a reference.
+                resize_size = size
+                if self.resize_short is not None:
+                    resize_size = self.get_image_size(
+                        stacked_images[0], target_short_edge=resize_short, size_divisor=size_divisor
+                    )
+                stacked_images = self.resize(stacked_images, size=resize_size, resample=resample)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+
+        # Group images by size for further processing
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            stacked_images = self._rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+
+        # RGB -> BGR
+        images = [image[[2, 1, 0], :, :] for image in processed_images]
+        return BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
+
+    def get_image_size(
+        self,
+        image: "torch.Tensor",
+        target_short_edge: int | None,
+        size_divisor: int | None,
+    ) -> tuple[SizeDict, torch.Tensor]:
+        _, height, width = image.shape
+        resize_scale = target_short_edge / min(height, width)
+        resized_height = round(height * resize_scale)
+        resized_width = round(width * resize_scale)
+        if size_divisor is not None:
+            resized_height = math.ceil(resized_height / size_divisor) * size_divisor
+            resized_width = math.ceil(resized_width / size_divisor) * size_divisor
+
+        return SizeDict(height=resized_height, width=resized_width)
+
+
+__all__ = ["PPLCNetImageProcessor"]
