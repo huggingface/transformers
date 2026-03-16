@@ -1029,13 +1029,13 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         tools: list[dict | Callable] | None = None,
         add_generation_prompt: bool = False,
         continue_final_message: bool = False,
-        reasoning_effort: ReasoningEffort | None = None,
         tokenize: bool = True,
         padding: bool | str | PaddingStrategy = False,
         truncation: bool = False,
         max_length: int | None = None,
         return_tensors: str | TensorType | None = None,
         return_dict: bool = True,
+        reasoning_effort: ReasoningEffort | None = None,
         **kwargs,
     ) -> str | list[int] | list[str] | list[list[int]] | BatchEncoding:
         """
@@ -1083,6 +1083,12 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
             return_dict (`bool`, defaults to `False`):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
                 If at least one conversation contains an image, its pixel values will be returned in the `pixel_values` key and image sizes in the `image_sizes` key.
+            reasoning_effort (`ReasoningEffort`, *optional*):
+                The reasoning effort to use for the chat completion for models that support it. Possible values are:
+                - `ReasoningEffort.none`: The model will not reason.
+                - `ReasoningEffort.high`: The model will use a reasoning approach.
+                If not specified, the default reasoning effort will be used.
+
             kwargs (additional keyword arguments, *optional*):
                 Not supported by `MistralCommonBackend.apply_chat_template`.
                 Will raise an error if used.
