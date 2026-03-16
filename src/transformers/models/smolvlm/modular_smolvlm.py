@@ -23,7 +23,7 @@ from ...generation import GenerationConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
 from ..idefics3.image_processing_idefics3_fast import Idefics3ImageProcessorFast
@@ -108,39 +108,6 @@ class SmolVLMModel(Idefics3Model):
     A subclass of Idefics3Model. We do *not* remove or block the call to inputs_merger
     in forward. Instead, we override inputs_merger here with custom logic.
     """
-
-    def inputs_merger(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_hidden_states: torch.Tensor
-    ):
-        _, patch_size, _ = image_hidden_states.shape
-
-        if input_ids is None:
-            image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            image_mask = image_mask[..., 0]  # slice off the hidden dim
-        else:
-            image_mask = input_ids == self.config.image_token_id
-
-        num_image_tokens = image_mask.sum(dim=1)
-        torch_compilable_check(
-            torch.all(num_image_tokens % patch_size == 0),
-            "At least one sample has <image> tokens not divisible by patch_size.",
-        )
-        blocks_per_sample = num_image_tokens // patch_size
-
-        offsets = torch.nn.functional.pad(blocks_per_sample.cumsum(dim=0), (1, 0), value=0)
-        block_offset = offsets[:-1]
-        row_cum = image_mask.cumsum(dim=-1)
-        chunk_idx = (row_cum - 1) // patch_size
-        local_idx = (row_cum - 1) % patch_size
-        block_idx = block_offset.unsqueeze(1) + chunk_idx
-
-        image_embeds = torch.zeros_like(inputs_embeds)
-        image_embeds[image_mask] = image_hidden_states[block_idx[image_mask], local_idx[image_mask], :]
-
-        merged_embeds = torch.where(image_mask.unsqueeze(-1), image_embeds, inputs_embeds)
-        return merged_embeds
 
     @can_return_tuple
     @auto_docstring(

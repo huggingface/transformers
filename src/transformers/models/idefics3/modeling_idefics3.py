@@ -541,34 +541,6 @@ class Idefics3Model(Idefics3PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
 
-    def inputs_merger(
-        self,
-        input_ids: torch.LongTensor,
-        inputs_embeds: torch.Tensor | None,
-        image_hidden_states: torch.Tensor | None,
-    ):
-        """
-        This method aims at merging the token embeddings with the image hidden states into one single sequence of vectors that are fed to the transformer LM.
-        The merging happens as follows:
-        - The text token sequence is: `tok_1 tok_2 tok_3 <fake_token_around_image> <image> <image> ... <image> <fake_token_around_image> tok_4`.
-        - We get the image hidden states for the image through the vision encoder and that hidden state, after a pixel shuffle operation, is then projected into the text embedding space.
-        We thus have a sequence of image hidden states of size (1, image_seq_len, hidden_dim), where 1 is for batch_size of 1 image and hidden_dim is the hidden_dim of the LM transformer.
-        - The merging happens so that we obtain the following sequence: `vector_tok_1 vector_tok_2 vector_tok_3 vector_fake_tok_around_image {sequence of image_seq_len image hidden states} vector_fake_toke_around_image vector_tok_4`. That sequence is fed to the LM.
-        - To fit the format of that sequence, `input_ids`, `inputs_embeds`, `attention_mask` are all 3 adapted to insert the image hidden states.
-        """
-        if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
-
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        image_hidden_states = image_hidden_states.to(inputs_embeds.device, inputs_embeds.dtype)
-        inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_hidden_states)
-        return inputs_embeds
-
     @can_return_tuple
     @auto_docstring
     def get_image_features(
