@@ -164,11 +164,15 @@ class PPChart2TableModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="PPChart2Table have reused the GotOcr2 model, which does not implement the latest logic for capturing attentions and hidden_states introduced in Transformers v5.")
+    @unittest.skip(
+        reason="PPChart2Table have reused the GotOcr2 model, which does not implement the latest logic for capturing attentions and hidden_states introduced in Transformers v5."
+    )
     def test_get_image_features_attentions(self):
         pass
 
-    @unittest.skip(reason="PPChart2Table have reused the GotOcr2 model, which does not implement the latest logic for capturing attentions and hidden_states introduced in Transformers v5.")
+    @unittest.skip(
+        reason="PPChart2Table have reused the GotOcr2 model, which does not implement the latest logic for capturing attentions and hidden_states introduced in Transformers v5."
+    )
     def test_get_image_features_hidden_states(self):
         pass
 
@@ -191,7 +195,6 @@ class PPChart2TableIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_pp_chart2table(self):
-        
         inputs = self.processor(self.image, return_tensors="pt").to(torch_device)
         generate_ids = self.model.generate(
             **inputs,
@@ -207,7 +210,6 @@ class PPChart2TableIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_pp_chart2table_batched(self):
-
         inputs = self.processor([self.image, self.image], return_tensors="pt").to(torch_device)
         generate_ids = self.model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=6)
         decoded_output = self.processor.batch_decode(
