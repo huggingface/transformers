@@ -335,7 +335,6 @@ def _build_checkpoint_conversion_mapping():
         ],
         "rf_detr": [
             # RfDetrConvEncoder
-            ## RfDetrC2FLayer
             WeightRenaming(r"projector.stages.0.0.cv1.conv", r"projector.projector_layer.conv1.conv"),
             WeightRenaming(r"projector.stages.0.0.cv1.bn", r"projector.projector_layer.conv1.norm"),
             WeightRenaming(r"projector.stages.0.0.cv2.conv", r"projector.projector_layer.conv2.conv"),
@@ -353,7 +352,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 r"projector.stages.0.0.m.(\d+).cv2.bn", r"projector.projector_layer.bottlenecks.\1.conv2.norm"
             ),
-            # RfDetrDecoder renames
+            # RfDetrDecoder
             WeightRenaming(r"decoder.layers.(\d+).norm1", r"decoder.layers.\1.self_attn_layer_norm"),
             WeightRenaming(r"decoder.layers.(\d+).norm2", r"decoder.layers.\1.cross_attn_layer_norm"),
             WeightRenaming(r"decoder.layers.(\d+).linear1", r"decoder.layers.\1.mlp.fc1"),
