@@ -24,14 +24,5 @@ else:
     import sys
 
     _file = globals()["__file__"]
-    # Explicitly define the import structure to include modeling classes
-    import_structure = define_import_structure(_file)
-    # Add the modeling classes explicitly
-    import_structure[frozenset({})]["modeling_mistral4"] = {
-        "Mistral4PreTrainedModel",
-        "Mistral4Model",
-        "Mistral4ForCausalLM",
-        "Mistral4ForSequenceClassification",
-        "Mistral4ForTokenClassification",
-    }
-    sys.modules[__name__] = _LazyModule(__name__, _file, import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+
