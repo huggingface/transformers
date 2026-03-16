@@ -17,11 +17,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ..deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
@@ -41,6 +42,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="tencent/Youtu-LLM-2B")
+@strict(accept_kwargs=True)
 class YoutuConfig(DeepseekV3Config):
     r"""
     embedding_initializer_range (`float`, *optional*):
@@ -64,88 +66,43 @@ class YoutuConfig(DeepseekV3Config):
     }
     attribute_map = {}
 
-    def __init__(
-        self,
-        vocab_size: int | None = 128256,
-        hidden_size: int | None = 2048,
-        intermediate_size: int | None = 6144,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 16,
-        num_key_value_heads: int | None = 16,
-        kv_lora_rank: int | None = 512,
-        q_lora_rank: int | None = 1536,
-        qk_rope_head_dim: int | None = 64,
-        v_head_dim: int | None = 128,
-        qk_nope_head_dim: int | None = 128,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 131072,
-        initializer_range: float | None = None,
-        embedding_initializer_range: float | None = None,
-        rms_norm_eps: int | None = 1e-6,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = 128000,
-        eos_token_id: int | None = 128001,
-        tie_word_embeddings: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] = None,
-        rope_interleave: bool | None = True,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        **kwargs,
-    ):
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            kv_lora_rank=kv_lora_rank,
-            q_lora_rank=q_lora_rank,
-            qk_rope_head_dim=qk_rope_head_dim,
-            v_head_dim=v_head_dim,
-            qk_nope_head_dim=qk_nope_head_dim,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            rms_norm_eps=rms_norm_eps,
-            use_cache=use_cache,
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            rope_parameters=rope_parameters,
-            rope_interleave=rope_interleave,
-            attention_bias=attention_bias,
-            attention_dropout=attention_dropout,
-            **kwargs,
-        )
+    vocab_size: int = 128256
+    hidden_size: int = 2048
+    intermediate_size: int = 6144
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 16
+    max_position_embeddings: int = 131072
+    initializer_range: float | None = None
+    embedding_initializer_range: float | None = None
+    pad_token_id: int | None = None
+    bos_token_id: int | None = 128000
+    eos_token_id: int | list[int] | None = 128001
+    tie_word_embeddings: bool = True
 
-        # remove unused attribute
-        del self.n_shared_experts
-        del self.n_routed_experts
-        del self.routed_scaling_factor
-        del self.n_group
-        del self.topk_group
-        del self.num_experts_per_tok
-        del self.first_k_dense_replace
-        del self.norm_topk_prob
-        del self.pretraining_tp
-        del self.moe_intermediate_size
+    # remove unused attribute
+    n_shared_experts = AttributeError()
+    n_routed_experts = AttributeError()
+    routed_scaling_factor = AttributeError()
+    n_group = AttributeError()
+    topk_group = AttributeError()
+    num_experts_per_tok = AttributeError()
+    first_k_dense_replace = AttributeError()
+    norm_topk_prob = AttributeError()
+    pretraining_tp = AttributeError()
+    moe_intermediate_size = AttributeError()
 
-        # if initializer_range is None, set it to 2.0 / (5.0 * self.hidden_size) ** 0.5 (if hidden size is valid)
+    def __post_init__(self, **kwargs):
         if self.initializer_range is None:
             if self.hidden_size != 0:
                 self.initializer_range = 2.0 / (5.0 * self.hidden_size) ** 0.5
             else:
                 self.initializer_range = 0.02
 
-        # if embedding_initializer_range is None, set it to 2.0 * self.initializer_range
-        if embedding_initializer_range is None:
-            self.embedding_initializer_range = 2.0 * self.initializer_range
-        else:
-            self.embedding_initializer_range = embedding_initializer_range
+        self.embedding_initializer_range = self.embedding_initializer_range or 2.0 * self.initializer_range
+        super().__post_init__(**kwargs)
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
+    def convert_rope_params_to_dict(self, **kwargs):
         raise AttributeError("Not overwritten for the Youtu model!")
 
 

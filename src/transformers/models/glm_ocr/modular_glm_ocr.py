@@ -17,6 +17,7 @@ from collections.abc import Callable
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -53,23 +54,17 @@ class GlmOcrVisionMlp(Glm4VisionMlp):
 
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
+@strict(accept_kwargs=True)
 class GlmOcrVisionConfig(Glm4vVisionConfig):
-    def __init__(
-        self,
-        depth=24,
-        hidden_size=1024,
-        hidden_act="silu",
-        attention_bias=True,
-        num_heads=16,
-        image_size=336,
-        out_hidden_size=1536,
-        intermediate_size=4096,
-        **super_kwargs,
-    ):
-        super().__init__(**super_kwargs)
+    hidden_size: int = 1024
+    attention_bias: bool = True
+    num_heads: int = 16
+    out_hidden_size: int = 1536
+    intermediate_size: int = 4096
 
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
+@strict(accept_kwargs=True)
 class GlmOcrTextConfig(Glm4vTextConfig):
     r"""
     Example:
@@ -87,21 +82,17 @@ class GlmOcrTextConfig(Glm4vTextConfig):
     >>> configuration = model.config
     ```"""
 
-    def __init__(
-        self,
-        vocab_size: int | None = 59392,
-        hidden_size: int | None = 1024,
-        intermediate_size: int | None = 4096,
-        num_hidden_layers: int | None = 16,
-        num_attention_heads: int | None = 16,
-        num_key_value_heads: int | None = 8,
-        max_position_embeddings: int | None = 131072,
-        **super_kwargs,
-    ):
-        super().__init__(**super_kwargs)
+    vocab_size: int = 59392
+    hidden_size: int = 1024
+    intermediate_size: int = 4096
+    num_hidden_layers: int = 16
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 8
+    max_position_embeddings: int = 131072
 
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
+@strict(accept_kwargs=True)
 class GlmOcrConfig(Glm4vConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 59256):
@@ -126,20 +117,12 @@ class GlmOcrConfig(Glm4vConfig):
     >>> configuration = model.config
     ```"""
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        image_token_id=59280,
-        video_token_id=59281,
-        image_start_token_id=59256,
-        image_end_token_id=59257,
-        video_start_token_id=59258,
-        video_end_token_id=59259,
-        tie_word_embeddings=False,
-        **super_kwargs,
-    ):
-        super().__init__(**super_kwargs)
+    image_token_id: int = 59280
+    video_token_id: int = 59281
+    image_start_token_id: int = 59256
+    image_end_token_id: int = 59257
+    video_start_token_id: int = 59258
+    video_end_token_id: int = 59259
 
 
 class GlmOcrTextAttention(Glm4vTextAttention, nn.Module):

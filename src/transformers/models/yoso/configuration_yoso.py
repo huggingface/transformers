@@ -13,14 +13,14 @@
 # limitations under the License.
 """YOSO model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="uw-madison/yoso-4096")
+@strict(accept_kwargs=True)
 class YosoConfig(PreTrainedConfig):
     r"""
     use_expectation (`bool`, *optional*, defaults to `True`):
@@ -53,58 +53,29 @@ class YosoConfig(PreTrainedConfig):
 
     model_type = "yoso"
 
-    def __init__(
-        self,
-        vocab_size=50265,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=4096,
-        type_vocab_size=1,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        use_expectation=True,
-        hash_code_len=9,
-        num_hash=64,
-        conv_window=None,
-        use_fast_hash=True,
-        lsh_backward=True,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        add_cross_attention=False,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-
-        self.add_cross_attention = add_cross_attention
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.type_vocab_size = type_vocab_size
-        self.layer_norm_eps = layer_norm_eps
-        self.use_expectation = use_expectation
-        self.hash_code_len = hash_code_len
-        self.num_hash = num_hash
-        self.conv_window = conv_window
-        self.use_fast_hash = use_fast_hash
-        self.lsh_backward = lsh_backward
+    vocab_size: int = 50265
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.1
+    attention_probs_dropout_prob: float = 0.1
+    max_position_embeddings: int = 4096
+    type_vocab_size: int = 1
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    use_expectation: bool = True
+    hash_code_len: int = 9
+    num_hash: int = 64
+    conv_window: int | None = None
+    use_fast_hash: bool = True
+    lsh_backward: bool = True
+    pad_token_id: int | None = 1
+    bos_token_id: int | None = 0
+    eos_token_id: int | None = 2
+    add_cross_attention: bool = False
+    tie_word_embeddings: bool = True
 
 
 __all__ = ["YosoConfig"]

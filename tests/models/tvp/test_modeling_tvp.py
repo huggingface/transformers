@@ -218,7 +218,7 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         # Load a timm backbone
         # We hack adding hidden_sizes to the config to test the backbone loading
-        backbone_config = TimmBackboneConfig("resnet18", out_indices=[-2, -1], hidden_sizes=[64, 128])
+        backbone_config = TimmBackboneConfig(backbone="resnet18", out_indices=[-2, -1], hidden_sizes=[64, 128])
         config_dict["backbone_config"] = backbone_config
         config = config.__class__(**config_dict)
         _validate_backbone_init()
