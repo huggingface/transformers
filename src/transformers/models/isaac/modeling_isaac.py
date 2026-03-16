@@ -1317,40 +1317,26 @@ class IsaacModel(PreTrainedModel):
         position_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor,
         inputs_embeds: torch.Tensor,
-        past_seen_tokens: int = 0,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Prepare multimodal RoPE positions and carry forward per-batch offsets.
+        """Prepare multimodal RoPE positions for the current prefill sequence.
 
         Unlike vanilla 1D RoPE, Isaac builds 3-axis indices for text and vision tokens.
-        If callers do not supply positions, we synthesize them from `attention_mask`
-        and use `past_seen_tokens` to decide whether to reuse cached offsets.
-        The returned `rope_deltas` capture any custom offset (i.e., prefill length) and
-        are reused across generation steps so newly decoded tokens keep counting forward
-        after the cached prefix."""
+        If callers do not supply positions, we synthesize text-style positions from
+        `attention_mask`. The returned `rope_deltas` capture any custom offset between
+        the attended sequence length and Isaac's multimodal positions so decode steps can
+        keep counting forward from the cached prefix."""
 
         device = inputs_embeds.device
         batch_size, seq_len = inputs_embeds.shape[:2]
+        attention_mask = attention_mask.to(device=device, dtype=torch.long)
 
         if position_ids is None:
-            attn = attention_mask.to(device=device, dtype=torch.long)
-            rope_position = attn.cumsum(dim=-1) - 1
-            rope_position = rope_position.masked_fill(attn == 0, 0)
+            rope_position = attention_mask.cumsum(dim=-1) - 1
+            rope_position = rope_position.masked_fill(attention_mask == 0, 0)
             rope_position = rope_position[:, -seq_len:]
-
-            if self.rope_deltas is None or past_seen_tokens == 0:
-                base_delta = torch.zeros((batch_size, 1), device=device, dtype=torch.long)
-            else:
-                previous_delta = torch.as_tensor(self.rope_deltas, device=device, dtype=torch.long).reshape(-1, 1)
-                if previous_delta.shape[0] != batch_size:
-                    if batch_size % previous_delta.shape[0] == 0:
-                        previous_delta = previous_delta.repeat_interleave(batch_size // previous_delta.shape[0], dim=0)
-                    else:
-                        previous_delta = previous_delta[:1].expand(batch_size, -1)
-                base_delta = previous_delta
-
-            rope_position = rope_position + base_delta
             pos_3d = rope_position.unsqueeze(-1).expand(-1, -1, 3)
-            return pos_3d, base_delta
+            rope_deltas = torch.zeros((batch_size, 1), device=device, dtype=torch.long)
+            return pos_3d, rope_deltas
 
         position_ids = position_ids.to(device=device)
         if position_ids.ndim == 2:
@@ -1361,11 +1347,55 @@ class IsaacModel(PreTrainedModel):
             position_ids = torch.arange(seq_len, device=position_ids.device).view(1, -1) + start_positions
             position_ids = position_ids.unsqueeze(-1).expand(-1, -1, 3)
 
-        attn = attention_mask.to(device=device, dtype=torch.long)
         m_per_batch = position_ids.amax(dim=(1, 2))
-        seq_lens = attn.eq(1).sum(dim=-1).to(dtype=m_per_batch.dtype, device=device)
+        seq_lens = attention_mask.eq(1).sum(dim=-1).to(dtype=m_per_batch.dtype, device=device)
         rope_deltas = (m_per_batch + 1 - seq_lens).to(dtype=position_ids.dtype).unsqueeze(1)
         return position_ids, rope_deltas
+
+    def compute_3d_position_ids(
+        self,
+        input_ids: torch.Tensor | None,
+        inputs_embeds: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        past_key_values: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
+        if past_seen_tokens == 0:
+            if attention_mask is None:
+                attention_mask = torch.ones(inputs_embeds.shape[:2], device=inputs_embeds.device, dtype=torch.long)
+            position_ids, rope_deltas = self.get_rope_index(
+                position_ids=position_ids,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+            )
+            self.rope_deltas = rope_deltas
+            return position_ids
+
+        if self.rope_deltas is None:
+            return None
+
+        rope_deltas = torch.as_tensor(self.rope_deltas, device=inputs_embeds.device, dtype=torch.long).reshape(-1, 1)
+        if rope_deltas.shape[0] != inputs_embeds.shape[0]:
+            if inputs_embeds.shape[0] % rope_deltas.shape[0] == 0:
+                rope_deltas = rope_deltas.repeat_interleave(inputs_embeds.shape[0] // rope_deltas.shape[0], dim=0)
+            else:
+                rope_deltas = rope_deltas[:1].expand(inputs_embeds.shape[0], -1)
+
+        if attention_mask is not None and attention_mask.shape[-1] > inputs_embeds.shape[1]:
+            rope_position = attention_mask.long().cumsum(dim=-1) - 1
+            rope_position = rope_position.masked_fill(attention_mask == 0, 0)
+            rope_position = rope_position[:, -inputs_embeds.shape[1] :]
+        else:
+            rope_position = torch.arange(
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
+                dtype=torch.long,
+            ).view(1, -1)
+            rope_position = rope_position.expand(inputs_embeds.shape[0], -1)
+
+        return rope_position.unsqueeze(-1).expand(-1, -1, 3) + rope_deltas.unsqueeze(-1)
 
     @auto_docstring
     @can_return_tuple
@@ -1472,21 +1502,22 @@ class IsaacModel(PreTrainedModel):
                 (batch_size, seq_len), MM_TOKEN_TYPE_TEXT, device=inputs_embeds.device, dtype=torch.long
             )
 
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-
         if attention_mask is None:
             attention_mask = torch.ones(inputs_embeds.shape[:2], device=inputs_embeds.device, dtype=torch.long)
 
-        position_ids, rope_deltas = self.get_rope_index(
+        position_ids = self.compute_3d_position_ids(
+            input_ids=input_ids,
+            inputs_embeds=inputs_embeds,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            past_seen_tokens=past_seen_tokens,
+            past_key_values=past_key_values,
         )
-        self.rope_deltas = rope_deltas
 
-        rope_position_ids = self.prepare_multimodal_rope_position_ids(position_ids, mm_token_type_ids)
-        text_position_ids = torch.cat((position_ids[..., 0].unsqueeze(0), rope_position_ids), dim=0)
+        if position_ids is None:
+            text_position_ids = None
+        else:
+            rope_position_ids = self.prepare_multimodal_rope_position_ids(position_ids, mm_token_type_ids)
+            text_position_ids = torch.cat((position_ids[..., 0].unsqueeze(0), rope_position_ids), dim=0)
 
         if isinstance(attention_mask, dict):
             attention_mask = attention_mask.get("full_attention", next(iter(attention_mask.values())))
