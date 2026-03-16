@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from copy import deepcopy
 
 import numpy as np
@@ -27,9 +28,11 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, auto_docstring
+from ...utils.import_utils import requires
 
 
-@auto_docstring(checkpoint="facebook/sam3")
+@requires(backends=("torch",))
+@auto_docstring
 class Sam3TrackerProcessor(ProcessorMixin):
     def __init__(self, image_processor, target_size: int | None = None, point_pad_value: int = -10, **kwargs):
         r"""

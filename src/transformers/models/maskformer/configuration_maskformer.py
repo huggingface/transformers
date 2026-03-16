@@ -13,6 +13,8 @@
 # limitations under the License.
 """MaskFormer model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
@@ -24,6 +26,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/maskformer-swin-base-ade")
+@strict(accept_kwargs=True)
 class MaskFormerConfig(PreTrainedConfig):
     r"""
     cross_entropy_weight (`float`, *optional*, defaults to 1.0):
@@ -67,24 +70,22 @@ class MaskFormerConfig(PreTrainedConfig):
     backbones_supported = ["resnet", "swin"]
     decoders_supported = ["detr"]
 
-    def __init__(
-        self,
-        fpn_feature_size: int = 256,
-        mask_feature_size: int = 256,
-        no_object_weight: float = 0.1,
-        use_auxiliary_loss: bool = False,
-        backbone_config: dict | PreTrainedConfig | None = None,
-        decoder_config: dict | None = None,
-        init_std: float = 0.02,
-        init_xavier_std: float = 1.0,
-        dice_weight: float = 1.0,
-        cross_entropy_weight: float = 1.0,
-        mask_weight: float = 20.0,
-        output_auxiliary_logits: bool | None = None,
-        **kwargs,
-    ):
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+    fpn_feature_size: int = 256
+    mask_feature_size: int = 256
+    no_object_weight: float = 0.1
+    use_auxiliary_loss: bool = False
+    backbone_config: dict | PreTrainedConfig | None = None
+    decoder_config: dict | PreTrainedConfig | None = None
+    init_std: float = 0.02
+    init_xavier_std: float = 1.0
+    dice_weight: float = 1.0
+    cross_entropy_weight: float = 1.0
+    mask_weight: float = 20.0
+    output_auxiliary_logits: bool | None = None
+
+    def __post_init__(self, **kwargs):
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_config_type="swin",
             default_config_kwargs={
                 "depths": [2, 2, 18, 2],
@@ -99,48 +100,34 @@ class MaskFormerConfig(PreTrainedConfig):
         )
 
         # verify that the backbone is supported
-        if backbone_config is not None and backbone_config.model_type not in self.backbones_supported:
+        if self.backbone_config is not None and self.backbone_config.model_type not in self.backbones_supported:
             logger.warning_once(
-                f"Backbone {backbone_config.model_type} is not a supported model and may not be compatible with MaskFormer. "
+                f"Backbone {self.backbone_config.model_type} is not a supported model and may not be compatible with MaskFormer. "
                 f"Supported model types: {','.join(self.backbones_supported)}"
             )
 
-        if decoder_config is None:
+        if self.decoder_config is None:
             # fall back to https://huggingface.co/facebook/detr-resnet-50
-            decoder_config = DetrConfig()
+            self.decoder_config = DetrConfig()
         else:
             # verify that the decoder is supported
             decoder_type = (
-                decoder_config.pop("model_type") if isinstance(decoder_config, dict) else decoder_config.model_type
+                self.decoder_config.pop("model_type")
+                if isinstance(self.decoder_config, dict)
+                else self.decoder_config.model_type
             )
             if decoder_type not in self.decoders_supported:
                 raise ValueError(
                     f"Transformer Decoder {decoder_type} not supported, please use one of"
                     f" {','.join(self.decoders_supported)}"
                 )
-            if isinstance(decoder_config, dict):
+            if isinstance(self.decoder_config, dict):
                 config_class = CONFIG_MAPPING[decoder_type]
-                decoder_config = config_class.from_dict(decoder_config)
-
-        self.backbone_config = backbone_config
-        self.decoder_config = decoder_config
-        # main feature dimension for the model
-        self.fpn_feature_size = fpn_feature_size
-        self.mask_feature_size = mask_feature_size
-        # initializer
-        self.init_std = init_std
-        self.init_xavier_std = init_xavier_std
-        # Hungarian matcher && loss
-        self.cross_entropy_weight = cross_entropy_weight
-        self.dice_weight = dice_weight
-        self.mask_weight = mask_weight
-        self.use_auxiliary_loss = use_auxiliary_loss
-        self.no_object_weight = no_object_weight
-        self.output_auxiliary_logits = output_auxiliary_logits
+                self.decoder_config = config_class.from_dict(self.decoder_config)
 
         self.num_attention_heads = self.decoder_config.encoder_attention_heads
         self.num_hidden_layers = self.decoder_config.num_hidden_layers
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["MaskFormerConfig"]

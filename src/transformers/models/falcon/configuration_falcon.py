@@ -13,15 +13,15 @@
 # limitations under the License.
 """Falcon configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="tiiuae/falcon-7b")
+@strict(accept_kwargs=True)
 class FalconConfig(PreTrainedConfig):
     r"""
     num_ln_in_parallel_attn (`int`, *optional*):
@@ -63,66 +63,40 @@ class FalconConfig(PreTrainedConfig):
     model_type = "falcon"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        vocab_size: int | None = 65024,
-        hidden_size: int | None = 4544,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 71,
-        num_ln_in_parallel_attn: int | None = None,
-        layer_norm_epsilon: int | None = 1e-5,
-        initializer_range: float | None = 0.02,
-        use_cache: bool | None = True,
-        hidden_dropout: float | None = 0.0,
-        attention_dropout: float | None = 0.0,
-        num_kv_heads: int | None = None,
-        alibi: bool | None = False,
-        new_decoder_architecture: bool | None = False,
-        multi_query: bool | None = True,
-        parallel_attn: bool | None = True,
-        bias: bool | None = False,
-        max_position_embeddings: int | None = 2048,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        bos_token_id: int | None = 11,
-        eos_token_id: int | None = 11,
-        pad_token_id: int | None = None,
-        ffn_hidden_size: int | None = None,
-        activation: str | None = "gelu",
-        tie_word_embeddings: bool | None = True,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
+    vocab_size: int = 65024
+    hidden_size: int = 4544
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 71
+    num_ln_in_parallel_attn: int | None = None
+    layer_norm_epsilon: float | None = 1e-5
+    initializer_range: float = 0.02
+    use_cache: bool = True
+    hidden_dropout: float | int | None = 0.0
+    attention_dropout: float | int | None = 0.0
+    num_kv_heads: int | None = None
+    alibi: bool | None = False
+    new_decoder_architecture: bool | None = False
+    multi_query: bool | None = True
+    parallel_attn: bool | None = True
+    bias: bool | None = False
+    max_position_embeddings: int = 2048
+    rope_parameters: RopeParameters | dict | None = None
+    bos_token_id: int | None = 11
+    eos_token_id: int | list[int] | None = 11
+    pad_token_id: int | None = None
+    ffn_hidden_size: int | None = None
+    activation: str | None = "gelu"
+    tie_word_embeddings: bool = True
+
+    def __post_init__(self, **kwargs):
         # Backward compatibility with n_embed kwarg
         n_embed = kwargs.pop("n_embed", None)
-        self.hidden_size = hidden_size if n_embed is None else n_embed
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.layer_norm_epsilon = layer_norm_epsilon
-        self.initializer_range = initializer_range
-        self.use_cache = use_cache
-        self.hidden_dropout = hidden_dropout
-        self.attention_dropout = attention_dropout
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.num_kv_heads = num_attention_heads if num_kv_heads is None else num_kv_heads
-        self.alibi = alibi
-        self.new_decoder_architecture = new_decoder_architecture
-        self.multi_query = multi_query  # Ignored when new_decoder_architecture is True
-        self.parallel_attn = parallel_attn
-        self.bias = bias
-        self.num_ln_in_parallel_attn = num_ln_in_parallel_attn
-        self.max_position_embeddings = max_position_embeddings
-        self.activation = activation
-        self.tie_word_embeddings = tie_word_embeddings
-        if ffn_hidden_size is None:
-            self.ffn_hidden_size = hidden_size * 4
-        else:
-            self.ffn_hidden_size = ffn_hidden_size
+        self.hidden_size = self.hidden_size if n_embed is None else n_embed
+        self.num_kv_heads = self.num_attention_heads if self.num_kv_heads is None else self.num_kv_heads
+        if self.ffn_hidden_size is None:
+            self.ffn_hidden_size = self.hidden_size * 4
 
-        self.rope_parameters = rope_parameters
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
     @property
     def head_dim(self):

@@ -13,15 +13,15 @@
 # limitations under the License.
 """GPTNeoX model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="EleutherAI/gpt-neox-20b")
+@strict(accept_kwargs=True)
 class GPTNeoXConfig(PreTrainedConfig):
     r"""
     use_parallel_residual (`bool`, *optional*, defaults to `True`):
@@ -58,60 +58,36 @@ class GPTNeoXConfig(PreTrainedConfig):
         "final_layer_norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 50432,
-        hidden_size: int | None = 6144,
-        num_hidden_layers: int | None = 44,
-        num_attention_heads: int | None = 64,
-        intermediate_size: int | None = 24576,
-        hidden_act: str | None = "gelu",
-        attention_dropout: float | None = 0.0,
-        hidden_dropout: float | None = 0.0,
-        classifier_dropout: float | None = 0.1,
-        max_position_embeddings: int | None = 2048,
-        initializer_range: float | None = 0.02,
-        layer_norm_eps: int | None = 1e-5,
-        use_cache: bool | None = True,
-        bos_token_id: int | None = 0,
-        eos_token_id: int | None = 2,
-        pad_token_id: int | None = None,
-        tie_word_embeddings: bool | None = False,
-        use_parallel_residual: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = True,
-        is_decoder: bool | None = False,
-        **kwargs,
-    ):
-        self.is_decoder = is_decoder
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.attention_dropout = attention_dropout
-        self.hidden_dropout = hidden_dropout
-        self.classifier_dropout = classifier_dropout
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        self.use_parallel_residual = use_parallel_residual
-        self.attention_bias = attention_bias
-        self.rope_parameters = rope_parameters
-        self.tie_word_embeddings = tie_word_embeddings
+    vocab_size: int = 50432
+    hidden_size: int = 6144
+    num_hidden_layers: int = 44
+    num_attention_heads: int = 64
+    intermediate_size: int = 24576
+    hidden_act: str = "gelu"
+    attention_dropout: float | int = 0.0
+    hidden_dropout: float | int = 0.0
+    classifier_dropout: float | int = 0.1
+    max_position_embeddings: int = 2048
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-5
+    use_cache: bool = True
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 2
+    pad_token_id: int | None = None
+    tie_word_embeddings: bool = False
+    use_parallel_residual: bool = True
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = True
+    is_decoder: bool = False
 
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
                 "The hidden size is not divisible by the number of attention heads! Make sure to update them!"
             )
-        super().__init__(**kwargs)
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
+    def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
@@ -121,7 +97,6 @@ class GPTNeoXConfig(PreTrainedConfig):
         self.rope_parameters.setdefault("rope_theta", kwargs.pop("rotary_emb_base", self.default_theta))
         self.rope_parameters["partial_rotary_factor"] = kwargs.pop("rotary_pct", 0.25)
         self.standardize_rope_params()
-        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
 
 
