@@ -326,6 +326,8 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     def test_attention_outputs(self):
+        # Override test_attention_outputs to support object detection and segmentation heads.
+        # Outputs include pred_logits, pred_boxes and auxiliary outputs.
         def check_attention_outputs(inputs_dict, config, model_class):
             model = model_class._from_config(config, attn_implementation="eager")
             config = model.config
