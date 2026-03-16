@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-10-31 and added to Hugging Face Transformers on 2026-03-16.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -24,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 # PI0
 
-[PI0](https://arxiv.org/abs/2410.24164) is a vision-language-action model for robotics manipulation. It jointly processes visual observations and language instructions to generate robot actions.
+[PI0](https://huggingface.co/papers/2410.24164) is a vision-language-action model for robotics manipulation. It jointly processes visual observations and language instructions to generate robot actions.
 
 The abstract from the paper is as follows:
 *Robot learning holds tremendous promise to unlock the full potential of flexible, general, and dexterous robot systems, as well as to address some of the deepest questions in artificial intelligence. However, bringing robot learning to the level of generality required for effective real-world systems faces major obstacles in terms of data, generalization, and robustness. In this paper, we discuss how generalist robot policies (i.e., robot foundation models) can address these challenges, and how we can design effective generalist robot policies for complex and highly dexterous tasks. We propose a novel flow matching architecture built on top of a pre-trained vision-language model (VLM) to inherit Internet-scale semantic knowledge. We then discuss how this model can be trained on a large and diverse dataset from multiple dexterous robot platforms, including single-arm robots, dual-arm robots, and mobile manipulators. We evaluate our model in terms of its ability to perform tasks in zero shot after pre-training, follow language instructions from people and from a high-level VLM policy, and its ability to acquire new skills via fine-tuning. Our results cover a wide variety of tasks, such as laundry folding, table cleaning, and assembling boxes.*
