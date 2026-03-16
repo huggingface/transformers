@@ -2496,7 +2496,7 @@ class KubeflowCallback(TrainerCallback):
         )
 
     def on_log(self, args, state, control, logs=None, **kwargs):
-        if not self._initialized or logs is None:
+        if not self._initialized or not state.is_world_process_zero or logs is None:
             return
 
         for key, value in logs.items():
@@ -2504,7 +2504,7 @@ class KubeflowCallback(TrainerCallback):
                 self._metrics[key] = value
 
     def on_step_end(self, args, state, control, **kwargs):
-        if not self._initialized:
+        if not self._initialized or not state.is_world_process_zero:
             return
 
         if not state.max_steps or state.max_steps <= 0:
@@ -2537,7 +2537,7 @@ class KubeflowCallback(TrainerCallback):
         )
 
     def on_train_end(self, args, state, control, **kwargs):
-        if not self._initialized:
+        if not self._initialized or not state.is_world_process_zero:
             return
 
         self._update_status(

@@ -948,6 +948,8 @@ class KubeflowCallbackTest(unittest.TestCase):
 
     def test_update_status_throttling(self):
         """_update_status should throttle requests unless force=True."""
+        import time
+
         with patch.dict(os.environ, {"KUBEFLOW_TRAINER_STATUS_URL": "https://test-url"}, clear=False):
             with patch("transformers.integrations.integration_utils.is_kubeflow_available", return_value=True):
                 with patch(
@@ -960,7 +962,7 @@ class KubeflowCallbackTest(unittest.TestCase):
                     callback._start_time = 0
                     callback._last_update_time = 0.0
                     callback._cached_token = "test-token"
-                    callback._token_read_time = 0.0
+                    callback._token_read_time = time.monotonic()  # Use current time so cache is valid
 
                     with patch("urllib.request.urlopen") as mock_urlopen:
                         mock_response = Mock()
