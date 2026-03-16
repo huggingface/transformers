@@ -20,10 +20,11 @@
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
 from ...utils import auto_docstring
+from ..siglip.image_processing_siglip_fast import SiglipImageProcessorFast
 
 
 @auto_docstring
-class PI0ImageProcessorFast(BaseImageProcessorFast):
+class PI0ImageProcessorFast(SiglipImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
