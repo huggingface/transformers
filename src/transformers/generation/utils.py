@@ -2964,35 +2964,47 @@ class GenerationMixin(ContinuousMixin):
 
         # --- Reset model_kwargs for static decode loop ---
         # cache_position: single-element tensor pointing to where the next decode token will be written
-        model_kwargs["cache_position"] = torch.tensor([prefill_len], dtype=torch.long, device=device)
-        # position_ids: derived from cache_position (no torch.cat accumulation)
-        if model_kwargs.get("position_ids") is not None:
-            model_kwargs["position_ids"] = model_kwargs["cache_position"].unsqueeze(0).expand(batch_size, 1)
+        cache_position = torch.tensor([prefill_len], dtype=torch.long, device=device)
+        position_ids = (
+            cache_position.unsqueeze(0).expand(batch_size, 1) if model_kwargs.get("position_ids") is not None else None
+        )
+
+        past_key_values = model_kwargs["past_key_values"]
+        attention_mask = model_kwargs.get("attention_mask")
 
         # --- Static decode loop (for loop, no while, no growing tensors) ---
+        # Build model_inputs directly instead of calling prepare_inputs_for_generation,
+        # which clones input_ids and position_ids every step (unnecessary overhead).
+        # The 2D attention mask is kept as-is; the model's forward pass handles the
+        # 2D→4D conversion internally when using a compileable cache.
         for _ in range(max_new_tokens - 1):
-            cur_pos = model_kwargs["cache_position"]  # shape [1], e.g. [prefill_len]
+            # 3. position_ids: derived directly from cache_position, not concatenated
+            if position_ids is not None:
+                position_ids = cache_position.unsqueeze(0).expand(batch_size, 1)
 
-            # 3. position_ids: derived directly from cur_pos, not concatenated
-            if model_kwargs.get("position_ids") is not None:
-                model_kwargs["position_ids"] = cur_pos.unsqueeze(0).expand(batch_size, 1).clone()
+            # 2. attention_mask: in-place update at cache_position (no torch.cat)
+            if attention_mask is not None:
+                attention_mask.scatter_(1, cache_position.view(1, 1).expand(batch_size, 1), 1)
 
-            # 2. attention_mask: in-place update at cur_pos (no torch.cat)
-            if model_kwargs.get("attention_mask") is not None:
-                model_kwargs["attention_mask"].scatter_(1, cur_pos.view(1, 1).expand(batch_size, 1), 1)
-
-            # Run decode step using current_ids (always [batch, 1], no growth)
-            model_inputs = self.prepare_inputs_for_generation(current_ids, next_sequence_length=1, **model_kwargs)
+            model_inputs = {
+                "input_ids": current_ids,
+                "inputs_embeds": None,
+                "attention_mask": attention_mask,
+                "position_ids": position_ids,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+                "use_cache": True,
+            }
             with self._optimize_model_for_decode():
                 outputs = model_forward(**model_inputs, return_dict=True)
 
-            model_kwargs["past_key_values"] = outputs.past_key_values
+            past_key_values = outputs.past_key_values
 
             # Copy is needed to avoid keeping a hanging ref to outputs.logits
             next_token_logits = outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=device)
 
             # next_pos: where the new token will be written in the output buffer
-            next_pos = cur_pos + 1  # shape [1]
+            next_pos = cache_position + 1  # shape [1]
             cur_len = next_pos.item() + 1
             next_token_scores = logits_processor(output_ids[:, :cur_len], next_token_logits)
 
@@ -3024,7 +3036,7 @@ class GenerationMixin(ContinuousMixin):
                 streamer.put(next_tokens.cpu())
 
             # 4. cache_position scalar increment (no torch.cat) — updated AFTER forward pass
-            model_kwargs["cache_position"] = next_pos
+            cache_position = next_pos
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(output_ids[:, :cur_len], scores)
             if unfinished_sequences.max() == 0:
@@ -3036,7 +3048,7 @@ class GenerationMixin(ContinuousMixin):
             streamer.end()
 
         if return_dict_in_generate:
-            cache = model_kwargs.get("past_key_values")
+            cache = past_key_values
             return GenerateDecoderOnlyOutput(
                 sequences=output_ids,
                 scores=scores,
