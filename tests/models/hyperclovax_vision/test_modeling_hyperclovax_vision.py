@@ -19,6 +19,7 @@ import unittest
 from transformers import HCXVisionConfig, is_torch_available
 from transformers.image_utils import load_image
 from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, torch_device
+from transformers.video_utils import load_video
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -237,56 +238,84 @@ class HCXVisionForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         pass
 
 
+torch_device = "cpu"
+
+
 @require_torch
 @require_torch_accelerator
 class HCXVisionIntegrationTest(unittest.TestCase):
-    model_id = "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B"
+    model_id = "/home/jp/DEMO/LLM42/base_models/HCX/HCX-SEED-Think-32B"
 
     def setUp(self):
         self.processor = HCXVisionV2Processor.from_pretrained(self.model_id)
-        self.messages = [
+        self.model = HCXVisionForConditionalGeneration.from_pretrained(
+            self.model_id,
+            dtype=torch.bfloat16,
+            device_map=torch_device,
+        )
+
+        image_url = (
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
+        )
+        video_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/bedroom.mp4"
+        self.image_messages = [
             {
                 "role": "user",
                 "content": [
-                    {"type": "image"},
+                    {"type": "image_url", "data": {"url": image_url}},
                     {"type": "text", "text": "What is shown in this image?"},
                 ],
             }
         ]
-        img_url = url_to_local_path(
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
-        )
-        self.image = load_image(img_url).convert("RGB")
+        self.video_messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": video_url}},
+                    {"type": "text", "text": "What is shown in this video?"},
+                ],
+            }
+        ]
+        self.image = load_image(url_to_local_path(image_url)).convert("RGB")
+        self.video, _ = load_video(url_to_local_path(video_url))
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    def test_model_logits(self):
-        model = HCXVisionForConditionalGeneration.from_pretrained(
-            self.model_id, dtype=torch.bfloat16, device_map="auto"
-        )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+    def test_model_image_logits(self):
+        text = self.processor.apply_chat_template(self.image_messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
-            output = model(**inputs)
+            output = self.model(**inputs)
 
         EXPECTED_LOGITS_SLICE = torch.tensor(
-            [[-4.5938, -4.4062, -0.4121], [-5.5625, -5.4375, -0.8750], [-5.3750, -5.4375, -1.3984]],
+            [
+                [2.1406, 4.7500, 5.1562],
+                [-1.5391, 5.4688, 5.5312],
+                [-1.3672, -4.4688, -1.8281],
+            ],
             dtype=torch.float32,
         )
         torch.testing.assert_close(output.logits[0, :3, :3].float().cpu(), EXPECTED_LOGITS_SLICE, atol=1e-2, rtol=1e-3)
 
-    def test_model_generate(self):
-        model = HCXVisionForConditionalGeneration.from_pretrained(
-            self.model_id, dtype=torch.bfloat16, device_map="auto"
-        )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+    def test_model_image_generate(self):
+        text = self.processor.apply_chat_template(self.image_messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        EXPECTED_DECODED_TEXT = "user\nWhat is shown in this image?\nassistant\n"
+        output = self.model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        EXPECTED_DECODED_TEXT = "This image shows a cow standing on a sandy beach."
 
         decoded = self.processor.decode(output[0], skip_special_tokens=True)
-        self.assertTrue(decoded.startswith(EXPECTED_DECODED_TEXT))
+        self.assertTrue(EXPECTED_DECODED_TEXT in decoded)
+
+    def test_model_video_generate(self):
+        text = self.processor.apply_chat_template(self.video_messages, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(text=[text], videos=[self.video], return_tensors="pt").to(torch_device)
+
+        output = self.model.generate(**inputs, max_new_tokens=10, do_sample=False)
+        EXPECTED_DECODED_TEXT = "This image shows a cow standing on a sandy beach."
+
+        decoded = self.processor.decode(output[0], skip_special_tokens=True)
+        self.assertTrue(EXPECTED_DECODED_TEXT in decoded)
