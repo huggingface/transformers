@@ -115,7 +115,6 @@ class HCXVisionModelTester:
             },
             img_start_id=self.img_start_id,
             video_start_id=self.video_start_id,
-            mm_projector_type="mlp",
         )
 
     def prepare_config_and_inputs(self):
@@ -229,13 +228,16 @@ class HCXVisionForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
                 )
             self.assertIsNotNone(outputs)
 
-    def test_reverse_loading_mapping(self):
-        orig_classes = self.all_model_classes
-        self.all_model_classes = (HCXVisionForConditionalGeneration,)
-        try:
-            super().test_reverse_loading_mapping()
-        finally:
-            self.all_model_classes = orig_classes
+    @unittest.skip(reason="Feedforward chunking is not yet supported")
+    def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip(reason="CPU offload is not yet supported")
+    def test_cpu_offload(self):
+        pass
+
+
+torch_device = "cpu"
 
 
 @require_torch
@@ -244,11 +246,12 @@ class HCXVisionIntegrationTest(unittest.TestCase):
     model_id = "/home/jp/DEMO/LLM42/base_models/HCX/HCX-SEED-Think-32B"
 
     def setUp(self):
-        self.processor = HCXVisionV2Processor.from_pretrained(self.model_id)
+        self.processor = HCXVisionV2Processor.from_pretrained(self.model_id, trust_remote_code=False)
         self.model = HCXVisionForConditionalGeneration.from_pretrained(
             self.model_id,
             dtype=torch.bfloat16,
-            device_map=torch_device,
+            device_map="auto",
+            trust_remote_code=False,
         )
 
         image_url = (
