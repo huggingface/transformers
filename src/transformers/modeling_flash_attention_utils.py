@@ -174,7 +174,7 @@ def _lazy_imports(
             # Map standard attention names to hub kernel repos
             kernel_repo = FLASH_ATTN_KERNEL_FALLBACK.get(implementation, implementation)
             # We want to explicitly register the name with `paged|` if found
-            kernel_implementation = f"paged|{kernel_repo}" if is_paged else kernel_repo
+            kernel_implementation = f"paged|{implementation}" if is_paged else kernel_repo
             kernel = load_and_register_attn_kernel(
                 kernel_implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
             )
