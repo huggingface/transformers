@@ -94,7 +94,7 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
     scale_factor_list: list | None = None
     hidden_act: str = "relu"
     kernel_list: list | None = None
-    id2label: dict[int, str] | None = None
+    id2label: dict[int, str] | dict[str, str] | None = None
     num_labels: int = 1
 
     def __post_init__(self, **kwargs):

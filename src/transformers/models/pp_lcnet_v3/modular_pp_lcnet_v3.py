@@ -101,7 +101,7 @@ class PPLCNetV3Config(PPLCNetConfig):
         self.depths = [len(blocks) for blocks in self.block_configs]
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.block_configs) + 1)]
         self.set_output_features_output_indices(
-            out_indices=kwargs.pop("out_indices"), out_features=kwargs.pop("out_features")
+            out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
         )
         PreTrainedConfig.__post_init__(**kwargs)
 

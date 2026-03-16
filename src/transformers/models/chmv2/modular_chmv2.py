@@ -79,10 +79,10 @@ class CHMv2Config(PreTrainedConfig):
     model_type = "chmv2"
     sub_configs = {"backbone_config": AutoConfig}
 
-    backbone_config: dict | None = None
+    backbone_config: dict | PreTrainedConfig | None = None
     patch_size: int = 16
     initializer_range: float = 0.02
-    reassemble_factors: list[float] | None = None
+    reassemble_factors: list[float | int] | None = None
     post_process_channels: list[int] | None = None
     fusion_hidden_size: int = 256
     head_hidden_size: int = 128

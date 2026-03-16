@@ -60,7 +60,7 @@ class PPLCNetV3Config(BackboneConfigMixin, PreTrainedConfig):
 
     model_type = "pp_lcnet_v3"
 
-    scale: float = 1.0
+    scale: float | int = 1.0
     block_configs: list | None = None
     stem_channels: int = 16
     stem_stride: int = 2
@@ -100,7 +100,7 @@ class PPLCNetV3Config(BackboneConfigMixin, PreTrainedConfig):
         self.depths = [len(blocks) for blocks in self.block_configs]
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.block_configs) + 1)]
         self.set_output_features_output_indices(
-            out_indices=kwargs.pop("out_indices"), out_features=kwargs.pop("out_features")
+            out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
         )
         super().__post_init__(**kwargs)
 
