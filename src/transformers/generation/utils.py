@@ -2970,9 +2970,21 @@ class GenerationMixin(ContinuousMixin):
         # --- Reset model_kwargs for static decode loop ---
         # cache_position: single-element tensor pointing to where the next decode token will be written
         cache_position = torch.tensor([prefill_len], dtype=torch.long, device=device)
-        position_ids = (
-            cache_position.unsqueeze(0).expand(batch_size, 1) if model_kwargs.get("position_ids") is not None else None
-        )
+
+        # Pre-compute position_id offset for left-padded inputs.
+        # With left-padding, cache_position != position_id:
+        #   position_id = cache_position - position_offset
+        # where position_offset = num_padding_tokens = prefill_len - actual_prompt_len.
+        if model_kwargs.get("position_ids") is not None:
+            original_attention_mask = model_kwargs.get("attention_mask")
+            if original_attention_mask is not None:
+                position_offset = prefill_len - original_attention_mask[:, :prefill_len].sum(dim=-1, keepdim=True)
+            else:
+                position_offset = torch.zeros(batch_size, 1, dtype=torch.long, device=device)
+            position_ids = cache_position.unsqueeze(0).expand(batch_size, 1) - position_offset
+        else:
+            position_ids = None
+            position_offset = None
 
         # StaticCache updates in-place (index_copy_), so the object reference never changes.
         # We grab it once and reuse it — no need to re-read outputs.past_key_values each step.
@@ -2985,9 +2997,9 @@ class GenerationMixin(ContinuousMixin):
         # The 2D attention mask is kept as-is; the model's forward pass handles the
         # 2D→4D conversion internally when using a compileable cache.
         for i in range(max_new_tokens - 1):
-            # 3. position_ids: derived directly from cache_position, not concatenated
+            # 3. position_ids: derived from cache_position minus left-padding offset (not concatenated)
             if position_ids is not None:
-                position_ids = cache_position.unsqueeze(0).expand(batch_size, 1)
+                position_ids = cache_position.unsqueeze(0).expand(batch_size, 1) - position_offset
 
             # 2. attention_mask: in-place update at cache_position (no torch.cat)
             if attention_mask is not None:
