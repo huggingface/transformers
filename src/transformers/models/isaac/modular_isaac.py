@@ -1188,7 +1188,7 @@ class IsaacModel(Qwen3PreTrainedModel):
 
     def compute_3d_position_ids(
         self,
-        input_ids: torch.Tensor | None,
+        input_ids: torch.Tensor,
         inputs_embeds: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
