@@ -50,44 +50,32 @@ class MetaClip2TextConfig(PreTrainedConfig):
     model_type = "metaclip_2_text_model"
     base_config_key = "text_config"
 
-    def __init__(
-        self,
-        vocab_size=49408,
-        hidden_size=512,
-        intermediate_size=2048,
-        projection_dim=512,
-        num_hidden_layers=12,
-        num_attention_heads=8,
-        max_position_embeddings=77,
-        hidden_act="quick_gelu",
-        layer_norm_eps=1e-5,
-        attention_dropout=0.0,
-        initializer_range=0.02,
-        initializer_factor=1.0,
-        # This differs from `MetaClip2Tokenizer`'s default and from openai/metaclip_2
-        # See https://github.com/huggingface/transformers/pull/24773#issuecomment-1632287538
-        pad_token_id=1,
-        bos_token_id=49406,
-        eos_token_id=49407,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
+    vocab_size: int = 49408
+    hidden_size: int = 512
+    intermediate_size: int = 2048
+    projection_dim: int | None = 512
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 8
+    max_position_embeddings: int = 77
+    hidden_act: str = "quick_gelu"
+    layer_norm_eps: float | None = 1e-5
+    attention_dropout: int | float | None = 0.0
+    initializer_range: float = 0.02
+    initializer_factor: float | None = 1.0
 
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.max_position_embeddings = max_position_embeddings
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
-        self.attention_dropout = attention_dropout
+    # This differs from `MetaClip2Tokenizer`'s default and from openai/metaclip_2
+    # See https://github.com/huggingface/transformers/pull/24773#issuecomment-1632287538
+    pad_token_id: int | None = 1
+    bos_token_id: int | None = 49406
+    eos_token_id: int | list[int] | None = 49407
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({self.num_attention_heads})."
+            )
 
 
 @auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
@@ -112,38 +100,27 @@ class MetaClip2VisionConfig(PreTrainedConfig):
     model_type = "metaclip_2_vision_model"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        hidden_size=768,
-        intermediate_size=3072,
-        projection_dim=512,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        num_channels=3,
-        image_size=224,
-        patch_size=32,
-        hidden_act="quick_gelu",
-        layer_norm_eps=1e-5,
-        attention_dropout=0.0,
-        initializer_range=0.02,
-        initializer_factor=1.0,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    hidden_size: int = 768
+    intermediate_size: int = 3072
+    projection_dim: int | None = 512
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    num_channels: int | None = 3
+    image_size: int | None = 224
+    patch_size: int | None = 32
+    hidden_act: str = "quick_gelu"
+    layer_norm_eps: float | None = 1e-5
+    attention_dropout: int | float | None = 0.0
+    initializer_range: float = 0.02
+    initializer_factor: float | None = 1.0
 
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.image_size = image_size
-        self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
-        self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({self.num_attention_heads})."
+            )
 
 
 @auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
@@ -177,22 +154,37 @@ class MetaClip2Config(PreTrainedConfig):
     model_type = "metaclip_2"
     sub_configs = {"text_config": MetaClip2TextConfig, "vision_config": MetaClip2VisionConfig}
 
-    def __init__(
-        self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
-    ):
-        # If `_config_dict` exist, we use them for the backward compatibility.
-        # We pop out these 2 attributes before calling `super().__init__` to avoid them being saved (which causes a lot
-        # of confusion!).
-        text_config_dict = kwargs.pop("text_config_dict", None)
-        vision_config_dict = kwargs.pop("vision_config_dict", None)
+    text_config: dict | MetaClip2TextConfig | None = None
+    vision_config: dict | MetaClip2VisionConfig | None = None
+    projection_dim: int | None = 512
+    logit_scale_init_value: float | int | None = 2.6592
+    initializer_factor: float | None = 1.0
 
+    def __post_init__(self, **kwargs):
+        if self.text_config is None:
+            text_config = {}
+            logger.info("`text_config` is `None`. Initializing the `MetaClip2TextConfig` with default values.")
+        elif isinstance(self.text_config, MetaClip2TextConfig):
+            text_config = self.text_config.to_dict()
+        else:
+            text_config = self.text_config
+
+        if self.vision_config is None:
+            vision_config = {}
+            logger.info("`vision_config` is `None`. initializing the `MetaClip2VisionConfig` with default values.")
+        elif isinstance(self.vision_config, MetaClip2VisionConfig):
+            vision_config = self.vision_config.to_dict()
+        else:
+            vision_config = self.vision_config
+
+        # For backward compatibility check keyword args
         # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
         # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
         # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
-        if text_config_dict is not None:
-            if text_config is None:
-                text_config = {}
+        text_config_dict = kwargs.pop("text_config_dict", None)
+        vision_config_dict = kwargs.pop("vision_config_dict", None)
 
+        if text_config_dict is not None:
             # This is the complete result when using `text_config_dict`.
             _text_config_dict = MetaClip2TextConfig(**text_config_dict).to_dict()
 
@@ -217,9 +209,6 @@ class MetaClip2Config(PreTrainedConfig):
             text_config.update(_text_config_dict)
 
         if vision_config_dict is not None:
-            if vision_config is None:
-                vision_config = {}
-
             # This is the complete result when using `vision_config_dict`.
             _vision_config_dict = MetaClip2VisionConfig(**vision_config_dict).to_dict()
             # convert keys to string instead of integer
@@ -248,25 +237,11 @@ class MetaClip2Config(PreTrainedConfig):
             # Update all values in `vision_config` with the ones in `_vision_config_dict`.
             vision_config.update(_vision_config_dict)
 
-        if text_config is None:
-            text_config = MetaClip2TextConfig()
-            logger.info("`text_config` is `None`. initializing the `MetaClip2TextConfig` with default values.")
-        elif isinstance(text_config, dict):
-            text_config = MetaClip2TextConfig(**text_config)
+        # Finally we can convert back our unified text/vision configs to `PretrainedConfig`
+        self.text_config = MetaClip2TextConfig(**text_config)
+        self.vision_config = MetaClip2VisionConfig(**vision_config)
 
-        if vision_config is None:
-            vision_config = MetaClip2VisionConfig()
-            logger.info("`vision_config` is `None`. initializing the `MetaClip2VisionConfig` with default values.")
-        elif isinstance(vision_config, dict):
-            vision_config = MetaClip2VisionConfig(**vision_config)
-
-        self.text_config = text_config
-        self.vision_config = vision_config
-
-        self.projection_dim = projection_dim
-        self.logit_scale_init_value = logit_scale_init_value
-        self.initializer_factor = 1.0
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["MetaClip2Config", "MetaClip2TextConfig", "MetaClip2VisionConfig"]
