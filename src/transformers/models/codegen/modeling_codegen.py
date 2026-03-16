@@ -228,9 +228,7 @@ class CodeGenMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.gptj.modeling_gptj.GPTJBlock with GPTJ->CodeGen
 class CodeGenBlock(GradientCheckpointingLayer):
-    # Ignore copy
     def __init__(self, config, layer_idx=None):
         super().__init__()
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
