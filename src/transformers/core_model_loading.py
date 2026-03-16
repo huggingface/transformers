@@ -1164,7 +1164,14 @@ def convert_and_load_state_dict_in_model(
             if (
                 hf_quantizer
                 and hf_quantizer.pre_quantized
-                and (original_key != renamed_key or not tensor.get_dtype().startswith(("F", "BF")))
+                and (
+                    original_key != renamed_key
+                    or not (
+                        tensor.get_dtype().startswith(("F", "BF"))
+                        if hasattr(tensor, "get_dtype")
+                        else tensor.is_floating_point()
+                    )
+                )
             ):
                 # if the key was renamed as it is not available in the state dict otherwise, it means that we are deserializing it,
                 # so we need to make sure to load the tensor with the same dtype from the checkpoint
