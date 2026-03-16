@@ -634,15 +634,6 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.assertEqual(outputs.pooler_output.ndim, 2)
         torch.testing.assert_close(outputs.pooler_output, expected)
 
-    def test_prepare_multimodal_rope_position_ids(self):
-        position_ids = torch.tensor([[[7, 0, 0], [1, 2, 3], [4, 0, 0]]], device=torch_device, dtype=torch.long)
-        mm_token_type_ids = torch.tensor([[0, 1, 0]], device=torch_device, dtype=torch.long)
-
-        rope_position_ids = IsaacModel.prepare_multimodal_rope_position_ids(position_ids, mm_token_type_ids)
-        expected = torch.tensor([[[7, 1, 4]], [[7, 2, 4]], [[7, 3, 4]]], device=torch_device, dtype=torch.long)
-
-        torch.testing.assert_close(rope_position_ids, expected)
-
     def test_for_conditional_generation(self):
         config, input_ids, attention_mask, labels = self.model_tester.prepare_config_and_inputs()
         model = IsaacForConditionalGeneration(config)

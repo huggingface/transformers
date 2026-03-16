@@ -1190,17 +1190,6 @@ class IsaacModel(PreTrainedModel):
     def set_input_embeddings(self, value: nn.Module) -> None:
         self.text_model.set_input_embeddings(value)
 
-    @staticmethod
-    def prepare_multimodal_rope_position_ids(
-        position_ids: torch.Tensor,
-        mm_token_type_ids: torch.Tensor,
-    ) -> torch.Tensor:
-        pos = position_ids.clone()
-        text_mask = mm_token_type_ids == MM_TOKEN_TYPE_TEXT
-        text_positions = pos[text_mask][..., :1]
-        pos[text_mask] = text_positions.expand(-1, pos.shape[-1])
-        return pos.permute(2, 0, 1).contiguous()
-
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -1514,7 +1503,11 @@ class IsaacModel(PreTrainedModel):
         if position_ids is None:
             text_position_ids = None
         else:
-            rope_position_ids = self.prepare_multimodal_rope_position_ids(position_ids, mm_token_type_ids)
+            rope_position_ids = position_ids.clone()
+            text_mask = mm_token_type_ids == MM_TOKEN_TYPE_TEXT
+            text_positions = rope_position_ids[text_mask][..., :1]
+            rope_position_ids[text_mask] = text_positions.expand(-1, rope_position_ids.shape[-1])
+            rope_position_ids = rope_position_ids.permute(2, 0, 1).contiguous()
             text_position_ids = torch.cat((position_ids[..., 0].unsqueeze(0), rope_position_ids), dim=0)
 
         if isinstance(attention_mask, dict):
