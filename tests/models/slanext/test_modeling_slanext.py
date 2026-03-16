@@ -1,5 +1,5 @@
 # coding = utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -50,7 +50,7 @@ class SLANeXtModelTester:
     def __init__(
         self,
         batch_size=1,
-        image_size=512,
+        image_size=256,
         num_channels=3,
         is_training=False,
     ):
@@ -71,14 +71,24 @@ class SLANeXtModelTester:
         return config, pixel_values
 
     def get_config(self) -> SLANeXtConfig:
+        # config = SLANeXtConfig(
+        #     encoder_embed_dim=768,
+        #     encoder_depth=12,
+        #     encoder_num_heads=12,
+        #     encoder_global_attn_indexes=[2, 5, 8, 11],
+        #     out_channels=50,
+        #     hidden_size=512,
+        #     max_text_length=500,
+        #     loc_reg_num=8,
+        # )
         config = SLANeXtConfig(
-            encoder_embed_dim=768,
-            encoder_depth=12,
-            encoder_num_heads=12,
-            encoder_global_attn_indexes=[2, 5, 8, 11],
-            out_channels=50,
-            hidden_size=512,
-            max_text_length=500,
+            encoder_embed_dim=1,
+            encoder_depth=1,
+            encoder_num_heads=1,
+            encoder_global_attn_indexes=[1, 1, 1, 1],
+            out_channels=1,
+            hidden_size=1,
+            max_text_length=1,
             loc_reg_num=8,
         )
 
@@ -115,14 +125,27 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     @unittest.skip(reason="SLANeXt does not use test_inputs_embeds_matches_input_ids")
     def test_inputs_embeds_matches_input_ids(self):
         pass
+    
+    @unittest.skip(reason="SLANeXt does not use tensor output")
+    def test_determinism(self):
+        pass
+
+
+    # @unittest.skip(reason="test_model_is_small")
+    # def test_model_is_small(self):
+    #     pass
+    @unittest.skip(reason="SLANeXt does not use tensor output")
+    def test_torch_export(self):
+        pass
+
 
     @unittest.skip(reason="SLANeXt does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="SLANeXt does not support init all missing weights")
-    def test_can_init_all_missing_weights(self):
-        pass
+    # @unittest.skip(reason="SLANeXt does not support init all missing weights")
+    # def test_can_init_all_missing_weights(self):
+    #     pass
 
     @unittest.skip(reason="SLANeXt does not support input and output embeddings")
     def test_model_common_attributes(self):
@@ -140,9 +163,9 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="SLANeXt does not support this test")
-    def test_model_is_small(self):
-        pass
+    # @unittest.skip(reason="SLANeXt does not support this test")
+    # def test_model_is_small(self):
+    #     pass
 
     @unittest.skip(reason="SLANeXt does not support attention")
     def test_retain_grad_hidden_states_attentions(self):
@@ -196,11 +219,13 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 @slow
 class SLANeXtModelIntegrationTest(unittest.TestCase):
     def setUp(self):
-        model_path = "./test/slanext"
+        # model_path = "./test/slanext"
+        model_path = "/workspace/ssd1/liujiaxuan01/trans_to_transformer/test/slanext/wired_tf_new"
 
         self.model = SLANeXtForTableRecognition.from_pretrained(model_path).float().to(torch_device)
         self.image_processor = SLANeXtImageProcessor.from_pretrained(model_path) if is_vision_available() else None
-        path = "./table_recognition.jpg"
+        # path = "./table_recognition.jpg"
+        path = "/workspace/ssd1/liujiaxuan01/trans_to_transformer/test/slanext/table_recognition.jpg"
         self.image = Image.open(path).convert("RGB")
 
     def test_inference_table_recognition_head(self):

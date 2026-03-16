@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_slanext.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,9 +31,10 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_slanext import SLANeXtConfig, SLANeXtVisionConfig
@@ -217,6 +218,12 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
             if module.use_rel_pos:
                 init.constant_(module.rel_pos_h, 0.0)
                 init.constant_(module.rel_pos_w, 0.0)
+
+        # Initialize GRUCell (replicates PyTorch default reset_parameters)
+        if isinstance(module, nn.GRUCell):
+            stdv = 1.0 / math.sqrt(module.hidden_size) if module.hidden_size > 0 else 0
+            for weight in module.parameters():
+                init.uniform_(weight, -stdv, stdv)
 
         # Initialize SLAHead layers
         if isinstance(module, SLANeXtSLAHead):
@@ -825,10 +832,17 @@ class SLANeXtModel(SLANeXtPreTrainedModel):
         )
         self.post_init()
 
-    def forward(self, pixel_values, **kwargs):
-        hidden_states = self.backbone(pixel_values)
-        hidden_states = self.head(hidden_states)
-        return hidden_states
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+        backbone_states = self.backbone(pixel_values)
+        hidden_states = self.head(backbone_states)
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=hidden_states,
+            hidden_states=backbone_states,
+        )
 
 
 @auto_docstring(custom_intro="TableRecognition for the SLANeXt model.")
@@ -842,22 +856,18 @@ class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
         self.model = SLANeXtModel(config)
         self.post_init()
 
-    def forward(self, pixel_values, return_dict: bool | None = None, **kwargs):
-        hidden_states = self.model(pixel_values)
-        if not return_dict:
-            return ((hidden_states["structure_probs"]),)
-        else:
-            return SLANeXtOutput(structure_probs=hidden_states["structure_probs"])
+    @can_return_tuple
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+        outputs = self.model(pixel_values)
 
-
-@dataclass
-class SLANeXtOutput(ModelOutput):
-    """
-    Output class for SLANeXtForTableRecognition. Extends ModelOutput
-    to include table recognition probs.
-    """
-
-    structure_probs: torch.FloatTensor | None = None
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=outputs.last_hidden_state["structure"],
+            hidden_states=outputs.hidden_states,
+        )
 
 
 __all__ = ["SLANeXtForTableRecognition", "SLANeXtModel", "SLANeXtPreTrainedModel"]

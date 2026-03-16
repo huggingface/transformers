@@ -1,4 +1,4 @@
-# Copyright 2025 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,8 +25,9 @@ from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BaseImageProcessor
 from ...image_transforms import normalize, pad
+from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ..focalnet.modeling_focalnet import FocalNetMlp
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2VisionConfig
 from ..got_ocr2.modeling_got_ocr2 import (
@@ -47,22 +48,27 @@ class SLANeXtVisionAttention(GotOcr2VisionAttention):
     pass
 
 
-@auto_docstring(custom_intro="Configuration for the SLANeXt model.", checkpoint="PaddlePaddle/SLANeXt_wired")
-class SLANeXtConfig(PreTrainedConfig):
-    r"""
+@auto_docstring(
+    checkpoint="PaddlePaddle/SLANeXt_wired",
+    custom_intro="Configuration for the SLANeXt model.",
+    custom_args=r"""
     encoder_embed_dim (`int`, *optional*, defaults to 768):
-        Dimensionality of the encoder embeddings.
+        Dimensionality of the encoder embeddings, used as the hidden size of the vision encoder (ViT backbone).
     encoder_depth (`int`, *optional*, defaults to 12):
-        Number of encoder layers.
+        Number of transformer encoder layers in the vision backbone.
     encoder_global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
-        Indexes of the encoder layers that use global attention.
+        Indexes of the encoder layers that use global (non-windowed) attention instead of local window attention.
     out_channels (`int`, *optional*, defaults to 50):
-        Number of output channels for the structure prediction head.
+        Number of output token classes for the structure prediction head (i.e., vocabulary size for table structure
+        tokens).
     max_text_length (`int`, *optional*, defaults to 500):
-        Maximum text length for the decoder.
+        Maximum number of decoding steps (tokens) for the autoregressive structure and location decoder.
     loc_reg_num (`int`, *optional*, defaults to 8):
-        Number of location regression values.
-    """
+        Number of regression values predicted per token for bounding box location (e.g., 8 for four corner
+        coordinates).
+    """,
+)
+class SLANeXtConfig(PreTrainedConfig):
 
     model_type = "slanext"
 
@@ -116,6 +122,12 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
             if module.use_rel_pos:
                 init.constant_(module.rel_pos_h, 0.0)
                 init.constant_(module.rel_pos_w, 0.0)
+
+        # Initialize GRUCell (replicates PyTorch default reset_parameters)
+        if isinstance(module, nn.GRUCell):
+            stdv = 1.0 / math.sqrt(module.hidden_size) if module.hidden_size > 0 else 0
+            for weight in module.parameters():
+                init.uniform_(weight, -stdv, stdv)
 
         # Initialize SLAHead layers
         if isinstance(module, SLANeXtSLAHead):
@@ -473,10 +485,19 @@ class SLANeXtModel(SLANeXtPreTrainedModel):
         )
         self.post_init()
 
-    def forward(self, pixel_values, **kwargs):
-        hidden_states = self.backbone(pixel_values)
-        hidden_states = self.head(hidden_states)
-        return hidden_states
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self, 
+        pixel_values: torch.FloatTensor,
+        **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+        backbone_states = self.backbone(pixel_values)
+        hidden_states = self.head(backbone_states)
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=hidden_states,
+            hidden_states=backbone_states,
+        )
 
 
 @auto_docstring(custom_intro="ImageProcessor for the SLANeXt model.")
@@ -614,7 +635,9 @@ class SLANeXtImageProcessor(BaseImageProcessor):
         return img
 
     def post_process_table_recognition(self, hidden_states):
-        return self.decode(hidden_states[0].detach().cpu())[0]
+        return self.decode(
+            hidden_states["last_hidden_state"]["structure_probs"].detach().cpu()
+        )[0]
 
     def init_decoder(self, merge_no_span_structure=True):
         dict_character = [
@@ -698,22 +721,18 @@ class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
         self.model = SLANeXtModel(config)
         self.post_init()
 
-    def forward(self, pixel_values, return_dict: bool | None = None, **kwargs):
-        hidden_states = self.model(pixel_values)
-        if not return_dict:
-            return ((hidden_states["structure_probs"]),)
-        else:
-            return SLANeXtOutput(structure_probs=hidden_states["structure_probs"])
+    @can_return_tuple
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+        outputs = self.model(pixel_values)
 
-
-@dataclass
-class SLANeXtOutput(ModelOutput):
-    """
-    Output class for SLANeXtForTableRecognition. Extends ModelOutput
-    to include table recognition probs.
-    """
-
-    structure_probs: torch.FloatTensor | None = None
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=outputs.last_hidden_state["structure"],
+            hidden_states=outputs.hidden_states,
+        )
 
 
 __all__ = [

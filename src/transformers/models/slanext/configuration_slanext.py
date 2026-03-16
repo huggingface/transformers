@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_slanext.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -84,23 +84,27 @@ class SLANeXtVisionConfig(PreTrainedConfig):
         self.mlp_dim = mlp_dim
 
 
-@auto_docstring(custom_intro="Configuration for the SLANeXt model.", checkpoint="PaddlePaddle/SLANeXt_wired")
-class SLANeXtConfig(PreTrainedConfig):
-    r"""
+@auto_docstring(
+    checkpoint="PaddlePaddle/SLANeXt_wired",
+    custom_intro="Configuration for the SLANeXt model.",
+    custom_args=r"""
     encoder_embed_dim (`int`, *optional*, defaults to 768):
-        Dimensionality of the encoder embeddings.
+        Dimensionality of the encoder embeddings, used as the hidden size of the vision encoder (ViT backbone).
     encoder_depth (`int`, *optional*, defaults to 12):
-        Number of encoder layers.
+        Number of transformer encoder layers in the vision backbone.
     encoder_global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
-        Indexes of the encoder layers that use global attention.
+        Indexes of the encoder layers that use global (non-windowed) attention instead of local window attention.
     out_channels (`int`, *optional*, defaults to 50):
-        Number of output channels for the structure prediction head.
+        Number of output token classes for the structure prediction head (i.e., vocabulary size for table structure
+        tokens).
     max_text_length (`int`, *optional*, defaults to 500):
-        Maximum text length for the decoder.
+        Maximum number of decoding steps (tokens) for the autoregressive structure and location decoder.
     loc_reg_num (`int`, *optional*, defaults to 8):
-        Number of location regression values.
-    """
-
+        Number of regression values predicted per token for bounding box location (e.g., 8 for four corner
+        coordinates).
+    """,
+)
+class SLANeXtConfig(PreTrainedConfig):
     model_type = "slanext"
 
     def __init__(

@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_slanext.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -162,7 +162,7 @@ class SLANeXtImageProcessor(BaseImageProcessor):
         return img
 
     def post_process_table_recognition(self, hidden_states):
-        return self.decode(hidden_states[0].detach().cpu())[0]
+        return self.decode(hidden_states["last_hidden_state"]["structure_probs"].detach().cpu())[0]
 
     def init_decoder(self, merge_no_span_structure=True):
         dict_character = [
