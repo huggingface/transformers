@@ -140,7 +140,6 @@ class PagedAttentionCache:
 
         # Extract model dimensions
         kv_heads = getattr(config, "num_key_value_heads", None)
-        config = getattr(config, "text_config", config)
         self.num_key_value_heads: int = kv_heads if kv_heads is not None else config.num_attention_heads
         head_dim = getattr(config, "head_dim", None)
         self.head_dim: int = head_dim if head_dim is not None else config.hidden_size // config.num_attention_heads
