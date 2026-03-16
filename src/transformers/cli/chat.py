@@ -195,17 +195,10 @@ class RichInterface:
         import json
 
         import requests
-        from rich.console import Group
-        from rich.progress import (
-            BarColumn,
-            DownloadColumn,
-            MofNCompleteColumn,
-            Progress,
-            TextColumn,
-            TimeElapsedColumn,
-            TimeRemainingColumn,
-            TransferSpeedColumn,
-        )
+        from rich import filesize
+        from rich.progress import BarColumn, Progress, ProgressColumn, TextColumn, TimeElapsedColumn
+        from rich.table import Column
+        from rich.text import Text
 
         stages = ["processor", "config", "model"]
         size_of_tqdm = 50
@@ -214,8 +207,30 @@ class RichInterface:
             "config:start": f"{model}  →  Loading config",
             "model:start": f"{model}  →  Loading model weights",
         }
-
         stage_labels = {k: v + " " * (size_of_tqdm - len(v)) for k, v in stage_labels.items()}
+
+        class _StatsColumn(ProgressColumn):
+            """Shows 'X.X GB / Y.Y GB  Z MB/s  ETA' for download tasks, 'n/total' for others."""
+
+            def render(self, task):  # type: ignore[override]
+                if task.fields.get("is_download"):
+                    if not task.total:
+                        return Text("")
+                    completed_str = filesize.decimal(int(task.completed))
+                    total_str = filesize.decimal(int(task.total))
+                    speed = task.speed
+                    speed_str = f"  {filesize.decimal(int(speed))}/s" if speed else "  ?/s"
+                    remaining = task.time_remaining
+                    if remaining is not None:
+                        m, s = divmod(int(remaining), 60)
+                        eta_str = f"  {m}:{s:02d}"
+                    else:
+                        eta_str = ""
+                    return Text(f"{completed_str}/{total_str}{speed_str}{eta_str}", style="progress.download")
+                else:
+                    if task.total is None:
+                        return Text("")
+                    return Text(f"{int(task.completed)}/{int(task.total)}")
 
         response = requests.post(
             f"{self.base_url.rstrip('/')}/load_model",
@@ -224,44 +239,31 @@ class RichInterface:
         )
         response.raise_for_status()
 
-        stage_progress = Progress(
-            TextColumn("[bold]{task.description}"),
+        progress = Progress(
+            TextColumn("[bold]{task.description}", table_column=Column(width=size_of_tqdm, no_wrap=True)),
             BarColumn(bar_width=40),
-            MofNCompleteColumn(),
-            TimeElapsedColumn(),
-            console=self._console,
-        )
-        dl_progress = Progress(
-            TextColumn("[bold]{task.description}"),
-            BarColumn(bar_width=40),
-            DownloadColumn(),
-            TransferSpeedColumn(),
-            TimeRemainingColumn(),
-            console=self._console,
-        )
-        weights_progress = Progress(
-            TextColumn("[bold]{task.description}"),
-            BarColumn(bar_width=40),
-            MofNCompleteColumn(),
+            _StatsColumn(),
             TimeElapsedColumn(),
             console=self._console,
         )
 
-        stage_task = stage_progress.add_task(model, total=len(stages))
+        stage_task = progress.add_task(model + " " * (size_of_tqdm - len(model)), total=len(stages))
 
         dl_task_name = " " * len(model) + "  ↳  Downloading files"
-        dl_task = dl_progress.add_task(dl_task_name + " " * (size_of_tqdm - len(dl_task_name)), total=None, visible=False)
+        dl_task = progress.add_task(
+            dl_task_name + " " * (size_of_tqdm - len(dl_task_name)), total=None, visible=False, is_download=True
+        )
 
         weights_task_name = " " * len(model) + "  ↳  Loading into memory"
-        weights_task = weights_progress.add_task(
+        weights_task = progress.add_task(
             weights_task_name + " " * (size_of_tqdm - len(weights_task_name)), total=None, visible=False
         )
 
         bar_last_n: dict[str, int] = {}
-        byte_descs: set[str] = set()   # only track byte-unit bars in dl_progress
-        weight_descs: set[str] = set() # tqdm bars for weight loading (from _tqdm_hook)
+        byte_descs: set[str] = set()
+        weight_descs: set[str] = set()
 
-        with Live(Group(stage_progress, dl_progress, weights_progress), console=self._console, transient=True):
+        with Live(progress, console=self._console, transient=True):
             for line in response.iter_lines():
                 if not line or not line.startswith(b"data: "):
                     continue
@@ -277,43 +279,42 @@ class RichInterface:
 
                     if stage == "tqdm:start" and unit == "B":
                         byte_descs.add(desc)
-                        dl_progress.update(dl_task, visible=True)
+                        progress.update(dl_task, visible=True)
                         if total:
-                            current_total = next((t.total for t in dl_progress.tasks if t.id == dl_task), 0) or 0
-                            dl_progress.update(dl_task, total=current_total + total)
+                            current_total = next((t.total for t in progress.tasks if t.id == dl_task), 0) or 0
+                            progress.update(dl_task, total=current_total + total)
 
                     elif stage == "tqdm:update" and n is not None and desc in byte_descs:
                         delta = n - bar_last_n.get(desc, 0)
                         bar_last_n[desc] = n
-                        dl_progress.advance(dl_task, delta)
+                        progress.advance(dl_task, delta)
                         if total is not None:
-                            current_total = next((t.total for t in dl_progress.tasks if t.id == dl_task), 0) or 0
+                            current_total = next((t.total for t in progress.tasks if t.id == dl_task), 0) or 0
                             if total > current_total:
-                                dl_progress.update(dl_task, total=total)
+                                progress.update(dl_task, total=total)
 
                     elif stage == "tqdm:start" and desc == "Loading weights":
-                        # Captured via _tqdm_hook from core_model_loading.py
                         weight_descs.add(desc)
-                        dl_progress.update(dl_task, visible=False)
-                        weights_progress.update(weights_task, visible=True, total=total)
+                        progress.update(dl_task, visible=False)
+                        progress.update(weights_task, visible=True, total=total)
 
                     elif stage == "tqdm:update" and n is not None and desc in weight_descs:
                         delta = n - bar_last_n.get(desc, 0)
                         bar_last_n[desc] = n
-                        weights_progress.advance(weights_task, delta)
+                        progress.advance(weights_task, delta)
 
                     continue
 
                 if stage == "model:weights_loading":
-                    dl_progress.update(dl_task, visible=False)
-                    weights_progress.update(weights_task, visible=True)
+                    progress.update(dl_task, visible=False)
+                    progress.update(weights_task, visible=True)
                     continue
 
                 if stage in stage_labels:
-                    stage_progress.update(stage_task, description=stage_labels[stage])
+                    progress.update(stage_task, description=stage_labels[stage])
 
                 if stage and stage.endswith(":ready"):
-                    stage_progress.advance(stage_task, 1)
+                    progress.advance(stage_task, 1)
 
                 if stage == "ready":
                     break
