@@ -338,9 +338,9 @@ def _build_checkpoint_conversion_mapping():
             )
         ],
         "hyperclovax_vision": [
-            WeightRenaming("^model.mm_projector", "model.multi_modal_projector.proj"),
-            WeightRenaming("^model.language_model.model", "model.language_model"),
-            WeightRenaming("^model.language_model.lm_head", "lm_head"),
+            WeightRenaming("mm_projector", "multi_modal_projector.proj"),
+            WeightRenaming("language_model.model", "language_model"),
+            WeightRenaming("language_model.lm_head", "lm_head"),
         ],
         "legacy": [
             WeightRenaming(
