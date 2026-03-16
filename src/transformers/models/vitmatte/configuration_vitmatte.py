@@ -15,36 +15,22 @@
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="hustvl/vitmatte-small-composition-1k")
 class VitMatteConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of [`VitMatteForImageMatting`]. It is used to
-    instantiate a ViTMatte model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the ViTMatte
-    [hustvl/vitmatte-small-composition-1k](https://huggingface.co/hustvl/vitmatte-small-composition-1k) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `VitDetConfig()`):
-            The configuration of the backbone model.
-        hidden_size (`int`, *optional*, defaults to 384):
-            The number of input channels of the decoder.
-        batch_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the batch norm layers.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        convstream_hidden_sizes (`list[int]`, *optional*, defaults to `[48, 96, 192]`):
-            The output channels of the ConvStream module.
-        fusion_hidden_sizes (`list[int]`, *optional*, defaults to `[256, 128, 64, 32]`):
-            The output channels of the Fusion blocks.
+    batch_norm_eps (`float`, *optional*, defaults to 1e-05):
+        The epsilon used by the batch norm layers.
+    convstream_hidden_sizes (`list[int]`, *optional*, defaults to `[48, 96, 192]`):
+        The output channels of the ConvStream module.
+    fusion_hidden_sizes (`list[int]`, *optional*, defaults to `[256, 128, 64, 32]`):
+        The output channels of the Fusion blocks.
 
     Example:
 

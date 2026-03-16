@@ -17,7 +17,7 @@
 from typing import Any
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import is_timm_available, logging, requires_backends
+from ...utils import auto_docstring, is_timm_available, logging, requires_backends
 
 
 if is_timm_available():
@@ -27,28 +27,16 @@ if is_timm_available():
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="resnet50")
 class TimmWrapperConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration for a timm backbone [`TimmWrapper`].
-
-    It is used to instantiate a timm model according to the specified arguments, defining the model.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Config loads imagenet label descriptions and stores them in `id2label` attribute, `label2id` attribute for default
-    imagenet models is set to `None` due to occlusions in the label descriptions.
-
-    Args:
-        architecture (`str`, *optional*, defaults to `"resnet50"`):
-            The timm architecture to load.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        do_pooling (`bool`, *optional*, defaults to `True`):
-            Whether to do pooling for the last_hidden_state in `TimmWrapperModel` or not.
-        model_args (`dict[str, Any]`, *optional*):
-            Additional keyword arguments to pass to the `timm.create_model` function. e.g. `model_args={"depth": 3}`
-            for `timm/vit_base_patch32_clip_448.laion2b_ft_in12k_in1k` to create a model with 3 blocks. Defaults to `None`.
+    architecture (`str`, *optional*, defaults to `"resnet50"`):
+        The timm architecture to load.
+    do_pooling (`bool`, *optional*, defaults to `True`):
+        Whether to do pooling for the last_hidden_state in `TimmWrapperModel` or not.
+    model_args (`dict[str, Any]`, *optional*):
+        Additional keyword arguments to pass to the `timm.create_model` function. e.g. `model_args={"depth": 3}`
+        for `timm/vit_base_patch32_clip_448.laion2b_ft_in12k_in1k` to create a model with 3 blocks. Defaults to `None`.
 
     Example:
     ```python

@@ -80,6 +80,7 @@ CORE_FILES = (
     "src/transformers/core_model_loading.py",
     "src/transformers/cache_utils.py",
     "src/transformers/generation/utils.py",
+    "src/transformers/utils/output_capturing.py",
 )
 
 
@@ -1069,6 +1070,7 @@ JOB_TO_TEST_FILE = {
     "tests_hub": r"tests/.*",
     "tests_non_model": r"tests/[^/]*?/test_.*\.py",
     "tests_training_ci": r"tests/models/.*/test_modeling_.*",
+    "tests_tensor_parallel_ci": r"(tests/models/.*/test_modeling_.*|tests/tensor_parallel(?:/test_tensor_parallel\.py)?)",
 }
 
 

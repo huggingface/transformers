@@ -585,7 +585,7 @@ class Serve:
         self,
         request: dict,
         schema: TypedDict,
-        validator: TypeAdapter,
+        validator: "TypeAdapter",
         unused_fields: set,
     ):
         """
@@ -661,10 +661,10 @@ class Serve:
         model: str | None = None,
         role: str | None = None,
         finish_reason: str | None = None,
-        tool_calls: list[ChoiceDeltaToolCall] | None = None,
+        tool_calls: list["ChoiceDeltaToolCall"] | None = None,
         decode_stream: DecodeStream | None = None,
         tokenizer: Optional["PreTrainedTokenizerFast"] = None,
-    ) -> ChatCompletionChunk:
+    ) -> "ChatCompletionChunk":
         """
         Builds a chunk of a streaming OpenAI Chat Completion response.
 
@@ -713,7 +713,7 @@ class Serve:
         return chunk
 
     @staticmethod
-    def chunk_to_sse_element(chunk: ChatCompletionChunk | BaseModel) -> str:
+    def chunk_to_sse_element(chunk: "ChatCompletionChunk | BaseModel") -> str:
         """
         Builds an event of a streaming OpenAI Response model or a ChatCompletion chunk.
 
@@ -781,7 +781,7 @@ class Serve:
 
         return generative_models
 
-    def continuous_batching_chat_completion(self, req: dict, request_id: str) -> StreamingResponse | JSONResponse:
+    def continuous_batching_chat_completion(self, req: dict, request_id: str) -> "StreamingResponse | JSONResponse":
         """
         Generates an OpenAI Chat Completion using continuous batching.
 
@@ -804,6 +804,14 @@ class Serve:
                 self.running_continuous_batching_manager = None
 
         model, processor = self.load_model_and_processor(model_id_and_revision)
+
+        # Continuous batching only supports text-only models
+        if self.get_model_modality(model, processor=processor) != Modality.LLM:
+            logger.warning_once(
+                "Continuous batching is not supported for non-text-only models. Falling back to regular generate."
+            )
+            return self.generate_chat_completion(req)
+
         tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
 
         generation_config = create_generation_config_from_req(
@@ -1001,7 +1009,7 @@ class Serve:
             processor_inputs.append(parsed_message)
         return processor_inputs
 
-    def generate_chat_completion(self, req: dict) -> StreamingResponse | JSONResponse:
+    def generate_chat_completion(self, req: dict) -> "StreamingResponse | JSONResponse":
         """
         Generates an OpenAI Chat Completion using `generate`.
 

@@ -20,6 +20,7 @@ from __future__ import annotations
 import inspect
 import json
 import os
+import re
 import warnings
 from collections import OrderedDict, UserDict
 from collections.abc import Callable, Iterable, MutableMapping
@@ -214,9 +215,12 @@ def is_mlx_array(x) -> bool:
     return False if not _is_mlx_available else _is_mlx(x)
 
 
-def is_flash_attention_requested(config=None, requested_attention_implementation: str | None = None) -> bool:
+def is_flash_attention_requested(
+    config=None, requested_attention_implementation: str | None = None, version: int | None = None
+) -> bool:
     """
-    Checks whether some flavor of flash attention is requested or not.
+    Checks whether some flavor of flash attention is requested or not. Optionally, checks for a specific version of
+    flash attention.
 
     This is checked against one of the two arguments, i.e. either the `config` or the directly passed value
     `requested_attention_implementation`. Otherwise, an error will be raised (ambiguity).
@@ -236,6 +240,14 @@ def is_flash_attention_requested(config=None, requested_attention_implementation
     else:
         checked_attention_implementation = requested_attention_implementation
 
+    # theoretically can happen, equivalent to default implementation (sdpa/eager)
+    if checked_attention_implementation is None:
+        return False
+
+    # If a specific version is requested, look for a pattern of type "flash...{version}"
+    if version is not None:
+        return re.match(r".*flash.*" + str(version), checked_attention_implementation) is not None
+    # Otherwise, just check "flash" is in the attention implementation
     return "flash" in checked_attention_implementation
 
 
@@ -931,7 +943,7 @@ def merge_with_config_defaults(func):
 class GeneralInterface(MutableMapping):
     """
     Dict-like object keeping track of a class-wide mapping, as well as a local one. Allows to have library-wide
-    modifications though the class mapping, as well as local modifications in a single file with the local mapping.
+    modifications through the class mapping, as well as local modifications in a single file with the local mapping.
     """
 
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
