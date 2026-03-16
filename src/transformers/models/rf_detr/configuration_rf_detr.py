@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-@auto_docstring(checkpoint="stevenbucaille/lwdetr_small_60e_coco")
+@auto_docstring(checkpoint="stevenbucaille/rf-detr-base")
 class RfDetrDinov2Config(BackboneConfigMixin, PreTrainedConfig):
     r"""
     layerscale_value (`float`, *optional*, defaults to 1.0):
@@ -116,6 +116,7 @@ class RfDetrDinov2Config(BackboneConfigMixin, PreTrainedConfig):
         self.window_block_indexes = window_block_indexes
 
 
+@auto_docstring(checkpoint="stevenbucaille/rf-detr-base")
 class RfDetrConfig(PreTrainedConfig):
     r"""
     hidden_expansion (`float`, *optional*, defaults to 0.5):
