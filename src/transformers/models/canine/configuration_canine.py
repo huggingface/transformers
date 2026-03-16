@@ -13,14 +13,14 @@
 # limitations under the License.
 """CANINE model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/canine-s")
+@strict(accept_kwargs=True)
 class CanineConfig(PreTrainedConfig):
     r"""
     downsampling_rate (`int`, *optional*, defaults to 4):
@@ -54,52 +54,25 @@ class CanineConfig(PreTrainedConfig):
 
     model_type = "canine"
 
-    def __init__(
-        self,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=16384,
-        type_vocab_size=16,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        pad_token_id=0,
-        bos_token_id=0xE000,
-        eos_token_id=0xE001,
-        downsampling_rate=4,
-        upsampling_kernel_size=4,
-        num_hash_functions=8,
-        num_hash_buckets=16384,
-        local_transformer_stride=128,  # Good TPU/XLA memory alignment.
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.type_vocab_size = type_vocab_size
-        self.layer_norm_eps = layer_norm_eps
-
-        # Character config:
-        self.downsampling_rate = downsampling_rate
-        self.upsampling_kernel_size = upsampling_kernel_size
-        self.num_hash_functions = num_hash_functions
-        self.num_hash_buckets = num_hash_buckets
-        self.local_transformer_stride = local_transformer_stride
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.1
+    attention_probs_dropout_prob: float = 0.1
+    max_position_embeddings: int = 16384
+    type_vocab_size: int = 16
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 0xE000
+    eos_token_id: int | list[int] | None = 0xE001
+    downsampling_rate: int = 4
+    upsampling_kernel_size: int = 4
+    num_hash_functions: int = 8
+    num_hash_buckets: int = 16384
+    local_transformer_stride: int = 128  # Good TPU/XLA memory alignment
 
 
 __all__ = ["CanineConfig"]

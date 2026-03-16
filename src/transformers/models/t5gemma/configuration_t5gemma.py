@@ -20,12 +20,15 @@
 # limitations under the License.
 from typing import Any
 
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/t5_gemma_module-7b")
+@strict(accept_kwargs=True)
 class T5GemmaModuleConfig(PreTrainedConfig):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):
@@ -62,72 +65,52 @@ class T5GemmaModuleConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 256000,
-        hidden_size: int | None = 2304,
-        intermediate_size: int | None = 9216,
-        num_hidden_layers: int | None = 26,
-        num_attention_heads: int | None = 8,
-        num_key_value_heads: int | None = 4,
-        head_dim: int | None = 256,
-        hidden_activation: str | None = "gelu_pytorch_tanh",
-        max_position_embeddings: int | None = 8192,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-6,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = 0,
-        eos_token_id: int | None = 1,
-        bos_token_id: int | None = 2,
-        tie_word_embeddings: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        query_pre_attn_scalar: int | None = 256,
-        sliding_window: int | None = 4096,
-        layer_types: list[str] | None = None,
-        final_logit_softcapping: float | None = 30.0,
-        attn_logit_softcapping: float | None = 50.0,
-        is_decoder: bool | None = False,
-        **kwargs,
-    ):
-        self.is_decoder = is_decoder
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.head_dim = head_dim
-        self.num_key_value_heads = num_key_value_heads
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.hidden_activation = hidden_activation
-        self.query_pre_attn_scalar = query_pre_attn_scalar
-        self.sliding_window = sliding_window
-        self.final_logit_softcapping = final_logit_softcapping
-        self.attn_logit_softcapping = attn_logit_softcapping
-        self.layer_types = layer_types
+    vocab_size: int = 256000
+    hidden_size: int = 2304
+    intermediate_size: int = 9216
+    num_hidden_layers: int = 26
+    num_attention_heads: int = 8
+    num_key_value_heads: int = 4
+    head_dim: int = 256
+    hidden_activation: str = "gelu_pytorch_tanh"
+    max_position_embeddings: int = 8192
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    pad_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 1
+    bos_token_id: int | None = 2
+    tie_word_embeddings: bool = True
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: int | float | None = 0.0
+    query_pre_attn_scalar: int = 256
+    sliding_window: int | None = 4096
+    layer_types: list[str] | None = None
+    final_logit_softcapping: float | None = 30.0
+    attn_logit_softcapping: float | None = 50.0
 
+    is_decoder: bool = False
+
+    def __post_init__(self, **kwargs):
         if self.layer_types is None:
             self.layer_types = [
                 "sliding_attention" if bool((i + 1) % 2) else "full_attention" for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        self.rope_parameters = rope_parameters
+        super().__post_init__(**kwargs)
 
-        super().__init__(**kwargs)
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({self.num_attention_heads})."
+            )
 
 
 @auto_docstring(checkpoint="google/t5_gemma_module-7b")
+@strict(accept_kwargs=True)
 class T5GemmaConfig(PreTrainedConfig):
     r"""
     encoder (`Union[T5GemmaModuleConfig, dict]`, optional, *optional*):
@@ -147,60 +130,43 @@ class T5GemmaConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {"encoder": T5GemmaModuleConfig, "decoder": T5GemmaModuleConfig}
 
-    def __init__(
-        self,
-        encoder: T5GemmaModuleConfig | dict[Any, Any] | None = None,
-        decoder: T5GemmaModuleConfig | dict[Any, Any] | None = None,
-        is_encoder_decoder: bool | None = True,
-        dropout_rate: float | None = 0.0,
-        classifier_dropout_rate: float | None = 0.0,
-        attention_dropout: float | None = 0.0,
-        tie_word_embeddings: bool | None = True,
-        vocab_size: int | None = 256000,
-        **kwargs,
-    ):
-        if isinstance(encoder, dict):
-            encoder = T5GemmaModuleConfig(**encoder)
-        elif encoder is None:
-            encoder = T5GemmaModuleConfig()
-        else:
-            assert isinstance(encoder, T5GemmaModuleConfig), f"{type(encoder)} is not supported."
+    encoder: T5GemmaModuleConfig | dict[Any, Any] | None = None
+    decoder: T5GemmaModuleConfig | dict[Any, Any] | None = None
+    is_encoder_decoder: bool = True
+    dropout_rate: int | float = 0.0
+    classifier_dropout_rate: int | float = 0.0
+    attention_dropout: float | int = 0.0
+    tie_word_embeddings: bool = True
+    vocab_size: int = 256000
 
-        if isinstance(decoder, dict):
-            decoder = T5GemmaModuleConfig(**decoder)
-        elif decoder is None:
-            decoder = encoder
-        else:
-            assert isinstance(decoder, T5GemmaModuleConfig), f"{type(decoder)} is not supported."
+    def __post_init__(self, **kwargs):
+        if isinstance(self.encoder, dict):
+            self.encoder = T5GemmaModuleConfig(**self.encoder)
+        elif self.encoder is None:
+            self.encoder = T5GemmaModuleConfig()
 
-        encoder = T5GemmaModuleConfig(**encoder.to_dict())
-        decoder = T5GemmaModuleConfig(**decoder.to_dict())
+        if isinstance(self.decoder, dict):
+            self.decoder = T5GemmaModuleConfig(**self.decoder)
+        elif self.decoder is None:
+            self.decoder = T5GemmaModuleConfig()
 
-        encoder.is_decoder = False
-        encoder.dropout_rate = dropout_rate
-        encoder.attention_dropout = attention_dropout
-        self.encoder = encoder
+        self.encoder.is_decoder = False
+        self.encoder.dropout_rate = self.dropout_rate
+        self.encoder.attention_dropout = self.attention_dropout
 
-        decoder.is_decoder = True
-        decoder.use_cache = True
-        decoder.dropout_rate = dropout_rate
-        decoder.attention_dropout = attention_dropout
-        decoder.cross_attention_hidden_size = encoder.hidden_size
-        self.decoder = decoder
+        self.decoder.is_decoder = True
+        self.decoder.use_cache = True
+        self.decoder.dropout_rate = self.dropout_rate
+        self.decoder.attention_dropout = self.attention_dropout
+        self.decoder.cross_attention_hidden_size = self.encoder.hidden_size
+
+        self.initializer_range = kwargs.pop("initializer_range", self.decoder.initializer_range)
 
         for special_token_key in ["bos_token_id", "pad_token_id", "eos_token_id"]:
             if special_token_key not in kwargs:
-                kwargs[special_token_key] = getattr(decoder, special_token_key)
+                kwargs[special_token_key] = getattr(self.decoder, special_token_key)
 
-        super().__init__(**kwargs)
-
-        self.is_encoder_decoder = is_encoder_decoder
-        self.initializer_range = kwargs.get("initializer_range", decoder.initializer_range)
-        self.classifier_dropout_rate = classifier_dropout_rate
-        self.tie_word_embeddings = tie_word_embeddings
-
-        # Used in pipeline generation.
-        self.vocab_size = vocab_size
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["T5GemmaConfig", "T5GemmaModuleConfig"]
