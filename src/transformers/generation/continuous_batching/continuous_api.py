@@ -166,7 +166,7 @@ class ContinuousBatchProcessor:
             )
         else:
             self.inputs_and_outputs = ContinuousBatchingIOs(
-                cache, config, model_device, model_dtype, max_cached_graphs
+                cache, config, model_device, model_dtype, self.max_cached_graphs
             )
         # Set up the graph pool. This allows all graphs to share the same memory pool, which is fine because they never
         # run concurrently. This greatly saves memory.
