@@ -1124,8 +1124,8 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         r"transformer.enc_out_class_embed.(\d+)": r"model.model.enc_out_class_embed.\1",
         r"refpoint_embed.weight$": r"model.model.reference_point_embed.weight",
         # Regex mappings for variable length strings
-        r"^bbox_embed.layers": "model.model.bbox_embed.layers",
-        r"^class_embed.(weight|bias)": r"model.model.class_embed.\1",
+        r"^bbox_embed.layers": "model.bbox_embed.layers",
+        r"^class_embed.(weight|bias)": r"model.class_embed.\1",
         r"^query_feat.(weight|bias)": r"model.model.query_feat.\1",
         # segmentation head (specific rules first)
         r"segmentation_head.query_features_block.layers.0": "query_features_block.mlp.fc1",
