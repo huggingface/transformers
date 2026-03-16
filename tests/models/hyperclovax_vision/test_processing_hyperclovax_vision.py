@@ -1,4 +1,4 @@
-# Copyright 2025 NAVER Corp. and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 NAVER Corp. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""HyperClovaX model configuration"""
 
 import inspect
 import unittest
@@ -25,7 +24,7 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
-    from transformers import HyperClovaXProcessor
+    from transformers import HCXVisionV2Processor
 
 if is_torch_available():
     import torch
@@ -35,7 +34,7 @@ if is_torch_available():
 @require_torch
 @require_torchvision
 class HyperClovaXProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    processor_class = HyperClovaXProcessor
+    processor_class = HCXVisionV2Processor
     model_id = "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B"
 
     @classmethod
