@@ -85,8 +85,7 @@ class FalconMambaCache:
 
         >>> # Prepare a cache class and pass it to model's forward
         >>> cache_params = FalconMambaCache(config=model.config, max_batch_size=1, device=model.device, dtype=model.dtype)
-        >>> cache_position = torch.arange(len(inputs["input_ids"][0]), device=model.device)  # sequence length
-        >>> outputs = model(**inputs, cache_params=cache_params, cache_position=cache_position, use_cache=True)
+        >>> outputs = model(**inputs, cache_params=cache_params, use_cache=True)
         >>> outputs.cache_params
         ```
     """
@@ -106,7 +105,7 @@ class FalconMambaCache:
         self.intermediate_size = config.intermediate_size
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
-        self.seen_tokens = 0
+        self.seen_tokens = [0 for _ in range(config.num_hidden_layers)]
 
         self.conv_states: list[torch.Tensor] = []
         self.ssm_states: list[torch.Tensor] = []
@@ -142,9 +141,8 @@ class FalconMambaCache:
         cache_position = torch.arange(seq_len, device=conv_state.device) + self.seen_tokens
         cache_position = cache_position.clamp(0, self.conv_kernel_size - 1)
 
-        # Update it if it's the last layer only
-        if layer_idx == len(self.conv_states) - 1:
-            self.seen_tokens += seq_len
+        # Update it
+        self.seen_tokens[layer_idx] += seq_len
 
         conv_state = conv_state.roll(shifts=-1, dims=-1)
         conv_state[:, :, cache_position] = new_conv_state.to(device=conv_state.device, dtype=conv_state.dtype)
@@ -163,9 +161,10 @@ class FalconMambaCache:
             self.conv_states[layer_idx].zero_()
             self.ssm_states[layer_idx].zero_()
 
-    def get_seq_length(self, layer_idx: int | None = 0) -> torch.Tensor:
-        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        return self.conv_states[layer_idx][0, 0, :].nonzero().sum()
+    @property
+    def has_previous_state(self) -> bool:
+        """Returns whether the cache was already used or not for at least one `forward`."""
+        return self.seen_tokens[-1] > 0
 
 
 def rms_forward(hidden_states, variance_epsilon=1e-6):
@@ -311,9 +310,9 @@ class FalconMambaMixer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         cache_params: FalconMambaCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
     ):
+        seq_len = hidden_states.shape[1]
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
         if self.training and cache_params is None:  # Doesn't support outputting the states -> used for training
@@ -343,9 +342,11 @@ class FalconMambaMixer(nn.Module):
             if attention_mask is not None:
                 hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
+            is_decoding = cache_params is not None and cache_params.has_previous_state
+
             # 2. Convolution sequence transformation
             conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
-            if cache_params is not None and cache_position[0] > 0:
+            if is_decoding:
                 hidden_states = causal_conv1d_update(
                     hidden_states.squeeze(-1),
                     cache_params.conv_states[self.layer_idx],
@@ -359,7 +360,7 @@ class FalconMambaMixer(nn.Module):
                     conv_states = nn.functional.pad(
                         hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0)
                     )
-                    cache_params.update_conv_state(self.layer_idx, conv_states, cache_position)
+                    cache_params.update_conv_state(self.layer_idx, conv_states, seq_len)
                 hidden_states = causal_conv1d_fn(
                     hidden_states, conv_weights, self.conv1d.bias, activation=self.activation
                 )
@@ -388,7 +389,7 @@ class FalconMambaMixer(nn.Module):
             A = -torch.exp(self.A_log.float())
             # 3.c perform the recurrence y ← SSM(A, B, C)(x)
             time_proj_bias = self.dt_proj.bias.float() if hasattr(self.dt_proj, "bias") else None
-            if cache_params is not None and cache_position[0] > 0:
+            if is_decoding:
                 scan_outputs = selective_state_update(
                     cache_params.ssm_states[self.layer_idx],
                     hidden_states[..., 0],
@@ -425,7 +426,6 @@ class FalconMambaMixer(nn.Module):
     def slow_forward(self,
         input_states,
         cache_params: FalconMambaCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
     ):
         batch_size, seq_len, _ = input_states.shape
@@ -441,18 +441,15 @@ class FalconMambaMixer(nn.Module):
         if cache_params is not None:
             ssm_state = cache_params.ssm_states[self.layer_idx].clone()
             ssm_state = ssm_state.to(hidden_states.device)
-            # use `cache_position.shape[0]` to check whether we are in prefill
-            # stage, it's equivalent to check `cache_position[0] == 0`, which
-            # breaks dynamo fullgraph constraints
-            if cache_position is not None and cache_position.shape[0] == self.conv_kernel_size:
+            if not cache_params.has_previous_state:
                 conv_state = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
 
-                cache_params.update_conv_state(self.layer_idx, conv_state, cache_position)
+                cache_params.update_conv_state(self.layer_idx, conv_state, seq_len)
                 hidden_states = self.act(
                     self.conv1d(hidden_states)[..., :seq_len]
                 )  # [batch, intermediate_size, seq_len]
             else:
-                conv_state = cache_params.update_conv_state(self.layer_idx, hidden_states, cache_position)
+                conv_state = cache_params.update_conv_state(self.layer_idx, hidden_states, seq_len)
                 conv_state = conv_state.to(self.conv1d.weight.device)
                 hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
                 if self.use_conv_bias:
@@ -552,15 +549,15 @@ class FalconMambaMixer(nn.Module):
         self,
         hidden_states,
         cache_params: FalconMambaCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
+        **kwargs,
     ):
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)
         )
         if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_torchdynamo_compiling():
-            return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
-        return self.slow_forward(hidden_states, cache_params, cache_position, attention_mask)
+            return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
+        return self.slow_forward(hidden_states, cache_params, attention_mask)
 
 
 class FalconMambaRMSNorm(nn.Module):

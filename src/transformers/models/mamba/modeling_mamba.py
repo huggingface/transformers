@@ -103,7 +103,7 @@ class MambaCache:
         self.intermediate_size = config.intermediate_size
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
-        self.seen_tokens = 0
+        self.seen_tokens = [0 for _ in range(config.num_hidden_layers)]
 
         self.conv_states: list[torch.Tensor] = []
         self.ssm_states: list[torch.Tensor] = []
@@ -139,9 +139,8 @@ class MambaCache:
         cache_position = torch.arange(seq_len, device=conv_state.device) + self.seen_tokens
         cache_position = cache_position.clamp(0, self.conv_kernel_size - 1)
 
-        # Update it if it's the last layer only
-        if layer_idx == len(self.conv_states) - 1:
-            self.seen_tokens += seq_len
+        # Update it
+        self.seen_tokens[layer_idx] += seq_len
 
         conv_state = conv_state.roll(shifts=-1, dims=-1)
         conv_state[:, :, cache_position] = new_conv_state.to(device=conv_state.device, dtype=conv_state.dtype)
@@ -160,9 +159,10 @@ class MambaCache:
             self.conv_states[layer_idx].zero_()
             self.ssm_states[layer_idx].zero_()
 
-    def get_seq_length(self, layer_idx: int | None = 0) -> torch.Tensor:
-        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        return self.conv_states[layer_idx][0, 0, :].nonzero().sum()
+    @property
+    def has_previous_state(self) -> bool:
+        """Returns whether the cache was already used or not for at least one `forward`."""
+        return self.seen_tokens[-1] > 0
 
 
 class MambaMixer(nn.Module):
@@ -307,9 +307,11 @@ class MambaMixer(nn.Module):
             if attention_mask is not None:
                 hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
+            is_decoding = cache_params is not None and cache_params.has_previous_state
+
             # 2. Convolution sequence transformation
             conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
-            if cache_params is not None and cache_params.get_seq_length(self.layer_idx) > 0:
+            if is_decoding:
                 hidden_states = causal_conv1d_update(
                     hidden_states.squeeze(-1),
                     cache_params.conv_states[self.layer_idx],
@@ -342,7 +344,7 @@ class MambaMixer(nn.Module):
             A = -torch.exp(self.A_log.float())
             # 3.c perform the recurrence y ← SSM(A, B, C)(x)
             time_proj_bias = self.dt_proj.bias.float() if hasattr(self.dt_proj, "bias") else None
-            if cache_params is not None and cache_params.get_seq_length(self.layer_idx) > 0:
+            if is_decoding:
                 scan_outputs = selective_state_update(
                     cache_params.ssm_states[self.layer_idx],
                     hidden_states[..., 0],
@@ -390,7 +392,7 @@ class MambaMixer(nn.Module):
         if cache_params is not None:
             ssm_state = cache_params.ssm_states[self.layer_idx].clone()
             ssm_state = ssm_state.to(hidden_states.device)
-            if cache_params.seen_tokens == 0:
+            if not cache_params.has_previous_state:
                 conv_state = nn.functional.pad(
                     hidden_states,
                     (self.conv_kernel_size - hidden_states.shape[-1], 0)
@@ -475,6 +477,7 @@ class MambaMixer(nn.Module):
         hidden_states,
         cache_params: MambaCache | None = None,
         attention_mask: torch.LongTensor | None = None,
+        **kwargs,
     ):
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
