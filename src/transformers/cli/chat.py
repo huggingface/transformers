@@ -23,6 +23,7 @@ from typing import Annotated, Any
 from urllib.parse import urljoin, urlparse
 
 import httpx
+import requests
 import typer
 import yaml
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
@@ -41,9 +42,13 @@ if platform.system() != "Windows":
     import pwd
 
 if is_rich_available():
+    from rich import filesize
     from rich.console import Console
     from rich.live import Live
     from rich.markdown import Markdown
+    from rich.progress import BarColumn, Progress, ProgressColumn, TextColumn, TimeElapsedColumn
+    from rich.table import Column
+    from rich.text import Text
 
 DEFAULT_HTTP_ENDPOINT = {"hostname": "localhost", "port": 8000}
 ALLOWED_KEY_CHARS = set(string.ascii_letters + string.whitespace)
@@ -100,10 +105,11 @@ If you're a new user, check this basic flag guide: https://huggingface.co/docs/t
 
 
 class RichInterface:
-    def __init__(self, model_id: str, user_id: str):
+    def __init__(self, model_id: str, user_id: str, base_url: str):
         self._console = Console()
         self.model_id = model_id
         self.user_id = user_id
+        self.base_url = base_url
 
     async def stream_output(self, stream: AsyncIterator[ChatCompletionStreamOutput]) -> tuple[str, str | Any | None]:
         self._console.print(f"[bold blue]<{self.model_id}>:")
@@ -188,6 +194,132 @@ class RichInterface:
     def print_help(self, minimal: bool = False):
         """Prints the help message to the console."""
         self._console.print(Markdown(HELP_STRING_MINIMAL if minimal else HELP_STRING))
+        self._console.print()
+
+    def print_model_load(self, model: str):
+        stages = ["processor", "config", "model"]
+        size_of_tqdm = 50
+        stage_labels = {
+            "processor:start": f"{model}  →  Loading processor",
+            "config:start": f"{model}  →  Loading config",
+            "model:start": f"{model}  →  Loading model weights",
+        }
+
+        class _StatsColumn(ProgressColumn):
+            """Shows 'X.X GB / Y.Y GB  Z MB/s  ETA' for download tasks, 'n/total' for others."""
+
+            def render(self, task):  # type: ignore[override]
+                if task.fields.get("is_download"):
+                    if not task.total:
+                        return Text("")
+
+                    completed_str = filesize.decimal(int(task.completed))
+                    total_str = filesize.decimal(int(task.total))
+
+                    speed = task.speed
+                    speed_str = f"  {filesize.decimal(int(speed))}/s" if speed else "  ?/s"
+
+                    remaining = task.time_remaining
+
+                    if remaining is not None:
+                        m, s = divmod(int(remaining), 60)
+                        eta_str = f"  {m}:{s:02d}"
+                    else:
+                        eta_str = ""
+
+                    return Text(f"{completed_str}/{total_str}{speed_str}{eta_str}", style="progress.download")
+                else:
+                    if task.total is None:
+                        return Text("")
+
+                    return Text(f"{int(task.completed)}/{int(task.total)}")
+
+        response = requests.post(
+            f"{self.base_url.rstrip('/')}/load_model",
+            json={"model": model},
+            stream=True,
+        )
+        response.raise_for_status()
+
+        progress = Progress(
+            TextColumn("[bold]{task.description}", table_column=Column(width=size_of_tqdm, no_wrap=True)),
+            BarColumn(bar_width=40),
+            _StatsColumn(),
+            TimeElapsedColumn(),
+            console=self._console,
+        )
+
+        stage_task = progress.add_task(model + " " * (size_of_tqdm - len(model)), total=len(stages))
+
+        dl_task = progress.add_task(
+            " " * len(model) + "  ↳  Downloading files", total=None, visible=False, is_download=True
+        )
+
+        weights_task = progress.add_task(" " * len(model) + "  ↳  Loading into memory", total=None, visible=False)
+
+        bar_last_n: dict[str, int] = {}
+        byte_descs: set[str] = set()
+        weight_descs: set[str] = set()
+
+        with Live(progress, console=self._console, transient=True):
+            for line in response.iter_lines():
+                if not line or not line.startswith(b"data: "):
+                    continue
+
+                payload = json.loads(line.split(b"data: ", 1)[1])
+                stage = payload.get("stage")
+
+                if stage and stage.startswith("tqdm:"):
+                    desc = payload.get("desc") or "download"
+                    total = payload.get("total")
+                    n = payload.get("n")
+                    unit = payload.get("unit")
+
+                    if stage == "tqdm:start" and unit == "B":
+                        byte_descs.add(desc)
+                        progress.update(dl_task, visible=True)
+                        if total:
+                            current_total = next((t.total for t in progress.tasks if t.id == dl_task), 0) or 0
+                            progress.update(dl_task, total=current_total + total)
+
+                    elif stage == "tqdm:update" and n is not None and desc in byte_descs:
+                        delta = n - bar_last_n.get(desc, 0)
+                        bar_last_n[desc] = n
+                        progress.advance(dl_task, delta)
+                        if total is not None:
+                            current_total = next((t.total for t in progress.tasks if t.id == dl_task), 0) or 0
+                            if total > current_total:
+                                progress.update(dl_task, total=total)
+
+                    elif stage == "tqdm:start" and desc == "Loading weights":
+                        weight_descs.add(desc)
+                        progress.update(dl_task, visible=False)
+                        progress.update(weights_task, visible=True, total=total)
+
+                    elif stage == "tqdm:update" and n is not None and desc in weight_descs:
+                        delta = n - bar_last_n.get(desc, 0)
+                        bar_last_n[desc] = n
+                        progress.advance(weights_task, delta)
+
+                    continue
+
+                if stage == "model:weights_loading":
+                    progress.update(dl_task, visible=False)
+                    progress.update(weights_task, visible=True)
+                    continue
+
+                if stage in stage_labels:
+                    progress.update(stage_task, description=stage_labels[stage])
+
+                if stage and stage.endswith(":ready"):
+                    progress.advance(stage_task, 1)
+
+                if stage == "ready":
+                    break
+                if stage == "error":
+                    raise RuntimeError(payload.get("message", "Unknown error"))
+
+        self._console.print(Markdown(f"_*{model} is warm.*_"))
         self._console.print()
 
     def print_status(self, config: GenerationConfig):
@@ -364,12 +496,13 @@ class Chat:
         return chat, valid_command, config
 
     async def _inner_run(self):
-        interface = RichInterface(model_id=self.model_id, user_id=self.user)
+        interface = RichInterface(model_id=self.model_id, user_id=self.user, base_url=self.base_url)
         interface.clear()
         chat = new_chat_history(self.system_prompt)
 
         # Starts the session with a minimal help message at the top, so that a user doesn't get stuck
         interface.print_help(minimal=True)
+        interface.print_model_load(self.model_id)
 
         config = self.config
 

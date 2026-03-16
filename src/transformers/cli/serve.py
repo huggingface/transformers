@@ -23,7 +23,7 @@ import tempfile
 import threading
 import time
 import uuid
-from collections.abc import Generator, Iterable
+from collections.abc import Callable, Generator, Iterable
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from io import BytesIO
@@ -37,6 +37,11 @@ from tqdm import tqdm
 
 import transformers
 from transformers import AutoTokenizer, BitsAndBytesConfig, GenerationConfig, PreTrainedTokenizerBase
+from transformers.generation import (
+    LogitsProcessorList,
+    TextIteratorStreamer,
+)
+from transformers.utils import logging
 from transformers.utils.import_utils import (
     is_fastapi_available,
     is_librosa_available,
@@ -45,12 +50,6 @@ from transformers.utils.import_utils import (
     is_uvicorn_available,
     is_vision_available,
 )
-
-from .. import (
-    LogitsProcessorList,
-    TextIteratorStreamer,
-)
-from ..utils import logging
 
 
 if TYPE_CHECKING:
@@ -232,6 +231,68 @@ class Modality(enum.Enum):
     TTS = "TTS"
 
 
+class StreamingTqdmWrapper:
+    def __init__(
+        self,
+        wrapped,
+        enqueue: Callable[[dict], None],
+        model_id_and_revision: str,
+        desc: str,
+        total: int,
+    ):
+        self._wrapped = wrapped
+        self.enqueue = enqueue
+        self.model_id_and_revision = model_id_and_revision
+        self.desc = desc
+        self.total = total
+
+    def __getattr__(self, name):
+        return getattr(self._wrapped, name)
+
+    def update(self, n: int = 1):
+        result = self._wrapped.update(n)
+        self.enqueue(
+            {
+                "stage": "tqdm:update",
+                "model": self.model_id_and_revision,
+                "desc": self.desc,
+                "n": getattr(self._wrapped, "n", None),
+                "total": getattr(self._wrapped, "total", self.total),
+            }
+        )
+        return result
+
+    def close(self):
+        self.enqueue({"stage": "tqdm:close", "model": self.model_id_and_revision, "desc": self.desc})
+        return self._wrapped.close()
+
+    def __enter__(self):
+        self._wrapped.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return self._wrapped.__exit__(exc_type, exc_value, traceback)
+
+    def __iter__(self):
+        # tqdm's __iter__ calls _wrapped.update() internally (after each yield), so we
+        # must NOT call self.update() here — that would double-increment _wrapped.n and
+        # report 2× the real iteration count.  Instead, track the count ourselves and
+        # enqueue SSE events directly.
+        count = 0
+        for item in self._wrapped:
+            count += 1
+            self.enqueue(
+                {
+                    "stage": "tqdm:update",
+                    "model": self.model_id_and_revision,
+                    "desc": self.desc,
+                    "n": count,
+                    "total": getattr(self._wrapped, "total", self.total),
+                }
+            )
+            yield item
+
+
 def create_generation_config_from_req(
     req: dict,
     model_generation_config: GenerationConfig,
@@ -348,7 +409,7 @@ class TimedModel:
     def timeout_reached(self):
         if self.timeout_seconds > 0:
             self.delete_model()
-            logger.info(
+            logger.warning(
                 f"{self._name_or_path} was removed from memory after {self.timeout_seconds} seconds of inactivity"
             )
 
@@ -363,8 +424,9 @@ class Serve:
     def __init__(
         self,
         continuous_batching: Annotated[
-            bool, typer.Option(help="Whether to use continuous batching for chat completions.")
-        ] = False,
+            bool | None,
+            typer.Option(help="Whether to use continuous batching for chat completions."),
+        ] = None,
         device: Annotated[
             str,
             typer.Option(
@@ -382,9 +444,7 @@ class Serve:
         ] = False,
         attn_implementation: Annotated[
             str | None,
-            typer.Option(
-                help="Which attention implementation to use; you can run --attn_implementation=flash_attention_2, in which case you must install this manually by running `pip install flash-attn --no-build-isolation`."
-            ),
+            typer.Option(help="Which attention implementation to use."),
         ] = None,
         quantization: Annotated[
             str | None,
@@ -397,7 +457,7 @@ class Serve:
         ] = 300,
         log_level: Annotated[
             str, typer.Option(help="Logging level as a string. Example: 'info' or 'warning'.")
-        ] = "info",
+        ] = "warning",
         default_seed: Annotated[
             int | None, typer.Option(help="The default seed for torch, should be an integer.")
         ] = None,
@@ -424,12 +484,13 @@ class Serve:
             )
 
         # Save input arguments
+        self.attn_implementation = attn_implementation
         self.continuous_batching = continuous_batching
         self.device = device
+        self.quantization = quantization
+
         self.dtype = dtype
         self.trust_remote_code = trust_remote_code
-        self.attn_implementation = attn_implementation
-        self.quantization = quantization
         self.host = host
         self.port = port
         self.model_timeout = model_timeout
@@ -473,10 +534,7 @@ class Serve:
         @asynccontextmanager
         async def lifespan(app: FastAPI):
             yield
-            for model in self.loaded_models.values():
-                model.delete_model()
-            if self.running_continuous_batching_manager is not None:
-                self.running_continuous_batching_manager.stop(block=True, timeout=5)
+            self.reset_loaded_models()
 
         app = FastAPI(lifespan=lifespan)
 
@@ -500,6 +558,8 @@ class Serve:
         def chat_completion(request: Request, body: dict):
             self.validate_chat_completion_request(request=body)
 
+            logger.warning(f"[Request received] Model: {body['model']}, CB: {self.continuous_batching}")
+
             if self.continuous_batching:
                 return self.continuous_batching_chat_completion(body, request.state.request_id)
             else:
@@ -508,6 +568,9 @@ class Serve:
         @app.post("/v1/responses")
         def responses(request: dict):
             self.validate_response_request(request=request)
+
+            logger.warning(f"[Request received] Model: {request['model']}, CB: {self.continuous_batching}")
+
             # Support non-streaming mode when `stream=false` is provided
             stream = request.get("stream", True)
             if not stream:
@@ -544,6 +607,55 @@ class Serve:
         def healthcheck():
             return JSONResponse({"status": "ok"})
 
+        @app.post("/load_model")
+        async def load_model(body: dict):
+            model = body.get("model")
+            if model is None:
+                raise HTTPException(status_code=422, detail="Missing `model` field in the request body.")
+
+            model_id_and_revision = self.process_model_name(model)
+
+            async def event_publisher(method: Callable):
+                queue: asyncio.Queue[str | None] = asyncio.Queue()
+                loop = asyncio.get_running_loop()
+
+                def enqueue(payload: dict):
+                    loop.call_soon_threadsafe(queue.put_nowait, f"data: {json.dumps(payload)}\n\n")
+
+                def streaming_tqdm_hook(factory, args, kwargs):
+                    bar = factory(*args, **kwargs)
+                    desc = kwargs.get("desc") or getattr(bar, "desc", None)
+                    total = getattr(bar, "total", kwargs.get("total"))
+                    enqueue({"stage": "tqdm:start", "model": model_id_and_revision, "desc": desc, "total": total})
+
+                    return StreamingTqdmWrapper(
+                        bar, enqueue=enqueue, model_id_and_revision=model_id_and_revision, desc=desc, total=total
+                    )
+
+                async def run_load():
+                    enqueue({"stage": "received", "model": model_id_and_revision})
+                    previous_hook = logging.set_tqdm_hook(streaming_tqdm_hook)
+                    try:
+                        await asyncio.to_thread(method, model_id_and_revision, enqueue)
+                    except Exception as e:
+                        logger.error(f"Failed to load {model_id_and_revision}: {e}", exc_info=True)
+                        enqueue({"stage": "error", "model": model_id_and_revision, "message": str(e), "error": True})
+                    else:
+                        enqueue({"stage": "ready", "model": model_id_and_revision})
+                    finally:
+                        logging.set_tqdm_hook(previous_hook)
+                        loop.call_soon_threadsafe(queue.put_nowait, None)
+
+                asyncio.create_task(run_load())
+
+                while True:
+                    item = await queue.get()
+                    if item is None:
+                        break
+                    yield item
+
+            return StreamingResponse(event_publisher(self.load_model_and_processor), media_type="text/event-stream")
+
         @app.middleware("http")
         async def get_or_set_request_id(request: Request, call_next):
             request_id = request.headers.get(X_REQUEST_ID) or str(uuid.uuid4())
@@ -552,7 +664,7 @@ class Serve:
             response.headers[X_REQUEST_ID] = request_id
             return response
 
-        config = uvicorn.Config(app, host=self.host, port=self.port, log_level=self.log_level)
+        config = uvicorn.Config(app, host=self.host, port=self.port, log_level="info")
         self.server = uvicorn.Server(config)
 
         if self.non_blocking:
@@ -580,6 +692,18 @@ class Serve:
         self.server.should_exit = True
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=2)
+
+    def reset_loaded_models(self):
+        """
+        Resets all loaded models.
+        """
+        if self.running_continuous_batching_manager is not None:
+            logger.warning("Resetting the continuous batching manager.")
+            self.running_continuous_batching_manager.stop(block=True, timeout=2)
+            self.running_continuous_batching_manager = None
+        for model in list(self.loaded_models.values()):
+            model.delete_model()
+        self.last_model = None
 
     def _validate_request(
         self,
@@ -822,6 +946,7 @@ class Serve:
             use_cache=False,
             do_sample=False,
             scheduler="fifo",
+            max_tokens=req.get("max_tokens"),
         )
 
         if self.running_continuous_batching_manager is None:
@@ -834,9 +959,18 @@ class Serve:
             self.running_continuous_batching_manager.start()
 
         # TODO (Joao, Lysandre): this should also work with tool support
+        modality = self.get_model_modality(model, processor=processor)
+        processor_inputs = self.get_processor_inputs_from_inbound_messages(req["messages"], modality)
+
         inputs = processor.apply_chat_template(
-            req["messages"], return_tensors="pt", add_generation_prompt=True, return_dict=True
-        ).to(model.device)["input_ids"][0]
+            processor_inputs,
+            add_generation_prompt=True,
+            tools=req.get("tools"),
+            return_tensors="pt",
+            return_dict=True,
+            tokenize=True,
+        )
+        inputs = inputs["input_ids"][0].to(model.device)
 
         def stream_chat_completion(request_id, decode_stream):
             from ..generation.continuous_batching import RequestStatus
@@ -1072,13 +1206,23 @@ class Serve:
             skip_special_tokens=skip_special_tokens,
             skip_prompt=True,
         )
-        generation_config = create_generation_config_from_req(req, model_generation_config=model.generation_config)
 
-        last_kv_cache = None
         if self.is_continuation(req) and not must_discard_cache:
             seq_len = self.last_kv_cache.get_seq_length()
             if inputs["input_ids"].shape[-1] > seq_len:
                 last_kv_cache = self.last_kv_cache
+            else:
+                last_kv_cache = None
+        else:
+            seq_len = inputs["input_ids"].shape[-1]
+            last_kv_cache = None
+
+        generation_config = create_generation_config_from_req(
+            req,
+            model_generation_config=model.generation_config,
+            max_tokens=req.get("max_tokens"),
+            max_new_tokens=req.get("max_tokens") - seq_len,
+        )
 
         generation_kwargs = {
             **inputs,
@@ -1767,7 +1911,7 @@ class Serve:
             quantization_config = None
 
         if quantization_config is not None:
-            logger.info(f"Quantization applied with the following config: {quantization_config}")
+            logger.warning(f"Quantization applied with the following config: {quantization_config}")
 
         return quantization_config
 
@@ -1788,7 +1932,9 @@ class Serve:
             return model_id
         return f"{model_id}@main"
 
-    def _load_model_and_data_processor(self, model_id_and_revision: str):
+    def _load_model_and_data_processor(
+        self, model_id_and_revision: str, progress_callback: Callable[[dict], None] | None = None
+    ):
         """
         Generic method to load a model and a data processor from a model ID and revision, making use of the serve CLI
         arguments.
@@ -1804,10 +1950,77 @@ class Serve:
             data processor (tokenizer, audio processor, etc.).
         """
         import torch
+        from tqdm.auto import tqdm as base_tqdm
 
         from transformers import AutoConfig, AutoProcessor
 
-        logger.info(f"Loading {model_id_and_revision}")
+        _callback = progress_callback
+        _mid = model_id_and_revision
+
+        if _callback is not None:
+            _open_byte_bars = [0]  # count of currently-open unit="B" bars
+
+            class _SseTqdm(base_tqdm):
+                """Thin tqdm subclass that forwards progress events to the SSE stream."""
+
+                def __init__(self, *args, **kwargs):
+                    # Extract before super().__init__ because disable=True takes an early
+                    # return that skips setting self.desc and self.unit.
+                    self._sse_desc = kwargs.get("desc") or ""
+                    self._sse_unit = kwargs.get("unit") or "it"
+                    kwargs["disable"] = True  # suppress server-side display
+                    super().__init__(*args, **kwargs)
+                    self._n = 0
+                    if self._sse_unit == "B":
+                        _open_byte_bars[0] += 1
+                    # self.total IS set by the disabled path, so read it after super().__init__
+                    _callback(
+                        {
+                            "stage": "tqdm:start",
+                            "model": _mid,
+                            "desc": self._sse_desc,
+                            "total": self.total,
+                            "unit": self._sse_unit,
+                        }
+                    )
+
+                def update(self, n=1):
+                    if n is None:
+                        n = 1
+                    self._n += n
+                    _callback(
+                        {
+                            "stage": "tqdm:update",
+                            "model": _mid,
+                            "desc": self._sse_desc,
+                            "n": self._n,
+                            "total": self.total,  # may grow after init via direct assignment
+                            "unit": self._sse_unit,
+                        }
+                    )
+
+                def close(self):
+                    _callback({"stage": "tqdm:close", "model": _mid, "desc": self._sse_desc})
+                    if self._sse_unit == "B":
+                        _open_byte_bars[0] -= 1
+                        if _open_byte_bars[0] == 0:
+                            _callback({"stage": "model:weights_loading", "model": _mid})
+                    super().close()
+
+            tqdm_class: type | None = _SseTqdm
+        else:
+            tqdm_class = None
+
+        def emit_progress(stage: str, message: str | None = None):
+            if progress_callback is None:
+                return
+            payload = {"stage": stage, "model": model_id_and_revision}
+            if message is not None:
+                payload["message"] = message
+            progress_callback(payload)
+
+        logger.warning(f"Loading {model_id_and_revision}")
+        emit_progress("processor:start", "Loading processor")
 
         if "@" in model_id_and_revision:
             model_id, revision = model_id_and_revision.split("@", 1)
@@ -1830,6 +2043,7 @@ class Serve:
             except OSError:
                 raise OSError("Failed to load processor with `AutoProcessor` and `AutoTokenizer`.")
 
+        emit_progress("processor:ready", "Processor loaded")
         dtype = self.dtype if self.dtype in ["auto", None] else getattr(torch, self.dtype)
         quantization_config = self.get_quantization_config()
 
@@ -1842,9 +2056,13 @@ class Serve:
             "quantization_config": quantization_config,
         }
 
+        emit_progress("config:start", "Loading config")
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
+        emit_progress("config:ready")
         architecture = getattr(transformers, config.architectures[0])
-        model = architecture.from_pretrained(model_id, **model_kwargs)
+        emit_progress("model:start", "Loading model weights")
+        model = architecture.from_pretrained(model_id, tqdm_class=tqdm_class, **model_kwargs)
+        emit_progress("model:ready", "Model weights loaded")
 
         has_default_max_length = (
             model.generation_config.max_new_tokens is None and model.generation_config.max_length == 20
@@ -1855,11 +2073,10 @@ class Serve:
         if has_default_max_length or has_short_max_new_tokens:
             model.generation_config.max_new_tokens = 1024
 
-        logger.info(f"Loaded model {model_id_and_revision}")
         return model, data_processor
 
     def load_model_and_processor(
-        self, model_id_and_revision: str
+        self, model_id_and_revision: str, progress_callback: Callable[[dict], None] | None = None
     ) -> tuple["PreTrainedModel", "PreTrainedTokenizerFast"]:
         """
         Loads the text model and processor from the given model ID and revision into the ServeCommand instance.
@@ -1871,18 +2088,34 @@ class Serve:
         Returns:
             `tuple[PreTrainedModel, PreTrainedTokenizerFast]`: The loaded text model and processor.
         """
+
+        def emit_progress(stage: str, message: str | None = None):
+            if progress_callback is None:
+                return
+            payload = {"stage": stage, "model": model_id_and_revision}
+            if message is not None:
+                payload["message"] = message
+            progress_callback(payload)
+
         if model_id_and_revision not in self.loaded_models or self.loaded_models[model_id_and_revision].is_deleted():
-            model, processor = self._load_model_and_data_processor(model_id_and_revision)
+            emit_progress("start", "Loading model and processor")
+            model, processor = self._load_model_and_data_processor(
+                model_id_and_revision, progress_callback=progress_callback
+            )
             self.loaded_models[model_id_and_revision] = TimedModel(
                 model,
                 timeout_seconds=self.model_timeout,
+                model_id_and_revision=model_id_and_revision,
                 processor=processor,
+                loaded_models=self.loaded_models,
             )
         else:
             self.loaded_models[model_id_and_revision].reset_timer()
             model = self.loaded_models[model_id_and_revision].model
             processor = self.loaded_models[model_id_and_revision].processor
+            emit_progress("cached", "Model already loaded in memory")
 
+        emit_progress("loaded", "Model available")
         return model, processor
 
     def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple["PreTrainedModel", "ProcessorMixin"]:
@@ -1897,6 +2130,7 @@ class Serve:
             `tuple[PreTrainedModel, ProcessorMixin]`: The loaded audio model and processor.
         """
         if model_id_and_revision not in self.loaded_models or self.loaded_models[model_id_and_revision].is_deleted():
+            logger.warning(f"Loading model into cache: {model_id_and_revision}")
             audio_model, audio_processor = self._load_model_and_data_processor(model_id_and_revision)
             self.loaded_models[model_id_and_revision] = TimedModel(
                 audio_model,

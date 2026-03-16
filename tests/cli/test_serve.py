@@ -25,10 +25,19 @@ from parameterized import parameterized
 from transformers import GenerationConfig
 from transformers.cli.serve import Modality, Serve
 from transformers.testing_utils import require_openai, slow
-from transformers.utils.import_utils import is_openai_available
+from transformers.utils.import_utils import (
+    is_fastapi_available,
+    is_openai_available,
+    is_pydantic_available,
+    is_uvicorn_available,
+)
 
 
-if is_openai_available():
+serve_dependencies_available = (
+    is_pydantic_available() and is_fastapi_available() and is_uvicorn_available() and is_openai_available()
+)
+
+if serve_dependencies_available:
     from openai import APIConnectionError, OpenAI
     from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall, ChoiceDeltaToolCallFunction
     from openai.types.responses import (
