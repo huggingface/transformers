@@ -15,6 +15,7 @@ from collections.abc import Iterable
 
 import numpy as np
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
@@ -96,6 +97,7 @@ def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):
 
 
 @auto_docstring(checkpoint="rhymes-ai/Aria")
+@strict(accept_kwargs=True)
 class AriaTextConfig(LlamaConfig):
     r"""
     moe_num_experts (`int`, *optional*, defaults to 8):
@@ -118,25 +120,16 @@ class AriaTextConfig(LlamaConfig):
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
     }
 
-    def __init__(
-        self,
-        intermediate_size: int = 4096,
-        moe_num_experts: int = 8,
-        moe_topk: int = 2,
-        moe_num_shared_experts: int = 2,
-        pad_token_id=2,
-        dummy_kwarg=None,
-        **super_kwargs,
-    ):
-        self.intermediate_size = intermediate_size
-        self.moe_num_experts = moe_num_experts
-        self.moe_topk = moe_topk
-        self.moe_num_shared_experts = moe_num_shared_experts
-        self.dummy_kwarg = dummy_kwarg
-        super().__init__(pad_token_id=pad_token_id, **super_kwargs)
+    intermediate_size: int = 4096
+    moe_num_experts: int = 8
+    moe_topk: int = 2
+    moe_num_shared_experts: int = 2
+    pad_token_id: int | None = 2
+    dummy_kwarg: int | None = None
 
 
 @auto_docstring(checkpoint="rhymes-ai/Aria")
+@strict(accept_kwargs=True)
 class AriaConfig(PreTrainedConfig):
     r"""
     projector_patch_to_query_dict (`dict`, *optional*):
@@ -149,47 +142,37 @@ class AriaConfig(PreTrainedConfig):
     }
     sub_configs = {"text_config": AriaTextConfig, "vision_config": AutoConfig}
 
-    def __init__(
-        self,
-        vision_config=None,
-        vision_feature_layer: int = -1,
-        text_config: AriaTextConfig = None,
-        projector_patch_to_query_dict: dict | None = None,
-        image_token_index: int | None = 9,
-        initializer_range: float | None = 0.02,
-        tie_word_embeddings: bool | None = False,
-        **kwargs,
-    ):
-        self.image_token_index = image_token_index
+    vision_config: dict | PreTrainedConfig | None = None
+    text_config: dict | AriaTextConfig | None = None
+    vision_feature_layer: int | list[int] = -1
+    projector_patch_to_query_dict: dict | None = None
+    image_token_index: int = 9
+    initializer_range: float = 0.02
+    tie_word_embeddings: bool = False
 
+    def __post_init__(self, **kwargs):
         # Convert the keys and values of projector_patch_to_query_dict to integers
         # This ensures consistency even if they were provided as strings
-        if projector_patch_to_query_dict is None:
-            projector_patch_to_query_dict = {
+        if self.projector_patch_to_query_dict is None:
+            self.projector_patch_to_query_dict = {
                 1225: 128,
                 4900: 256,
             }
-        self.projector_patch_to_query_dict = {int(k): int(v) for k, v in projector_patch_to_query_dict.items()}
+        self.projector_patch_to_query_dict = {int(k): int(v) for k, v in self.projector_patch_to_query_dict.items()}
         self.max_value_projector_patch_to_query_dict = max(self.projector_patch_to_query_dict.values())
-        self.vision_feature_layer = vision_feature_layer
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = "idefics3_vision"
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        elif vision_config is None:
-            vision_config = CONFIG_MAPPING["idefics3_vision"]()
 
-        self.vision_config = vision_config
-        self.initializer_range = initializer_range
+        if isinstance(self.vision_config, dict):
+            self.vision_config["model_type"] = "idefics3_vision"
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = CONFIG_MAPPING["idefics3_vision"]()
 
-        if isinstance(text_config, dict) and "model_type" in text_config:
-            text_config = AriaTextConfig(**text_config)
-        elif text_config is None:
-            text_config = AriaTextConfig()
+        if isinstance(self.text_config, dict) and "model_type" in self.text_config:
+            self.text_config = AriaTextConfig(**self.text_config)
+        elif self.text_config is None:
+            self.text_config = AriaTextConfig()
 
-        self.text_config = text_config
-        self.tie_word_embeddings = tie_word_embeddings
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 class AriaTextRMSNorm(LlamaRMSNorm):
@@ -1184,7 +1167,7 @@ class AriaModel(LlavaModel):
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: torch.FloatTensor | None = None,
-        vision_feature_layer: int = -1,
+        vision_feature_layer: int | list[int] = -1,
         output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -1269,7 +1252,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: torch.FloatTensor | None = None,
-        vision_feature_layer: int = -1,
+        vision_feature_layer: int | list[int] = -1,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(

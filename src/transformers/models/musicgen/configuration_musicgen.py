@@ -13,15 +13,17 @@
 # limitations under the License.
 """MusicGen model configuration"""
 
+from typing import ClassVar
+
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
 
 
-logger = logging.get_logger(__name__)
-
-
 @auto_docstring(checkpoint="facebook/musicgen-small")
+@strict(accept_kwargs=True)
 class MusicgenDecoderConfig(PreTrainedConfig):
     r"""
     audio_channels (`int`, *optional*, defaults to 1
@@ -33,64 +35,38 @@ class MusicgenDecoderConfig(PreTrainedConfig):
     base_config_key = "decoder_config"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        vocab_size=2048,
-        max_position_embeddings=2048,
-        num_hidden_layers=24,
-        ffn_dim=4096,
-        num_attention_heads=16,
-        layerdrop=0.0,
-        use_cache=True,
-        activation_function="gelu",
-        hidden_size=1024,
-        dropout=0.1,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        initializer_factor=0.02,
-        scale_embedding=False,
-        num_codebooks=4,
-        audio_channels=1,
-        pad_token_id=2048,
-        bos_token_id=2048,
-        eos_token_id=None,
-        tie_word_embeddings=False,
-        is_decoder=False,
-        add_cross_attention=False,
-        cross_attention_hidden_size=None,
-        **kwargs,
-    ):
-        self.is_decoder = is_decoder
-        self.add_cross_attention = add_cross_attention
-        self.cross_attention_hidden_size = cross_attention_hidden_size
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.ffn_dim = ffn_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.activation_function = activation_function
-        self.initializer_factor = initializer_factor
-        self.layerdrop = layerdrop
-        self.use_cache = use_cache
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.num_codebooks = num_codebooks
+    vocab_size: int = 2048
+    max_position_embeddings: int = 2048
+    num_hidden_layers: int = 24
+    ffn_dim: int = 4096
+    num_attention_heads: int = 16
+    layerdrop: float | int = 0.0
+    use_cache: bool = True
+    activation_function: str = "gelu"
+    hidden_size: int = 1024
+    dropout: float | int = 0.1
+    attention_dropout: float | int = 0.0
+    activation_dropout: float | int = 0.0
+    initializer_factor: float = 0.02
+    scale_embedding: bool = False
+    num_codebooks: int = 4
+    audio_channels: int = 1
+    pad_token_id: int | None = 2048
+    bos_token_id: int | None = 2048
+    eos_token_id: int | list[int] | None = None
+    tie_word_embeddings: bool = False
+    is_decoder: bool = False
+    add_cross_attention: bool = False
+    cross_attention_hidden_size: int | None = None
 
-        if audio_channels not in [1, 2]:
-            raise ValueError(f"Expected 1 (mono) or 2 (stereo) audio channels, got {audio_channels} channels.")
-        self.audio_channels = audio_channels
-
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        super().__init__(**kwargs)
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.audio_channels not in [1, 2]:
+            raise ValueError(f"Expected 1 (mono) or 2 (stereo) audio channels, got {self.audio_channels} channels.")
 
 
 @auto_docstring(checkpoint="facebook/musicgen-small")
+@strict(accept_kwargs=True)
 class MusicgenConfig(PreTrainedConfig):
     r"""
     text_encoder (`Union[dict, `PretrainedConfig`]`):
@@ -139,34 +115,43 @@ class MusicgenConfig(PreTrainedConfig):
     >>> model = MusicgenForConditionalGeneration.from_pretrained("musicgen-model", config=musicgen_config)
     ```"""
 
-    model_type = "musicgen"
-    sub_configs = {
+    model_type: ClassVar[str] = "musicgen"
+    sub_configs: ClassVar[dict[str, type[PreTrainedConfig]]] = {
         "text_encoder": AutoConfig,
         "audio_encoder": AutoConfig,
         "decoder": MusicgenDecoderConfig,
     }
-    has_no_defaults_at_init = True
+    has_no_defaults_at_init: ClassVar[bool] = True
 
-    def __init__(self, text_encoder, audio_encoder, decoder, **kwargs):
-        if isinstance(text_encoder, dict):
-            text_encoder_model_type = text_encoder.pop("model_type")
-            text_encoder = AutoConfig.for_model(text_encoder_model_type, **text_encoder)
+    text_encoder: dict | PreTrainedConfig = None
+    audio_encoder: dict | PreTrainedConfig = None
+    decoder: dict | PreTrainedConfig = None
+    initializer_factor: float = 0.02
 
-        if isinstance(audio_encoder, dict):
-            audio_encoder_model_type = audio_encoder.pop("model_type")
-            audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **audio_encoder)
+    def __post_init__(self, **kwargs):
+        if isinstance(self.text_encoder, dict):
+            text_encoder_model_type = self.text_encoder.pop("model_type")
+            self.text_encoder = AutoConfig.for_model(text_encoder_model_type, **self.text_encoder)
+        elif self.text_encoder is None:
+            raise ValueError(
+                f"A configuration of type {self.model_type} cannot be instantiated because text_encoder is not passed"
+            )
 
-        if isinstance(decoder, dict):
-            decoder = MusicgenDecoderConfig(**decoder)
+        if isinstance(self.audio_encoder, dict):
+            audio_encoder_model_type = self.audio_encoder.pop("model_type")
+            self.audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **self.audio_encoder)
+        elif self.audio_encoder is None:
+            raise ValueError(
+                f"A configuration of type {self.model_type} cannot be instantiated because audio_encoder is not passed"
+            )
 
-        self.text_encoder = text_encoder
-        self.audio_encoder = audio_encoder
-        self.decoder = decoder
-        self.initializer_factor = self.decoder.initializer_factor
-        self.tie_encoder_decoder = kwargs.get("tie_encoder_decoder", False)
+        if isinstance(self.decoder, dict):
+            self.decoder = MusicgenDecoderConfig(**self.decoder)
+        elif self.decoder is None:
+            self.decoder = MusicgenDecoderConfig()
 
-        kwargs["is_encoder_decoder"] = True
-        super().__init__(**kwargs)
+        self.is_encoder_decoder = True
+        super().__post_init__(**kwargs)
 
     @property
     # This is a property because you might want to change the codec model on the fly

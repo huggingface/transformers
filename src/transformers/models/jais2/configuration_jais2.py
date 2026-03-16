@@ -19,12 +19,16 @@
 # limitations under the License.
 
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
+from ...utils.type_validators import interval
 
 
 @auto_docstring(checkpoint="inceptionai/Jais-2-8B-Chat")
+@strict(accept_kwargs=True)
 class Jais2Config(PreTrainedConfig):
     r"""
     ```python
@@ -42,7 +46,6 @@ class Jais2Config(PreTrainedConfig):
 
     model_type = "jais2"
     keys_to_ignore_at_inference = ["past_key_values"]
-
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -57,57 +60,42 @@ class Jais2Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 150272,
-        hidden_size: int | None = 3328,
-        intermediate_size: int | None = 26624,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 26,
-        num_key_value_heads: int | None = None,
-        hidden_act: str | None = "relu2",
-        max_position_embeddings: int | None = 8192,
-        initializer_range: float | None = 0.02,
-        layer_norm_eps: float | None = 1e-5,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = 0,
-        eos_token_id: int | None = 150024,
-        tie_word_embeddings: bool | None = False,
-        attention_bias: bool | None = True,
-        attention_dropout: float | None = 0.0,
-        mlp_bias: bool | None = True,
-        head_dim: int | None = None,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vocab_size: int = 150272
+    hidden_size: int = 3328
+    intermediate_size: int = 26624
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 26
+    num_key_value_heads: int | None = None
+    hidden_act: str = "relu2"
+    max_position_embeddings: int = 8192
+    initializer_range: float = interval(min=0.0, max=1.0)(default=0.02)
+    use_cache: bool = True
+    pad_token_id: int | None = None
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 150024
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = True
+    attention_dropout: int | float | None = 0.0
+    mlp_bias: bool = True
+    head_dim: int | None = None
+    layer_norm_eps: float = 1e-5
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.mlp_bias = mlp_bias
-        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        self.rope_parameters = rope_parameters
+        super().__post_init__(**kwargs)
 
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        super().__init__(**kwargs)
-        self.layer_norm_eps = layer_norm_eps
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({self.num_attention_heads})."
+            )
 
 
 __all__ = ["Jais2Config"]

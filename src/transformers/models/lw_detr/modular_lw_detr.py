@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
@@ -27,7 +28,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
@@ -52,10 +53,8 @@ from ..vitdet.modeling_vitdet import (
 )
 
 
-logger = logging.get_logger(__name__)
-
-
 @auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
+@strict(accept_kwargs=True)
 class LwDetrViTConfig(VitDetConfig):
     r"""
     pretrain_image_size (`int`, *optional*, defaults to 224):
@@ -87,68 +86,33 @@ class LwDetrViTConfig(VitDetConfig):
 
     model_type = "lw_detr_vit"
 
-    def __init__(
-        self,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        mlp_ratio=4,
-        hidden_act="gelu",
-        dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-6,
-        image_size=256,
-        pretrain_image_size=224,
-        patch_size=16,
-        num_channels=3,
-        qkv_bias=True,
-        window_block_indices=[],
-        use_absolute_position_embeddings=True,
-        out_features=None,
-        out_indices=None,
-        cae_init_values: float = 0.1,
-        num_windows=16,
-        **kwargs,
-    ):
-        super().__init__(
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            mlp_ratio=mlp_ratio,
-            hidden_act=hidden_act,
-            dropout_prob=dropout_prob,
-            initializer_range=initializer_range,
-            layer_norm_eps=layer_norm_eps,
-            image_size=image_size,
-            pretrain_image_size=pretrain_image_size,
-            patch_size=patch_size,
-            num_channels=num_channels,
-            qkv_bias=qkv_bias,
-            window_block_indices=window_block_indices,
-            use_absolute_position_embeddings=use_absolute_position_embeddings,
-            out_features=out_features,
-            out_indices=out_indices,
-            **kwargs,
-        )
-        del self.residual_block_indices
-        del self.use_relative_position_embeddings
-        del self.window_size
-        del self.drop_path_rate
+    image_size: int | list[int] | tuple[int, int] = 256
+    cae_init_values: float = 0.1
+    num_windows: int = 16
 
-        self.cae_init_values = cae_init_values
-        if num_windows % math.sqrt(num_windows) != 0:
+    residual_block_indices = AttributeError()
+    use_relative_position_embeddings = AttributeError()
+    window_size = AttributeError()
+    drop_path_rate = AttributeError()
+
+    def __post_init__(self, **kwargs):
+        self.num_windows_side = int(math.sqrt(self.num_windows))
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.num_windows % math.sqrt(self.num_windows) != 0:
             raise ValueError(
-                f"`num_windows` has to be a perfect square, where num_windows % math.sqrt(num_windows) != 0, but got {num_windows}."
+                f"`num_windows` has to be a perfect square, where num_windows % math.sqrt(num_windows) != 0, but got {self.num_windows}."
             )
-        if image_size / num_windows % math.sqrt(num_windows) != 0:
+        if self.image_size / self.num_windows % math.sqrt(self.num_windows) != 0:
             raise ValueError(
-                f"`image_size` has to be divisible by `num_windows`, where image_size / num_windows % math.sqrt(num_windows) != 0,but got {image_size} and {num_windows}."
+                f"`image_size` has to be divisible by `num_windows`, where image_size / num_windows % math.sqrt(num_windows) != 0,but got {self.image_size} and {self.num_windows}."
             )
-        self.num_windows = num_windows
-        self.num_windows_side = int(math.sqrt(num_windows))
 
 
 @auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
+@strict(accept_kwargs=True)
 class LwDetrConfig(PreTrainedConfig):
     r"""
     projector_scale_factors (`list[float]`, *optional*, defaults to `[]`):
@@ -201,50 +165,41 @@ class LwDetrConfig(PreTrainedConfig):
     model_type = "lw_detr"
     sub_configs = {"backbone_config": AutoConfig}
 
-    def __init__(
-        self,
-        # backbone
-        backbone_config=None,
-        # projector
-        projector_scale_factors: list[float] = [],
-        hidden_expansion=0.5,
-        c2f_num_blocks=3,
-        activation_function="silu",
-        batch_norm_eps=1e-5,
-        # decoder
-        d_model=256,
-        dropout=0.0,
-        decoder_ffn_dim=2048,
-        decoder_n_points=4,
-        decoder_layers: int = 3,
-        decoder_self_attention_heads: int = 8,
-        decoder_cross_attention_heads: int = 16,
-        decoder_activation_function="relu",
-        # model
-        num_queries=300,
-        attention_bias=True,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        group_detr: int = 13,
-        init_std=0.02,
-        disable_custom_kernels=True,
-        # loss
-        class_cost=2,
-        bbox_cost=5,
-        giou_cost=2,
-        mask_loss_coefficient=1,
-        dice_loss_coefficient=1,
-        bbox_loss_coefficient=5,
-        giou_loss_coefficient=2,
-        eos_coefficient=0.1,
-        focal_alpha=0.25,
-        auxiliary_loss=True,
-        **kwargs,
-    ):
-        self.batch_norm_eps = batch_norm_eps
+    backbone_config: dict | PreTrainedConfig | None = None
+    projector_scale_factors: list[float] | tuple[float, ...] = ()
+    hidden_expansion: float = 0.5
+    c2f_num_blocks: int = 3
+    activation_function: str = "silu"
+    batch_norm_eps: float = 1e-5
+    dropout: float | int = 0.0
+    decoder_ffn_dim: int = 2048
+    decoder_n_points: int = 4
+    decoder_layers: int = 3
+    decoder_self_attention_heads: int = 8
+    decoder_cross_attention_heads: int = 16
+    decoder_activation_function: str = "relu"
+    num_queries: int = 300
+    attention_bias: bool = True
+    attention_dropout: float | int = 0.0
+    activation_dropout: float | int = 0.0
+    group_detr: int = 13
+    init_std: float = 0.02
+    disable_custom_kernels: bool = True
+    class_cost: int = 2
+    bbox_cost: int = 5
+    giou_cost: int = 2
+    mask_loss_coefficient: int = 1
+    dice_loss_coefficient: int = 1
+    bbox_loss_coefficient: int = 5
+    giou_loss_coefficient: int = 2
+    eos_coefficient: float = 0.1
+    focal_alpha: float = 0.25
+    auxiliary_loss: bool = True
+    d_model: int = 256
 
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+    def __post_init__(self, **kwargs):
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_config_type="lw_detr_vit",
             default_config_kwargs={
                 "image_size": 1024,
@@ -256,48 +211,16 @@ class LwDetrConfig(PreTrainedConfig):
             **kwargs,
         )
 
-        self.backbone_config = backbone_config
-        # projector
-        self.projector_scale_factors = projector_scale_factors
-        for scale in projector_scale_factors:
+        self.projector_in_channels = [self.d_model] * len(self.projector_scale_factors)
+        self.projector_out_channels = self.d_model
+        self.num_feature_levels = len(self.projector_scale_factors)
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        for scale in self.projector_scale_factors:
             if scale not in [0.5, 1.0, 2.0]:
                 raise ValueError(f"Unsupported scale factor: {scale}")
-        self.projector_in_channels = [d_model] * len(projector_scale_factors)
-        self.projector_out_channels = d_model
-        self.activation_function = activation_function
-        self.hidden_expansion = hidden_expansion
-        self.c2f_num_blocks = c2f_num_blocks
-        # decoder
-        self.d_model = d_model
-        self.dropout = dropout
-        self.num_queries = num_queries
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.num_feature_levels = len(self.projector_scale_factors)
-        self.decoder_n_points = decoder_n_points
-        self.decoder_layers = decoder_layers
-        self.decoder_activation_function = decoder_activation_function
-        self.decoder_self_attention_heads = decoder_self_attention_heads
-        self.decoder_cross_attention_heads = decoder_cross_attention_heads
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        # model
-        self.init_std = init_std
-        self.group_detr = group_detr
-        # Loss
-        self.auxiliary_loss = auxiliary_loss
-        # Hungarian matcher
-        self.class_cost = class_cost
-        self.bbox_cost = bbox_cost
-        self.giou_cost = giou_cost
-        # Loss coefficients
-        self.dice_loss_coefficient = dice_loss_coefficient
-        self.bbox_loss_coefficient = bbox_loss_coefficient
-        self.giou_loss_coefficient = giou_loss_coefficient
-        self.eos_coefficient = eos_coefficient
-        self.focal_alpha = focal_alpha
-        self.disable_custom_kernels = disable_custom_kernels
-        super().__init__(**kwargs)
 
 
 class LwDetrViTSelfAttention(ViTSelfAttention):
