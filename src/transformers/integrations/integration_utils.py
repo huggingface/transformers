@@ -210,7 +210,7 @@ def is_swanlab_available():
 def is_kubeflow_available():
     if os.getenv("DISABLE_KUBEFLOW_INTEGRATION", "FALSE").upper() == "TRUE":
         return False
-    return os.getenv("KUBEFLOW_TRAINER_STATUS_URL") is not None
+    return os.getenv("KUBEFLOW_TRAINER_SERVER_URL") is not None
 
 
 def hp_params(trial):
@@ -2372,9 +2372,9 @@ class KubeflowCallback(TrainerCallback):
 
     **Environment Variables (injected by controller):**
 
-    - `KUBEFLOW_TRAINER_STATUS_URL`: HTTPS endpoint for status updates
-    - `KUBEFLOW_TRAINER_STATUS_CA_CERT`: Path to CA certificate for TLS verification
-    - `KUBEFLOW_TRAINER_STATUS_TOKEN`: Path to service account token for authentication
+    - `KUBEFLOW_TRAINER_SERVER_URL`: HTTPS endpoint for status updates
+    - `KUBEFLOW_TRAINER_SERVER_CA_CERT`: Path to CA certificate for TLS verification
+    - `KUBEFLOW_TRAINER_SERVER_TOKEN`: Path to service account token for authentication
 
     **Reported Information:**
 
@@ -2394,15 +2394,15 @@ class KubeflowCallback(TrainerCallback):
 
     _MIN_UPDATE_INTERVAL = 5.0
     _TOKEN_CACHE_DURATION = 300.0  # 5 minutes, aligned with SDK
-    _ENV_STATUS_URL = "KUBEFLOW_TRAINER_STATUS_URL"
-    _ENV_CA_CERT = "KUBEFLOW_TRAINER_STATUS_CA_CERT"
-    _ENV_TOKEN_PATH = "KUBEFLOW_TRAINER_STATUS_TOKEN"
+    _ENV_SERVER_URL = "KUBEFLOW_TRAINER_SERVER_URL"
+    _ENV_CA_CERT = "KUBEFLOW_TRAINER_SERVER_CA_CERT"
+    _ENV_TOKEN_PATH = "KUBEFLOW_TRAINER_SERVER_TOKEN"
 
     def __init__(self):
         if not is_kubeflow_available():
             raise RuntimeError(
-                "KubeflowCallback requires KUBEFLOW_TRAINER_STATUS_URL environment variable to be set. "
-                "This is automatically set when running inside a Kubeflow TrainJob with TrainJobProgress enabled."
+                "KubeflowCallback requires KUBEFLOW_TRAINER_SERVER_URL environment variable to be set. "
+                "This is automatically set when running inside a Kubeflow TrainJob with TrainJobRuntimeStatus enabled."
             )
 
         self._initialized = False
@@ -2443,7 +2443,7 @@ class KubeflowCallback(TrainerCallback):
         from datetime import datetime, timezone
 
         try:
-            url = os.environ.get(self._ENV_STATUS_URL)
+            url = os.environ.get(self._ENV_SERVER_URL)
             if not url:
                 return False
 

@@ -804,7 +804,7 @@ class KubeflowCallbackTest(unittest.TestCase):
 
     def _create_callback(self, fake_update_status):
         """Create a KubeflowCallback with mocked _update_status method."""
-        with patch.dict(os.environ, {"KUBEFLOW_TRAINER_STATUS_URL": "https://test-url"}, clear=False):
+        with patch.dict(os.environ, {"KUBEFLOW_TRAINER_SERVER_URL": "https://test-url"}, clear=False):
             with patch("transformers.integrations.integration_utils.is_kubeflow_available", return_value=True):
                 with patch(
                     "transformers.integrations.integration_utils.KubeflowCallback.__init__",
@@ -950,7 +950,7 @@ class KubeflowCallbackTest(unittest.TestCase):
         """_update_status should throttle requests unless force=True."""
         import time
 
-        with patch.dict(os.environ, {"KUBEFLOW_TRAINER_STATUS_URL": "https://test-url"}, clear=False):
+        with patch.dict(os.environ, {"KUBEFLOW_TRAINER_SERVER_URL": "https://test-url"}, clear=False):
             with patch("transformers.integrations.integration_utils.is_kubeflow_available", return_value=True):
                 with patch(
                     "transformers.integrations.integration_utils.KubeflowCallback.__init__",
@@ -980,7 +980,7 @@ class KubeflowCallbackTest(unittest.TestCase):
                         self.assertFalse(result2)
 
     def test_update_status_returns_false_without_url(self):
-        """_update_status should return False if KUBEFLOW_TRAINER_STATUS_URL is not set."""
+        """_update_status should return False if KUBEFLOW_TRAINER_SERVER_URL is not set."""
         with patch.dict(os.environ, {}, clear=True):
             with patch("transformers.integrations.integration_utils.is_kubeflow_available", return_value=True):
                 with patch(
@@ -1005,7 +1005,7 @@ class KubeflowCallbackTest(unittest.TestCase):
             token_path = f.name
 
         try:
-            with patch.dict(os.environ, {"KUBEFLOW_TRAINER_STATUS_TOKEN": token_path}, clear=False):
+            with patch.dict(os.environ, {"KUBEFLOW_TRAINER_SERVER_TOKEN": token_path}, clear=False):
                 with patch("transformers.integrations.integration_utils.is_kubeflow_available", return_value=True):
                     with patch(
                         "transformers.integrations.integration_utils.KubeflowCallback.__init__",
