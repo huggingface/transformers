@@ -283,7 +283,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mistral", "MistralModel"),
         ("mistral3", "Mistral3Model"),
         ("mixtral", "MixtralModel"),
-        ("mlcd", "MLCDVisionModel"),
+        ("mlcd", "MLCDVisionModel"),  # Keep this to make some original hub repositories (from `DeepGlint-AI`) works
         ("mlcd_vision_model", "MLCDVisionModel"),
         ("mllama", "MllamaModel"),
         ("mm-grounding-dino", "MMGroundingDinoModel"),
@@ -770,7 +770,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("imagegpt", "ImageGPTModel"),
         ("levit", "LevitModel"),
         ("llama4", "Llama4VisionModel"),
-        ("mlcd", "MLCDVisionModel"),
+        ("mlcd", "MLCDVisionModel"),  # Keep this to make some original hub repositories (from `DeepGlint-AI`) works
         ("mlcd_vision_model", "MLCDVisionModel"),
         ("mllama", "MllamaVisionModel"),
         ("mobilenet_v1", "MobileNetV1Model"),
