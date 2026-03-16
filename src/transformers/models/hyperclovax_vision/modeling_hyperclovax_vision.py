@@ -36,6 +36,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.auto import AutoModel
+from ...models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ...models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionTransformerPretrainedModel,
     Qwen2_5_VLModelOutputWithPast,
@@ -622,7 +623,7 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
     def __init__(self, config: HCXVisionConfig) -> None:
         super().__init__(config)
 
-        if config.vision_config.architectures[0] == "Qwen2_5_VisionTransformerPretrainedModel":
+        if isinstance(config.vision_config, Qwen2_5_VLVisionConfig):
             vision_config = Qwen2_5_VisionTransformerPretrainedModel(config.vision_config)
         else:
             vision_config = AutoModel.from_config(config.vision_config)

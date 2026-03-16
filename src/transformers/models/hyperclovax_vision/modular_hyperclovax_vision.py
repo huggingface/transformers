@@ -37,7 +37,12 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
 )
-from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionTransformerPretrainedModel, Qwen2_5_VLModelOutputWithPast
+from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
+from ..qwen2_5_vl.modeling_qwen2_5_vl import (
+    Qwen2_5_VisionRotaryEmbedding,
+    Qwen2_5_VisionTransformerPretrainedModel,
+    Qwen2_5_VLModelOutputWithPast,
+)
 from .configuration_hyperclovax_vision import HCXVisionConfig, HyperClovaXConfig
 
 
@@ -364,7 +369,7 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
     def __init__(self, config: HCXVisionConfig) -> None:
         super().__init__(config)
 
-        if config.vision_config.architectures[0] == "Qwen2_5_VisionTransformerPretrainedModel":
+        if isinstance(config.vision_config, Qwen2_5_VLVisionConfig):
             vision_config = Qwen2_5_VisionTransformerPretrainedModel(config.vision_config)
         else:
             vision_config = AutoModel.from_config(config.vision_config)
