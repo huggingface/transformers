@@ -286,6 +286,12 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "falcon_mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
 }
 
+# Mapping from standard attention implementation names to hub kernel repos
+_ATTN_IMPLEMENTATION_TO_KERNEL: dict[str, str] = {
+    "flash_attention_2": "kernels-community/flash-attn2",
+    "flash_attention_3": "kernels-community/flash-attn3",
+}
+
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
 
 
@@ -317,6 +323,11 @@ def load_and_register_attn_kernel(
     from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
 
     actual_attn_name = attn_implementation.split("|")[1] if "|" in attn_implementation else attn_implementation
+
+    # Map standard attention names to hub kernel repos if not already a kernel format
+    if not is_kernel(actual_attn_name) and actual_attn_name in _ATTN_IMPLEMENTATION_TO_KERNEL:
+        actual_attn_name = _ATTN_IMPLEMENTATION_TO_KERNEL[actual_attn_name]
+
     if not is_kernel(actual_attn_name):
         return None
     if not _kernels_available:
