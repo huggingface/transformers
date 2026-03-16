@@ -39,7 +39,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, int_div_ceil, is_vision_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -206,8 +206,8 @@ class Gemma3ImageProcessor(BaseImageProcessor):
             num_crops_h = min(pan_and_scan_max_num_crops, num_crops_h)
             num_crops_w = 1
 
-        crop_size_w = int(math.ceil(width / num_crops_w))
-        crop_size_h = int(math.ceil(height / num_crops_h))
+        crop_size_w = int_div_ceil(width, num_crops_w)
+        crop_size_h = int_div_ceil(height, num_crops_h)
 
         # Don't apply PaS if crop size is too small.
         if min(crop_size_w, crop_size_h) < pan_and_scan_min_crop_size:

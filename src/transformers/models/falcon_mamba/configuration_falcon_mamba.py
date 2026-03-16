@@ -17,10 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
-
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring
+from ...utils import auto_docstring, int_div_ceil
 
 
 @auto_docstring(checkpoint="tiiuae/falcon-mamba-7b")
@@ -117,7 +115,7 @@ class FalconMambaConfig(PreTrainedConfig):
         self.use_conv_bias = use_conv_bias
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        self.time_step_rank = math.ceil(self.hidden_size / 16) if time_step_rank == "auto" else time_step_rank
+        self.time_step_rank = int_div_ceil(self.hidden_size, 16) if time_step_rank == "auto" else time_step_rank
         self.time_step_scale = time_step_scale
         self.time_step_min = time_step_min
         self.time_step_max = time_step_max

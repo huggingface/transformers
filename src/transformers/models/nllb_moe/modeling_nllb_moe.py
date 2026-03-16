@@ -37,7 +37,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, int_div_ceil, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_nllb_moe import NllbMoeConfig
@@ -269,7 +269,7 @@ class NllbMoeTop2Router(nn.Module):
         if not self.training and self.moe_eval_capacity_token_fraction > 0:
             self.expert_capacity = math.ceil(self.moe_eval_capacity_token_fraction * nb_tokens)
         else:
-            capacity = 2 * math.ceil(nb_tokens / self.num_experts)
+            capacity = 2 * int_div_ceil(nb_tokens, self.num_experts)
             self.expert_capacity = capacity if self.expert_capacity is None else self.expert_capacity
 
         # Remove locations outside capacity from ( cumsum < capacity = False will not be routed)

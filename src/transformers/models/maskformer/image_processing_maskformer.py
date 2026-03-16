@@ -13,7 +13,6 @@
 # limitations under the License.
 """Image processor class for MaskFormer."""
 
-import math
 from collections.abc import Iterable
 from typing import Any
 
@@ -46,6 +45,7 @@ from ...utils import (
     IMAGENET_DEFAULT_STD,
     TensorType,
     filter_out_non_signature_kwargs,
+    int_div_ceil,
     is_torch_available,
     is_torch_tensor,
     logging,
@@ -359,8 +359,8 @@ def get_maskformer_resize_output_image_size(
 
     if size_divisor > 0:
         height, width = output_size
-        height = int(math.ceil(height / size_divisor) * size_divisor)
-        width = int(math.ceil(width / size_divisor) * size_divisor)
+        height = int_div_ceil(height, size_divisor) * size_divisor
+        width = int_div_ceil(width, size_divisor) * size_divisor
         output_size = (height, width)
 
     return output_size

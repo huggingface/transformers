@@ -20,7 +20,6 @@ import copy
 import datetime
 import io
 import json
-import math
 import os
 import re
 import sys
@@ -43,6 +42,7 @@ from torch.utils.data.distributed import DistributedSampler
 from .integrations.deepspeed import is_deepspeed_zero3_enabled
 from .tokenization_utils_base import BatchEncoding
 from .utils import (
+    int_div_ceil,
     is_sagemaker_mp_enabled,
     is_torch_available,
     is_torch_xla_available,
@@ -612,9 +612,9 @@ class DistributedLengthGroupedSampler(DistributedSampler):
             # Split to nearest available length that is evenly divisible.
             # This is to ensure each rank receives the same amount of data when
             # using this Sampler.
-            self.num_samples = math.ceil((len(self.lengths) - self.num_replicas) / self.num_replicas)
+            self.num_samples = int_div_ceil(len(self.lengths) - self.num_replicas, self.num_replicas)
         else:
-            self.num_samples = math.ceil(len(self.lengths) / self.num_replicas)
+            self.num_samples = int_div_ceil(len(self.lengths), self.num_replicas)
         self.total_size = self.num_samples * self.num_replicas
         self.seed = seed
 
@@ -664,7 +664,7 @@ class ShardSampler(Sampler):
 
         self.total_batch_size = total_batch_size = batch_size * num_processes
 
-        num_batches = len(dataset) // total_batch_size if drop_last else math.ceil(len(dataset) / total_batch_size)
+        num_batches = len(dataset) // total_batch_size if drop_last else int_div_ceil(len(dataset), total_batch_size)
         self.total_num_samples = num_batches * total_batch_size
 
     def __iter__(self):
@@ -788,7 +788,7 @@ class IterableDatasetShard(IterableDataset):
         if self.drop_last:
             return (len(self.dataset) // (self.batch_size * self.num_processes)) * self.batch_size
         else:
-            return math.ceil(len(self.dataset) / (self.batch_size * self.num_processes)) * self.batch_size
+            return int_div_ceil(len(self.dataset), self.batch_size * self.num_processes) * self.batch_size
 
 
 def _secs2timedelta(secs):

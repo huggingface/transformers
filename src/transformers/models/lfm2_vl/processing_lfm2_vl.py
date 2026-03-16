@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
@@ -22,7 +21,7 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import BatchEncoding, TextInput
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, int_div_ceil, logging
 
 
 logger = logging.get_logger(__name__)
@@ -215,14 +214,14 @@ class Lfm2VlProcessor(ProcessorMixin):
     def _compute_tokens_per_tile(self, tile_size: int, encoder_patch_size: int, downsample_factor: int) -> int:
         """Compute the number of tokens for a single tile."""
         num_patches = tile_size // encoder_patch_size
-        downsampled_patches = math.ceil(num_patches / downsample_factor)
+        downsampled_patches = int_div_ceil(num_patches, downsample_factor)
         return downsampled_patches * downsampled_patches
 
     def _compute_tokens_for_image(self, image_size: list[int], encoder_patch_size: int, downsample_factor: int) -> int:
         """Compute the number of tokens for a resized image (used for single-tile or thumbnail)."""
         image_height, image_width = image_size
-        patches_h = math.ceil((image_height // encoder_patch_size) / downsample_factor)
-        patches_w = math.ceil((image_width // encoder_patch_size) / downsample_factor)
+        patches_h = int_div_ceil(image_height // encoder_patch_size, downsample_factor)
+        patches_w = int_div_ceil(image_width // encoder_patch_size, downsample_factor)
         return patches_h * patches_w
 
     def _get_image_num_tokens(self, image_size: list[int], **images_kwargs) -> tuple[int, int]:

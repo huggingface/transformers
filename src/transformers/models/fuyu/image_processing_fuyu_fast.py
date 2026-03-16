@@ -13,7 +13,6 @@
 # limitations under the License.
 """Fast Image processor class for Fuyu."""
 
-import math
 from typing import Optional
 
 import torch
@@ -32,6 +31,7 @@ from ...image_utils import (
 from ...utils import (
     TensorType,
     auto_docstring,
+    int_div_ceil,
     is_torchvision_available,
     logging,
     requires_backends,
@@ -286,15 +286,8 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
                     image_height, image_width = image.shape[1], image.shape[2]
                     if variable_sized:
                         # Calculate new dimensions based on unpadded size
-                        # The min() is required here due to floating point issues
-                        new_h = min(
-                            image_height,
-                            math.ceil(image_unpadded_h[batch_index, subseq_index] / patch_height) * patch_height,
-                        )
-                        new_w = min(
-                            image_width,
-                            math.ceil(image_unpadded_w[batch_index, subseq_index] / patch_width) * patch_width,
-                        )
+                        new_h = int_div_ceil(image_unpadded_h[batch_index, subseq_index], patch_height) * patch_height
+                        new_w = int_div_ceil(image_unpadded_w[batch_index, subseq_index], patch_width) * patch_width
                         image = image[:, :new_h, :new_w]
                         image_height, image_width = new_h, new_w
                     num_patches = self.get_num_patches(

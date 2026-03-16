@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from typing import Any, Optional, Union
 
 import torch
@@ -44,7 +43,7 @@ from ...image_utils import (
     PILImageResampling,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, logging
+from ...utils import TensorType, auto_docstring, int_div_ceil, logging
 from .image_processing_mask2former import (
     Mask2FormerImageProcessorKwargs,
     compute_segments,
@@ -189,8 +188,8 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
             )
         if size_divisor > 0:
             height, width = new_size
-            height = int(math.ceil(height / size_divisor) * size_divisor)
-            width = int(math.ceil(width / size_divisor) * size_divisor)
+            height = int_div_ceil(height, size_divisor) * size_divisor
+            width = int_div_ceil(width, size_divisor) * size_divisor
             new_size = (height, width)
 
         image = tvF.resize(

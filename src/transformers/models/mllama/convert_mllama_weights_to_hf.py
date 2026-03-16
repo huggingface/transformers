@@ -15,7 +15,6 @@
 import argparse
 import gc
 import json
-import math
 import os
 
 import regex as re
@@ -32,6 +31,7 @@ from transformers import (
 from transformers.convert_slow_tokenizer import TikTokenConverter
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig, MllamaVisionConfig
 from transformers.models.mllama.image_processing_mllama import get_all_supported_aspect_ratios
+from transformers.utils import int_div_ceil
 
 
 # fmt: off
@@ -257,7 +257,7 @@ def write_model(
         text_key_value_dim = text_dim
 
     # cross-attention layers: 20 for 90B, 8 for 11B
-    cross_attention_frequency = math.ceil(text_num_layers / cross_attention_num_layers)
+    cross_attention_frequency = int_div_ceil(text_num_layers, cross_attention_num_layers)
     text_num_total_layers = text_num_layers + cross_attention_num_layers
     cross_attention_layers_shift = list(
         range(cross_attention_frequency - 1, text_num_total_layers, cross_attention_frequency + 1)

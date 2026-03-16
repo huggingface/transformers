@@ -31,7 +31,7 @@ from ...modeling_outputs import (
     SemanticSegmenterOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging, torch_int
+from ...utils import auto_docstring, int_div_ceil, logging, torch_int
 from .configuration_mobilevit import MobileViTConfig
 
 
@@ -405,12 +405,12 @@ class MobileViTLayer(GradientCheckpointingLayer):
         new_height = (
             torch_int(torch.ceil(orig_height / patch_height) * patch_height)
             if torch.jit.is_tracing()
-            else int(math.ceil(orig_height / patch_height) * patch_height)
+            else int_div_ceil(orig_height, patch_height) * patch_height
         )
         new_width = (
             torch_int(torch.ceil(orig_width / patch_width) * patch_width)
             if torch.jit.is_tracing()
-            else int(math.ceil(orig_width / patch_width) * patch_width)
+            else int_div_ceil(orig_width, patch_width) * patch_width
         )
 
         interpolate = False

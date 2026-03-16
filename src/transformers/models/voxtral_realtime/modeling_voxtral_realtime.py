@@ -39,7 +39,14 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    int_div_ceil,
+    is_torchdynamo_compiling,
+    logging,
+)
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -1251,7 +1258,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         input_features = model_kwargs.get("input_features")
         if input_features is not None and not isinstance(input_features, GeneratorType):
             audio_length = input_features.shape[-1]
-            num_audio_tokens = math.ceil(audio_length / self.config.audio_length_per_tok)
+            num_audio_tokens = int_div_ceil(audio_length, self.config.audio_length_per_tok)
             # Stash for use in _prepare_generated_length
             generation_config._num_audio_tokens = num_audio_tokens
 

@@ -21,7 +21,7 @@ import torch
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ChannelDimension, PILImageResampling, SizeDict, get_image_size
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, add_start_docstrings, logging
+from ...utils import TensorType, add_start_docstrings, int_div_ceil, logging
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
@@ -46,7 +46,7 @@ def smart_resize(
         )
     h_bar = round(height / factor) * factor
     w_bar = round(width / factor) * factor
-    t_bar = math.ceil(num_frames / temporal_factor) * temporal_factor
+    t_bar = int_div_ceil(num_frames, temporal_factor) * temporal_factor
 
     if t_bar * h_bar * w_bar > max_pixels:
         beta = math.sqrt((num_frames * height * width) / max_pixels)

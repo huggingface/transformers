@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from collections.abc import Iterable
 from typing import Any
 
@@ -35,7 +34,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, int_div_ceil, is_vision_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -431,11 +430,11 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         frames = []
         if height > max_height or width > max_width:
             # Calculate the number of splits
-            num_splits_h = math.ceil(height / max_height)
-            num_splits_w = math.ceil(width / max_width)
+            num_splits_h = int_div_ceil(height, max_height)
+            num_splits_w = int_div_ceil(width, max_width)
             # Calculate the optimal width and height for the sub-images
-            optimal_height = math.ceil(height / num_splits_h)
-            optimal_width = math.ceil(width / num_splits_w)
+            optimal_height = int_div_ceil(height, num_splits_h)
+            optimal_width = int_div_ceil(width, num_splits_w)
 
             # Iterate through each row and column
             for r in range(num_splits_h):
@@ -502,13 +501,13 @@ class Idefics3ImageProcessor(BaseImageProcessor):
 
         aspect_ratio = width / height
         if width >= height:
-            width = math.ceil(width / vision_encoder_max_size) * vision_encoder_max_size
+            width = int_div_ceil(width, vision_encoder_max_size) * vision_encoder_max_size
             height = int(width / aspect_ratio)
-            height = math.ceil(height / vision_encoder_max_size) * vision_encoder_max_size
+            height = int_div_ceil(height, vision_encoder_max_size) * vision_encoder_max_size
         elif height > width:
-            height = math.ceil(height / vision_encoder_max_size) * vision_encoder_max_size
+            height = int_div_ceil(height, vision_encoder_max_size) * vision_encoder_max_size
             width = int(height * aspect_ratio)
-            width = math.ceil(width / vision_encoder_max_size) * vision_encoder_max_size
+            width = int_div_ceil(width, vision_encoder_max_size) * vision_encoder_max_size
         new_size = {"height": height, "width": width}
         return self.resize(
             image, size=new_size, resample=resample, input_data_format=input_data_format, data_format=data_format
@@ -893,19 +892,19 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             aspect_ratio = width / height
 
             if width >= height:
-                resized_width = math.ceil(width / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
+                resized_width = int_div_ceil(width, max_image_size["longest_edge"]) * max_image_size["longest_edge"]
                 resized_height = int(width / aspect_ratio)
-                resized_height = math.ceil(height / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
+                resized_height = int_div_ceil(height, max_image_size["longest_edge"]) * max_image_size["longest_edge"]
             elif height > width:
-                resized_height = math.ceil(height / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
+                resized_height = int_div_ceil(height, max_image_size["longest_edge"]) * max_image_size["longest_edge"]
                 resized_width = int(height * aspect_ratio)
-                resized_width = math.ceil(width / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
+                resized_width = int_div_ceil(width, max_image_size["longest_edge"]) * max_image_size["longest_edge"]
 
             max_height = max_width = max_image_size["longest_edge"]
             if resized_height > max_height or resized_width > max_width:
                 # Calculate the number of splits
-                num_rows = math.ceil(resized_height / max_height)
-                num_cols = math.ceil(resized_width / max_width)
+                num_rows = int_div_ceil(resized_height, max_height)
+                num_cols = int_div_ceil(resized_width, max_width)
                 num_patches = num_rows * num_cols + 1
 
         return num_patches, num_rows, num_cols

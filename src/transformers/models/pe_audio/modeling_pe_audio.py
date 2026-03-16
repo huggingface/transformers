@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -37,7 +36,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, int_div_ceil
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -110,7 +109,7 @@ class PeAudioDacEncoderBlock(nn.Module):
         self.res_unit3 = PeAudioDacResidualUnit(dimension // 2, dilation=9)
         self.snake1 = Snake1d(dimension // 2)
         self.conv1 = nn.Conv1d(
-            dimension // 2, dimension, kernel_size=2 * stride, stride=stride, padding=math.ceil(stride / 2)
+            dimension // 2, dimension, kernel_size=2 * stride, stride=stride, padding=int_div_ceil(stride, 2)
         )
 
     def forward(self, hidden_state):

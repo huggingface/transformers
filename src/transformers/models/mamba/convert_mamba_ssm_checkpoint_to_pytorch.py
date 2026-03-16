@@ -15,12 +15,11 @@
 
 import argparse
 import json
-import math
 
 import torch
 
 from transformers import AutoTokenizer, MambaConfig, MambaForCausalLM
-from transformers.utils import logging
+from transformers.utils import int_div_ceil, logging
 from transformers.utils.import_utils import is_mamba_ssm_available
 
 
@@ -34,7 +33,7 @@ if is_mamba_ssm_available():
         # Set config hidden size, num hidden layers, and vocab size directly from the original config
         hf_config.hidden_size = config_ssm.d_model
         hf_config.intermediate_size = config_ssm.d_model * 2
-        hf_config.time_step_rank = math.ceil(config_ssm.d_model / 16)
+        hf_config.time_step_rank = int_div_ceil(config_ssm.d_model, 16)
 
         hf_config.num_hidden_layers = config_ssm.n_layer
         vocab_size = config_ssm.vocab_size

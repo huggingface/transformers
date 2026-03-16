@@ -22,7 +22,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, logging, torch_int
+from ...utils import ModelOutput, auto_docstring, int_div_ceil, logging, torch_int
 from ..auto import AutoModel
 from .configuration_depth_pro import DepthProConfig
 
@@ -895,8 +895,8 @@ class DepthProFovHead(nn.Module):
         for i in range(config.num_fov_head_layers):
             self.layers.append(
                 nn.Conv2d(
-                    math.ceil(self.fusion_hidden_size / 2 ** (i + 1)),
-                    math.ceil(self.fusion_hidden_size / 2 ** (i + 2)),
+                    int_div_ceil(self.fusion_hidden_size, 2 ** (i + 1)),
+                    int_div_ceil(self.fusion_hidden_size, 2 ** (i + 2)),
                     kernel_size=3,
                     stride=2,
                     padding=1,
@@ -904,7 +904,7 @@ class DepthProFovHead(nn.Module):
             )
             self.layers.append(nn.ReLU(True))
         # calculate expected shapes to finally generate a scalar output from final head layer
-        final_in_channels = math.ceil(self.fusion_hidden_size / 2 ** (config.num_fov_head_layers + 1))
+        final_in_channels = int_div_ceil(self.fusion_hidden_size, 2 ** (config.num_fov_head_layers + 1))
         final_kernel_size = torch_int((self.out_size - 1) / 2**config.num_fov_head_layers + 1)
         self.layers.append(
             nn.Conv2d(

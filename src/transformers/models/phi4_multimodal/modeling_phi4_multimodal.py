@@ -44,7 +44,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, torch_int
+from ...utils import auto_docstring, int_div_ceil, torch_int
 from ...utils.generic import TransformersKwargs, can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_phi4_multimodal import Phi4MultimodalAudioConfig, Phi4MultimodalConfig, Phi4MultimodalVisionConfig
@@ -954,7 +954,7 @@ class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
 
     def forward_embeddings(self, hidden_states, masks):
         """Forwarding the inputs through the top embedding layers"""
-        seq_len = math.ceil(hidden_states.shape[1] / self.config.time_reduction)
+        seq_len = int_div_ceil(hidden_states.shape[1], self.config.time_reduction)
         if seq_len <= 0:
             raise ValueError(
                 f"The sequence length after time reduction is invalid: {seq_len}. Your input feature is too short."

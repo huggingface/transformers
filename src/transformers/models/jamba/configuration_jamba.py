@@ -13,10 +13,8 @@
 # limitations under the License.
 """Jamba model configuration"""
 
-import math
-
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, int_div_ceil, logging
 
 
 logger = logging.get_logger(__name__)
@@ -118,7 +116,7 @@ class JambaConfig(PreTrainedConfig):
         self.mamba_d_state = mamba_d_state
         self.mamba_d_conv = mamba_d_conv
         self.mamba_expand = mamba_expand
-        self.mamba_dt_rank = math.ceil(self.hidden_size / 16) if mamba_dt_rank == "auto" else mamba_dt_rank
+        self.mamba_dt_rank = int_div_ceil(self.hidden_size, 16) if mamba_dt_rank == "auto" else mamba_dt_rank
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
 

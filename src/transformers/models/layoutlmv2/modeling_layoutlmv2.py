@@ -32,7 +32,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import auto_docstring, is_detectron2_available, logging, requires_backends
+from ...utils import auto_docstring, int_div_ceil, is_detectron2_available, logging, requires_backends
 from ...utils.generic import TransformersKwargs, can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_layoutlmv2 import LayoutLMv2Config
@@ -500,8 +500,8 @@ class LayoutLMv2VisualBackbone(nn.Module):
             backbone_stride = self.backbone.output_shape()[self.out_feature_key].stride
             self.pool = nn.AvgPool2d(
                 (
-                    math.ceil(math.ceil(input_shape[0] / backbone_stride) / config.image_feature_pool_shape[0]),
-                    math.ceil(math.ceil(input_shape[1] / backbone_stride) / config.image_feature_pool_shape[1]),
+                    int_div_ceil(int_div_ceil(input_shape[0], backbone_stride), config.image_feature_pool_shape[0]),
+                    int_div_ceil(int_div_ceil(input_shape[1], backbone_stride), config.image_feature_pool_shape[1]),
                 )
             )
         else:

@@ -39,7 +39,7 @@ from ...image_utils import (
     is_torch_tensor,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, requires_backends
+from ...utils import TensorType, auto_docstring, int_div_ceil, requires_backends
 from .image_processing_dpt import DPTImageProcessorKwargs
 
 
@@ -60,7 +60,7 @@ def get_resize_output_image_size(
             x = math.floor(val / multiple) * multiple
 
         if x < min_val:
-            x = math.ceil(val / multiple) * multiple
+            x = int_div_ceil(val, multiple) * multiple
 
         return x
 
@@ -325,7 +325,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         height, width = image.shape[-2:]
 
         def _get_pad(size, size_divisor):
-            new_size = math.ceil(size / size_divisor) * size_divisor
+            new_size = int_div_ceil(size, size_divisor) * size_divisor
             pad_size = new_size - size
             pad_size_left = pad_size // 2
             pad_size_right = pad_size - pad_size_left

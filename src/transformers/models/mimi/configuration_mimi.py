@@ -19,7 +19,7 @@ import numpy as np
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, int_div_ceil, logging
 
 
 logger = logging.get_logger(__name__)
@@ -185,7 +185,7 @@ class MimiConfig(PreTrainedConfig):
     @property
     def encodec_frame_rate(self) -> int:
         hop_length = np.prod(self.upsampling_ratios)
-        return math.ceil(self.sampling_rate / hop_length)
+        return int_div_ceil(self.sampling_rate, int(hop_length))
 
     @property
     def num_codebooks(self) -> int:

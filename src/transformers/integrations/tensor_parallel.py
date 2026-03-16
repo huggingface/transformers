@@ -13,14 +13,13 @@
 # limitations under the License.
 from __future__ import annotations
 
-import math
 import operator
 import os
 import re
 from functools import reduce
 
 from ..distributed import DistributedConfig
-from ..utils import is_torch_greater_or_equal, logging
+from ..utils import int_div_ceil, is_torch_greater_or_equal, logging
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available
 
@@ -374,7 +373,7 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: int
     elif empty_param.dim() == 3 and dim == 2 and len(param_shape) == 2:
         dim = 1
 
-    shard_size = math.ceil(param_shape[dim] / world_size)
+    shard_size = int_div_ceil(param_shape[dim], world_size)
     start = rank * shard_size
     end = min(start + shard_size, param_shape[dim])
 
@@ -723,7 +722,7 @@ class ColwiseParallel(TensorParallelLayer):
         # Colwise shards dim -2, but 1D tensors (bias) shard on dim -1
         dim = -1 if len(shape) == 1 else -2
         dim = len(shape) + dim if dim < 0 else dim
-        shard_size = math.ceil(shape[dim] / world_size)
+        shard_size = int_div_ceil(shape[dim], world_size)
         start = self.rank * shard_size
         end = min(start + shard_size, shape[dim])
         shape[dim] = end - start
@@ -866,7 +865,7 @@ class RowwiseParallel(TensorParallelLayer):
         shape = list(full_shape)
         dim = -1
         dim = len(shape) + dim if dim < 0 else dim
-        shard_size = math.ceil(shape[dim] / world_size)
+        shard_size = int_div_ceil(shape[dim], world_size)
         start = self.rank * shard_size
         end = min(start + shard_size, shape[dim])
         shape[dim] = end - start
@@ -996,7 +995,7 @@ class EmbeddingParallel(TensorParallelLayer):
         # 1D tensors (bias) shard on dim -1
         dim = -1 if len(shape) == 1 else self.embedding_dim_sharding
         dim = len(shape) + dim if dim < 0 else dim
-        shard_size = math.ceil(shape[dim] / world_size)
+        shard_size = int_div_ceil(shape[dim], world_size)
         start = self.rank * shard_size
         end = min(start + shard_size, shape[dim])
         shape[dim] = end - start

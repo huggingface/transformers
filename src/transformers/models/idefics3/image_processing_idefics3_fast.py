@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import math
 from typing import Optional
 
 import torch
@@ -33,7 +31,7 @@ from ...image_utils import (
     make_nested_list_of_images,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
+from ...utils import TensorType, auto_docstring, int_div_ceil, is_torchvision_available, logging
 from .image_processing_idefics3 import Idefics3ImageProcessorKwargs
 
 
@@ -284,8 +282,8 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
         frames = []
         if height > max_height or width > max_width:
             # Calculate the number of splits
-            num_splits_h = math.ceil(height / max_height)
-            num_splits_w = math.ceil(width / max_width)
+            num_splits_h = int_div_ceil(height, max_height)
+            num_splits_w = int_div_ceil(width, max_width)
 
             # Split the images by height, then by width
             frames = (
@@ -333,13 +331,13 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
 
         aspect_ratio = width / height
         if width >= height:
-            width = math.ceil(width / vision_encoder_max_size) * vision_encoder_max_size
+            width = int_div_ceil(width, vision_encoder_max_size) * vision_encoder_max_size
             height = int(width / aspect_ratio)
-            height = math.ceil(height / vision_encoder_max_size) * vision_encoder_max_size
+            height = int_div_ceil(height, vision_encoder_max_size) * vision_encoder_max_size
         elif height > width:
-            height = math.ceil(height / vision_encoder_max_size) * vision_encoder_max_size
+            height = int_div_ceil(height, vision_encoder_max_size) * vision_encoder_max_size
             width = int(height * aspect_ratio)
-            width = math.ceil(width / vision_encoder_max_size) * vision_encoder_max_size
+            width = int_div_ceil(width, vision_encoder_max_size) * vision_encoder_max_size
         new_size = SizeDict(height=height, width=width)
         return self.resize(image, size=new_size, interpolation=interpolation)
 
@@ -530,19 +528,19 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
             aspect_ratio = width / height
 
             if width >= height:
-                resized_width = math.ceil(width / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
+                resized_width = int_div_ceil(width, max_image_size["longest_edge"]) * max_image_size["longest_edge"]
                 resized_height = int(width / aspect_ratio)
-                resized_height = math.ceil(height / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
+                resized_height = int_div_ceil(height, max_image_size["longest_edge"]) * max_image_size["longest_edge"]
             elif height > width:
-                resized_height = math.ceil(height / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
+                resized_height = int_div_ceil(height, max_image_size["longest_edge"]) * max_image_size["longest_edge"]
                 resized_width = int(height * aspect_ratio)
-                resized_width = math.ceil(width / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
+                resized_width = int_div_ceil(width, max_image_size["longest_edge"]) * max_image_size["longest_edge"]
 
             max_height = max_width = max_image_size["longest_edge"]
             if resized_height > max_height or resized_width > max_width:
                 # Calculate the number of splits
-                num_rows = math.ceil(resized_height / max_height)
-                num_cols = math.ceil(resized_width / max_width)
+                num_rows = int_div_ceil(resized_height, max_height)
+                num_cols = int_div_ceil(resized_width, max_width)
                 num_patches = num_rows * num_cols + 1
 
         return num_patches, num_rows, num_cols
