@@ -207,12 +207,15 @@ class RichInterface:
             TransferSpeedColumn,
         )
 
-        STAGES = ["processor", "config", "model"]
-        STAGE_LABELS = {
-            "processor:start": f"{model}  •  Loading processor",
-            "config:start": f"{model}  •  Loading config",
-            "model:start": f"{model}  •  Loading model weights",
+        stages = ["processor", "config", "model"]
+        size_of_tqdm = 50
+        stage_labels = {
+            "processor:start": f"{model}  →  Loading processor",
+            "config:start": f"{model}  →  Loading config",
+            "model:start": f"{model}  →  Loading model weights",
         }
+
+        stage_labels = {k: v + " " * (size_of_tqdm - len(v)) for k, v in stage_labels.items()}
 
         response = requests.post(
             f"{self.base_url.rstrip('/')}/load_model",
@@ -229,7 +232,7 @@ class RichInterface:
             console=self._console,
         )
         dl_progress = Progress(
-            TextColumn("{task.description}"),
+            TextColumn("[bold]{task.description}"),
             BarColumn(bar_width=40),
             DownloadColumn(),
             TransferSpeedColumn(),
@@ -237,8 +240,10 @@ class RichInterface:
             console=self._console,
         )
 
-        stage_task = stage_progress.add_task(model, total=len(STAGES))
-        dl_task = dl_progress.add_task(model, total=None, visible=False)
+        stage_task = stage_progress.add_task(model, total=len(stages))
+
+        dl_task_name = " " * len(model) + "  ↳  Downloading files"
+        dl_task = dl_progress.add_task(dl_task_name + " " * (size_of_tqdm - len(dl_task_name)), total=None, visible=False)
         bar_last_n: dict[str, int] = {}
         byte_descs: set[str] = set()  # only track byte-unit bars in dl_progress
 
@@ -274,8 +279,8 @@ class RichInterface:
 
                     continue
 
-                if stage in STAGE_LABELS:
-                    stage_progress.update(stage_task, description=STAGE_LABELS[stage])
+                if stage in stage_labels:
+                    stage_progress.update(stage_task, description=stage_labels[stage])
 
                 if stage and stage.endswith(":ready"):
                     stage_progress.advance(stage_task, 1)
