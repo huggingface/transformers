@@ -11,9 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from __future__ import annotations
-
 import asyncio
 import base64
 import copy
@@ -31,7 +28,7 @@ from contextlib import asynccontextmanager
 from functools import lru_cache
 from io import BytesIO
 from threading import Thread
-from typing import TYPE_CHECKING, Annotated, TypedDict
+from typing import TYPE_CHECKING, Annotated, Optional, TypedDict, Union
 
 import typer
 from huggingface_hub import scan_cache_dir
@@ -316,9 +313,9 @@ class TimedModel:
 
     def __init__(
         self,
-        model: PreTrainedModel,
+        model: "PreTrainedModel",
         timeout_seconds: int,
-        processor: ProcessorMixin | PreTrainedTokenizerFast | None = None,
+        processor: Union["ProcessorMixin", "PreTrainedTokenizerFast"] | None = None,
     ):
         self.model = model
         self._name_or_path = str(model.name_or_path)
@@ -588,7 +585,7 @@ class Serve:
         self,
         request: dict,
         schema: TypedDict,
-        validator: TypeAdapter,
+        validator: "TypeAdapter",
         unused_fields: set,
     ):
         """
@@ -664,10 +661,10 @@ class Serve:
         model: str | None = None,
         role: str | None = None,
         finish_reason: str | None = None,
-        tool_calls: list[ChoiceDeltaToolCall] | None = None,
+        tool_calls: list["ChoiceDeltaToolCall"] | None = None,
         decode_stream: DecodeStream | None = None,
-        tokenizer: PreTrainedTokenizerFast | None = None,
-    ) -> ChatCompletionChunk:
+        tokenizer: Optional["PreTrainedTokenizerFast"] = None,
+    ) -> "ChatCompletionChunk":
         """
         Builds a chunk of a streaming OpenAI Chat Completion response.
 
@@ -716,7 +713,7 @@ class Serve:
         return chunk
 
     @staticmethod
-    def chunk_to_sse_element(chunk: ChatCompletionChunk | BaseModel) -> str:
+    def chunk_to_sse_element(chunk: "ChatCompletionChunk | BaseModel") -> str:
         """
         Builds an event of a streaming OpenAI Response model or a ChatCompletion chunk.
 
@@ -784,7 +781,7 @@ class Serve:
 
         return generative_models
 
-    def continuous_batching_chat_completion(self, req: dict, request_id: str) -> StreamingResponse | JSONResponse:
+    def continuous_batching_chat_completion(self, req: dict, request_id: str) -> "StreamingResponse | JSONResponse":
         """
         Generates an OpenAI Chat Completion using continuous batching.
 
@@ -946,7 +943,7 @@ class Serve:
             return JSONResponse(json_chunk, media_type="application/json")
 
     @staticmethod
-    def get_model_modality(model: PreTrainedModel, processor=None) -> Modality:
+    def get_model_modality(model: "PreTrainedModel", processor=None) -> Modality:
         if processor is not None:
             if isinstance(processor, PreTrainedTokenizerBase):
                 return Modality.LLM
@@ -1012,7 +1009,7 @@ class Serve:
             processor_inputs.append(parsed_message)
         return processor_inputs
 
-    def generate_chat_completion(self, req: dict) -> StreamingResponse | JSONResponse:
+    def generate_chat_completion(self, req: dict) -> "StreamingResponse | JSONResponse":
         """
         Generates an OpenAI Chat Completion using `generate`.
 
@@ -1331,7 +1328,7 @@ class Serve:
         last_kv_cache = None
         if self.is_continuation(req) and not must_discard_cache:
             seq_len = self.last_kv_cache.get_seq_length()
-            if inputs["input_ids"].shape[-1] > seq_len:
+            if inputs.shape[-1] > seq_len:
                 last_kv_cache = self.last_kv_cache
 
         generation_kwargs = {
@@ -1861,7 +1858,9 @@ class Serve:
         logger.info(f"Loaded model {model_id_and_revision}")
         return model, data_processor
 
-    def load_model_and_processor(self, model_id_and_revision: str) -> tuple[PreTrainedModel, PreTrainedTokenizerFast]:
+    def load_model_and_processor(
+        self, model_id_and_revision: str
+    ) -> tuple["PreTrainedModel", "PreTrainedTokenizerFast"]:
         """
         Loads the text model and processor from the given model ID and revision into the ServeCommand instance.
 
@@ -1886,7 +1885,7 @@ class Serve:
 
         return model, processor
 
-    def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple[PreTrainedModel, ProcessorMixin]:
+    def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple["PreTrainedModel", "ProcessorMixin"]:
         """
         Loads the audio model and processor from the given model ID and revision into the ServeCommand instance.
 

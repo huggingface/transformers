@@ -13,14 +13,14 @@
 # limitations under the License.
 """Nystromformer model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="uw-madison/nystromformer-512")
+@strict(accept_kwargs=True)
 class NystromformerConfig(PreTrainedConfig):
     r"""
     segment_means_seq_len (`int`, *optional*, defaults to 64):
@@ -51,53 +51,27 @@ class NystromformerConfig(PreTrainedConfig):
 
     model_type = "nystromformer"
 
-    def __init__(
-        self,
-        vocab_size=30000,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu_new",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=510,
-        type_vocab_size=2,
-        segment_means_seq_len=64,
-        num_landmarks=64,
-        conv_kernel_size=65,
-        inv_coeff_init_option=False,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        add_cross_attention=False,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        self.add_cross_attention = add_cross_attention
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.type_vocab_size = type_vocab_size
-        self.segment_means_seq_len = segment_means_seq_len
-        self.num_landmarks = num_landmarks
-        self.conv_kernel_size = conv_kernel_size
-        self.inv_coeff_init_option = inv_coeff_init_option
-        self.layer_norm_eps = layer_norm_eps
-        super().__init__(**kwargs)
+    vocab_size: int = 30000
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu_new"
+    hidden_dropout_prob: float = 0.1
+    attention_probs_dropout_prob: float = 0.1
+    max_position_embeddings: int = 510
+    type_vocab_size: int = 2
+    segment_means_seq_len: int = 64
+    num_landmarks: int = 64
+    conv_kernel_size: int = 65
+    inv_coeff_init_option: bool = False
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-5
+    pad_token_id: int | None = 1
+    bos_token_id: int | None = 0
+    eos_token_id: int | None = 2
+    add_cross_attention: bool = False
+    tie_word_embeddings: bool = True
 
 
 __all__ = ["NystromformerConfig"]

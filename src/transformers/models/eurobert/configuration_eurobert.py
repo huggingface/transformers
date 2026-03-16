@@ -47,63 +47,34 @@ class EuroBertConfig(LlamaConfig):
 
     model_type = "eurobert"
 
-    def __init__(
-        self,
-        vocab_size=128256,
-        hidden_size=768,
-        intermediate_size=3072,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        num_key_value_heads=None,
-        hidden_act="silu",
-        max_position_embeddings=8192,
-        initializer_range=0.02,
-        rms_norm_eps=1e-05,
-        bos_token_id=128000,
-        eos_token_id=128001,
-        pad_token_id=128001,
-        mask_token_id=128002,
-        pretraining_tp=1,
-        tie_word_embeddings=False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        mlp_bias=False,
-        head_dim=None,
-        classifier_pooling="late",
-        **kwargs,
-    ):
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-        kwargs.pop("use_cache", None)  # use_cache=True is not supported for EuroBert
+    vocab_size: int = 128256
+    hidden_size: int = 768
+    intermediate_size: int = 3072
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    num_key_value_heads: int | None = None
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 8192
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-05
+    bos_token_id: int | None = 128000
+    eos_token_id: int | None = 128001
+    pad_token_id: int | None = 128001
+    mask_token_id: int = 128002
+    pretraining_tp: int = 1
+    tie_word_embeddings: int = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: int | float = 0.0
+    mlp_bias: bool = False
+    head_dim: int | None = None
+    classifier_pooling: str = "late"
+    is_causal: bool = False
 
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            rms_norm_eps=rms_norm_eps,
-            use_cache=False,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            pad_token_id=pad_token_id,
-            pretraining_tp=pretraining_tp,
-            tie_word_embeddings=tie_word_embeddings,
-            rope_parameters=rope_parameters,
-            attention_bias=attention_bias,
-            attention_dropout=attention_dropout,
-            mlp_bias=mlp_bias,
-            head_dim=head_dim,
-            **kwargs,
-        )
-        self.mask_token_id = mask_token_id
-        self.classifier_pooling = classifier_pooling
-        self.is_causal = False
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["EuroBertConfig"]
