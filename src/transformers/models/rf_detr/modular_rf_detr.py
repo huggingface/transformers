@@ -52,7 +52,7 @@ from ..lw_detr.modeling_lw_detr import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="stevenbucaille/lwdetr_small_60e_coco")
+@auto_docstring(checkpoint="stevenbucaille/rf-detr-base")
 class RfDetrDinov2Config(Dinov2Config):
     r"""
     layerscale_value (`float`, *optional*, defaults to 1.0):
@@ -98,6 +98,7 @@ class RfDetrDinov2Config(Dinov2Config):
         self.window_block_indexes = window_block_indexes
 
 
+@auto_docstring(checkpoint="stevenbucaille/rf-detr-base")
 class RfDetrConfig(PreTrainedConfig):
     r"""
     hidden_expansion (`float`, *optional*, defaults to 0.5):
