@@ -222,11 +222,7 @@ def convert_rf_detr_checkpoint(
     # Save model
     print("Saving model..." + " and pushing to hub..." if push_to_hub else "")
     model.save_pretrained(
-        pytorch_dump_folder_path,
-        save_original_format=False,
-        push_to_hub=push_to_hub,
-        repo_id=repo_id,
-        commit_message=f"Add {model_name} model",
+        pytorch_dump_folder_path, push_to_hub=push_to_hub, repo_id=repo_id, commit_message=f"Add {model_name} model"
     )
 
     # Save image processor

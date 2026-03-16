@@ -181,6 +181,7 @@ class RfDetrConfig(PreTrainedConfig):
 
     model_type = "rf_detr"
     sub_configs = {"backbone_config": AutoConfig}
+    attribute_map = {"hidden_size": "d_model"}
 
     def __init__(
         self,
@@ -301,6 +302,7 @@ class RfDetrConfig(PreTrainedConfig):
         self.mask_point_sample_ratio = mask_point_sample_ratio
         # segmentation
         self.mask_downsample_ratio = mask_downsample_ratio
+        self.intermediate_size = self.d_model * 4
         self.segmentation_head_activation_function = segmentation_head_activation_function
         super().__init__(**kwargs)
 

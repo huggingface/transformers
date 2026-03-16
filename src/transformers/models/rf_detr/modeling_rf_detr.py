@@ -1976,21 +1976,32 @@ class RfDetrSegmentationBlock(nn.Module):
         return features
 
 
+class RfDetrSegmentationMLP(nn.Module):
+    def __init__(self, config: RfDetrConfig):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.segmentation_head_activation_function]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
 class RfDetrSegmentationMLPBlock(nn.Module):
     def __init__(self, config: RfDetrConfig):
         super().__init__()
         dim = config.d_model
         self.norm_in = nn.LayerNorm(dim)
-        self.in_linear = nn.Linear(dim, dim * 4)
-        self.act = ACT2FN[config.segmentation_head_activation_function]
-        self.out_linear = nn.Linear(dim * 4, dim)
+        self.mlp = RfDetrSegmentationMLP(config)
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         residual = features
         features = self.norm_in(features)
-        features = self.in_linear(features)
-        features = self.act(features)
-        features = self.out_linear(features)
+        features = self.mlp(features)
         features = features + residual
         return features
 
@@ -2018,8 +2029,8 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         r"^class_embed.(weight|bias)": r"rf_detr.class_embed.\1",
         r"^query_feat.(weight|bias)": r"rf_detr.model.query_feat.\1",
         # segmentation head (specific rules first)
-        r"segmentation_head.query_features_block.layers.0": "query_features_block.in_linear",
-        r"segmentation_head.query_features_block.layers.2": "query_features_block.out_linear",
+        r"segmentation_head.query_features_block.layers.0": "query_features_block.mlp.fc1",
+        r"segmentation_head.query_features_block.layers.2": "query_features_block.mlp.fc2",
         r"segmentation_head.blocks.(\d+).norm": r"blocks.\1.layernorm",
         # Generic prefix rules later
         r"segmentation_head.spatial_features_proj": "spatial_features_proj",
