@@ -585,6 +585,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
                 ("cuda", 7): "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh<|reserved_797|>cw algunas",
                 ("cuda", 8): "<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.",
                 ("rocm", 9): "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh Hebrew llam bb",
+                ("xpu", 3): "<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.",
             }
         )
         # fmt: on
