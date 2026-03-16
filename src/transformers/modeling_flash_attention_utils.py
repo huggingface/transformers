@@ -14,6 +14,7 @@
 import importlib
 import inspect
 import os
+import warnings
 from collections.abc import Callable
 from functools import partial
 from typing import TypedDict
@@ -37,14 +38,13 @@ from .utils.import_utils import PACKAGE_DISTRIBUTION_MAPPING, is_tracing
 logger = logging.get_logger(__name__)
 
 
-# TODO Deprecate when all models have the attention interface
 def flash_attn_supports_top_left_mask():
-    if is_flash_attn_2_available() or is_flash_attn_3_available() or is_flash_attn_4_available():
-        return False
-
-    from .integrations.npu_flash_attention import is_npu_fa2_top_left_aligned_causal_mask
-
-    return is_npu_fa2_top_left_aligned_causal_mask()
+    warnings.warn(
+        "Top-left mask alignment with FA has been deprecated! This is no longer supported "
+        "as we default to the normal causal alignment (of the most recent FA versions `2.3.3+`).",
+        FutureWarning
+    )
+    return False
 
 
 # TODO Deprecate when all models have the attention interface
@@ -162,7 +162,8 @@ def _lazy_imports(
         # Flash-Attention2 related apis for Ascend NPU must be imported from `.integrations.npu_flash_attention` module
         from .integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
         from .integrations.npu_flash_attention import npu_flash_attn_varlen_func as flash_attn_varlen_func
-        from .integrations.npu_flash_attention import npu_flash_attn_with_kvcache as flash_attn_with_kvcache
+
+        flash_attn_with_kvcache = None  # not supported yet
     else:
         if implementation == "flash_attention_3" or (implementation is None and is_fa3 and not is_fa4):
             from flash_attn_interface import flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache
@@ -584,12 +585,10 @@ class FlashAttentionKwargs(TypedDict, total=False):
 
 
 def _process_flash_attention_kwargs(
-    query_length: int,
     is_causal: bool,
     dropout: float = 0.0,
     softmax_scale: float | None = None,
     sliding_window: int | None = None,
-    use_top_left_mask: bool = False,
     softcap: float | None = None,
     deterministic: bool | None = None,
     s_aux: torch.Tensor | None = None,
@@ -607,8 +606,6 @@ def _process_flash_attention_kwargs(
     inspected in `supports_mapping`, see `_lazy_define_process_function` for more details.
 
     Args:
-        query_length (`int`):
-            Length of the query states
         is_causal (`bool`):
             Whether we perform causal (decoder) attention or full attention.
         dropout (`float`):
@@ -617,8 +614,6 @@ def _process_flash_attention_kwargs(
             The scaling of QK^T before applying softmax. Default to `1 / sqrt(head_dim)`.
         sliding_window (`int`, *optional*):
             The size of the sliding window, i.e. we look at a max of `sliding_window` tokens back.
-        use_top_left_mask (`bool`):
-            Deprecated behavior of older versions of flash attention requiring different masking.
         softcap (`float`, *optional*):
             Softcap for the attention logits, used e.g. in gemma2.
         deterministic (`bool`, *optional*):
@@ -633,8 +628,9 @@ def _process_flash_attention_kwargs(
         flash_kwargs (`dict`):
             A dict of kwargs that are requested and supported.
     """
+    # Shared across all FA functions
     flash_kwargs = {
-        "causal": is_causal and not (use_top_left_mask and query_length == 1),
+        "causal": is_causal,
         "softmax_scale": softmax_scale,
     }
 
@@ -708,7 +704,6 @@ def _flash_attention_forward(
     position_ids: torch.Tensor | None = None,
     softmax_scale: float | None = None,
     sliding_window: int | None = None,
-    use_top_left_mask: bool = False,
     softcap: float | None = None,
     deterministic: bool | None = None,
     cu_seq_lens_q: torch.LongTensor | None = None,
@@ -762,12 +757,10 @@ def _flash_attention_forward(
     # Extract the flash attention kwargs that have been requested (and are supported by the implementation)
     flash_kwargs = partial(
         process_flash_kwargs_fn,
-        query_length=query_length,
         is_causal=is_causal,
         dropout=dropout,
         softmax_scale=softmax_scale,
         sliding_window=sliding_window,
-        use_top_left_mask=use_top_left_mask,
         softcap=softcap,
         deterministic=deterministic,
         **kwargs,

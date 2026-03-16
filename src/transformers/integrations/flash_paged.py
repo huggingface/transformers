@@ -40,7 +40,6 @@ def _prepare_varlen_fa(
     )
 
     flash_kwargs = process_flash_kwargs_fn(
-        query_length=42,  # arbitrary just needs to be >1 to avoid `top_left_mask` workarounds
         flash_fn_name="flash_varlen_fn",
         **kwargs,
     )
@@ -93,7 +92,6 @@ def _prepare_kvcache_fa(
     )
 
     flash_kwargs = process_flash_kwargs_fn(
-        query_length=42,  # arbitrary just needs to be >1 to avoid `top_left_mask` workarounds
         block_table=block_table[group_idx],
         flash_fn_name="flash_with_kvcache_fn",
         **kwargs,

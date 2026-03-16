@@ -21,7 +21,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, StaticCache
-from ...modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
+from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from ..gemma.modeling_gemma import GemmaForCausalLM
@@ -160,14 +160,6 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -250,7 +242,6 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
             position_ids=position_ids,
             dropout=dropout_rate,
             sliding_window=getattr(self, "sliding_window", None),
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
         )
 
@@ -263,7 +254,6 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
             position_ids=position_ids,
             dropout=dropout_rate,
             sliding_window=getattr(self, "sliding_window", None),
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
         )
 

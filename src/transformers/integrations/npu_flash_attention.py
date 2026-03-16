@@ -23,15 +23,19 @@ if is_torch_npu_available():
 
 
 # FlashAttention2 is supported on Ascend NPU with down-right aligned causal mask by default.
-# Set environment variable `NPU_FA2_SPARSE_MODE` to 2 when using top-left aligned causal mask.
 TOP_LEFT_ALIGNED_CAUSAL_MASK_MODE = 2
 DOWN_RIGHT_ALIGNED_CAUSAL_MASK_MODE = 3
 
 SPARSE_MODE = int(os.getenv("NPU_FA2_SPARSE_MODE", default=DOWN_RIGHT_ALIGNED_CAUSAL_MASK_MODE))
-if SPARSE_MODE not in [TOP_LEFT_ALIGNED_CAUSAL_MASK_MODE, DOWN_RIGHT_ALIGNED_CAUSAL_MASK_MODE]:
+if SPARSE_MODE != DOWN_RIGHT_ALIGNED_CAUSAL_MASK_MODE:
+    if SPARSE_MODE == TOP_LEFT_ALIGNED_CAUSAL_MASK_MODE:
+        raise ValueError(
+            "Environment variable `NPU_FA2_SPARSE_MODE` can only be set as 3 (down-right aligned causal mask). "
+            "Sparse mode 2 (top-left aligned causal mask) has been deprecated."
+        )
+
     raise ValueError(
-        "Environment variable `NPU_FA2_SPARSE_MODE` can only be set as 2 (top-left aligned causal mask) "
-        "or 3 (down-right aligned causal mask)."
+        "Environment variable `NPU_FA2_SPARSE_MODE` can only be set as 3 (down-right aligned causal mask)."
     )
 
 ATTN_MASK_NPU_CACHE = {}
@@ -42,10 +46,6 @@ def get_attn_mask_npu(device):
     if device not in ATTN_MASK_NPU_CACHE:
         ATTN_MASK_NPU_CACHE[device] = torch.triu(torch.ones([2048, 2048], device=device), diagonal=1).bool()
     return ATTN_MASK_NPU_CACHE[device]
-
-
-def is_npu_fa2_top_left_aligned_causal_mask():
-    return SPARSE_MODE == TOP_LEFT_ALIGNED_CAUSAL_MASK_MODE if is_torch_npu_available() else False
 
 
 def npu_flash_attn_func(
@@ -136,8 +136,3 @@ def npu_flash_attn_varlen_func(
         )[0]
 
     return output
-
-
-# This function is not implemented but should never be called because block table is not used on NPU
-def npu_flash_attn_with_kvcache():
-    raise NotImplementedError("npu_flash_attn_with_kvcache is not implemented")
