@@ -24,9 +24,21 @@ class HCXVisionV2ProcessorKwargs(ProcessingKwargs, total=False):
 class HCXVisionV2Processor(ProcessorMixin):
     image_processor_class = "Qwen2VLImageProcessor"
     video_processor_class = "Qwen2VLVideoProcessor"
-    tokenizer_class = ("GPT2Tokenizer", "GPT2TokenizerFast", "PreTrainedTokenizer", "PreTrainedTokenizerFast")
+    tokenizer_class = (
+        "GPT2Tokenizer",
+        "GPT2TokenizerFast",
+        "PreTrainedTokenizer",
+        "PreTrainedTokenizerFast",
+    )
 
-    def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        video_processor=None,
+        chat_template=None,
+        **kwargs,
+    ):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
         self.image_token_id = (
@@ -120,7 +132,10 @@ class HCXVisionV2Processor(ProcessorMixin):
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
-        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={**text_inputs, **image_inputs, **videos_inputs},
+            tensor_type=return_tensors,
+        )
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """
@@ -146,7 +161,12 @@ class HCXVisionV2Processor(ProcessorMixin):
                 for image_size in image_sizes
             ]
             num_image_tokens = [(num_patches // merge_size**2) for num_patches in num_image_patches]
-            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+            vision_data.update(
+                {
+                    "num_image_tokens": num_image_tokens,
+                    "num_image_patches": num_image_patches,
+                }
+            )
 
         if video_sizes is not None:
             videos_kwargs = HCXVisionV2ProcessorKwargs._defaults.get("videos_kwargs", {})
@@ -161,7 +181,11 @@ class HCXVisionV2Processor(ProcessorMixin):
         return MultiModalData(**vision_data)
 
     def post_process_image_text_to_text(
-        self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
+        self,
+        generated_outputs,
+        skip_special_tokens=True,
+        clean_up_tokenization_spaces=False,
+        **kwargs,
     ):
         """
         Post-process the output of the model to decode the text.
