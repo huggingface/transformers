@@ -668,6 +668,20 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         reason="Sam3Model creates attention masks from features (with gradients), "
         "which is incompatible with flash attention's expectation of binary masks"
     )
+    def test_flash_attn_4_inference_equivalence(self):
+        pass
+
+    @unittest.skip(
+        reason="Sam3Model creates attention masks from features (with gradients), "
+        "which is incompatible with flash attention's expectation of binary masks"
+    )
+    def test_flash_attn_4_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip(
+        reason="Sam3Model creates attention masks from features (with gradients), "
+        "which is incompatible with flash attention's expectation of binary masks"
+    )
     def test_flash_attn_kernels_inference_equivalence(self):
         pass
 
