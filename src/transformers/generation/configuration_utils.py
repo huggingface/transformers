@@ -1752,7 +1752,7 @@ class ContinuousBatchingConfig:
             self.max_cached_graphs = 32
 
     def process_compile_config(
-        self, fallback_compile_config: CompileConfig | None, decode_fast_path_available: bool
+        self, fallback_compile_config: CompileConfig | None, is_flash_attn: bool, decode_fast_path_available: bool
     ) -> tuple[CompileConfig | None, CompileConfig | None]:
         """Processes the compile configs for varlen and decode paths. Returns (varlen_config, decode_config) with either
         potentially None.
@@ -1765,7 +1765,9 @@ class ContinuousBatchingConfig:
         # For each config, priority is: explicit config, default config, fallback config, None
         if self.varlen_compile_config is None:
             if self.use_default_compile_configs:
-                varlen_config = CompileConfig(mode="max-autotune-no-cudagraphs", dynamic=True, fullgraph=False)
+                # Flash does not support fullgraph but other (sdpa and eager) do
+                fullgraph = not is_flash_attn
+                varlen_config = CompileConfig(mode="max-autotune-no-cudagraphs", fullgraph=fullgraph, dynamic=True)
             elif fallback_compile_config is not None:
                 varlen_config = fallback_compile_config
             else:
@@ -1775,7 +1777,7 @@ class ContinuousBatchingConfig:
 
         if self.decode_compile_config is None:
             if self.use_default_compile_configs:
-                decode_config = CompileConfig(mode="max-autotune-no-cudagraphs", dynamic=False, fullgraph=False)
+                decode_config = CompileConfig(mode="max-autotune-no-cudagraphs", fullgraph=False, dynamic=False)
             elif fallback_compile_config is not None:
                 decode_config = fallback_compile_config
             else:

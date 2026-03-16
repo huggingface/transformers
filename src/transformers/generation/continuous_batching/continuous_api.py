@@ -27,7 +27,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from ...configuration_utils import PretrainedConfig
-from ...generation.configuration_utils import CompileConfig, ContinuousBatchingConfig, GenerationConfig
+from ...generation.configuration_utils import ContinuousBatchingConfig, GenerationConfig
 from ...generation.logits_process import LogitsProcessorList
 from ...modeling_flash_attention_utils import lazy_import_paged_flash_attention
 from ...utils.generic import is_flash_attention_requested
@@ -126,10 +126,6 @@ class ContinuousBatchProcessor:
         self.kv_padding_interval_size = self.cb_config.kv_padding_interval_size
         self.max_cached_graphs = self.cb_config.max_cached_graphs
         self.use_cuda_graph = self.cb_config.use_cuda_graph
-        # Compile-related arguments
-        self.compile_config: CompileConfig | None = getattr(generation_config, "compile_config", None)
-
-        self._pad_inputs = self.use_cuda_graph or (self.compile_config is not None and not self.compile_config.dynamic)
 
         # Set up metrics collector
         self.max_batch_tokens = cache.max_batch_tokens
@@ -138,11 +134,14 @@ class ContinuousBatchProcessor:
         # If the user turned on the decode fast path (ie. using a block table), check if it is available
         self._ensure_decode_fast_path_is_available()  # this needs to happen before self.inputs_and_outputs is created
 
-        # Now resolve the compile configs for both paths
+        # Resolve compile behavior
         varlen_config, decode_config = self.cb_config.process_compile_config(
-            fallback_compile_config=self.compile_config,
+            fallback_compile_config=getattr(generation_config, "compile_config", None),
+            is_flash_attn=is_flash_attention_requested(config=config),
             decode_fast_path_available=self.cache.max_blocks_per_request > 0,
         )
+        use_compile_config = varlen_config is not None or decode_config is not None
+        self._pad_inputs = self.use_cuda_graph or use_compile_config  # even with dynamic compile, it's better to pad
 
         # Compile the varlen path if config provided
         if varlen_config is not None:
