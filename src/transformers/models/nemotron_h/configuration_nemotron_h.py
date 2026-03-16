@@ -24,7 +24,7 @@ logger = logging.get_logger(__name__)
 class NemotronHConfig(PretrainedConfig):
     r"""
     layers_block_type (`list`, *optional*):
-        Explicit list of layer types for each layer. Each element must be one of: "mamba", "attention", or "moe".
+        Explicit list of layer types for each layer. Each element must be one of: "mlp", "mamba", "attention", or "moe".
         The number of layers is determined by the length of this list.
     num_logits_to_keep (`int`, *optional*, defaults to 1):
         Number of prompt logits to calculate during generation. If `None`, all logits will be calculated.
@@ -98,7 +98,7 @@ class NemotronHConfig(PretrainedConfig):
         if expected_length is not None and len(layers_block_type) != expected_length:
             raise ValueError(f"{param_name} must have length {expected_length}. Got length {len(layers_block_type)}.")
 
-        valid_types = {"mamba", "attention", "moe"}
+        valid_types = {"mamba", "attention", "moe", "mlp"}
         if not all(block_type in valid_types for block_type in layers_block_type):
             invalid = set(layers_block_type) - valid_types
             raise ValueError(f"{param_name} contains invalid types: {invalid}. Must be one of: {valid_types}")
@@ -321,7 +321,7 @@ class NemotronHConfig(PretrainedConfig):
     @staticmethod
     def _pattern_to_list(pattern: str) -> list:
         """Convert pattern string to list of layer types (for backward compatibility)."""
-        pattern_mapping = {"M": "mamba", "E": "moe", "*": "attention"}
+        pattern_mapping = {"M": "mamba", "E": "moe", "*": "attention", "-": "mlp"}
         return [pattern_mapping[char] for char in pattern]
 
 
