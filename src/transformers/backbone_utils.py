@@ -15,6 +15,7 @@
 """Collection of utils to be used by backbones and their components."""
 
 import enum
+import functools
 import inspect
 
 from huggingface_hub import repo_exists
@@ -154,6 +155,27 @@ class BackboneConfigMixin:
         output["out_features"] = output.pop("_out_features", None)
         output["out_indices"] = output.pop("_out_indices", None)
         return output
+
+
+def filter_output_hidden_states(forward_function):
+    """
+    Wrapper to filer out `hidden_states` as backbones tend to always use them to get their feature maps, i.e.
+    they also always output `hidden_states`. This controls for user-defined behavior again.
+
+    NOTE: We assume a `can_return_tuple` decorator to be applied before so that we always expect a dict like
+          object to remove the hidden states.
+    """
+
+    @functools.wraps(forward_function)
+    def wrapper(self, *args, **kwargs):
+        output_hidden_states = kwargs.get("output_hidden_states", getattr(self.config, "output_hidden_states", False))
+        output = forward_function(self, *args, **kwargs)
+        if not output_hidden_states:
+            filtered_output_data = {k: v for k, v in output.items() if k not in ("hidden_states")}
+            output = type(output)(**filtered_output_data)
+        return output
+
+    return wrapper
 
 
 class BackboneMixin:

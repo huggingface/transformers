@@ -343,7 +343,6 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             expected_arg_names = [
                 "attention_mask",
                 "bbox",
-                "cache_position",
                 "decoder_attention_mask",
                 "decoder_input_ids",
                 "decoder_inputs_embeds",
