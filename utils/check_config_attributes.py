@@ -32,6 +32,7 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    "PI0Config": ["vlm_projection_dim"],
     "Ernie4_5_VL_MoeConfig": ["args"],  # BC Alias
     "Ernie4_5_VL_MoeTextConfig": ["args"],  # BC Alias
     "Ernie4_5_VL_MoeVisionConfig": ["args"],  # BC Alias
