@@ -26,16 +26,21 @@ Citation:
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Union
+from typing import Optional, Union
 
 import torch
 from packaging import version
 
 from ..utils import is_torch_flex_attn_available, logging
-from ..utils.import_utils import get_torch_version, is_torch_less_or_equal, is_torchdynamo_compiling
+from ..utils.import_utils import (
+    get_torch_version,
+    is_torch_greater_or_equal,
+    is_torch_less_or_equal,
+    is_torchdynamo_compiling,
+)
 
 
-_TORCH_FLEX_USE_AUX = version.parse(get_torch_version()) >= version.parse("2.9.0")
+_TORCH_FLEX_USE_AUX = is_torch_greater_or_equal("2.9.0")
 
 
 if is_torch_flex_attn_available():
@@ -92,15 +97,18 @@ class WrappedFlexAttention:
         return self._compiled_flex_attention
 
 
-def _get_flex_attention_lse_kwargs(return_lse: bool) -> dict[str, Any]:
-    if _TORCH_FLEX_USE_AUX:
-        return {
-            "return_aux": AuxRequest(lse=True) if return_lse else None,
-        }
+def get_flex_attention_lse_kwargs(return_lse: bool) -> dict[str, bool | Optional["AuxRequest"]]:
+    """
+    Requests the LSE from flex_attention in a version-agnostic fashion.
 
-    return {
-        "return_lse": return_lse,
-    }
+    Before torch 2.9, the LSE was requested via the boolean return_lse field. However, starting with
+    torch 2.9, an AuxRequest object must be passed via the aux_request field. This method conditionally
+    returns the correct form based on the python version.
+    """
+    if _TORCH_FLEX_USE_AUX:
+        return {"return_aux": AuxRequest(lse=True) if return_lse else None}
+
+    return {"return_lse": return_lse}
 
 
 def compile_friendly_flex_attention(
@@ -319,15 +327,19 @@ def flex_attention_forward(
         # For simplification, we thus always return it as no additional computations are introduced.
         training=module.training,
         # inject the lse args
-        **_get_flex_attention_lse_kwargs(return_lse),
+        **get_flex_attention_lse_kwargs(return_lse),
     )
-    # lse is returned in float32
+
     if return_lse:
+        # before torch 2.9, return_lse returns the LSE directly as a second tuple element
+        # in torch 2.9 and later, return_aux returns AuxOutput as a second tuple element -- the LSE must be extracted
         if _TORCH_FLEX_USE_AUX:
             attention_output, aux = flex_attention_output  # type: ignore[misc]
             lse = aux.lse
         else:
             attention_output, lse = flex_attention_output  # type: ignore[misc]
+
+        # lse is returned in float32
         lse = lse.to(value.dtype)
 
         if s_aux is not None:
