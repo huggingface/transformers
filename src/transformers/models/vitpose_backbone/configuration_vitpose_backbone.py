@@ -13,15 +13,15 @@
 # limitations under the License.
 """VitPose backbone configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="usyd-community/vitpose-base-simple")
+@strict(accept_kwargs=True)
 class VitPoseBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     part_features (`int`, *optional*):
@@ -44,46 +44,30 @@ class VitPoseBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
 
     model_type = "vitpose_backbone"
 
-    def __init__(
-        self,
-        image_size=[256, 192],
-        patch_size=[16, 16],
-        num_channels=3,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        mlp_ratio=4,
-        num_experts=1,
-        part_features=256,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        qkv_bias=True,
-        out_features=None,
-        out_indices=None,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    image_size: int | list[int] | tuple[int, ...] = (256, 192)
+    patch_size: int | list[int] | tuple[int, ...] = (16, 16)
+    num_channels: int = 3
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    mlp_ratio: int = 4
+    num_experts: int = 1
+    part_features: int = 256
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    qkv_bias: bool = True
+    _out_features: list[str] | None = None
+    _out_indices: list[int] | None = None
 
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.mlp_ratio = mlp_ratio
-        self.num_experts = num_experts
-        self.part_features = part_features
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.qkv_bias = qkv_bias
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, num_hidden_layers + 1)]
-        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
+    def __post_init__(self, **kwargs):
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
+        self.set_output_features_output_indices(
+            out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
+        )
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["VitPoseBackboneConfig"]

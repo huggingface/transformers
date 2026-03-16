@@ -13,12 +13,15 @@
 # limitations under the License.
 """Config class for Granite Speech."""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-3.2-8b")
+@strict(accept_kwargs=True)
 class GraniteSpeechEncoderConfig(PreTrainedConfig):
     r"""
     feedforward_mult (`int`, *optional*, defaults to 4):
@@ -51,38 +54,22 @@ class GraniteSpeechEncoderConfig(PreTrainedConfig):
 
     model_type = "granite_speech_encoder"
 
-    def __init__(
-        self,
-        input_dim=160,
-        num_layers=10,
-        hidden_dim=1024,
-        feedforward_mult=4,
-        num_heads=8,
-        dim_head=128,
-        output_dim=42,
-        context_size=200,
-        max_pos_emb=512,
-        dropout=0.1,
-        conv_kernel_size=15,
-        conv_expansion_factor=2,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.input_dim = input_dim
-        self.num_layers = num_layers
-        self.hidden_dim = hidden_dim
-        self.feedforward_mult = feedforward_mult
-        self.num_heads = num_heads
-        self.dim_head = dim_head
-        self.output_dim = output_dim
-        self.context_size = context_size
-        self.dropout = dropout
-        self.conv_kernel_size = conv_kernel_size
-        self.conv_expansion_factor = conv_expansion_factor
-        self.max_pos_emb = max_pos_emb
+    input_dim: int = 160
+    num_layers: int = 10
+    hidden_dim: int = 1024
+    feedforward_mult: int = 4
+    num_heads: int = 8
+    dim_head: int = 128
+    output_dim: int = 42
+    context_size: int = 200
+    max_pos_emb: int = 512
+    dropout: float | int = 0.1
+    conv_kernel_size: int = 15
+    conv_expansion_factor: int = 2
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-3.2-8b")
+@strict(accept_kwargs=True)
 class GraniteSpeechConfig(PreTrainedConfig):
     r"""
     has_lora_adapter (`bool`, *optional*, defaults to `True`):
@@ -120,43 +107,33 @@ class GraniteSpeechConfig(PreTrainedConfig):
         "projector_config": AutoConfig,
     }
 
-    def __init__(
-        self,
-        text_config=None,
-        encoder_config=None,
-        projector_config=None,
-        audio_token_index=49155,
-        initializer_range=0.02,
-        has_lora_adapter=True,
-        downsample_rate=5,
-        window_size=15,
-        **kwargs,
-    ):
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "granite")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["granite"]()
+    text_config: dict | PreTrainedConfig | None = None
+    encoder_config: dict | PreTrainedConfig | None = None
+    projector_config: dict | PreTrainedConfig | None = None
+    audio_token_index: int = 49155
+    initializer_range: float = 0.02
+    has_lora_adapter: bool = True
+    downsample_rate: int = 5
+    window_size: int = 15
 
-        if isinstance(projector_config, dict):
-            projector_config["model_type"] = projector_config.get("model_type", "blip_2_qformer")
-            projector_config = CONFIG_MAPPING[projector_config["model_type"]](**projector_config)
-        elif projector_config is None:
-            projector_config = CONFIG_MAPPING["blip_2_qformer"]()
+    def __post_init__(self, **kwargs):
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "granite")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["granite"]()
 
-        if not isinstance(encoder_config, GraniteSpeechEncoderConfig):
-            encoder_config = {} if encoder_config is None else encoder_config
-            encoder_config = GraniteSpeechEncoderConfig(**encoder_config)
+        if isinstance(self.projector_config, dict):
+            self.projector_config["model_type"] = self.projector_config.get("model_type", "blip_2_qformer")
+            self.projector_config = CONFIG_MAPPING[self.projector_config["model_type"]](**self.projector_config)
+        elif self.projector_config is None:
+            self.projector_config = CONFIG_MAPPING["blip_2_qformer"]()
 
-        self.text_config = text_config
-        self.encoder_config = encoder_config
-        self.projector_config = projector_config
-        self.audio_token_index = audio_token_index
-        self.initializer_range = initializer_range
-        self.has_lora_adapter = has_lora_adapter
-        self.downsample_rate = downsample_rate
-        self.window_size = window_size
-        super().__init__(**kwargs)
+        if not isinstance(self.encoder_config, GraniteSpeechEncoderConfig):
+            self.encoder_config = {} if self.encoder_config is None else self.encoder_config
+            self.encoder_config = GraniteSpeechEncoderConfig(**self.encoder_config)
+
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["GraniteSpeechEncoderConfig", "GraniteSpeechConfig"]
