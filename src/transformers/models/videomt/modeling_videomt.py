@@ -947,7 +947,7 @@ class VideomtPreTrainedModel(PreTrainedModel):
 
     config: VideomtConfig
     base_model_prefix = "videomt"
-    main_input_name = "pixel_values"
+    main_input_name = "pixel_values_videos"
     input_modalities = ("video",)
     supports_gradient_checkpointing = False
     _no_split_modules = ["VideomtLayer"]
@@ -1062,7 +1062,7 @@ class VideomtMaskHead(nn.Module):
     """
 )
 class VideomtForUniversalSegmentation(VideomtPreTrainedModel):
-    main_input_name = "pixel_values"
+    main_input_name = "pixel_values_videos"
 
     def __init__(self, config: VideomtConfig):
         super().__init__(config)
@@ -1125,16 +1125,15 @@ class VideomtForUniversalSegmentation(VideomtPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         mask_labels: list[torch.Tensor] | None = None,
         class_labels: list[torch.Tensor] | None = None,
         patch_offsets: list[torch.Tensor] | None = None,  # Unused, kept for modular compatibility.
         **kwargs: Unpack[TransformersKwargs],
     ) -> VideomtForUniversalSegmentationOutput:
         r"""
-        pixel_values (`torch.Tensor`, *optional*):
-            Video inputs of shape `(batch_size, num_frames, num_channels, height, width)`. Can also be passed as
-            `pixel_values_videos`.
+        pixel_values_videos (`torch.Tensor`, *optional*):
+            Video inputs of shape `(batch_size, num_frames, num_channels, height, width)`.
         mask_labels (`list[torch.Tensor]`, *optional*):
             Not supported for 5D video inputs.
         class_labels (`list[torch.LongTensor]`, *optional*):
@@ -1142,15 +1141,13 @@ class VideomtForUniversalSegmentation(VideomtPreTrainedModel):
         patch_offsets (`list[torch.Tensor]`, *optional*):
             Unused for video inputs and only kept for modular compatibility.
         """
+        if "pixel_values" in kwargs:
+            raise ValueError("Use `pixel_values_videos` with `VideomtForUniversalSegmentation`.")
 
-        pixel_values_videos = kwargs.pop("pixel_values_videos", None)
-        if pixel_values is None:
-            pixel_values = pixel_values_videos
+        if pixel_values_videos is None:
+            raise ValueError("You have to specify pixel_values_videos")
 
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values or pixel_values_videos")
-
-        if pixel_values.ndim != 5:
+        if pixel_values_videos.ndim != 5:
             raise ValueError(
                 "VideomtForUniversalSegmentation only supports 5D video inputs of shape "
                 "(batch_size, num_frames, channels, height, width)."
@@ -1162,8 +1159,8 @@ class VideomtForUniversalSegmentation(VideomtPreTrainedModel):
                 "Flatten frames and use `EomtForUniversalSegmentation` instead."
             )
 
-        batch_size, num_frames, num_channels, height, width = pixel_values.shape
-        flat_pixel_values = pixel_values.reshape(batch_size * num_frames, num_channels, height, width)
+        batch_size, num_frames, num_channels, height, width = pixel_values_videos.shape
+        flat_pixel_values = pixel_values_videos.reshape(batch_size * num_frames, num_channels, height, width)
 
         hidden_states = self.embeddings(flat_pixel_values)
         query_start_idx = self.num_hidden_layers - self.config.num_blocks
@@ -1223,6 +1220,10 @@ class VideomtForUniversalSegmentation(VideomtPreTrainedModel):
         mask_logits = torch.einsum("bqc, bchw -> bqhw", query_tokens, prefix_tokens)
 
         return mask_logits, class_logits
+
+    @staticmethod
+    def _disable_attention_mask(attn_mask, prob, num_query_tokens, encoder_start_tokens, device):
+        raise AttributeError("Not needed for Videomt")
 
 
 __all__ = ["VideomtPreTrainedModel", "VideomtForUniversalSegmentation"]

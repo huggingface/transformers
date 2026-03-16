@@ -402,7 +402,7 @@ def convert_checkpoint(
 
     dummy_video = torch.randn(1, num_frames, 3, config.image_size, config.image_size)
     with torch.no_grad():
-        outputs = model(pixel_values=dummy_video)
+        outputs = model(pixel_values_videos=dummy_video)
 
     if (
         not torch.isfinite(outputs.class_queries_logits).all()
@@ -534,7 +534,7 @@ def verify_conversion_against_github_reference(
         _prepare_reference_model_for_verify(reference_model)
 
         with torch.no_grad():
-            hf_outputs = hf_model(pixel_values=dummy_video)
+            hf_outputs = hf_model(pixel_values_videos=dummy_video)
             reference_outputs = reference_model(dummy_video.reshape(-1, 3, image_size, image_size))
 
         reference_logits = reference_outputs["pred_logits"].reshape(

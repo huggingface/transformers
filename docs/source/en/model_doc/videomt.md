@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-02-19 and added to Hugging Face Transformers on 2026-03-13.*
+*This model was released on 2026-02-19 and added to Hugging Face Transformers on 2026-03-16.*
 
 
 # VidEoMT
@@ -76,7 +76,7 @@ video_url = "https://huggingface.co/datasets/huggingface/documentation-images/re
 # Sample 8 frames to keep the example lightweight.
 video_frames, _ = load_video(video_url, num_frames=8)
 
-inputs = processor(videos=[video_frames], return_tensors="pt")
+inputs = processor(videos=[video_frames], return_tensors="pt").to(model.device)
 
 with torch.inference_mode():
     outputs = model(**inputs)
@@ -120,7 +120,7 @@ video_url = "https://huggingface.co/datasets/huggingface/documentation-images/re
 # Sample 8 frames to keep the example lightweight.
 video_frames, _ = load_video(video_url, num_frames=8)
 
-inputs = processor(videos=[video_frames], return_tensors="pt")
+inputs = processor(videos=[video_frames], return_tensors="pt").to(model.device)
 
 with torch.inference_mode():
     outputs = model(**inputs)
@@ -163,7 +163,7 @@ video_url = "https://huggingface.co/datasets/huggingface/documentation-images/re
 # Sample 8 frames to keep the example lightweight.
 video_frames, _ = load_video(video_url, num_frames=8)
 
-inputs = processor(videos=[video_frames], return_tensors="pt")
+inputs = processor(videos=[video_frames], return_tensors="pt").to(model.device)
 
 with torch.inference_mode():
     outputs = model(**inputs)

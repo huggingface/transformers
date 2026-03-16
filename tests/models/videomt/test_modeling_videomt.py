@@ -57,7 +57,6 @@ class VideomtForUniversalSegmentationTester:
         hidden_size=8,
         num_attention_heads=2,
         num_hidden_layers=2,
-        is_training=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -70,7 +69,7 @@ class VideomtForUniversalSegmentationTester:
         self.num_attention_heads = num_attention_heads
         self.num_hidden_layers = num_hidden_layers
         self.num_register_tokens = num_register_tokens
-        self.is_training = is_training
+        self.is_training = False
 
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1 + self.num_register_tokens
@@ -100,7 +99,7 @@ class VideomtForUniversalSegmentationTester:
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values = self.prepare_config_and_inputs()
-        inputs_dict = {"pixel_values": pixel_values}
+        inputs_dict = {"pixel_values_videos": pixel_values}
         return config, inputs_dict
 
 
@@ -146,19 +145,15 @@ class VideomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin,
         model.eval()
 
         with self.assertRaisesRegex(ValueError, "only supports 5D video inputs"):
-            model(inputs_dict["pixel_values"][:, 0])
+            model(inputs_dict["pixel_values_videos"][:, 0])
 
-    def test_pixel_values_videos_alias(self):
+    def test_pixel_values_name_raises(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = VideomtForUniversalSegmentation(config).to(torch_device)
         model.eval()
 
-        with torch.inference_mode():
-            outputs = model(pixel_values_videos=inputs_dict["pixel_values"])
-
-        expected_batch = inputs_dict["pixel_values"].shape[0] * inputs_dict["pixel_values"].shape[1]
-        self.assertEqual(outputs.class_queries_logits.shape[0], expected_batch)
-        self.assertEqual(outputs.masks_queries_logits.shape[0], expected_batch)
+        with self.assertRaisesRegex(ValueError, "Use `pixel_values_videos`"):
+            model(pixel_values=inputs_dict["pixel_values_videos"])
 
 
 @slow
@@ -166,6 +161,21 @@ class VideomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin,
 @require_vision
 class VideomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
     instance_model_id = "tue-mps/videomt-dinov2-small-ytvis2019"
+    expected_instance_segments_info = [
+        {"id": 0, "label_id": 13, "score": 0.907032},
+        {"id": 1, "label_id": 7, "score": 0.805882},
+        {"id": 2, "label_id": 13, "score": 0.776713},
+    ]
+    expected_instance_segments_info_frame_1 = [
+        {"id": 0, "label_id": 13, "score": 0.958435},
+        {"id": 1, "label_id": 7, "score": 0.79756},
+        {"id": 2, "label_id": 13, "score": 0.893168},
+    ]
+    expected_panoptic_segments_info = [{"id": 0, "label_id": 13, "score": 0.927756}]
+    expected_panoptic_segments_info_frame_1 = [
+        {"id": 0, "label_id": 13, "score": 0.980277},
+        {"id": 1, "label_id": 13, "score": 0.912077},
+    ]
 
     def prepare_video(self, num_frames=2):
         frame = np.array(Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").convert("RGB"))
@@ -208,6 +218,13 @@ class VideomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.isfinite(outputs.class_queries_logits.float()).all())
         self.assertTrue(torch.isfinite(outputs.masks_queries_logits.float()).all())
 
+    def assert_segments_info_close(self, actual_segments_info, expected_segments_info):
+        self.assertEqual(len(actual_segments_info), len(expected_segments_info))
+        for actual, expected in zip(actual_segments_info, expected_segments_info):
+            self.assertEqual(actual["id"], expected["id"])
+            self.assertEqual(actual["label_id"], expected["label_id"])
+            self.assertAlmostEqual(actual["score"], expected["score"], delta=1e-4)
+
     def test_instance_segmentation_inference(self):
         _, processor, video_frames, outputs = self.run_inference(self.instance_model_id)
 
@@ -215,13 +232,49 @@ class VideomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         results = processor.post_process_instance_segmentation(outputs, target_sizes=target_sizes)
 
         self.assertEqual(len(results), len(video_frames))
-        for frame, result in zip(video_frames, results):
-            self.assertEqual(result["segmentation"].shape, frame.shape[:2])
-            self.assertGreaterEqual(len(result["segments_info"]), 1)
-            for info in result["segments_info"]:
-                self.assertIn("label_id", info)
-                self.assertIn("score", info)
-                self.assertTrue(0.0 <= info["score"] <= 1.0)
+
+        self.assertEqual(results[0]["segmentation"].shape, video_frames[0].shape[:2])
+        self.assertEqual(results[1]["segmentation"].shape, video_frames[1].shape[:2])
+
+        expected_slice = torch.tensor(
+            [
+                [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [-1, -1, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            ],
+            device=results[0]["segmentation"].device,
+        )
+        torch.testing.assert_close(results[0]["segmentation"][24:36, 473:485], expected_slice)
+
+        expected_slice = torch.tensor(
+            [
+                [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [-1, -1, 0, 1, 1, 1, 1, 1, 1, 1, 1, -1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            ],
+            device=results[1]["segmentation"].device,
+        )
+        torch.testing.assert_close(results[1]["segmentation"][24:36, 472:484], expected_slice)
+        self.assert_segments_info_close(results[0]["segments_info"], self.expected_instance_segments_info)
+        self.assert_segments_info_close(results[1]["segments_info"], self.expected_instance_segments_info_frame_1)
 
     def test_semantic_segmentation_inference(self):
         _, processor, video_frames, outputs = self.run_inference(self.instance_model_id)
@@ -230,11 +283,46 @@ class VideomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         semantic_results = processor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
 
         self.assertEqual(len(semantic_results), len(video_frames))
-        for frame, seg_map in zip(video_frames, semantic_results):
-            self.assertEqual(seg_map.shape, frame.shape[:2])
-            self.assertFalse(torch.is_floating_point(seg_map))
-            self.assertGreaterEqual(seg_map.min().item(), 0)
-            self.assertLess(seg_map.max().item(), outputs.class_queries_logits.shape[-1] - 1)
+        self.assertEqual(semantic_results[0].shape, video_frames[0].shape[:2])
+        self.assertEqual(semantic_results[1].shape, video_frames[1].shape[:2])
+
+        expected_slice = torch.tensor(
+            [
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 13, 13, 13, 13, 13, 13, 13, 0, 0, 0],
+                [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 0],
+                [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 0],
+                [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13],
+                [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13],
+                [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13],
+                [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13],
+                [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13],
+                [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13],
+                [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13],
+            ],
+            device=semantic_results[0].device,
+        )
+        torch.testing.assert_close(semantic_results[0][1:13, 487:499], expected_slice)
+
+        expected_slice = torch.tensor(
+            [
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 13, 13, 13, 13, 13, 13, 0, 0, 0, 0],
+                [0, 13, 13, 13, 13, 13, 13, 13, 13, 0, 0, 0],
+                [13, 13, 13, 13, 13, 13, 13, 13, 13, 0, 0, 0],
+                [13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 0, 0],
+                [0, 13, 13, 13, 13, 13, 13, 13, 13, 13, 0, 0],
+                [0, 0, 13, 13, 13, 13, 13, 13, 13, 13, 0, 0],
+                [0, 0, 0, 0, 0, 13, 13, 13, 13, 13, 13, 0],
+                [0, 0, 0, 0, 0, 0, 0, 13, 13, 13, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            ],
+            device=semantic_results[1].device,
+        )
+        torch.testing.assert_close(semantic_results[1][2:14, 488:500], expected_slice)
 
     def test_panoptic_segmentation_inference(self):
         _, processor, video_frames, outputs = self.run_inference(self.instance_model_id)
@@ -243,13 +331,50 @@ class VideomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         panoptic_results = processor.post_process_panoptic_segmentation(outputs, target_sizes=target_sizes)
 
         self.assertEqual(len(panoptic_results), len(video_frames))
-        for frame, result in zip(video_frames, panoptic_results):
-            self.assertEqual(result["segmentation"].shape, frame.shape[:2])
-            self.assertIsInstance(result["segments_info"], list)
-            for info in result["segments_info"]:
-                self.assertIn("label_id", info)
-                self.assertIn("score", info)
-                self.assertTrue(0.0 <= info["score"] <= 1.0)
+        self.assertEqual(panoptic_results[0]["segmentation"].shape, video_frames[0].shape[:2])
+        self.assertEqual(panoptic_results[1]["segmentation"].shape, video_frames[1].shape[:2])
+
+        expected_slice = torch.tensor(
+            [
+                [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [-1, -1, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            ],
+            device=panoptic_results[0]["segmentation"].device,
+        )
+        torch.testing.assert_close(panoptic_results[0]["segmentation"][24:36, 473:485], expected_slice)
+
+        expected_slice = torch.tensor(
+            [
+                [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [-1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            ],
+            device=panoptic_results[1]["segmentation"].device,
+        )
+        torch.testing.assert_close(panoptic_results[1]["segmentation"][24:36, 472:484], expected_slice)
+        self.assert_segments_info_close(panoptic_results[0]["segments_info"], self.expected_panoptic_segments_info)
+        self.assert_segments_info_close(
+            panoptic_results[1]["segments_info"], self.expected_panoptic_segments_info_frame_1
+        )
 
     @require_torch_gpu
     def test_instance_segmentation_inference_bf16(self):

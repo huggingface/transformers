@@ -13,8 +13,6 @@
 # limitations under the License.
 """Video processor class for Videomt."""
 
-from collections.abc import Collection
-
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
 from ...utils import is_torch_available, requires_backends
 from ...video_processing_utils import BaseVideoProcessor
@@ -74,7 +72,7 @@ def compute_segments(
     mask_probs: "torch.Tensor",
     pred_scores: "torch.Tensor",
     pred_labels: "torch.Tensor",
-    stuff_classes: Collection[int] | None,
+    label_ids_to_fuse: set[int] | None,
     mask_threshold: float = 0.5,
     overlap_mask_area_threshold: float = 0.8,
     target_size: tuple[int, int] | None = None,
@@ -89,8 +87,8 @@ def compute_segments(
             Tensor of shape `(num_queries,)` containing the confidence score of each predicted query.
         pred_labels (`torch.Tensor`):
             Tensor of shape `(num_queries,)` containing the predicted class ID of each query.
-        stuff_classes (`Collection[int]`, *optional*):
-            Collection of class IDs that should be fused across connected regions.
+        label_ids_to_fuse (`set[int]`, *optional*):
+            Label IDs that should be fused across disconnected regions.
         mask_threshold (`float`, *optional*, defaults to 0.5):
             Threshold used to binarize the query mask probabilities.
         overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
@@ -124,7 +122,7 @@ def compute_segments(
         if not mask_exists:
             continue
 
-        if stuff_classes and pred_class in stuff_classes:
+        if label_ids_to_fuse and pred_class in label_ids_to_fuse:
             if pred_class in stuff_memory_list:
                 segmentation[final_mask] = stuff_memory_list[pred_class]
                 continue
@@ -200,20 +198,15 @@ class VideomtVideoProcessor(BaseVideoProcessor):
         class_queries_logits = outputs.class_queries_logits  # [num_frames, num_queries, num_classes+1]
 
         # Remove the null class `[..., :-1]`
-        masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
-        masks_probs = masks_queries_logits.sigmoid()
+        masks_classes = class_queries_logits.float().softmax(dim=-1)[..., :-1]
+        masks_probs = masks_queries_logits.float().sigmoid()
 
-        segmentation_logits = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
+        segmentation_logits = torch.matmul(masks_classes.transpose(1, 2), masks_probs.flatten(2))
+        segmentation_logits = segmentation_logits.reshape(
+            masks_probs.shape[0], masks_classes.shape[-1], masks_probs.shape[-2], masks_probs.shape[-1]
+        )
 
-        output_logits = []
-        for idx in range(len(segmentation_logits)):
-            resized_logits = F.interpolate(
-                segmentation_logits[idx].unsqueeze(dim=0),
-                size=target_sizes[idx],
-                mode="bilinear",
-                align_corners=False,
-            )
-            output_logits.append(resized_logits[0])
+        output_logits = self._resize_mask_logits(segmentation_logits, target_sizes)
 
         return [logit.argmax(dim=0) for logit in output_logits]
 
@@ -257,10 +250,12 @@ class VideomtVideoProcessor(BaseVideoProcessor):
             mask_pred = mask_probs_batch[frame_idx]
             mask_class = class_queries_logits[frame_idx]
 
-            scores, pred_classes = mask_class.softmax(dim=-1)[..., :-1].max(-1)
+            class_probs = mask_class.float().softmax(dim=-1)[..., :-1]
+            scores, pred_classes = class_probs.max(-1)
             pred_masks = mask_pred > 0
 
-            mask_scores = (mask_pred.sigmoid().flatten(1) * pred_masks.flatten(1)).sum(1) / (
+            mask_probs = mask_pred.float().sigmoid()
+            mask_scores = (mask_probs.flatten(1) * pred_masks.flatten(1)).sum(1) / (
                 pred_masks.flatten(1).sum(1) + 1e-6
             )
             pred_scores = scores * mask_scores
@@ -293,7 +288,7 @@ class VideomtVideoProcessor(BaseVideoProcessor):
         threshold: float = 0.8,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        stuff_classes: list[int] | None = None,
+        label_ids_to_fuse: set[int] | None = None,
     ) -> list[dict]:
         """
         Converts the output of [`VideomtForUniversalSegmentation`] into panoptic segmentation predictions.
@@ -310,8 +305,8 @@ class VideomtVideoProcessor(BaseVideoProcessor):
                 Threshold for binarizing mask probabilities.
             overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
                 Overlap threshold to merge masks into a single segment.
-            stuff_classes (`list[int]`, *optional*):
-                List of class IDs that are "stuff" (amorphous regions). Instances of stuff classes are merged.
+            label_ids_to_fuse (`set[int]`, *optional*):
+                Label IDs that should be fused across disconnected regions.
 
         Returns:
             `list[dict]`: A list of dicts (one per frame), each containing:
@@ -327,7 +322,7 @@ class VideomtVideoProcessor(BaseVideoProcessor):
         num_labels = class_queries_logits.shape[-1] - 1
 
         mask_probs_batch = self._resize_mask_logits(masks_queries_logits, target_sizes)
-        pred_scores_batch, pred_labels_batch = class_queries_logits.softmax(dim=-1).max(-1)
+        pred_scores_batch, pred_labels_batch = class_queries_logits.float().softmax(dim=-1).max(-1)
 
         results: list = []
 
@@ -356,7 +351,7 @@ class VideomtVideoProcessor(BaseVideoProcessor):
                 mask_probs=mask_probs,
                 pred_scores=pred_scores,
                 pred_labels=pred_labels,
-                stuff_classes=stuff_classes,
+                label_ids_to_fuse=label_ids_to_fuse,
                 mask_threshold=mask_threshold,
                 overlap_mask_area_threshold=overlap_mask_area_threshold,
                 target_size=target_sizes[frame_idx] if target_sizes is not None else None,
