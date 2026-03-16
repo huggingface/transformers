@@ -125,12 +125,14 @@ class AriaTextConfig(LlamaConfig):
         moe_topk: int = 2,
         moe_num_shared_experts: int = 2,
         pad_token_id=2,
+        dummy_kwarg=None,
         **super_kwargs,
     ):
         self.intermediate_size = intermediate_size
         self.moe_num_experts = moe_num_experts
         self.moe_topk = moe_topk
         self.moe_num_shared_experts = moe_num_shared_experts
+        self.dummy_kwarg = dummy_kwarg
         super().__init__(pad_token_id=pad_token_id, **super_kwargs)
 
 
