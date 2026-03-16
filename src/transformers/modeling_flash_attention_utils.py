@@ -260,7 +260,7 @@ def lazy_import_flash_attention(
         )
         _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn, _flash_with_kvcache_fn)
 
-    return (_flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn), _process_flash_kwargs_fn
+    return (_flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn), partial(_process_flash_kwargs_fn, flash_fn_name="flash_varlen_fn")
 
 
 def lazy_import_paged_flash_attention(implementation: str | None, allow_all_kernels: bool = False):
@@ -269,10 +269,10 @@ def lazy_import_paged_flash_attention(implementation: str | None, allow_all_kern
     """
     from .integrations.flash_paged import paged_attention_forward
 
-    (_, flash_attn_varlen_func, flash_attn_with_kvcache_fn, _, _), _ = lazy_import_flash_attention(
+    (_, flash_attn_varlen_func, flash_attn_with_kvcache_fn, _, _), _process_flash_kwargs_fn = lazy_import_flash_attention(
         implementation, attention_wrapper=paged_attention_forward, allow_all_kernels=allow_all_kernels
     )
-    return flash_attn_varlen_func, flash_attn_with_kvcache_fn
+    return flash_attn_varlen_func, flash_attn_with_kvcache_fn, _process_flash_kwargs_fn
 
 
 def _index_first_axis(tensor, indices):
@@ -577,7 +577,6 @@ class FlashAttentionKwargs(TypedDict, total=False):
 
 def _process_flash_attention_kwargs(
     query_length: int,
-    key_length: int,
     is_causal: bool,
     dropout: float = 0.0,
     softmax_scale: float | None = None,
@@ -602,8 +601,6 @@ def _process_flash_attention_kwargs(
     Args:
         query_length (`int`):
             Length of the query states
-        key_length (`int`):
-            Length of the key states
         is_causal (`bool`):
             Whether we perform causal (decoder) attention or full attention.
         dropout (`float`):
@@ -638,7 +635,7 @@ def _process_flash_attention_kwargs(
     if supported_signature["dropout_p"]:
         flash_kwargs["dropout_p"] = dropout
 
-    if supported_signature["window_size"] and sliding_window is not None and key_length > sliding_window:
+    if supported_signature["window_size"] and sliding_window is not None:
         # The flash attention API sets inclusive boundaries, i.e. (4, 0) would take 4 tokens to the left
         # and the current token for a total size of 5. However, we usually define our window sizes by
         # their total window size (when causal). Encoder models as of now seldom use SWA and when they
@@ -706,10 +703,6 @@ def _flash_attention_forward(
     cu_seq_lens_k: torch.LongTensor | None = None,
     max_length_q: int | None = None,
     max_length_k: int | None = None,
-    block_table = None,
-    cache_seq_lens = None,
-    cached_key_states = None,
-    cached_value_states = None,
     target_dtype: torch.dtype | None = None,
     attn_implementation: str | None = None,
     **kwargs,
@@ -733,33 +726,13 @@ def _flash_attention_forward(
         attn_implementation (`str`, *optional*):
             The attention implementation to use. If None, will default to the one based on the environment.
     """
-    (flash_fn, flash_varlen_fn, flash_with_kvcache_fn, pad_fn, unpad_fn), process_flash_kwargs_fn = lazy_import_flash_attention(
+    (flash_fn, flash_varlen_fn, _, pad_fn, unpad_fn), process_flash_kwargs_fn = lazy_import_flash_attention(
         attn_implementation
     )
 
     # PEFT possibly silently casts tensors to fp32, this potentially reconverts to correct dtype or is a no op
     query_states, key_states, value_states = fa_peft_integration_check(
         query_states, key_states, value_states, target_dtype
-    )
-
-    # TODO
-    is_fa_with_cache_kwargs = all(
-        kwarg is not None for kwarg in (block_table, cache_seq_lens, cached_key_states, cached_value_states)
-    )
-
-    # Extract the flash attention kwargs that have been requested (and are supported by the implementation)
-    flash_kwargs = partial(
-        process_flash_kwargs_fn,
-        query_length=query_length,
-        key_length=key_states.size(1),
-        is_causal=is_causal,
-        dropout=dropout,
-        softmax_scale=softmax_scale,
-        sliding_window=sliding_window,
-        use_top_left_mask=use_top_left_mask,
-        softcap=softcap,
-        deterministic=deterministic,
-        **kwargs,
     )
 
     # We will use `flash_varlen_fn` to prevent cross-example attention and also allow padding free approach under two cases:
@@ -775,9 +748,9 @@ def _flash_attention_forward(
     )
 
     # Extract the flash attention kwargs that have been requested (and are supported by the implementation)
-    flash_kwargs = process_flash_kwargs_fn(
+    flash_kwargs = partial(
+        process_flash_kwargs_fn,
         query_length=query_length,
-        key_length=key_states.size(1),
         is_causal=is_causal,
         dropout=dropout,
         softmax_scale=softmax_scale,
@@ -785,8 +758,6 @@ def _flash_attention_forward(
         use_top_left_mask=use_top_left_mask,
         softcap=softcap,
         deterministic=deterministic,
-        block_table=block_table,
-        flash_fn_name="flash_varlen_fn" if not is_fa_with_cache_kwargs else "flash_with_kvcache_fn",
         **kwargs,
     )
 
@@ -813,20 +784,6 @@ def _flash_attention_forward(
             out_unpad = out_unpad[0]
 
         out = pad_fn(out_unpad, indices_q, query_states.size(0), query_length)
-
-    elif is_fa_with_cache_kwargs:
-        out = flash_with_kvcache_fn(
-            q=query_states,
-            k=key_states,
-            v=value_states,
-            k_cache=cached_key_states,
-            v_cache=cached_value_states,
-            cache_seqlens=cache_seq_lens,
-            **flash_kwargs,
-        )
-
-        if isinstance(out, tuple):
-            out = out[0]
 
     # Padding free, i.e. sequences flattened into one total sequence
     elif is_fa_with_varlen_kwargs or is_fa_with_position_ids:
