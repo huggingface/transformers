@@ -151,9 +151,8 @@ class IsaacProcessor(ProcessorMixin):
 
             start = max(0, total - self.max_sequence_length)
             end = total
-            base_device: torch.device | None = None
             input_ids_chunks, position_chunks = [], []
-            vision_patches, vision_grids, vision_offsets, vision_lengths = [], [], [], []
+            sample_patches_kept, vision_grids, vision_offsets, vision_lengths = [], [], [], []
             global_offset = 0
             position_offset = 0
 
@@ -163,37 +162,27 @@ class IsaacProcessor(ProcessorMixin):
                 current_window_end = min(end, global_offset + segment_length)
                 has_overlap = current_window_end > current_window_start
 
-                if has_overlap and base_device is None:
-                    base_device = item["patches"].device if item["type"] == "image" else item["tokens"].device
-
                 if has_overlap:
                     segment_local_start = int(current_window_start - global_offset)
                     segment_local_end = int(current_window_end - global_offset)
-                    segment_local_indices = torch.arange(
-                        segment_local_start, segment_local_end, device=base_device, dtype=torch.long
-                    )
+                    segment_local_indices = torch.arange(segment_local_start, segment_local_end, dtype=torch.long)
                     segment_kept_length = segment_local_end - segment_local_start
 
                     if item["type"] == "text":
                         slice_index = segment_local_indices + position_offset
                         zero_axis = torch.zeros_like(slice_index)
                         position_chunks.append(torch.stack((slice_index, zero_axis, zero_axis), -1))
-                        input_ids_chunks.append(item["tokens"].to(base_device)[segment_local_start:segment_local_end])
+                        input_ids_chunks.append(item["tokens"][segment_local_start:segment_local_end])
                         position_offset += segment_length
                     else:
-                        image_position_ids = (
-                            item["position_ids"].to(base_device)[segment_local_start:segment_local_end].clone()
-                        )
+                        image_position_ids = item["position_ids"][segment_local_start:segment_local_end].clone()
                         image_position_ids[:, 0] += position_offset
                         position_chunks.append(image_position_ids)
                         input_ids_chunks.append(
-                            torch.full(
-                                (segment_kept_length,), self.image_pad_token_id, device=base_device, dtype=torch.long
-                            )
+                            torch.full((segment_kept_length,), self.image_pad_token_id, dtype=torch.long)
                         )
-
-                        vision_patches.append(item["patches"].to(base_device))
-                        vision_grids.append(item["grid"].to(device=base_device))
+                        sample_patches_kept.append(item["patches"])
+                        vision_grids.append(item["grid"])
                         vision_offsets.append(segment_local_start)
                         vision_lengths.append(segment_kept_length)
                         position_offset += int(item["position_ids"][-1, 0].item()) + 1
@@ -204,40 +193,29 @@ class IsaacProcessor(ProcessorMixin):
 
                 global_offset += segment_length
 
-            if base_device is None:
-                base_device = torch.device("cpu")
-
             sample_input_ids.append(
-                torch.cat(input_ids_chunks, 0)
-                if input_ids_chunks
-                else torch.zeros((0,), device=base_device, dtype=torch.long)
+                torch.cat(input_ids_chunks, 0) if input_ids_chunks else torch.zeros((0,), dtype=torch.long)
             )
             sample_position_ids.append(
-                torch.cat(position_chunks, 0)
-                if position_chunks
-                else torch.zeros((0, 3), device=base_device, dtype=torch.long)
+                torch.cat(position_chunks, 0) if position_chunks else torch.zeros((0, 3), dtype=torch.long)
             )
-            sample_vision_patches.append(vision_patches)
-            if vision_patches:
+            sample_vision_patches.append(sample_patches_kept)
+            if sample_patches_kept:
                 sample_vision_grids.append(torch.stack(vision_grids))
-                sample_vision_offsets.append(torch.tensor(vision_offsets, device=base_device, dtype=torch.long))
-                sample_vision_lengths.append(torch.tensor(vision_lengths, device=base_device, dtype=torch.long))
+                sample_vision_offsets.append(torch.tensor(vision_offsets, dtype=torch.long))
+                sample_vision_lengths.append(torch.tensor(vision_lengths, dtype=torch.long))
             else:
-                sample_vision_grids.append(torch.zeros((0, 2), device=base_device, dtype=torch.long))
-                sample_vision_offsets.append(torch.zeros((0,), device=base_device, dtype=torch.long))
-                sample_vision_lengths.append(torch.zeros((0,), device=base_device, dtype=torch.long))
+                sample_vision_grids.append(torch.zeros((0, 2), dtype=torch.long))
+                sample_vision_offsets.append(torch.zeros((0,), dtype=torch.long))
+                sample_vision_lengths.append(torch.zeros((0,), dtype=torch.long))
 
         batch_size = len(sample_input_ids)
         lengths = [int(sample_input.shape[0]) for sample_input in sample_input_ids]
         max_len = max(lengths, default=0)
-        base_device = next(
-            (sample_input.device for sample_input in sample_input_ids if sample_input.numel() > 0),
-            torch.device("cpu"),
-        )
 
-        input_ids = torch.full((batch_size, max_len), self.text_pad_token_id, device=base_device, dtype=torch.long)
-        attention_mask = torch.zeros((batch_size, max_len), device=base_device, dtype=torch.long)
-        position_ids = torch.zeros((batch_size, max_len, 3), device=base_device, dtype=torch.long)
+        input_ids = torch.full((batch_size, max_len), self.text_pad_token_id, dtype=torch.long)
+        attention_mask = torch.zeros((batch_size, max_len), dtype=torch.long)
+        position_ids = torch.zeros((batch_size, max_len, 3), dtype=torch.long)
 
         for batch_idx, length in enumerate(lengths):
             if length == 0:
@@ -263,21 +241,18 @@ class IsaacProcessor(ProcessorMixin):
             patch_dtype = first_patch.dtype
             max_patches = max((patch.shape[0] for patches in sample_vision_patches for patch in patches), default=0)
 
-            vision_patches = torch.zeros(
-                (batch_size, max_images, max_patches, patch_dim), device=base_device, dtype=patch_dtype
-            )
-            vision_patch_attention_mask = torch.zeros(
-                (batch_size, max_images, max_patches), device=base_device, dtype=torch.long
-            )
-            vision_token_grids = torch.zeros((batch_size, max_images, 2), device=base_device, dtype=torch.long)
-            vision_token_offsets = torch.zeros((batch_size, max_images), device=base_device, dtype=torch.long)
-            vision_token_lengths = torch.zeros((batch_size, max_images), device=base_device, dtype=torch.long)
-            vision_image_attention_mask = torch.zeros((batch_size, max_images), device=base_device, dtype=torch.long)
+            vision_patches = torch.zeros((batch_size, max_images, max_patches, patch_dim), dtype=patch_dtype)
+            vision_patch_attention_mask = torch.zeros((batch_size, max_images, max_patches), dtype=torch.long)
+            vision_token_grids = torch.zeros((batch_size, max_images, 2), dtype=torch.long)
+            vision_token_offsets = torch.zeros((batch_size, max_images), dtype=torch.long)
+            vision_token_lengths = torch.zeros((batch_size, max_images), dtype=torch.long)
+            vision_image_attention_mask = torch.zeros((batch_size, max_images), dtype=torch.long)
 
             for batch_idx, sample_patches in enumerate(sample_vision_patches):
                 sample_image_count = len(sample_patches)
                 if sample_image_count == 0:
                     continue
+
                 vision_token_grids[batch_idx, :sample_image_count] = sample_vision_grids[batch_idx]
                 vision_token_offsets[batch_idx, :sample_image_count] = sample_vision_offsets[batch_idx]
                 vision_token_lengths[batch_idx, :sample_image_count] = sample_vision_lengths[batch_idx]
