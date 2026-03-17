@@ -18,13 +18,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(
-    checkpoint="PaddlePaddle/UVDoc_safetensors",
-    custom_args=r"""
+@auto_docstring(checkpoint="PaddlePaddle/UVDoc_safetensors")
+@strict(accept_kwargs=True)
+class UVDocConfig(PreTrainedConfig):
+    r"""
     num_filter (`int`, *optional*, defaults to 32):
         Number of convolutional filters in the initial convolutional layers.
     in_channels (`int`, *optional*, defaults to 3):
@@ -42,9 +45,8 @@ from ...utils import auto_docstring
         for a single bridge block.
     padding_mode (`str`, *optional*, defaults to `"reflect"`):
         Padding mode for convolutional layers. Supported modes are `"reflect"`, `"constant"`, and `"replicate"`.
-    """,
-)
-class UVDocConfig(PreTrainedConfig):
+    """
+
     model_type = "uvdoc"
 
     def __init__(

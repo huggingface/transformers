@@ -18,6 +18,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms.v2.functional as tvF
+from huggingface_hub.dataclasses import strict
 
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
@@ -33,9 +34,10 @@ from ...utils.generic import TensorType
 from ...utils.output_capturing import capture_outputs
 
 
-@auto_docstring(
-    checkpoint="PaddlePaddle/UVDoc_safetensors",
-    custom_args=r"""
+@auto_docstring(checkpoint="PaddlePaddle/UVDoc_safetensors")
+@strict(accept_kwargs=True)
+class UVDocConfig(PreTrainedConfig):
+    r"""
     num_filter (`int`, *optional*, defaults to 32):
         Number of convolutional filters in the initial convolutional layers.
     in_channels (`int`, *optional*, defaults to 3):
@@ -53,9 +55,8 @@ from ...utils.output_capturing import capture_outputs
         for a single bridge block.
     padding_mode (`str`, *optional*, defaults to `"reflect"`):
         Padding mode for convolutional layers. Supported modes are `"reflect"`, `"constant"`, and `"replicate"`.
-    """,
-)
-class UVDocConfig(PreTrainedConfig):
+    """
+
     model_type = "uvdoc"
 
     def __init__(
