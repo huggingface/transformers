@@ -34,7 +34,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 model = AutoModelForCausalLM.from_pretrained(
     "sarvamai/sarvam-105b",
     device_map="auto",
-    torch_dtype="auto",
 )
 tokenizer = AutoTokenizer.from_pretrained("sarvamai/sarvam-105b")
 

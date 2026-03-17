@@ -18,11 +18,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="sarvamai/sarvam-105b")
+@strict(accept_kwargs=True)
 class SarvamMLAConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 16):
@@ -67,105 +71,50 @@ class SarvamMLAConfig(PreTrainedConfig):
         "num_local_experts": "n_routed_experts",
     }
 
-    def __init__(
-        self,
-        vocab_size=262144,
-        hidden_size=4096,
-        intermediate_size=16384,
-        moe_intermediate_size=2048,
-        num_hidden_layers=32,
-        num_attention_heads=64,
-        num_key_value_heads=None,
-        n_shared_experts=1,
-        n_routed_experts=128,
-        routed_scaling_factor=2.5,
-        kv_lora_rank=512,
-        q_lora_rank=None,
-        qk_rope_head_dim=64,
-        v_head_dim=128,
-        qk_nope_head_dim=128,
-        n_group=16,
-        topk_group=2,
-        num_experts_per_tok=8,
-        first_k_dense_replace=1,
-        norm_topk_prob=True,
-        hidden_act="silu",
-        max_position_embeddings=4096,
-        initializer_range=0.006,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=0,
-        bos_token_id=None,
-        eos_token_id=1,
-        pretraining_tp=1,
-        tie_word_embeddings=False,
-        rope_parameters=None,
-        rope_interleave=True,
-        attention_bias=False,
-        attention_dropout=0.0,
-        **kwargs,
-    ):
-        # Hub config.json uses num_experts/num_shared_experts; map to parent names
-        n_routed_experts = kwargs.pop("num_experts", n_routed_experts)
-        n_shared_experts = kwargs.pop("num_shared_experts", n_shared_experts)
+    vocab_size: int = 262144
+    hidden_size: int = 4096
+    intermediate_size: int = 16384
+    moe_intermediate_size: int = 2048
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 64
+    num_key_value_heads: int | None = None
+    n_shared_experts: int = 1
+    n_routed_experts: int = 128
+    routed_scaling_factor: float = 2.5
+    kv_lora_rank: int = 512
+    q_lora_rank: int | None = None
+    qk_rope_head_dim: int = 64
+    v_head_dim: int | None = 128
+    qk_nope_head_dim: int = 128
+    n_group: int | None = 16
+    topk_group: int | None = 2
+    num_experts_per_tok: int | None = 8
+    first_k_dense_replace: int | None = 1
+    norm_topk_prob: bool | None = True
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 4096
+    initializer_range: float = 0.006
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    pad_token_id: int | None = None
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 1
+    pretraining_tp: int | None = 1
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    rope_interleave: bool | None = True
+    attention_bias: bool = False
+    attention_dropout: float | int | None = 0.0
 
-        # head_dim in Hub config.json is kv_lora_rank + qk_rope_head_dim (for vLLM
-        # MLA compat), but DeepseekV3Config computes it as qk_rope_head_dim.
-        kwargs.pop("head_dim", None)
-        kwargs.pop("q_head_dim", None)
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.moe_intermediate_size = moe_intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.n_shared_experts = n_shared_experts
-        self.n_routed_experts = n_routed_experts
-        self.routed_scaling_factor = routed_scaling_factor
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.v_head_dim = v_head_dim
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_head_dim = qk_nope_head_dim + qk_rope_head_dim
-        self.head_dim = qk_rope_head_dim
-        self.n_group = n_group
-        self.topk_group = topk_group
-        self.num_experts_per_tok = num_experts_per_tok
-        self.first_k_dense_replace = first_k_dense_replace
-        self.norm_topk_prob = norm_topk_prob
-        self.rope_interleave = rope_interleave
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
+        self.head_dim = self.qk_rope_head_dim
+        super().__post_init__(**kwargs)
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.pretraining_tp = pretraining_tp
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.rope_parameters = rope_parameters
-
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        super().__init__(**kwargs)
-
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
-        # The Hub config uses "deepseek_yarn" as rope type; normalize to "yarn"
-        # which is the standard type in ROPE_INIT_FUNCTIONS.
-        rope_scaling = kwargs.get("rope_scaling")
-        if rope_scaling is not None and rope_scaling.get("type") == "deepseek_yarn":
-            kwargs["rope_scaling"] = dict(rope_scaling)
-            kwargs["rope_scaling"]["type"] = "yarn"
-        if self.rope_parameters and self.rope_parameters.get("type") == "deepseek_yarn":
-            self.rope_parameters["type"] = "yarn"
+    def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
@@ -173,7 +122,6 @@ class SarvamMLAConfig(PreTrainedConfig):
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
         self.standardize_rope_params()
-        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
 
         # Convert to float because RoPE fn expect a float. Models on the hub were saved as int
         for key in ["beta_fast", "beta_slow", "factor"]:

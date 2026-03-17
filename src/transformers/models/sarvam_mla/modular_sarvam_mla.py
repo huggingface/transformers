@@ -11,13 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""SarvamMLA model configuration"""
+
+from huggingface_hub.dataclasses import strict
 
 from ...utils import auto_docstring
 from ..deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 
 
 @auto_docstring(checkpoint="sarvamai/sarvam-105b")
+@strict(accept_kwargs=True)
 class SarvamMLAConfig(DeepseekV3Config):
     r"""
     n_group (`int`, *optional*, defaults to 16):
@@ -42,103 +44,18 @@ class SarvamMLAConfig(DeepseekV3Config):
 
     model_type = "sarvam_mla"
 
-    def __init__(
-        self,
-        vocab_size=262144,
-        hidden_size=4096,
-        intermediate_size=16384,
-        moe_intermediate_size=2048,
-        num_hidden_layers=32,
-        num_attention_heads=64,
-        num_key_value_heads=None,
-        n_shared_experts=1,
-        n_routed_experts=128,
-        routed_scaling_factor=2.5,
-        kv_lora_rank=512,
-        q_lora_rank=None,
-        qk_rope_head_dim=64,
-        v_head_dim=128,
-        qk_nope_head_dim=128,
-        n_group=16,
-        topk_group=2,
-        num_experts_per_tok=8,
-        first_k_dense_replace=1,
-        norm_topk_prob=True,
-        hidden_act="silu",
-        max_position_embeddings=4096,
-        initializer_range=0.006,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=0,
-        bos_token_id=None,
-        eos_token_id=1,
-        pretraining_tp=1,
-        tie_word_embeddings=False,
-        rope_parameters=None,
-        rope_interleave=True,
-        attention_bias=False,
-        attention_dropout=0.0,
-        **kwargs,
-    ):
-        # Hub config.json uses num_experts/num_shared_experts; map to parent names
-        n_routed_experts = kwargs.pop("num_experts", n_routed_experts)
-        n_shared_experts = kwargs.pop("num_shared_experts", n_shared_experts)
-
-        # head_dim in Hub config.json is kv_lora_rank + qk_rope_head_dim (for vLLM
-        # MLA compat), but DeepseekV3Config computes it as qk_rope_head_dim.
-        kwargs.pop("head_dim", None)
-        kwargs.pop("q_head_dim", None)
-
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            moe_intermediate_size=moe_intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            n_shared_experts=n_shared_experts,
-            n_routed_experts=n_routed_experts,
-            routed_scaling_factor=routed_scaling_factor,
-            kv_lora_rank=kv_lora_rank,
-            q_lora_rank=q_lora_rank,
-            qk_rope_head_dim=qk_rope_head_dim,
-            v_head_dim=v_head_dim,
-            qk_nope_head_dim=qk_nope_head_dim,
-            n_group=n_group,
-            topk_group=topk_group,
-            num_experts_per_tok=num_experts_per_tok,
-            first_k_dense_replace=first_k_dense_replace,
-            norm_topk_prob=norm_topk_prob,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            rms_norm_eps=rms_norm_eps,
-            use_cache=use_cache,
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            pretraining_tp=pretraining_tp,
-            tie_word_embeddings=tie_word_embeddings,
-            rope_parameters=rope_parameters,
-            rope_interleave=rope_interleave,
-            attention_bias=attention_bias,
-            attention_dropout=attention_dropout,
-            **kwargs,
-        )
-
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
-        # The Hub config uses "deepseek_yarn" as rope type; normalize to "yarn"
-        # which is the standard type in ROPE_INIT_FUNCTIONS.
-        rope_scaling = kwargs.get("rope_scaling", None)
-        if rope_scaling is not None and rope_scaling.get("type") == "deepseek_yarn":
-            kwargs["rope_scaling"] = dict(rope_scaling)
-            kwargs["rope_scaling"]["type"] = "yarn"
-        if self.rope_parameters and self.rope_parameters.get("type") == "deepseek_yarn":
-            self.rope_parameters["type"] = "yarn"
-        return super().convert_rope_params_to_dict(
-            ignore_keys_at_rope_validation=ignore_keys_at_rope_validation, **kwargs
-        )
+    vocab_size: int = 262144
+    hidden_size: int = 4096
+    intermediate_size: int = 16384
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 64
+    num_key_value_heads: int | None = None
+    n_routed_experts: int = 128
+    q_lora_rank: int | None = None
+    n_group: int | None = 16
+    topk_group: int | None = 2
+    first_k_dense_replace: int | None = 1
+    initializer_range: float = 0.006
 
 
 __all__ = ["SarvamMLAConfig"]
