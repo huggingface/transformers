@@ -38,7 +38,13 @@ def _single_input_target(input_dict, source_patterns, target_patterns):
         if len(source_patterns) == 1:
             return source_patterns[0]
         raise ValueError("Undefined Operation encountered!")
-    return target_patterns[0]
+    target = target_patterns[0]
+    # If target still has a \1 backreference, the key was already resolved by a
+    # preceding GGUFDequantize op — reuse the input key rather than emitting a
+    # literal '\1' that WeightConverter's prefix/suffix step cannot resolve.
+    if r"\1" in target:
+        return next(iter(input_dict))
+    return target
 
 
 class GGUFDequantize(ConversionOps):
@@ -68,7 +74,12 @@ class GGUFDequantize(ConversionOps):
         rename_to_target = len(input_dict) == 1 and len(target_patterns) == 1
         result = {}
         for key, tensors in input_dict.items():
-            output_key = target_patterns[0] if rename_to_target else key
+            if rename_to_target:
+                # Use full_layer_name (already resolved, e.g. "model.layers.7.self_attn.q_proj.weight")
+                # instead of target_patterns[0] which may contain unresolved \1 backreferences.
+                output_key = kwargs.get("full_layer_name", target_patterns[0])
+            else:
+                output_key = key
             result[output_key] = tensors
         return result
 
@@ -197,7 +208,7 @@ class ReversePermuteAttnQ(ConversionOps):
         **kwargs,
     ) -> dict[str, "torch.Tensor"]:
         num_heads = config.num_attention_heads
-        target_pattern = target_patterns[0] if len(target_patterns) == 1 else source_patterns[0]
+        target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         dim = tensor.shape[0] // num_heads // 2
@@ -221,7 +232,7 @@ class ReversePermuteAttnK(ConversionOps):
         **kwargs,
     ) -> dict[str, "torch.Tensor"]:
         num_kv_heads = config.num_key_value_heads
-        target_pattern = target_patterns[0] if len(target_patterns) == 1 else source_patterns[0]
+        target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         dim = tensor.shape[0] // num_kv_heads // 2
@@ -247,7 +258,7 @@ class BloomReshapeQKVWeight(ConversionOps):
 
         n_head = config.n_head
         n_embed = config.hidden_size
-        target_pattern = target_patterns[0] if len(target_patterns) == 1 else source_patterns[0]
+        target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         w = tensors[0] if isinstance(tensors, list) else tensors
         q, k, v = torch.chunk(w, 3, dim=0)
@@ -277,7 +288,7 @@ class BloomReshapeQKVBias(ConversionOps):
 
         n_head = config.n_head
         n_embed = config.hidden_size
-        target_pattern = target_patterns[0] if len(target_patterns) == 1 else source_patterns[0]
+        target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         w = tensors[0] if isinstance(tensors, list) else tensors
         q, k, v = torch.chunk(w, 3)

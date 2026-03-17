@@ -1,35 +1,57 @@
 """Benchmarks for GGUF checkpoint loading.
 
+Measures end-to-end AutoModelForCausalLM.from_pretrained() time for GGUF files
+so the weight-map construction overhead (old: get_gguf_hf_weights_map full
+state-dict walk; new: _GGUF_ARCH_CONVERTERS O(1) lookup) is captured.
+
 Run with:
     pip install pytest-benchmark
-    pytest tests/quantization/ggml/test_ggml_benchmark.py --benchmark-only -v
+    RUN_SLOW=1 pytest tests/quantization/ggml/test_ggml_benchmark.py --benchmark-only -v \
+        --benchmark-min-rounds=3 --benchmark-max-time=120
 """
-import pytest
-from huggingface_hub import hf_hub_download
+import gc
 
-from transformers.modeling_gguf_pytorch_utils import load_gguf_checkpoint
+import torch
+
+from transformers import AutoModelForCausalLM
 from transformers.testing_utils import require_gguf, slow
 
 
-GGUF_MODEL_ID = "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"
-GGUF_FILENAME = "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+# --- models ---
+TINYLLAMA_REPO = "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"
+TINYLLAMA_FILE = "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+
+QWEN_MOE_REPO  = "gdax/Qwen1.5-MoE-A2.7B_gguf"
+QWEN_MOE_FILE  = "Qwen1.5-MoE-A2.7B_q4_k_m.gguf"
+
+DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
 
 
-@pytest.fixture(scope="module")
-def gguf_path(tmp_path_factory):
-    tmp = tmp_path_factory.mktemp("gguf")
-    return hf_hub_download(GGUF_MODEL_ID, filename=GGUF_FILENAME, local_dir=str(tmp))
+def _load_and_free(repo_id, filename, device):
+    model = AutoModelForCausalLM.from_pretrained(
+        repo_id,
+        gguf_file=filename,
+        device_map=device,
+    )
+    del model
+    gc.collect()
+    if device == "mps":
+        torch.mps.empty_cache()
 
+
+# ── TinyLlama (dense, ~669 MB Q4_K_M) ──────────────────────────────────────
 
 @slow
 @require_gguf
-def test_bench_load_gguf_metadata_only(benchmark, gguf_path):
-    """Benchmark metadata-only load (no tensor deserialization)."""
-    benchmark(load_gguf_checkpoint, gguf_path, return_tensors=False)
+def test_bench_tinyllama(benchmark):
+    """Dense 1.1B model — baseline."""
+    benchmark(_load_and_free, TINYLLAMA_REPO, TINYLLAMA_FILE, DEVICE)
 
+
+# ── Qwen1.5-MoE-A2.7B (~1.7 GB Q4_K_M, 60 layers × 60 experts) ─────────────
 
 @slow
 @require_gguf
-def test_bench_load_gguf_with_tensors(benchmark, gguf_path):
-    """Benchmark full load including static-table converter construction."""
-    benchmark(load_gguf_checkpoint, gguf_path, return_tensors=True)
+def test_bench_qwen_moe(benchmark):
+    """MoE model — old code walked the full state dict for every expert tensor."""
+    benchmark(_load_and_free, QWEN_MOE_REPO, QWEN_MOE_FILE, DEVICE)
