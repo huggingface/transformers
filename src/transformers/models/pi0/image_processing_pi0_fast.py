@@ -17,12 +17,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...siglip.image_processor_siglip import SiglipImageProcessorFast
+from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
 from ...utils import auto_docstring
 
 
 @auto_docstring
-class PI0ImageProcessorFast(SiglipImageProcessorFast):
+class PI0ImageProcessorFast(BaseImageProcessorFast):
+    resample = PILImageResampling.BICUBIC
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
     size = {"max_height": 224, "max_width": 224}
+    default_to_square = False
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
     pad_size = {"height": 224, "width": 224}
     do_pad = True
