@@ -279,6 +279,9 @@ class UVDocPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True
+    _can_record_outputs = {
+        "hidden_states": UVDocBridgeBlock,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
