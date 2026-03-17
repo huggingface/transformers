@@ -160,6 +160,11 @@ def _build_checkpoint_conversion_mapping():
         "qwen3_5_text": [
             WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
         ],
+        "t5gemma2": [
+            WeightRenaming(r"(?<!vision_model\.)encoder.embed_tokens.", "encoder.text_model.embed_tokens."),
+            WeightRenaming(r"(?<!vision_model\.)encoder.norm.", "encoder.text_model.norm."),
+            WeightRenaming(r"(?<!vision_model\.)encoder.layers.", "encoder.text_model.layers."),
+        ],
         "sam3_tracker": [
             WeightRenaming(
                 source_patterns=r"detector_model.vision_encoder.backbone.", target_patterns="vision_encoder.backbone."
