@@ -199,6 +199,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Dinov2WithRegisters
 class Dinov2WithRegistersSelfAttention(nn.Module):
     def __init__(self, config: Dinov2WithRegistersConfig):
         super().__init__()
@@ -254,6 +255,7 @@ class Dinov2WithRegistersSelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Dinov2WithRegisters
 class Dinov2WithRegistersSelfOutput(nn.Module):
     """
     The residual connection is defined in Dinov2WithRegistersLayer instead of here (as is the case with other models), due to the
@@ -271,6 +273,7 @@ class Dinov2WithRegistersSelfOutput(nn.Module):
         return hidden_states
 
 
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Dinov2WithRegisters
 class Dinov2WithRegistersAttention(nn.Module):
     def __init__(self, config: Dinov2WithRegistersConfig):
         super().__init__()

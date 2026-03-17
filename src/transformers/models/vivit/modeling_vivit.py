@@ -47,15 +47,15 @@ class VivitTubeletEmbeddings(nn.Module):
 
     def __init__(self, config: VivitConfig):
         super().__init__()
-        image_size, tubelet_size = config.image_size, config.tubelet_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
-        num_frames = config.num_frames
-
-        self.image_size = image_size
-        self.tubelet_size = tubelet_size
-        self.num_channels = num_channels
-
-        self.projection = nn.Conv3d(num_channels, hidden_size, kernel_size=tubelet_size, stride=tubelet_size)
+        tubelet_size = config.tubelet_size
+        self.num_patches = (
+            (config.num_frames // tubelet_size[0])
+            * (config.image_size // tubelet_size[1])
+            * (config.image_size // tubelet_size[2])
+        )
+        self.projection = nn.Conv3d(
+            config.num_channels, config.hidden_size, kernel_size=tubelet_size, stride=tubelet_size
+        )
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         # permute to (batch_size, num_channels, num_frames, height, width) for Conv3d
@@ -73,13 +73,9 @@ class VivitEmbeddings(nn.Module):
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.patch_embeddings = VivitTubeletEmbeddings(config)
-        tubelet_size = config.tubelet_size
-        num_patches = (
-            (config.num_frames // tubelet_size[0])
-            * (config.image_size // tubelet_size[1])
-            * (config.image_size // tubelet_size[2])
+        self.position_embeddings = nn.Parameter(
+            torch.zeros(1, self.patch_embeddings.num_patches + 1, config.hidden_size)
         )
-        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # patch_size is the spatial (height, width) part of the tubelet for pos encoding interpolation
         self.patch_size = config.tubelet_size[1:]

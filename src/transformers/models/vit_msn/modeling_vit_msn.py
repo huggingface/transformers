@@ -325,7 +325,7 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
     }
 
     @torch.no_grad()
-    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
+    def _init_weights(self, module):
         """Initialize the weights - ViT MSN uses normal (not trunc_normal) and zeros for embeddings."""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
