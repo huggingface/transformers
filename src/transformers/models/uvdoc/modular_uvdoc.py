@@ -230,40 +230,55 @@ class UVDocResidualBlockWithDilation(nn.Module):
         return hidden_state
 
 
+class UVDocResNetStage(nn.Module):
+    def __init__(self, config, in_channels, feature_map_multipliers, block_count, block_stride):
+        super().__init__()
+        out_channels = config.num_filter * feature_map_multipliers
+
+        downsample = None
+        if block_stride != 1 or in_channels != out_channels:
+            downsample = True
+
+        self.layers = nn.ModuleList([])
+        for index in range(block_count):
+            layer = UVDocResidualBlockWithDilation(
+                in_channels=in_channels if index == 0 else out_channels,
+                out_channels=out_channels,
+                kernel_size=config.kernel_size,
+                stride=block_stride if index == 0 else 1,
+                downsample=downsample if index == 0 else None,
+                block_index=index,
+            )
+            self.layers.append(layer)
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        for layer in self.layers:
+            hidden_state = layer(hidden_state)
+        return hidden_state
+
+
 class UVDocResNetStraight(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.in_channels = config.num_filter * config.feature_map_multipliers[0]
 
         self.stages = nn.ModuleList([])
-        for feature_map_multipliers, block_count, block_stride in zip(
+        for feature_map, block_count, block_stride in zip(
             config.feature_map_multipliers, config.block_counts_per_stage, config.block_stride_values
         ):
-            stage_layers = nn.ModuleList([])
-            out_channels = config.num_filter * feature_map_multipliers
-
-            downsample = None
-            if block_stride != 1 or self.in_channels != out_channels:
-                downsample = True
-
-            for index in range(block_count):
-                layer = UVDocResidualBlockWithDilation(
-                    in_channels=self.in_channels if index == 0 else out_channels,
-                    out_channels=out_channels,
-                    kernel_size=config.kernel_size,
-                    stride=block_stride if index == 0 else 1,
-                    downsample=downsample if index == 0 else None,
-                    block_index=index,
-                )
-                stage_layers.append(layer)
-            self.stages.append(stage_layers)
-            self.in_channels = out_channels
+            stage = UVDocResNetStage(
+                config=config,
+                in_channels=self.in_channels,
+                feature_map_multipliers=feature_map,
+                block_count=block_count,
+                block_stride=block_stride,
+            )
+            self.stages.append(stage)
+            self.in_channels = config.num_filter * feature_map
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        for stage_layers in self.stages:
-            for layer in stage_layers:
-                hidden_state = layer(hidden_state)
-
+        for stage in self.stages:
+            hidden_state = stage(hidden_state)
         return hidden_state
 
 
@@ -412,7 +427,12 @@ class UVDocPreTrainedModel(PreTrainedModel):
             module.reset_parameters()
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro=r"""
+    The model takes raw document images (pixel values) as input, processes them through the UVDoc backbone to predict spatial transformation parameters,
+    and outputs the rectified (corrected) document image tensor.
+    """
+)
 class UVDocModel(UVDocPreTrainedModel):
     def __init__(self, config: UVDocConfig):
         super().__init__(config)
@@ -440,9 +460,9 @@ class UVDocModel(UVDocPreTrainedModel):
 
         self.out_point_positions2D = UVDocPointPositions2D(config)
         self.post_init()
-
+    
     @capture_outputs
-    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -498,7 +518,8 @@ class UVDocForDocumentRectification(UVDocPreTrainedModel):
         self.model = UVDocModel(config)
         self.post_init()
 
-    @can_return_tuple
+    @capture_outputs
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,

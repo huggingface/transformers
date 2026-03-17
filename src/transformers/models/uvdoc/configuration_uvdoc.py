@@ -84,7 +84,9 @@ class UVDocConfig(PreTrainedConfig):
         self.block_stride_values = block_stride_values if block_stride_values is not None else [1, 2, 2]
         self.feature_map_multipliers = feature_map_multipliers if feature_map_multipliers is not None else [1, 2, 4]
         self.block_counts_per_stage = block_counts_per_stage if block_counts_per_stage is not None else [3, 4, 6]
-        self.dilation_values = dilation_values
+        self.dilation_values = (
+            dilation_values if dilation_values is not None else [[1], [2], [5], [8, 3, 2], [12, 7, 4], [18, 12, 6]]
+        )
         self.padding_mode = padding_mode
         self.upsample_size = upsample_size
         self.upsample_mode = upsample_mode
