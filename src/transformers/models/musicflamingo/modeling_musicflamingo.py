@@ -98,7 +98,9 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
         return inv_freq, attention_factor
 
     @autocast("cuda", enabled=False)
-    def forward(self, timestamps: Tensor, seq_len: int) -> tuple[Tensor, Tensor]:
+    def forward(
+        self, timestamps: Tensor, seq_len: int, window_positions: Tensor | None = None
+    ) -> tuple[Tensor, Tensor]:
         """Compute 2D axial rotary embeddings for batch and time dimensions.
 
         Args:
@@ -110,8 +112,12 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
             computed in float64 for numerical precision.
         """
 
-        # Compute frequencies for batch axis
-        batch_positions = torch.arange(timestamps.shape[0], device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        # Compute frequencies for the window axis. Resetting window positions per sample
+        # keeps single-sample and batched inference equivalent.
+        if window_positions is None:
+            batch_positions = torch.arange(timestamps.shape[0], device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        else:
+            batch_positions = window_positions.to(device=self.inv_freq.device, dtype=self.inv_freq.dtype)
         batch_positions = batch_positions / self.max_seq_len_cached
         batch_freqs = batch_positions.unsqueeze(-1) * self.inv_freq
         batch_freqs = torch.repeat_interleave(batch_freqs, 2, dim=-1)
@@ -264,12 +270,15 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
         self,
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor,
+        windows_per_sample: torch.Tensor | None = None,
         rote_timestamps: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padded feature indices.
+        windows_per_sample (`torch.Tensor` of shape `(batch_size,)`, *optional*):
+            Number of 30-second audio windows contributed by each original sample before window flattening.
         rote_timestamps (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
             Timestamps in seconds for each encoder output position, used to compute rotary time embeddings.
         """
@@ -281,14 +290,24 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
         )
         hidden_states = encoder_output.last_hidden_state
         if rote_timestamps is not None:
-            cos, sin = self.pos_emb(rote_timestamps.to(hidden_states.device), seq_len=hidden_states.shape[-2])
+            windows_per_sample_list = self._windows_per_sample_to_list(
+                windows_per_sample, expected_num_windows=rote_timestamps.shape[0], input_name="rote_timestamps"
+            )
+            window_positions = None
+            if windows_per_sample_list is not None:
+                window_positions = torch.cat(
+                    [torch.arange(num_windows, device=hidden_states.device) for num_windows in windows_per_sample_list]
+                )
+            cos, sin = self.pos_emb(
+                rote_timestamps.to(hidden_states.device),
+                seq_len=hidden_states.shape[-2],
+                window_positions=window_positions,
+            )
             hidden_states = apply_rotary_time_emb(hidden_states, cos, sin)
         audio_embeds = self.multi_modal_projector(hidden_states)
-
-        # Mask according to the audio tower output lengths, accounting for both conv downsampling and final avg pooling
-        _, post_lengths = self.audio_tower._get_feat_extract_output_lengths(input_features_mask.sum(-1).to(torch.long))
-        valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
-        encoder_output.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
+        encoder_output.pooler_output = self._flatten_audio_embeds(
+            audio_embeds, input_features_mask, windows_per_sample
+        )
         return encoder_output
 
     @can_return_tuple
@@ -298,6 +317,7 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
         input_ids: torch.LongTensor | None = None,
         input_features: torch.FloatTensor | None = None,
         input_features_mask: torch.Tensor | None = None,
+        windows_per_sample: torch.Tensor | None = None,
         rote_timestamps: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -315,6 +335,8 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
+        windows_per_sample (`torch.Tensor` of shape `(batch_size,)`, *optional*):
+            Number of 30-second audio windows contributed by each original sample before window flattening.
         rote_timestamps (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
             Timestamps in seconds for each encoder output position, used to compute rotary time embeddings.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -381,6 +403,7 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
             audio_embeds = self.get_audio_features(
                 input_features,
                 input_features_mask,
+                windows_per_sample=windows_per_sample,
                 rote_timestamps=rote_timestamps,
                 return_dict=True,
             ).pooler_output
@@ -407,19 +430,70 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
     def prepare_inputs_for_generation(self, *args, is_first_iteration=False, **kwargs):
         input_features = kwargs.pop("input_features", None)
         input_features_mask = kwargs.pop("input_features_mask", None)
+        windows_per_sample = kwargs.pop("windows_per_sample", None)
         rote_timestamps = kwargs.pop("rote_timestamps", None)
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
-        if is_first_iteration:
+        if is_first_iteration or not model_inputs.get("use_cache", False):
             if input_features is not None:
                 model_inputs["input_features"] = input_features
             if input_features_mask is not None:
                 model_inputs["input_features_mask"] = input_features_mask
+            if windows_per_sample is not None:
+                model_inputs["windows_per_sample"] = windows_per_sample
             if rote_timestamps is not None:
                 model_inputs["rote_timestamps"] = rote_timestamps
 
         return model_inputs
+
+    @staticmethod
+    def _windows_per_sample_to_list(
+        windows_per_sample: torch.Tensor | None, expected_num_windows: int, input_name: str
+    ) -> list[int] | None:
+        if windows_per_sample is None:
+            return None
+        if windows_per_sample.ndim != 1:
+            raise ValueError("`windows_per_sample` must be a 1D tensor.")
+
+        windows_per_sample_list = windows_per_sample.to("cpu").tolist()
+        if sum(windows_per_sample_list) != expected_num_windows:
+            raise ValueError(
+                f"The sum of `windows_per_sample` must match the number of audio windows in `{input_name}`."
+            )
+
+        return windows_per_sample_list
+
+    def _flatten_audio_embeds(
+        self,
+        audio_embeds: torch.Tensor,
+        input_features_mask: torch.Tensor,
+        windows_per_sample: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        _, post_lengths = self.audio_tower._get_feat_extract_output_lengths(input_features_mask.sum(-1).to(torch.long))
+        valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
+
+        if windows_per_sample is None:
+            return audio_embeds[valid_mask.to(audio_embeds.device)]
+
+        windows_per_sample_list = self._windows_per_sample_to_list(
+            windows_per_sample, expected_num_windows=audio_embeds.shape[0], input_name="input_features"
+        )
+        input_lengths = input_features_mask.sum(-1).to(torch.long)
+
+        merged_audio_embeds = []
+        for sample_audio_embeds, sample_valid_mask, sample_input_lengths in zip(
+            audio_embeds.split(windows_per_sample_list),
+            valid_mask.split(windows_per_sample_list),
+            input_lengths.split(windows_per_sample_list),
+        ):
+            sample_audio_embeds = sample_audio_embeds[sample_valid_mask.to(audio_embeds.device)]
+            _, sample_audio_tokens = self.audio_tower._get_feat_extract_output_lengths(
+                sample_input_lengths.sum().unsqueeze(0)
+            )
+            merged_audio_embeds.append(sample_audio_embeds[: int(sample_audio_tokens[0].item())])
+
+        return torch.cat(merged_audio_embeds, dim=0)
 
 
 __all__ = ["MusicFlamingoForConditionalGeneration", "MusicFlamingoPreTrainedModel"]

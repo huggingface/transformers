@@ -17,8 +17,10 @@
 import json
 import tempfile
 import unittest
+import wave
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from transformers import (
@@ -248,6 +250,70 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @staticmethod
+    def _write_wav(path: Path, audio: np.ndarray, sampling_rate: int = 16000):
+        audio = np.clip(audio, -0.95, 0.95)
+        pcm = (audio * np.iinfo(np.int16).max).astype("<i2")
+        with wave.open(str(path), "wb") as f:
+            f.setnchannels(1)
+            f.setsampwidth(2)
+            f.setframerate(sampling_rate)
+            f.writeframes(pcm.tobytes())
+
+    @staticmethod
+    def _make_pulsed_tone(duration_s: float, sampling_rate: int = 16000) -> np.ndarray:
+        t = np.arange(int(duration_s * sampling_rate), dtype=np.float32) / sampling_rate
+        envelope = 0.45 + 0.55 * (np.sin(2 * np.pi * 2.0 * t) > 0).astype(np.float32)
+        tone = np.sin(2 * np.pi * 110.0 * t)
+        overtone = np.sin(2 * np.pi * 220.0 * t + 0.3)
+        return 0.35 * envelope * tone + 0.1 * overtone
+
+    @staticmethod
+    def _make_stepped_melody(duration_s: float, sampling_rate: int = 16000) -> np.ndarray:
+        t = np.arange(int(duration_s * sampling_rate), dtype=np.float32) / sampling_rate
+        note_len = int(0.4 * sampling_rate)
+        freqs = np.array([261.63, 329.63, 392.0, 523.25, 659.25], dtype=np.float32)
+        note_ids = (np.arange(t.shape[0]) // note_len) % len(freqs)
+        melody = np.sin(2 * np.pi * freqs[note_ids] * t)
+        bass = np.sin(2 * np.pi * 82.41 * t) * (np.sin(2 * np.pi * 1.0 * t) > 0).astype(np.float32)
+        return 0.28 * melody + 0.18 * bass
+
+    def _generate_from_audio_paths(self, model, audio_paths: list[Path], prompt: str, max_new_tokens: int = 50):
+        conversations = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "audio", "path": str(path)},
+                    ],
+                }
+            ]
+            for path in audio_paths
+        ]
+        conversations = conversations[0] if len(conversations) == 1 else conversations
+
+        batch = self.processor.apply_chat_template(
+            conversations, tokenize=True, add_generation_prompt=True, return_dict=True
+        ).to(model.device, dtype=model.dtype)
+        seq = model.generate(**batch, max_new_tokens=max_new_tokens, do_sample=False)
+        inp_len = batch["input_ids"].shape[1]
+        gen_ids = seq[:, inp_len:] if seq.shape[1] >= inp_len else seq
+        txt = self.processor.batch_decode(gen_ids, skip_special_tokens=True)
+        return gen_ids.cpu(), txt
+
+    def _trim_right_padding(self, token_ids: torch.Tensor) -> torch.Tensor:
+        pad_token_id = self.processor.tokenizer.pad_token_id
+        if pad_token_id is None:
+            return token_ids
+
+        non_pad = token_ids.ne(pad_token_id)
+        if not non_pad.any():
+            return token_ids[:0]
+
+        last_non_pad = non_pad.nonzero(as_tuple=False)[-1, 0].item() + 1
+        return token_ids[:last_non_pad]
+
     @slow
     def test_fixture_single_matches(self):
         """
@@ -352,3 +418,40 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(gen_ids.cpu(), exp_ids)
         txt = self.processor.batch_decode(gen_ids, skip_special_tokens=True)
         self.assertListEqual(txt, exp_txt)
+
+    @slow
+    def test_batched_generation_matches_single_generation_for_different_audio_lengths(self):
+        prompt = "Describe this audio in detail. Focus on mood, instrumentation, and structure."
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            short_audio_path = tmpdir / "short_track.wav"
+            long_audio_path = tmpdir / "long_track.wav"
+
+            # Different durations guarantee different numbers of 30s processor windows.
+            self._write_wav(short_audio_path, self._make_pulsed_tone(duration_s=65.0))
+            self._write_wav(long_audio_path, self._make_stepped_melody(duration_s=125.0))
+
+            # Use a deterministic inference path so the equality check validates batching logic rather than
+            # bf16/kernel-level numeric drift.
+            model = AudioFlamingo3ForConditionalGeneration.from_pretrained(
+                self.checkpoint,
+                device_map=torch_device,
+                dtype=torch.float32,
+                attn_implementation="eager",
+            ).eval()
+
+            single_short_ids, single_short_txt = self._generate_from_audio_paths(model, [short_audio_path], prompt)
+            single_long_ids, single_long_txt = self._generate_from_audio_paths(model, [long_audio_path], prompt)
+            batched_ids, batched_txt = self._generate_from_audio_paths(
+                model, [short_audio_path, long_audio_path], prompt
+            )
+
+        torch.testing.assert_close(
+            self._trim_right_padding(batched_ids[0]), self._trim_right_padding(single_short_ids[0])
+        )
+        torch.testing.assert_close(
+            self._trim_right_padding(batched_ids[1]), self._trim_right_padding(single_long_ids[0])
+        )
+        self.assertEqual(batched_txt[0], single_short_txt[0])
+        self.assertEqual(batched_txt[1], single_long_txt[0])
