@@ -220,28 +220,22 @@ class LogNegate(ConversionOps):
 
 
 class ReversePermuteAttnQ(ConversionOps):
-    """Reverse Q-projection GGUF permutation. Needs ``config.num_attention_heads``."""
-
-    def __init__(self, num_heads: int):
-        self.num_heads = num_heads
+    """Reverse Q-projection GGUF permutation. Reads ``config.num_attention_heads`` at convert time."""
 
     def convert(
         self,
         input_dict: dict[str, "torch.Tensor"],
         source_patterns: list[str],
         target_patterns: list[str],
+        config=None,
         **kwargs,
     ) -> dict[str, "torch.Tensor"]:
+        num_heads = config.num_attention_heads
         target_pattern = target_patterns[0] if len(target_patterns) == 1 else source_patterns[0]
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
-        return {target_pattern: self._reverse_permute(tensor, self.num_heads, self.num_heads)}
-
-    def _reverse_permute(self, w: "torch.Tensor", n_head: int, num_kv_heads: int) -> "torch.Tensor":
-        if n_head != num_kv_heads:
-            n_head = num_kv_heads
-        dim = w.shape[0] // n_head // 2
-        return w.reshape(n_head, dim, 2, *w.shape[1:]).swapaxes(2, 1).reshape(w.shape)
+        dim = tensor.shape[0] // num_heads // 2
+        return {target_pattern: tensor.reshape(num_heads, dim, 2, *tensor.shape[1:]).swapaxes(2, 1).reshape(tensor.shape)}
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -249,29 +243,23 @@ class ReversePermuteAttnQ(ConversionOps):
 
 
 class ReversePermuteAttnK(ConversionOps):
-    """Reverse K-projection GGUF permutation. Needs ``num_attention_heads`` and ``num_key_value_heads``."""
-
-    def __init__(self, num_heads: int, num_kv_heads: int):
-        self.num_heads = num_heads
-        self.num_kv_heads = num_kv_heads
+    """Reverse K-projection GGUF permutation. Reads ``config.num_attention_heads`` and
+    ``config.num_key_value_heads`` at convert time."""
 
     def convert(
         self,
         input_dict: dict[str, "torch.Tensor"],
         source_patterns: list[str],
         target_patterns: list[str],
+        config=None,
         **kwargs,
     ) -> dict[str, "torch.Tensor"]:
+        num_kv_heads = config.num_key_value_heads
         target_pattern = target_patterns[0] if len(target_patterns) == 1 else source_patterns[0]
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
-        return {target_pattern: self._reverse_permute(tensor, self.num_heads, self.num_kv_heads)}
-
-    def _reverse_permute(self, w: "torch.Tensor", n_head: int, num_kv_heads: int) -> "torch.Tensor":
-        if n_head != num_kv_heads:
-            n_head = num_kv_heads
-        dim = w.shape[0] // n_head // 2
-        return w.reshape(n_head, dim, 2, *w.shape[1:]).swapaxes(2, 1).reshape(w.shape)
+        dim = tensor.shape[0] // num_kv_heads // 2
+        return {target_pattern: tensor.reshape(num_kv_heads, dim, 2, *tensor.shape[1:]).swapaxes(2, 1).reshape(tensor.shape)}
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -279,25 +267,23 @@ class ReversePermuteAttnK(ConversionOps):
 
 
 class BloomReshapeQKVWeight(ConversionOps):
-    """Reverse Bloom QKV weight reshape."""
-
-    def __init__(self, n_head: int, n_embed: int):
-        self.n_head = n_head
-        self.n_embed = n_embed
+    """Reverse Bloom QKV weight reshape. Reads ``config.n_head`` and ``config.hidden_size`` at convert time."""
 
     def convert(
         self,
         input_dict: dict[str, "torch.Tensor"],
         source_patterns: list[str],
         target_patterns: list[str],
+        config=None,
         **kwargs,
     ) -> dict[str, "torch.Tensor"]:
         import torch
 
+        n_head = config.n_head
+        n_embed = config.hidden_size
         target_pattern = target_patterns[0] if len(target_patterns) == 1 else source_patterns[0]
         tensors = next(iter(input_dict.values()))
         w = tensors[0] if isinstance(tensors, list) else tensors
-        n_head, n_embed = self.n_head, self.n_embed
         q, k, v = torch.chunk(w, 3, dim=0)
         q = q.reshape(n_head, n_embed // n_head, n_embed)
         k = k.reshape(n_head, n_embed // n_head, n_embed)
@@ -311,25 +297,23 @@ class BloomReshapeQKVWeight(ConversionOps):
 
 
 class BloomReshapeQKVBias(ConversionOps):
-    """Reverse Bloom QKV bias reshape."""
-
-    def __init__(self, n_head: int, n_embed: int):
-        self.n_head = n_head
-        self.n_embed = n_embed
+    """Reverse Bloom QKV bias reshape. Reads ``config.n_head`` and ``config.hidden_size`` at convert time."""
 
     def convert(
         self,
         input_dict: dict[str, "torch.Tensor"],
         source_patterns: list[str],
         target_patterns: list[str],
+        config=None,
         **kwargs,
     ) -> dict[str, "torch.Tensor"]:
         import torch
 
+        n_head = config.n_head
+        n_embed = config.hidden_size
         target_pattern = target_patterns[0] if len(target_patterns) == 1 else source_patterns[0]
         tensors = next(iter(input_dict.values()))
         w = tensors[0] if isinstance(tensors, list) else tensors
-        n_head, n_embed = self.n_head, self.n_embed
         q, k, v = torch.chunk(w, 3)
         q = q.reshape(n_head, n_embed // n_head)
         k = k.reshape(n_head, n_embed // n_head)
