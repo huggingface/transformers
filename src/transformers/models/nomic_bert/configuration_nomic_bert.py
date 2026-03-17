@@ -18,132 +18,49 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="google-nomic_bert/nomic_bert-base-uncased")
+@auto_docstring(checkpoint="nomic-ai/nomic-embed-text-v1.5")
+@strict(accept_kwargs=True)
 class NomicBertConfig(PreTrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`NomicBertModel`]. It is used to instantiate an NomicBERT
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the [nomic-ai/nomic-embed-text-v1.5](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the NomicBERT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`BertModel`].
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*):
-            Number of key-value attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        classifier_dropout (`float`, *optional*):
-            The dropout ratio for the classification head.
-        type_vocab_size (`int`, *optional*, defaults to 2):
-            The size of the token type (segment) vocabulary. Used to distinguish different portions of the input,
-            such as sentence A and sentence B in pairwise classification tasks.
-        bos_token_id (`int`, *optional*):
-            The token ID used for the beginning-of-sequence token.
-        eos_token_id (`int`, *optional*):
-            The token ID used for the end-of-sequence token.
-        pad_token_id (`int`, *optional*, defaults to 0):
-            The token ID used for padding.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie the input and output word embeddings. If set to `True`, the same embedding matrix
-            is used for both input embeddings and output logits.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with.
-        head_dim (`int`, *optional*):
-            The dimension of the attention heads.
-
-    ```python
-    >>> from transformers import NomicBertModel, NomicBertConfig
-
-    >>> # Initializing a NomicBERT 2048 style configuration
-    >>> configuration = NomicBertConfig()
-
-    >>> # Initializing a model from the NomicBERT 2048 style configuration
-    >>> model = NomicBertModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
-    """
-
     model_type = "nomic_bert"
 
-    def __init__(
-        self,
-        vocab_size=30522,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        num_key_value_heads=None,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        classifier_dropout=None,
-        type_vocab_size=2,
-        bos_token_id=None,
-        eos_token_id=None,
-        pad_token_id=0,
-        tie_word_embeddings=True,
-        rope_parameters: RopeParameters | None = None,
-        max_position_embeddings=2048,
-        head_dim=None,
-        **kwargs,
-    ):
-        self.head_dim = head_dim if head_dim is not None else hidden_size // num_attention_heads
-        self.num_key_value_heads = num_key_value_heads if num_key_value_heads is not None else num_attention_heads
-        self.rope_parameters = rope_parameters
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
+    vocab_size: int = 30522
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    num_key_value_heads: int | None = None
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.1
+    attention_probs_dropout_prob: float = 0.1
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    classifier_dropout: float | None = None
+    type_vocab_size: int = 2
+    bos_token_id: int | None = None
+    eos_token_id: int | None = None
+    pad_token_id: int = 0
+    tie_word_embeddings = True
+    rope_parameters: RopeParameters | dict | None = None
+    max_position_embeddings: int = 2048
+    head_dim: int | None = None
 
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
-        self.intermediate_size = intermediate_size
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.classifier_dropout = classifier_dropout
-        super().__init__(**kwargs)
+    def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+
+        self.is_decoder = False
+        self.add_cross_attention = False
+        self.use_cache = False
 
 
 __all__ = ["NomicBertConfig"]

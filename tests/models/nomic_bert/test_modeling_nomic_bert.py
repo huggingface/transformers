@@ -32,7 +32,6 @@ if is_torch_available():
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
         NomicBertForMaskedLM,
-        NomicBertForMultipleChoice,
         NomicBertForNextSentencePrediction,
         NomicBertForPreTraining,
         NomicBertForSequenceClassification,
@@ -264,32 +263,6 @@ class NomicBertModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
-    def create_and_check_for_multiple_choice(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        next_sentence_label,
-    ):
-        config.num_choices = self.num_choices
-        model = NomicBertForMultipleChoice(config=config)
-        model.to(torch_device)
-        model.eval()
-        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        result = model(
-            multiple_choice_inputs_ids,
-            attention_mask=multiple_choice_input_mask,
-            token_type_ids=multiple_choice_token_type_ids,
-            labels=choice_labels,
-        )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -312,7 +285,6 @@ class NomicBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         (
             NomicBertModel,
             NomicBertForMaskedLM,
-            NomicBertForMultipleChoice,
             NomicBertForNextSentencePrediction,
             NomicBertForPreTraining,
             NomicBertForSequenceClassification,
@@ -362,10 +334,6 @@ class NomicBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
 
-    def test_for_multiple_choice(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
-
     def test_for_next_sequence_prediction(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_next_sequence_prediction(*config_and_inputs)
@@ -390,14 +358,14 @@ class NomicBertModelIntegrationTest(unittest.TestCase):
         model = AutoModel.from_pretrained("nomic-ai/nomic-embed-text-v1.5")
         tokenizer = AutoTokenizer.from_pretrained("nomic-ai/nomic-embed-text-v1.5")
 
-        text = "Plants create oxygen through a process known as photosynthesis."
-        inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True)
-        inputs["attention_mask"] = torch.ones_like(inputs["input_ids"])
+        sentences = ["Plants create oxygen.", "Photosynthesis is a process where plants create oxygen."]
+
+        inputs = tokenizer(sentences, return_tensors="pt", padding=True, truncation=True)
 
         with torch.no_grad():
             output = model(**inputs)[0]
 
-        expected_shape = torch.Size((1, 11, 768))
+        expected_shape = torch.Size((2, 11, 768))
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor([[[0.4249, 0.1008, 0.7531], [0.3771, 0.1188, 0.7467], [0.4152, 0.1098, 0.7108]]])

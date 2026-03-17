@@ -172,10 +172,6 @@ print(embeddings)
 
 [[autodoc]] NomicBertForMaskedLM
 
-## NomicBertForMultipleChoice
-
-[[autodoc]] NomicBertForMultipleChoice
-
 ## NomicBertForNextSentencePrediction
 
 [[autodoc]] NomicBertForNextSentencePrediction
