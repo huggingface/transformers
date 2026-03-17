@@ -103,12 +103,12 @@ class MiniMaxConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     layer_types: list[str] | None = None
     block_size: int = 256
-    full_attn_alpha_factor: int = 1
-    full_attn_beta_factor: int = 1
-    linear_attn_alpha_factor: int = 1
-    linear_attn_beta_factor: int = 1
-    mlp_alpha_factor: int = 1
-    mlp_beta_factor: int = 1
+    full_attn_alpha_factor: float = 1.0
+    full_attn_beta_factor: float = 1.0
+    linear_attn_alpha_factor: float = 1.0
+    linear_attn_beta_factor: float = 1.0
+    mlp_alpha_factor: float = 1.0
+    mlp_beta_factor: float = 1.0
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:

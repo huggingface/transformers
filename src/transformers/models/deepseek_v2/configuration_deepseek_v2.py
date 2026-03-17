@@ -96,7 +96,7 @@ class DeepseekV2Config(PreTrainedConfig):
     head_dim: int | None = None
     first_k_dense_replace: int = 0
     kv_lora_rank: int = 512
-    q_lora_rank: int = 1536
+    q_lora_rank: int | None = 1536
     n_group: int | None = None
     n_routed_experts: int = 64
     n_shared_experts: int = 2
