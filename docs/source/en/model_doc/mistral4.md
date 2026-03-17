@@ -110,7 +110,3 @@ print(decoded_output)
 ## Mistral4ForTokenClassification
 
 [[autodoc]] Mistral4ForTokenClassification
-
-## Mistral4ForQuestionAnswering
-
-[[autodoc]] Mistral4ForQuestionAnswering

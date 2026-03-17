@@ -60,7 +60,7 @@ class HunYuanMoEV1Config(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
     num_experts: int = 1
-    moe_topk: int = 1
+    moe_topk: int | list[int] = 1
     head_dim: int | None = None
 
     def __post_init__(self, **kwargs):
