@@ -4067,11 +4067,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
             from .quantizers.quantizer_gguf import GGUFQuantizer
 
-            # we need a dummy model to get the state_dict - for this reason, we keep the state_dict as if it was
-            # passed directly as a kwarg from now on
-            with torch.device("meta"):
-                dummy_model = cls(config)
-            gguf_parsed = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True, model_to_load=dummy_model)
+            gguf_parsed = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True)
             state_dict = gguf_parsed["tensors"]  # {gguf_name: GGUFQuantizedTensor}
             _gguf_weight_mapping = gguf_parsed.get("weight_mapping", [])
             _gguf_quantizer = GGUFQuantizer()

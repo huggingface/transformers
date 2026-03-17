@@ -13,22 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
-from typing import NamedTuple
-
-import numpy as np
-
 from .core_model_loading import (
     Concatenate,
-    ConversionOps,
     GGUFQuantizedTensor,
     Transpose,
-    WeightConverter,
 )
 from .gguf_conversion_ops import (
     BloomReshapeQKVBias,
     BloomReshapeQKVWeight,
-    GGUFDequantize,
+    GGUFDequantizer,
     LogNegate,
     ReversePermuteAttnK,
     ReversePermuteAttnQ,
@@ -69,389 +62,150 @@ GGUF_TO_TRANSFORMERS_MAPPING = {
 GGUF_SUPPORTED_ARCHITECTURES = list(GGUF_TO_TRANSFORMERS_MAPPING["config"].keys())
 
 
-class GGUFTensor(NamedTuple):
-    weights: np.ndarray
-    name: str
-    metadata: dict
-
-
-class TensorProcessor:
-    def __init__(self, config=None):
-        self.config = config or {}
-
-    def preprocess_name(self, hf_name: str) -> str:
-        """
-        Preprocesses the tensor name to ease loading the GGUF tensors.
-        """
-        return hf_name
-
-    def perform_fallback_tensor_mapping(
-        self, gguf_to_hf_name_map: dict[str, str], suffix: str, qual_name: str, hf_name: str
-    ):
-        """
-        Called when get_gguf_hf_weights_map fails to map a HF parameter
-        (tensor) and corresponding GGUF one.
-
-        This is particularly useful to resolve one-to-many
-        HF-GGUF mappings sometimes appear in some MoE models.
-        """
-        pass
-
-    def process(self, weights, name, **kwargs):
-        return GGUFTensor(weights, name, {})
-
-
-class LlamaTensorProcessor(TensorProcessor):
-    def __init__(self, config=None):
-        super().__init__(config=config)
-
-    def process(self, weights, name, **kwargs):
-        if ".attn_k." in name or ".attn_q." in name:
-            num_heads = self.config.get("num_attention_heads")
-            num_kv_heads = self.config.get("num_key_value_heads")
-
-            if None in (num_heads, num_kv_heads):
-                return GGUFTensor(weights, name, {})
-            if ".attn_q." in name:
-                weights = self._reverse_permute_weights(weights, num_heads, num_heads)
-            elif ".attn_k." in name:
-                weights = self._reverse_permute_weights(weights, num_heads, num_kv_heads)
-        return GGUFTensor(weights, name, {})
-
-    def _reverse_permute_weights(
-        self, weights: np.ndarray, n_head: int, num_kv_heads: int | None = None
-    ) -> np.ndarray:
-        # Original permutation implementation
-        # https://github.com/ggerganov/llama.cpp/blob/a38b884c6c4b0c256583acfaaabdf556c62fabea/convert_hf_to_gguf.py#L1402-L1408
-        if num_kv_heads is not None and n_head != num_kv_heads:
-            n_head = num_kv_heads
-
-        dim = weights.shape[0] // n_head // 2
-        w = weights.reshape(n_head, dim, 2, *weights.shape[1:])
-        return w.swapaxes(2, 1).reshape(weights.shape)
-
-
-class Qwen2MoeTensorProcessor(TensorProcessor):
-    HF_EXPERT_RENAME_PATTERN = re.compile(r"mlp.experts.\d+.")
-    HF_MOE_W13_PATTERN = re.compile(r"model\.layers\.(?P<bid>\d+)\.mlp\.experts\.gate_up_proj")
-    GGUF_MOE_WEIGHTS_PATTERN = re.compile(r"(?P<name>.*\.ffn_(?P<w>gate|down|up)_exps)\.weight$")
-
-    def __init__(self, config=None):
-        super().__init__(config=config)
-
-    def preprocess_name(self, hf_name: str) -> str:
-        return re.sub(self.HF_EXPERT_RENAME_PATTERN, "mlp.experts.", hf_name)
-
-    def perform_fallback_tensor_mapping(
-        self, gguf_to_hf_name_map: dict[str, str], suffix: str, qual_name: str, hf_name: str
-    ):
-        # Map merged MoE weights (w1 (gate) and w3 (up)) separately.
-        if m := re.fullmatch(self.HF_MOE_W13_PATTERN, hf_name):
-            full_hf_name = qual_name + hf_name
-            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_gate_exps{suffix}"] = full_hf_name
-            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_up_exps{suffix}"] = full_hf_name
-
-    def process(self, weights, name: str, **kwargs):
-        if m := re.fullmatch(self.GGUF_MOE_WEIGHTS_PATTERN, name):
-            tensor_key_mapping = kwargs.get("tensor_key_mapping")
-            parsed_parameters = kwargs.get("parsed_parameters")
-            if tensor_key_mapping:
-                self._set_moe_expert_tensor(weights, parsed_parameters, tensor_key_mapping[m["name"]], m["w"])
-                return GGUFTensor(weights, None, {})
-        if "ffn_gate_inp_shexp" in name:
-            # for compatibility tensor shared_expert_gate must be (1, 2048) dim,
-            # quantized one is (2048)
-            weights = np.expand_dims(weights, axis=0)
-        return GGUFTensor(weights, name, {})
-
-    def _set_moe_expert_tensor(self, weights: np.ndarray, parsed_parameters: dict[str, dict], hf_name: str, w: str):
-        torch_weights = torch.from_numpy(np.copy(weights))
-        if w == "down":
-            parsed_parameters["tensors"][hf_name] = torch_weights
-        else:
-            # Double the size of the second dimension to interleave w1 (gate) and w3 (up)
-            # weights per expert (which is the first dimension).
-            # w1 (gate) comes first and w3 (up) comes second.
-            # ref: https://github.com/vllm-project/vllm/blob/8f8fda261a620234fdeea338f44093d5d8072879/vllm/model_executor/layers/fused_moe/layer.py#L988-L1015
-            shape = list(weights.shape)
-            shard_dim = 1
-            shard_size = shape[shard_dim]
-            shape[shard_dim] = shard_size * 2
-            if hf_name not in parsed_parameters["tensors"]:
-                parsed_parameters["tensors"][hf_name] = torch.zeros(shape, dtype=torch_weights.dtype)
-            out: torch.Tensor = parsed_parameters["tensors"][hf_name]
-            if w == "gate":
-                out = out.narrow(shard_dim, 0, shard_size)
-            else:  # w == "up"
-                out = out.narrow(shard_dim, shard_size, shard_size)
-            out.copy_(torch_weights)
-
-
-class BloomTensorProcessor(TensorProcessor):
-    def __init__(self, config=None):
-        super().__init__(config=config)
-
-    def process(self, weights, name, **kwargs):
-        if "attn_qkv" in name:
-            num_heads = self.config["n_head"]
-            n_embed = self.config["hidden_size"]
-            if "weight" in name:
-                weights = self._reverse_reshape_weights(weights, num_heads, n_embed)
-            else:
-                weights = self._reverse_reshape_bias(weights, num_heads, n_embed)
-        return GGUFTensor(weights, name, {})
-
-    def _reverse_reshape_weights(self, weights: np.ndarray, n_head: int, n_embed: int):
-        # Original reshape implementation
-        # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L972-L985
-        q, k, v = np.array_split(weights, 3, axis=0)
-
-        q = q.reshape(n_head, n_embed // n_head, n_embed)
-        k = k.reshape(n_head, n_embed // n_head, n_embed)
-        v = v.reshape(n_head, n_embed // n_head, n_embed)
-        qkv_weights = np.stack([q, k, v], axis=1)
-
-        return qkv_weights.reshape(n_head * 3 * (n_embed // n_head), n_embed)
-
-    def _reverse_reshape_bias(self, weights: np.ndarray, n_head: int, n_embed: int):
-        # Original reshape implementation
-        # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L986-L998
-        q_bias, k_bias, v_bias = np.array_split(weights, 3)
-
-        q_bias = q_bias.reshape(n_head, n_embed // n_head)
-        k_bias = k_bias.reshape(n_head, n_embed // n_head)
-        v_bias = v_bias.reshape(n_head, n_embed // n_head)
-
-        qkv_bias = np.stack([q_bias, k_bias, v_bias], axis=1).flatten()
-        return qkv_bias
-
-
-class T5TensorProcessor(TensorProcessor):
-    def __init__(self, config=None):
-        super().__init__(config=config)
-
-    def process(self, weights, name, **kwargs):
-        bid = None
-        for chunk in name.split("."):
-            if chunk.isdigit():
-                bid = int(chunk)
-                break
-        return GGUFTensor(weights, name, {"bid": bid})
-
-
-class GPT2TensorProcessor(TensorProcessor):
-    def __init__(self, config=None):
-        super().__init__(config=config)
-
-    def process(self, weights, name, **kwargs):
-        # Original transpose implementation
-        # https://github.com/ggerganov/llama.cpp/blob/a38b884c6c4b0c256583acfaaabdf556c62fabea/convert_hf_to_gguf.py#L2060-L2061
-        if (
-            "attn_qkv.weight" in name
-            or "ffn_down.weight" in name
-            or "ffn_up.weight" in name
-            or "attn_output.weight" in name
-        ):
-            weights = weights.T
-
-        # Handle special case for output.weight
-        if name == "output.weight":
-            # output.weight has conflicts with attn_output.weight in name checking
-            # Store the tensor directly and signal to skip further processing
-            name = "lm_head.weight"
-            parsed_parameters = kwargs.get("parsed_parameters", {})
-            parsed_parameters["tensors"][name] = torch.from_numpy(np.copy(weights))
-            name = None  # Signal to skip further processing
-        return GGUFTensor(weights, name, {})
-
-
-class MambaTensorProcessor(TensorProcessor):
-    def __init__(self, config=None):
-        super().__init__(config=config)
-
-    def process(self, weights, name, **kwargs):
-        if "ssm_conv1d.weight" in name:
-            # for compatibility tensor ssm_conv1d must be (5120, 1, 4]) dim,
-            # quantized one is (5120, 4)
-            weights = np.expand_dims(weights, axis=1)
-        if "ssm_a" in name:
-            # Original exponential implementation
-            # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L2975-L2977
-            weights = np.log(-weights)
-        return GGUFTensor(weights, name, {})
-
-
-class NemotronTensorProcessor(TensorProcessor):
-    def __init__(self, config=None):
-        super().__init__(config=config)
-
-    # ref : https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L4666
-    def process(self, weights, name, **kwargs):
-        if "norm.weight" in name:
-            weights = weights - 1
-        return GGUFTensor(weights, name, {})
-
-
-class Gemma2TensorProcessor(TensorProcessor):
-    def __init__(self, config=None):
-        super().__init__(config=config)
-
-    # ref: https://github.com/ggerganov/llama.cpp/blob/d79d8f39b4da6deca4aea8bf130c6034c482b320/convert_hf_to_gguf.py#L3191
-    # ref: https://github.com/huggingface/transformers/blob/fc37f38915372c15992b540dfcbbe00a916d4fc6/src/transformers/models/gemma/modeling_gemma.py#L89
-    def process(self, weights, name, **kwargs):
-        if "norm.weight" in name:
-            weights = weights - 1
-        return GGUFTensor(weights, name, {})
-
-
-class Lfm2TensorProcessor(TensorProcessor):
-    def __init__(self, config=None):
-        super().__init__(config=config)
-
-    def process(self, weights, name, **kwargs):
-        if "shortconv.conv.weight" in name:
-            ## GGUF shape is [hidden_dim, L_cache], HF expects [hidden_dim, 1, L_cache]
-            weights = np.expand_dims(weights, axis=1)  ## equivalent to unsqueeze(1)
-        return GGUFTensor(weights, name, {})
-
-
-TENSOR_PROCESSORS = {
-    "llama": LlamaTensorProcessor,
-    "qwen2moe": Qwen2MoeTensorProcessor,
-    "qwen3moe": Qwen2MoeTensorProcessor,
-    "bloom": BloomTensorProcessor,
-    "t5": T5TensorProcessor,
-    "t5encoder": T5TensorProcessor,
-    "gpt2": GPT2TensorProcessor,
-    "mamba": MambaTensorProcessor,
-    "nemotron": NemotronTensorProcessor,
-    "gemma2": Gemma2TensorProcessor,
-    "gemma3": Gemma2TensorProcessor,
-    "lfm2": Lfm2TensorProcessor,
-}
-
 # ---------------------------------------------------------------------------
-# Explicit per-architecture op tables (used by build_gguf_deserializers)
+# Static per-architecture GGUF→HF converter tables
 # ---------------------------------------------------------------------------
+# Each entry is a list of GGUFDequantizer instances.
+# `*` in source patterns becomes `(\d+)` (layer-index capture group).
+# `*` in target patterns becomes `\1`  (backreference, resolved at rename time).
 
-# (substring_in_gguf_name, op_factory(config)) pairs per architecture.
-# The first matching pattern wins for a given tensor name.
-_ROPE_ATTN_OPS = [
-    (".attn_q.", ReversePermuteAttnQ()),
-    (".attn_k.", ReversePermuteAttnK()),
+# Shared building blocks
+_ROPE_ATTN_CONVERTERS = [
+    GGUFDequantizer("blk.*.attn_q.weight", "model.layers.*.self_attn.q_proj.weight", [ReversePermuteAttnQ()]),
+    GGUFDequantizer("blk.*.attn_k.weight", "model.layers.*.self_attn.k_proj.weight", [ReversePermuteAttnK()]),
 ]
 
-_NORM_SUBTRACT_ONE_OPS = [
-    ("norm.weight", SubtractOne()),
+_NORM_SUBTRACT_ONE_CONVERTERS = [
+    GGUFDequantizer("blk.*.attn_norm.weight", "model.layers.*.input_layernorm.weight", [SubtractOne()]),
+    GGUFDequantizer("blk.*.ffn_norm.weight", "model.layers.*.post_attention_layernorm.weight", [SubtractOne()]),
 ]
 
-_QWEN_MOE_SHEXP_OPS = [
-    ("ffn_gate_inp_shexp", Unsqueeze(0)),
+_NORM_CONVERTERS = [
+    GGUFDequantizer("blk.*.attn_norm.weight", "model.layers.*.input_layernorm.weight"),
+    GGUFDequantizer("blk.*.ffn_norm.weight", "model.layers.*.post_attention_layernorm.weight"),
 ]
 
-_GGUF_ARCH_SINGLE_OPS: dict[str, list[tuple[str, object]]] = {
-    "llama":    _ROPE_ATTN_OPS,
-    "mistral":  _ROPE_ATTN_OPS,
-    "phi3":     _ROPE_ATTN_OPS,
-    "cohere":   _ROPE_ATTN_OPS,
+_LLAMA_SHARED = [
+    GGUFDequantizer("blk.*.attn_v.weight", "model.layers.*.self_attn.v_proj.weight"),
+    GGUFDequantizer("blk.*.attn_output.weight", "model.layers.*.self_attn.o_proj.weight"),
+    GGUFDequantizer("blk.*.ffn_gate.weight", "model.layers.*.mlp.gate_proj.weight"),
+    GGUFDequantizer("blk.*.ffn_up.weight", "model.layers.*.mlp.up_proj.weight"),
+    GGUFDequantizer("blk.*.ffn_down.weight", "model.layers.*.mlp.down_proj.weight"),
+    GGUFDequantizer("token_embd.weight", "model.embed_tokens.weight"),
+    GGUFDequantizer("output_norm.weight", "model.norm.weight"),
+    GGUFDequantizer("output.weight", "lm_head.weight"),
+]
+
+_LLAMA_CONVERTERS = _ROPE_ATTN_CONVERTERS + _NORM_CONVERTERS + _LLAMA_SHARED
+_NEMOTRON_CONVERTERS = _ROPE_ATTN_CONVERTERS + _NORM_SUBTRACT_ONE_CONVERTERS + _LLAMA_SHARED
+_GEMMA_CONVERTERS = _ROPE_ATTN_CONVERTERS + _NORM_SUBTRACT_ONE_CONVERTERS + _LLAMA_SHARED
+
+_QWEN2_MOE_CONVERTERS = [
+    *_ROPE_ATTN_CONVERTERS,
+    *_NORM_CONVERTERS,
+    GGUFDequantizer("blk.*.attn_v.weight", "model.layers.*.self_attn.v_proj.weight"),
+    GGUFDequantizer("blk.*.attn_output.weight", "model.layers.*.self_attn.o_proj.weight"),
+    GGUFDequantizer("blk.*.ffn_down.weight", "model.layers.*.mlp.shared_expert.down_proj.weight"),
+    GGUFDequantizer("blk.*.ffn_gate.weight", "model.layers.*.mlp.shared_expert.gate_proj.weight"),
+    GGUFDequantizer("blk.*.ffn_up.weight", "model.layers.*.mlp.shared_expert.up_proj.weight"),
+    GGUFDequantizer("blk.*.ffn_gate_inp.weight", "model.layers.*.mlp.gate.weight"),
+    GGUFDequantizer("blk.*.ffn_gate_inp_shexp", "model.layers.*.mlp.shared_expert_gate.weight", [Unsqueeze(0)]),
+    GGUFDequantizer(
+        ["blk.*.ffn_gate_exps.weight", "blk.*.ffn_up_exps.weight"],
+        "model.layers.*.mlp.experts.gate_up_proj",
+        [Concatenate(dim=1)],
+    ),
+    GGUFDequantizer("blk.*.ffn_down_exps.weight", "model.layers.*.mlp.experts.down_proj.weight"),
+    GGUFDequantizer("token_embd.weight", "model.embed_tokens.weight"),
+    GGUFDequantizer("output_norm.weight", "model.norm.weight"),
+    GGUFDequantizer("output.weight", "lm_head.weight"),
+]
+
+_GGUF_ARCH_CONVERTERS: dict[str, list[GGUFDequantizer]] = {
+    # RoPE llama-family
+    "llama": _LLAMA_CONVERTERS,
+    "mistral": _LLAMA_CONVERTERS,
+    "phi3": _LLAMA_CONVERTERS,
+    "cohere": _LLAMA_CONVERTERS,
+    "qwen2": _LLAMA_CONVERTERS,
+    "qwen3": _LLAMA_CONVERTERS,
+    # Norm subtract-one variants
+    "nemotron": _NEMOTRON_CONVERTERS,
+    "gemma2": _GEMMA_CONVERTERS,
+    "gemma3_text": _GEMMA_CONVERTERS,
+    # Bloom
     "bloom": [
-        ("attn_qkv.weight", BloomReshapeQKVWeight()),
-        ("attn_qkv.bias",   BloomReshapeQKVBias()),
+        GGUFDequantizer("blk.*.attn_norm.weight", "transformer.h.*.ln_attn.weight"),
+        GGUFDequantizer("blk.*.attn_norm.bias", "transformer.h.*.ln_attn.bias"),
+        GGUFDequantizer("blk.*.attn_qkv.weight", "transformer.h.*.self_attention.query_key_value.weight", [BloomReshapeQKVWeight()]),
+        GGUFDequantizer("blk.*.attn_qkv.bias", "transformer.h.*.self_attention.query_key_value.bias", [BloomReshapeQKVBias()]),
+        GGUFDequantizer("blk.*.attn_output.weight", "transformer.h.*.self_attention.dense.weight"),
+        GGUFDequantizer("blk.*.attn_output.bias", "transformer.h.*.self_attention.dense.bias"),
+        GGUFDequantizer("blk.*.ffn_norm.weight", "transformer.h.*.ln_mlp.weight"),
+        GGUFDequantizer("blk.*.ffn_norm.bias", "transformer.h.*.ln_mlp.bias"),
+        GGUFDequantizer("blk.*.ffn_up.weight", "transformer.h.*.mlp.dense_h_to_4h.weight"),
+        GGUFDequantizer("blk.*.ffn_up.bias", "transformer.h.*.mlp.dense_h_to_4h.bias"),
+        GGUFDequantizer("blk.*.ffn_down.weight", "transformer.h.*.mlp.dense_4h_to_h.weight"),
+        GGUFDequantizer("blk.*.ffn_down.bias", "transformer.h.*.mlp.dense_4h_to_h.bias"),
+        GGUFDequantizer("token_embd.weight", "transformer.word_embeddings.weight"),
+        GGUFDequantizer("token_embd.bias", "transformer.word_embeddings.bias"),
+        GGUFDequantizer("token_embd_norm.weight", "transformer.word_embeddings_layernorm.weight"),
+        GGUFDequantizer("token_embd_norm.bias", "transformer.word_embeddings_layernorm.bias"),
+        GGUFDequantizer("output_norm.weight", "transformer.ln_f.weight"),
+        GGUFDequantizer("output_norm.bias", "transformer.ln_f.bias"),
     ],
+    # GPT2
     "gpt2": [
-        ("attn_qkv.weight",    Transpose()),
-        ("ffn_down.weight",    Transpose()),
-        ("ffn_up.weight",      Transpose()),
-        ("attn_output.weight", Transpose()),
+        GGUFDequantizer("blk.*.attn_qkv.weight", "transformer.h.*.attn.c_attn.weight", [Transpose()]),
+        GGUFDequantizer("blk.*.attn_qkv.bias", "transformer.h.*.attn.c_attn.bias"),
+        GGUFDequantizer("blk.*.attn_output.weight", "transformer.h.*.attn.c_proj.weight", [Transpose()]),
+        GGUFDequantizer("blk.*.attn_output.bias", "transformer.h.*.attn.c_proj.bias"),
+        GGUFDequantizer("blk.*.ffn_up.weight", "transformer.h.*.mlp.c_fc.weight", [Transpose()]),
+        GGUFDequantizer("blk.*.ffn_up.bias", "transformer.h.*.mlp.c_fc.bias"),
+        GGUFDequantizer("blk.*.ffn_down.weight", "transformer.h.*.mlp.c_proj.weight", [Transpose()]),
+        GGUFDequantizer("blk.*.ffn_down.bias", "transformer.h.*.mlp.c_proj.bias"),
+        GGUFDequantizer("blk.*.attn_norm.weight", "transformer.h.*.ln_1.weight"),
+        GGUFDequantizer("blk.*.attn_norm.bias", "transformer.h.*.ln_1.bias"),
+        GGUFDequantizer("blk.*.ffn_norm.weight", "transformer.h.*.ln_2.weight"),
+        GGUFDequantizer("blk.*.ffn_norm.bias", "transformer.h.*.ln_2.bias"),
+        GGUFDequantizer("token_embd.weight", "transformer.wte.weight"),
+        GGUFDequantizer("position_embd.weight", "transformer.wpe.weight"),
+        GGUFDequantizer("output_norm.weight", "transformer.ln_f.weight"),
+        GGUFDequantizer("output_norm.bias", "transformer.ln_f.bias"),
+        GGUFDequantizer("output.weight", "lm_head.weight"),
     ],
+    # Mamba
     "mamba": [
-        ("ssm_conv1d.weight", Unsqueeze(1)),
-        ("ssm_a",             LogNegate()),
+        GGUFDequantizer("blk.*.ssm_in.weight", "backbone.layers.*.mixer.in_proj.weight"),
+        GGUFDequantizer("blk.*.ssm_conv1d.weight", "backbone.layers.*.mixer.conv1d.weight", [Unsqueeze(1)]),
+        GGUFDequantizer("blk.*.ssm_conv1d.bias", "backbone.layers.*.mixer.conv1d.bias"),
+        GGUFDequantizer("blk.*.ssm_x.weight", "backbone.layers.*.mixer.x_proj.weight"),
+        GGUFDequantizer("blk.*.ssm_dt.weight", "backbone.layers.*.mixer.dt_proj.weight"),
+        GGUFDequantizer("blk.*.ssm_dt.bias", "backbone.layers.*.mixer.dt_proj.bias"),
+        GGUFDequantizer("blk.*.ssm_a", "backbone.layers.*.mixer.A_log", [LogNegate()]),
+        GGUFDequantizer("blk.*.ssm_d", "backbone.layers.*.mixer.D"),
+        GGUFDequantizer("blk.*.ssm_out.weight", "backbone.layers.*.mixer.out_proj.weight"),
+        GGUFDequantizer("blk.*.attn_norm.weight", "backbone.layers.*.norm.weight"),
+        GGUFDequantizer("token_embd.weight", "backbone.embedding.weight"),
+        GGUFDequantizer("output_norm.weight", "backbone.norm_f.weight"),
+        GGUFDequantizer("output.weight", "lm_head.weight"),
     ],
-    "nemotron":   _NORM_SUBTRACT_ONE_OPS,
-    "gemma2":     _NORM_SUBTRACT_ONE_OPS,
-    "gemma3_text": _NORM_SUBTRACT_ONE_OPS,
+    # LFM2
     "lfm2": [
-        ("shortconv.conv.weight", Unsqueeze(1)),
+        *_ROPE_ATTN_CONVERTERS,
+        *_NORM_CONVERTERS,
+        *_LLAMA_SHARED,
+        GGUFDequantizer("blk.*.shortconv.conv.weight", "model.layers.*.conv.weight", [Unsqueeze(1)]),
     ],
-    "qwen2_moe": _QWEN_MOE_SHEXP_OPS,
-    "qwen3_moe": _QWEN_MOE_SHEXP_OPS,
-}
-
-# Model types that merge multiple GGUF tensors into one HF tensor via Concatenate.
-_GGUF_ARCH_MERGE_OP: dict[str, object] = {
-    "qwen2_moe": Concatenate(dim=1),
-    "qwen3_moe": Concatenate(dim=1),
+    # Qwen2MoE / Qwen3MoE
+    "qwen2_moe": _QWEN2_MOE_CONVERTERS,
+    "qwen3_moe": _QWEN2_MOE_CONVERTERS,
 }
 
 
-def build_gguf_deserializers(
-    tensor_key_mapping: dict[str, str],
-    model_type: str,
-) -> list[WeightConverter]:
-    """
-    Build one WeightConverter per GGUF tensor (or per MoE tensor group).
-    Each converter encodes: GGUF name → HF name, with
-    operations = [GGUFDequantize(), *optional_arch_ops].
-
-    Config-dependent ops (e.g. ReversePermuteAttnQ) read the model config at
-    convert time via the ``config`` kwarg passed by ``convert_and_load_state_dict_in_model``.
-
-    Args:
-        tensor_key_mapping: {gguf_name: hf_name} from get_gguf_hf_weights_map
-        model_type: HF model type string (e.g. "llama", "bloom", "qwen2_moe", ...)
-
-    Returns:
-        list of WeightConverter instances, one per distinct HF target tensor
-    """
-    single_ops = _GGUF_ARCH_SINGLE_OPS.get(model_type, [])
-    merge_op = _GGUF_ARCH_MERGE_OP.get(model_type)
-
-    # Group gguf_names by their hf target (for many-to-one converters like Qwen2MoE gate+up)
-    hf_to_gguf: dict[str, list[str]] = {}
-    for gguf_name, hf_name in tensor_key_mapping.items():
-        hf_to_gguf.setdefault(hf_name, []).append(gguf_name)
-
-    converters: list[WeightConverter] = []
-
-    for hf_name, gguf_names in hf_to_gguf.items():
-        gguf_names_sorted = _sort_moe_sources(gguf_names)
-        representative = gguf_names_sorted[0]
-
-        # Find the first matching extra op for this tensor name
-        extra_ops = []
-        for pattern, op in single_ops:
-            if pattern in representative:
-                extra_ops = [op]
-                break
-
-        if len(gguf_names) > 1 and merge_op is not None:
-            ops = [GGUFDequantize(), *extra_ops, merge_op]
-        else:
-            ops = [GGUFDequantize(), *extra_ops]
-
-        converters.append(
-            WeightConverter(
-                source_patterns=gguf_names_sorted,
-                target_patterns=[hf_name],
-                operations=ops,
-            )
-        )
-
-    return converters
-
-
-def _sort_moe_sources(gguf_names: list[str]) -> list[str]:
-    """Sort MoE source tensors so gate comes before up (preserving expected concat order)."""
-
-    def _rank(name):
-        if "gate" in name:
-            return 0
-        elif "up" in name:
-            return 1
-        return 2
-
-    return sorted(gguf_names, key=_rank)
+def get_gguf_converters(model_type: str) -> list[GGUFDequantizer]:
+    """Return the static list of GGUFDequantizer converters for a given HF model type."""
+    return list(_GGUF_ARCH_CONVERTERS.get(model_type, []))
 
 
 def read_field(reader, field):
@@ -461,92 +215,7 @@ def read_field(reader, field):
     return [_gguf_parse_value(value.parts[_data_index], value.types) for _data_index in value.data]
 
 
-# modified from https://github.com/vllm-project/vllm/blob/v0.6.4.post1/vllm/model_executor/model_loader/loader.py#L1115-L1147
-def get_gguf_hf_weights_map(
-    hf_model,
-    processor: TensorProcessor,
-    model_type: str | None = None,
-    num_layers: int | None = None,
-    qual_name: str = "",
-):
-    """
-    GGUF uses this naming convention for their tensors from HF checkpoint:
-    `blk.N.BB.weight` and `blk.N.BB.bias`
-    where N signifies the block number of a layer, and BB signifies the
-    attention/mlp layer components.
-    See "Standardized tensor names" in
-    https://github.com/ggerganov/ggml/blob/master/docs/gguf.md for details.
-    """
-    if is_gguf_available() and is_torch_available():
-        from gguf import MODEL_ARCH_NAMES, get_tensor_name_map
-    else:
-        logger.error(
-            "Loading a GGUF checkpoint in PyTorch, requires both PyTorch and GGUF>=0.10.0 to be installed. Please see "
-            "https://pytorch.org/ and https://github.com/ggerganov/llama.cpp/tree/master/gguf-py for installation instructions."
-        )
-        raise ImportError("Please install torch and gguf>=0.10.0 to load a GGUF checkpoint in PyTorch.")
-
-    model_type = hf_model.config.model_type if model_type is None else model_type
-    num_layers = hf_model.config.num_hidden_layers if num_layers is None else num_layers
-    # hack: ggufs have a different name for cohere
-    if model_type == "cohere":
-        model_type = "command-r"
-    elif model_type == "qwen2_moe":
-        model_type = "qwen2moe"
-    elif model_type == "qwen3_moe":
-        model_type = "qwen3moe"
-    elif model_type == "gemma3_text":
-        model_type = "gemma3"
-    elif model_type == "umt5":
-        model_type = "t5"
-    arch = None
-    for key, value in MODEL_ARCH_NAMES.items():
-        if value == model_type:
-            arch = key
-            break
-    if arch is None:
-        raise NotImplementedError(
-            f"Unknown gguf model_type: {model_type} in gguf-py. "
-            "This might because you're using an outdated version of gguf-py package, "
-            "you can install `gguf` package from source refer to "
-            "https://github.com/ggerganov/llama.cpp/tree/master/gguf-py#development"
-        )
-    name_map = get_tensor_name_map(arch, num_layers)
-
-    # Use a dummy conversion to get the mapping, because
-    # hf => gguf and gguf => hf mappings are reversed
-    gguf_to_hf_name_map = {}
-    state_dict = hf_model.state_dict()
-    for hf_name in state_dict:
-        hf_name = processor.preprocess_name(hf_name)
-
-        name, suffix = hf_name, ""
-        if hf_name.endswith(".weight") or hf_name.endswith(".bias"):
-            name, suffix = hf_name.rsplit(".", 1)
-            suffix = "." + suffix
-
-        gguf_name = name_map.get_name(name)
-        if gguf_name is None:
-            processor.perform_fallback_tensor_mapping(gguf_to_hf_name_map, suffix, qual_name, hf_name)
-            continue
-
-        gguf_to_hf_name_map[gguf_name + suffix] = qual_name + hf_name
-
-    # Some model like Bloom converted from BloomModel instead of BloomForCausalLM
-    # Therefore, we need to check submodule as well to get a correct mapping
-    if named_children := hf_model.named_children():
-        for name, child in named_children:
-            sub_map = get_gguf_hf_weights_map(
-                child, processor, model_type, num_layers, qual_name=f"{qual_name}{name}."
-            )
-            # Ignore the keys that are already in the main map to avoid overwriting
-            sub_map = {k: v for k, v in sub_map.items() if k not in gguf_to_hf_name_map}
-            gguf_to_hf_name_map.update(sub_map)
-
-    return gguf_to_hf_name_map
-
-
-def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_load=None):
+def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     """
     Load a GGUF file and return a dictionary of parsed parameters containing tensors, the parsed
     tokenizer and config attributes.
@@ -691,22 +360,13 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
 
     if return_tensors:
         config = parsed_parameters.get("config", {})
+        model_type = config.get("model_type", architecture)
 
-        # Build name mapping using the existing TensorProcessor for naming (preprocess_name / fallback mapping)
-        ProcessorClass = TENSOR_PROCESSORS.get(architecture, TensorProcessor)
-        processor = ProcessorClass(config=config)
-        tensor_key_mapping = get_gguf_hf_weights_map(model_to_load, processor)
-
-        # Build raw (undequantized) state dict keyed by GGUF tensor name
         parsed_parameters["tensors"] = {
             tensor.name: GGUFQuantizedTensor(tensor.data, tensor.tensor_type)
             for tensor in reader.tensors
         }
-
-        # Build GgufDeserializer WeightConverters that encode GGUF name → HF name + dequant + arch ops
-        parsed_parameters["weight_mapping"] = build_gguf_deserializers(
-            tensor_key_mapping, config.get("model_type", architecture)
-        )
+        parsed_parameters["weight_mapping"] = get_gguf_converters(model_type)
 
     if len(reader_keys) > 0:
         logger.info(f"Some keys of the GGUF file were not considered: {reader_keys}")
