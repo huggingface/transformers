@@ -423,57 +423,66 @@ def format_network_debug_report(max_requests: int = 20, max_routes: int = 10) ->
     return "\n".join(lines)
 
 
-def network_debug_setup_shared_dir() -> str | None:
-    """Create a shared temp directory for xdist workers. Returns the path or None if not enabled."""
-    if not _NETWORK_DEBUG_PROFILER.enabled:
-        return None
-    return _NETWORK_DEBUG_PROFILER.setup_shared_dir()
+class NetworkDebugPlugin:
+    """Pytest plugin that handles all network debug orchestration including xdist coordination."""
+
+    def pytest_configure(self, config):
+        enable_network_debug_report_from_env()
+        if not _NETWORK_DEBUG_PROFILER.enabled:
+            return
+
+        # xdist controller: create shared dir for workers to dump network records
+        if not hasattr(config, "workerinput"):
+            shared_dir = _NETWORK_DEBUG_PROFILER.setup_shared_dir()
+            if shared_dir:
+                config._network_debug_shared_dir = shared_dir
+        else:
+            # xdist worker: receive shared dir from controller
+            shared_dir = config.workerinput.get("network_debug_shared_dir")
+            if shared_dir:
+                _NETWORK_DEBUG_PROFILER.set_shared_dir(shared_dir)
+
+    def pytest_configure_node(self, node):
+        """xdist hook: called on the controller to configure each worker node."""
+        shared_dir = getattr(node.config, "_network_debug_shared_dir", None)
+        if shared_dir:
+            node.workerinput["network_debug_shared_dir"] = shared_dir
+
+    def pytest_sessionfinish(self, session, exitstatus):
+        # xdist worker: dump network debug records for the controller to aggregate
+        if hasattr(session.config, "workerinput"):
+            worker_id = session.config.workerinput.get("workerid", f"pid{os.getpid()}")
+            _NETWORK_DEBUG_PROFILER.dump_worker_records(worker_id=worker_id)
+
+    def pytest_terminal_summary(self, terminalreporter):
+        if not _NETWORK_DEBUG_PROFILER.enabled:
+            return
+
+        # Skip report generation in xdist worker processes; only the controller should aggregate and report.
+        if hasattr(terminalreporter.config, "workerinput"):
+            return
+
+        # Aggregate worker records if running under xdist.
+        _NETWORK_DEBUG_PROFILER.load_worker_records()
+
+        report_path = None
+        try:
+            report_path = _NETWORK_DEBUG_PROFILER.maybe_write_report()
+        except OSError as error:
+            report_path = f"Failed to write JSON report: {error}"
+
+        terminalreporter.section("Network debug", sep="=")
+        for line in format_network_debug_report().splitlines():
+            terminalreporter.write_line(line)
+        if report_path is not None:
+            terminalreporter.write_line(f"JSON report: {report_path}")
+
+        _NETWORK_DEBUG_PROFILER.cleanup_shared_dir()
 
 
-def network_debug_set_shared_dir(shared_dir: str) -> None:
-    """Set the shared directory path (called in xdist workers receiving controller config)."""
-    _NETWORK_DEBUG_PROFILER.set_shared_dir(shared_dir)
-
-
-def network_debug_dump_worker_records(worker_id: str | None = None) -> None:
-    """Dump this worker's collected records to the shared directory."""
-    _NETWORK_DEBUG_PROFILER.dump_worker_records(worker_id=worker_id)
-
-
-def network_debug_load_worker_records() -> None:
-    """Load all worker record dumps into the controller's profiler."""
-    _NETWORK_DEBUG_PROFILER.load_worker_records()
-
-
-def network_debug_cleanup_shared_dir() -> None:
-    """Remove the shared temp directory."""
-    _NETWORK_DEBUG_PROFILER.cleanup_shared_dir()
-
-
-def write_network_debug_report_terminal_summary(terminalreporter) -> None:
-    if not _NETWORK_DEBUG_PROFILER.enabled:
-        return
-
-    # Skip report generation in xdist worker processes; only the controller should aggregate and report.
-    if hasattr(terminalreporter.config, "workerinput"):
-        return
-
-    # Aggregate worker records if running under xdist.
-    network_debug_load_worker_records()
-
-    report_path = None
-    try:
-        report_path = _NETWORK_DEBUG_PROFILER.maybe_write_report()
-    except OSError as error:
-        report_path = f"Failed to write JSON report: {error}"
-
-    terminalreporter.section("Network debug", sep="=")
-    for line in format_network_debug_report().splitlines():
-        terminalreporter.write_line(line)
-    if report_path is not None:
-        terminalreporter.write_line(f"JSON report: {report_path}")
-
-    network_debug_cleanup_shared_dir()
+def register_network_debug_plugin(config) -> None:
+    """Register the network debug pytest plugin. Single entry point for conftest.py."""
+    config.pluginmanager.register(NetworkDebugPlugin(), "network_debug")
 
 
 __all__ = [
@@ -483,10 +492,5 @@ __all__ = [
     "enable_network_debug_report_from_env",
     "format_network_debug_report",
     "get_network_debug_report",
-    "network_debug_cleanup_shared_dir",
-    "network_debug_dump_worker_records",
-    "network_debug_load_worker_records",
-    "network_debug_set_shared_dir",
-    "network_debug_setup_shared_dir",
-    "write_network_debug_report_terminal_summary",
+    "register_network_debug_plugin",
 ]
