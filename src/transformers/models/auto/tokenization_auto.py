@@ -104,6 +104,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("data2vec-audio", "Wav2Vec2CTCTokenizer"),
         ("data2vec-text", "RobertaTokenizer"),
         ("dbrx", "GPT2Tokenizer" if is_tokenizers_available() else None),
+        ("deepseek_v2", "LlamaTokenizer" if is_tokenizers_available() else None),
+        ("deepseek_v3", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("deberta", "DebertaTokenizer" if is_tokenizers_available() else None),
         ("deberta-v2", "DebertaV2Tokenizer" if is_tokenizers_available() else None),
         ("dia", "DiaTokenizer"),
