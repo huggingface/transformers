@@ -282,24 +282,38 @@ def flex_attention_forward(
     # On CPU we must skip returning LSE due to a runtime issue; elsewhere, follow PyTorch API and return it
     return_lse = query.device.type != "cpu"
 
+    # PyTorch >= 2.9 renamed return_lse to return_aux
+    torch_version = get_torch_version()
+    use_return_aux = version.parse(torch_version).base_version >= "2.9"
+
     if not return_lse and s_aux is not None:
         raise ValueError(
             "Attention sinks cannot be run on CPU with flex attention. Please switch to a different device, e.g. CUDA"
         )
 
+    # Build the kwargs for flex attention
+    flex_attn_kwargs = {
+        "score_mod": score_mod,
+        "block_mask": block_mask,
+        "enable_gqa": enable_gqa,
+        "scale": scaling,
+        "kernel_options": kernel_options,
+        "training": module.training,
+    }
+
+    # Last time checked on PyTorch == 2.5.1: Flex Attention always computes the lse regardless.
+    # For simplification, we thus always return it as no additional computations are introduced.
+    # In PyTorch >= 2.9, return_lse was renamed to return_aux
+    if use_return_aux:
+        flex_attn_kwargs["return_aux"] = return_lse
+    else:
+        flex_attn_kwargs["return_lse"] = return_lse
+
     flex_attention_output = compile_friendly_flex_attention(
         query,
         key,
         value,
-        score_mod=score_mod,
-        block_mask=block_mask,
-        enable_gqa=enable_gqa,
-        scale=scaling,
-        kernel_options=kernel_options,
-        # Last time checked on PyTorch == 2.5.1: Flex Attention always computes the lse regardless.
-        # For simplification, we thus always return it as no additional computations are introduced.
-        return_lse=return_lse,
-        training=module.training,
+        **flex_attn_kwargs,
     )
     # lse is returned in float32
     if return_lse:

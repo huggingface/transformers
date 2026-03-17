@@ -34,6 +34,8 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
 from ...integrations.flex_attention import compile_friendly_flex_attention
+from ...utils.import_utils import get_torch_version
+from packaging import version
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -233,17 +235,31 @@ def flex_attention_forward(
             score = score + causal_mask[batch_idx][head_idx][q_idx][kv_idx]
         return score
 
+    # PyTorch >= 2.9 renamed return_lse to return_aux
+    torch_version = get_torch_version()
+    use_return_aux = version.parse(torch_version).base_version >= "2.9"
+
+    # Build kwargs for flex attention
+    flex_attn_kwargs = {
+        "score_mod": score_mod,
+        "block_mask": block_mask,
+        "enable_gqa": True,
+        "scale": scaling,
+    }
+
+    # Last time checked on PyTorch == 2.5.1: Flex Attention always computes the lse regardless.
+    # For simplification, we thus always return it as no additional computations are introduced.
+    # In PyTorch >= 2.9, return_lse was renamed to return_aux
+    if use_return_aux:
+        flex_attn_kwargs["return_aux"] = True
+    else:
+        flex_attn_kwargs["return_lse"] = True
+
     attn_output, attention_weights = compile_friendly_flex_attention(
         query,
         key,
         value,
-        score_mod=score_mod,
-        block_mask=block_mask,
-        enable_gqa=True,
-        scale=scaling,
-        # Last time checked on PyTorch == 2.5.1: Flex Attention always computes the lse regardless.
-        # For simplification, we thus always return it as no additional computations are introduced.
-        return_lse=True,
+        **flex_attn_kwargs,
     )
     # lse is returned in float32
     attention_weights = attention_weights.to(value.dtype)
