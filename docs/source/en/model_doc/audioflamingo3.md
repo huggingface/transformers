@@ -79,7 +79,7 @@ inputs = processor.apply_chat_template(
 
 outputs = model.generate(**inputs, max_new_tokens=500)
 
-decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+decoded_outputs = processor.decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
 print(decoded_outputs)
 ```
 
@@ -124,7 +124,7 @@ inputs = processor.apply_chat_template(
 
 outputs = model.generate(**inputs, max_new_tokens=500)
 
-decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+decoded_outputs = processor.decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
 print(decoded_outputs)
 ```
 
@@ -155,7 +155,7 @@ inputs = processor.apply_chat_template(
 
 outputs = model.generate(**inputs, max_new_tokens=500)
 
-decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+decoded_outputs = processor.decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
 print(decoded_outputs)
 ```
 
@@ -186,7 +186,7 @@ inputs = processor.apply_chat_template(
 
 outputs = model.generate(**inputs, max_new_tokens=500)
 
-decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+decoded_outputs = processor.decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
 print(decoded_outputs)
 ```
 
@@ -235,7 +235,7 @@ inputs = processor.apply_chat_template(
 
 outputs = model.generate(**inputs, max_new_tokens=500)
 
-decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+decoded_outputs = processor.decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
 print(decoded_outputs)
 ```
 
@@ -306,7 +306,7 @@ model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_
 inputs = processor.apply_transcription_request(audio="https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav").to(model.device, dtype=model.dtype)
 
 outputs = model.generate(**inputs, max_new_tokens=500)
-decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True, strip_prefix=True)
+decoded_outputs = processor.decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True, strip_prefix=True)
 
 print(decoded_outputs)
 ```
