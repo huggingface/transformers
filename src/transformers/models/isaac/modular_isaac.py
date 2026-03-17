@@ -500,7 +500,7 @@ class IsaacVisionTransformer(PreTrainedModel):
         self,
         vision_patches: torch.Tensor,
         vision_token_grids: torch.Tensor,
-        vision_patch_attention_mask: torch.Tensor | None = None,
+        vision_patch_attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         """
@@ -509,7 +509,7 @@ class IsaacVisionTransformer(PreTrainedModel):
                 Patches shaped `(num_images, max_patches, patch_dim)`.
             vision_token_grids (`torch.Tensor`):
                 Token grids shaped `(num_images, 2)` with per-image `(H_tokens, W_tokens)`.
-            vision_patch_attention_mask (`torch.Tensor`, *optional*):
+            vision_patch_attention_mask (`torch.Tensor`):
                 Patch mask shaped `(num_images, max_patches)`.
 
         Returns:
@@ -574,7 +574,7 @@ class IsaacVisionEmbedding(nn.Module):
         self,
         vision_patches: torch.Tensor,
         vision_token_grids: torch.Tensor,
-        vision_patch_attention_mask: torch.Tensor | None = None,
+        vision_patch_attention_mask: torch.Tensor,
     ) -> torch.Tensor:
         vision_outputs = self.vision_tower(
             vision_patches=vision_patches,
@@ -906,10 +906,6 @@ class IsaacProcessor(ProcessorMixin):
 
         vision_patches = image_inputs["vision_patches"]
         vision_patch_attention_mask = image_inputs["vision_patch_attention_mask"]
-        vision_token_grids = vision_token_grids
-        vision_token_offsets = vision_token_offsets
-        vision_token_lengths = vision_token_lengths
-        vision_image_attention_mask = vision_image_attention_mask
 
         return {
             "input_ids": input_ids,
@@ -1034,16 +1030,8 @@ class IsaacModel(Qwen3PreTrainedModel):
         device = self.text_model.embed_tokens.weight.device
         pixel_values = pixel_values.to(device=device)
         image_token_grids = image_token_grids.to(device=device, dtype=torch.long)
-        patch_attention_mask = (
-            image_patch_attention_mask.to(device=device, dtype=torch.long)
-            if image_patch_attention_mask is not None
-            else torch.ones(pixel_values.shape[:3], device=device, dtype=torch.long)
-        )
-        image_attention_mask = (
-            image_attention_mask.to(device=device, dtype=torch.bool)
-            if image_attention_mask is not None
-            else torch.ones(image_token_grids.shape[:2], device=device, dtype=torch.bool)
-        )
+        patch_attention_mask = image_patch_attention_mask.to(device=device, dtype=torch.long)
+        image_attention_mask = image_attention_mask.to(device=device, dtype=torch.bool)
 
         batch_size, max_images = pixel_values.shape[:2]
         hidden_size = self.config.get_text_config().hidden_size
@@ -1215,7 +1203,6 @@ class IsaacModel(Qwen3PreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
         vision_patches: torch.Tensor | None = None,
-        pixel_values: torch.Tensor | None = None,
         vision_patch_attention_mask: torch.Tensor | None = None,
         image_patch_attention_mask: torch.Tensor | None = None,
         vision_token_grids: torch.LongTensor | None = None,
@@ -1261,21 +1248,8 @@ class IsaacModel(Qwen3PreTrainedModel):
             image_attention_mask (`torch.LongTensor`, *optional*):
                 Alias for `vision_image_attention_mask`.
         """
-        if vision_patches is None and pixel_values is not None:
-            vision_patches = pixel_values
-            vision_patch_attention_mask = (
-                image_patch_attention_mask if vision_patch_attention_mask is None else vision_patch_attention_mask
-            )
-            vision_token_grids = image_token_grids if vision_token_grids is None else vision_token_grids
-            vision_image_attention_mask = (
-                image_attention_mask if vision_image_attention_mask is None else vision_image_attention_mask
-            )
-
+        has_vision_inputs = vision_patches is not None
         if inputs_embeds is None:
-            if input_ids is None:
-                raise ValueError("`input_ids` or `inputs_embeds` must be provided.")
-
-            has_vision_inputs = vision_patches is not None
             if mm_token_type_ids is not None or has_vision_inputs:
                 if mm_token_type_ids is None:
                     mm_token_type_ids = torch.full_like(input_ids, MM_TOKEN_TYPE_TEXT)
@@ -1411,15 +1385,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         image_attention_mask (`torch.LongTensor`, *optional*):
             Alias for `vision_image_attention_mask`.
         """
-        if vision_patches is None and pixel_values is not None:
-            vision_patches = pixel_values
-            vision_patch_attention_mask = (
-                image_patch_attention_mask if vision_patch_attention_mask is None else vision_patch_attention_mask
-            )
-            vision_token_grids = image_token_grids if vision_token_grids is None else vision_token_grids
-            vision_image_attention_mask = (
-                image_attention_mask if vision_image_attention_mask is None else vision_image_attention_mask
-            )
         outputs = self.model(
             input_ids=input_ids,
             mm_token_type_ids=mm_token_type_ids,

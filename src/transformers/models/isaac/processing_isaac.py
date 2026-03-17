@@ -209,10 +209,6 @@ class IsaacProcessor(ProcessorMixin):
 
         vision_patches = image_inputs["vision_patches"]
         vision_patch_attention_mask = image_inputs["vision_patch_attention_mask"]
-        vision_token_grids = vision_token_grids
-        vision_token_offsets = vision_token_offsets
-        vision_token_lengths = vision_token_lengths
-        vision_image_attention_mask = vision_image_attention_mask
 
         return {
             "input_ids": input_ids,
