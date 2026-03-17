@@ -31,7 +31,9 @@ from ...image_processing_utils_fast import (
     reorder_images,
 )
 from ...image_utils import (
+    ImageInput,
     PILImageResampling,
+    make_nested_list_of_images,
 )
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
@@ -703,31 +705,26 @@ class IsaacProcessor(ProcessorMixin):
     def _build_batch(
         self,
         text: str | list[str],
-        images: Image | list[Image] | None = None,
+        images: ImageInput | None = None,
     ) -> dict[str, torch.Tensor | None]:
         texts = [text] if isinstance(text, str) else text
         if images is None:
-            pairs = ((text_value, None) for text_value in texts)
-        elif isinstance(images, list) and len(images) == len(texts):
-            if not images:
-                images_list = []
-            elif isinstance(images[0], list):
-                images_list = images
-            else:
-                images_list = [[image] for image in images]
-            pairs = zip(texts, images_list, strict=True)
+            batched_images = [[] for _ in texts]
         else:
-            pairs = (
-                (
-                    text_value,
-                    None
-                    if text_value.count(self.vision_token) == 0
-                    else images
-                    if isinstance(images, list)
-                    else [images],
+            fetched_images = self.image_processor.fetch_images(images)
+            batched_images = make_nested_list_of_images(fetched_images)
+            if len(batched_images) != len(texts):
+                num_images_in_text = [text_value.count(self.vision_token) for text_value in texts]
+                num_images_in_images = [len(sample_images) for sample_images in batched_images]
+                add_message = ""
+                if sum(num_images_in_text) == sum(num_images_in_images):
+                    add_message = " Make sure to pass your images as a nested list, where each sub-list holds images for one text sample."
+
+                raise ValueError(
+                    f"Received inconsistently sized batches of images ({len(batched_images)}) and text ({len(texts)}).{add_message}"
                 )
-                for text_value in texts
-            )
+
+        pairs = zip(texts, batched_images, strict=True)
 
         sample_input_ids: list[torch.Tensor] = []
         sample_mm_token_type_ids: list[torch.Tensor] = []
@@ -740,7 +737,7 @@ class IsaacProcessor(ProcessorMixin):
         for text_value, sample_images in pairs:
             segments = text_value.split(self.vision_token)
             num_images = len(segments) - 1
-            num_provided_images = len(sample_images) if sample_images is not None else 0
+            num_provided_images = len(sample_images)
             if num_images != num_provided_images:
                 raise ValueError(
                     f"IsaacProcessor expects one image per image token, got {num_images} tokens and {num_provided_images} images in sample with text {text_value} "
@@ -947,7 +944,7 @@ class IsaacProcessor(ProcessorMixin):
     def __call__(
         self,
         text: str | list[str],
-        images: Image | list[Image] | None = None,
+        images: ImageInput | None = None,
         return_tensors: str | TensorType | None = TensorType.PYTORCH,
         **kwargs,
     ) -> BatchFeature:
