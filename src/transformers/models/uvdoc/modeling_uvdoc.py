@@ -344,28 +344,4 @@ class UVDocModel(UVDocPreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro=r"""
-    The model takes raw document images (pixel values) as input, processes them through the UVDoc backbone to predict spatial transformation parameters,
-    and outputs the rectified (corrected) document image tensor.
-    """
-)
-class UVDocForDocumentRectification(UVDocPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["num_batches_tracked"]
-
-    def __init__(self, config: UVDocConfig):
-        super().__init__(config)
-        self.model = UVDocModel(config)
-        self.post_init()
-
-    @capture_outputs
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
-        return self.model(pixel_values)
-
-
-__all__ = ["UVDocForDocumentRectification", "UVDocModel", "UVDocPreTrainedModel"]
+__all__ = ["UVDocModel", "UVDocPreTrainedModel"]

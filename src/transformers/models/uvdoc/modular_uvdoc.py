@@ -76,7 +76,9 @@ class UVDocConfig(PreTrainedConfig):
         self.block_stride_values = block_stride_values if block_stride_values is not None else [1, 2, 2]
         self.feature_map_multipliers = feature_map_multipliers if feature_map_multipliers is not None else [1, 2, 4]
         self.block_counts_per_stage = block_counts_per_stage if block_counts_per_stage is not None else [3, 4, 6]
-        self.dilation_values = dilation_values if dilation_values is not None else [[1], [2], [5], [8, 3, 2], [12, 7, 4], [18, 12, 6]]
+        self.dilation_values = (
+            dilation_values if dilation_values is not None else [[1], [2], [5], [8, 3, 2], [12, 7, 4], [18, 12, 6]]
+        )
         self.padding_mode = padding_mode
 
         super().__init__(**kwargs)
@@ -138,7 +140,9 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
 
         rescale_and_normalize_images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        grouped_images, grouped_images_index = group_images_by_shape(rescale_and_normalize_images, disable_grouping=disable_grouping)
+        grouped_images, grouped_images_index = group_images_by_shape(
+            rescale_and_normalize_images, disable_grouping=disable_grouping
+        )
         interpolated_images_grouped = {}
         original_images = []
 
@@ -237,15 +241,15 @@ class UVDocConvLayer(nn.Module):
         super().__init__()
 
         self.conv = nn.Conv2d(
-                in_channels,
-                out_channels,
-                bias=bias,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=padding,
-                padding_mode=padding_mode,
-                dilation=dilation,
-            )
+            in_channels,
+            out_channels,
+            bias=bias,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=padding,
+            padding_mode=padding_mode,
+            dilation=dilation,
+        )
         self.norm = nn.BatchNorm2d(out_channels)
         self.act_fn = ACT2FN[activation] if activation is not None else nn.Identity()
 
@@ -254,7 +258,7 @@ class UVDocConvLayer(nn.Module):
         hidden_state = self.norm(hidden_state)
         hidden_state = self.act_fn(hidden_state)
         return hidden_state
-    
+
 
 class UVDocResidualBlockWithDilation(nn.Module):
     """Residual block with optional downsampling and dilation support."""
@@ -443,7 +447,7 @@ class UVDocPointPositions2D(nn.Module):
             padding=config.kernel_size // 2,
             padding_mode=config.padding_mode,
             activation="prelu",
-        ) 
+        )
 
         self.conv_up = nn.Conv2d(
             config.num_filter * config.feature_map_multipliers[0],
@@ -514,7 +518,6 @@ class UVDocModel(UVDocPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
-        
         hidden_state = self.resnet_head(pixel_values)
         resnet_down = self.resnet_down(hidden_state)
 
@@ -533,32 +536,7 @@ class UVDocModel(UVDocPreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro=r"""
-    The model takes raw document images (pixel values) as input, processes them through the UVDoc backbone to predict spatial transformation parameters,
-    and outputs the rectified (corrected) document image tensor.
-    """
-)
-class UVDocForDocumentRectification(UVDocPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["num_batches_tracked"]
-
-    def __init__(self, config: UVDocConfig):
-        super().__init__(config)
-        self.model = UVDocModel(config)
-        self.post_init()
-
-    @capture_outputs
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
-        return self.model(pixel_values)
-
-
 __all__ = [
-    "UVDocForDocumentRectification",
     "UVDocImageProcessorFast",
     "UVDocConfig",
     "UVDocModel",

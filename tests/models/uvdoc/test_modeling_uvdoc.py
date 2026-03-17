@@ -21,8 +21,8 @@ from parameterized import parameterized
 
 from transformers import (
     UVDocConfig,
-    UVDocForDocumentRectification,
     UVDocImageProcessorFast,
+    UVDocModel,
     is_torch_available,
     is_vision_available,
 )
@@ -77,35 +77,31 @@ class UVDocModelTester:
         self.dilation_values = dilation_values
 
         config = UVDocConfig(
-            num_filter=32,
+            num_filter=8,
             in_channels=3,
             kernel_size=5,
-            block_stride_values=[1, 2, 2, 2],
-            feature_map_multipliers=[1, 1, 1, 2, 2],
-            block_counts_per_stage=[1, 1, 1, 1],
+            block_stride_values=[1, 2, 2],
+            feature_map_multipliers=[1, 2, 4],
+            block_counts_per_stage=[3, 4, 6],
             dilation_values=dilation_values,
             padding_mode="reflect",
-            upsample_size=[712, 488],
-            upsample_mode="bilinear",
         )
 
         return config
 
     def create_and_check_uvdoc_document_rectification(self, config, pixel_values):
-        model = UVDocForDocumentRectification(config=config)
+        model = UVDocModel(config=config)
         model.to(torch_device)
         model.eval()
 
         result = model(pixel_values)
 
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, 2, 8, 8))
 
 
 @require_torch
 class UVDocModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (UVDocForDocumentRectification,) if is_torch_available() else ()
+    all_model_classes = (UVDocModel,) if is_torch_available() else ()
 
     has_attentions = False
     test_resize_embeddings = False
@@ -125,16 +121,7 @@ class UVDocModelTest(ModelTesterMixin, unittest.TestCase):
         )
 
     def test_config(self):
-        # Skip create_and_test_config_with_num_labels: UVDoc has fixed single class (image)
-        self.config_tester.create_and_test_config_common_properties()
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_from_and_save_pretrained_subfolder()
-        self.config_tester.create_and_test_config_from_and_save_pretrained_composite()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
-        self.config_tester.create_and_test_config_from_pretrained_custom_kwargs()
+        self.config_tester.run_common_tests()
 
     def test_uvdoc_document_rectification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -191,7 +178,7 @@ class UVDocModelTest(ModelTesterMixin, unittest.TestCase):
 class UVDocModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "/workspace/model_weight_torch/UVDoc"
-        self.model = UVDocForDocumentRectification.from_pretrained(model_path).to(torch_device)
+        self.model = UVDocModel.from_pretrained(model_path).to(torch_device)
         self.image_processor = UVDocImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
         path = "/workspace/PaddleX/paddlex/inference/models/image_unwarping/modeling/doc_test.jpg"
         self.image = Image.open(path)
@@ -203,14 +190,16 @@ class UVDocModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(**inputs)
 
-        results = self.image_processor.post_process_document_rectification(outputs.last_hidden_state)
+        results = self.image_processor.post_process_document_rectification(
+            outputs.last_hidden_state, inputs["original_images"]
+        )
 
-        expected_shape_logits = torch.Size((bs, 3, 708, 1100))
+        expected_shape_logits = torch.Size((bs, 2, 45, 31))
         expected_logits = torch.tensor(
             [
-                [0.5279, 0.5213, 0.5157],
-                [0.5331, 0.5261, 0.5187],
-                [0.5330, 0.5291, 0.5239],
+                [-0.7635, -0.7251, -0.6819],
+                [-0.7643, -0.7250, -0.6814],
+                [-0.7647, -0.7252, -0.6816],
             ],
             device=torch_device,
         )

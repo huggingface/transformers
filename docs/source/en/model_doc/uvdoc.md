@@ -41,18 +41,18 @@ The example below demonstrates how to classify image with UVDoc using the [`Auto
 ```py
 import requests
 from PIL import Image
-from transformers import AutoImageProcessor, UVDocForDocumentRectification
+from transformers import AutoImageProcessor, UVDocModel
 
 model_path = "PaddlePaddle/UVDoc_safetensors"
-model = UVDocForDocumentRectification.from_pretrained(
+model = UVDocModel.from_pretrained(
     model_path,
     device_map="auto",
 )
-image_processor = AutoImageProcessor.from_pretrained(model_path).to(model.device)
+image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/doc_test.jpg", stream=True).raw)
 
-inputs = image_processor(images=image, return_tensors="pt")
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
 result = image_processor.post_process_document_rectification(outputs.last_hidden_state)
@@ -72,18 +72,18 @@ Here is how you can do it with UVDoc using the [`AutoModel`]:
 ```py
 import requests
 from PIL import Image
-from transformers import AutoImageProcessor, UVDocForDocumentRectification
+from transformers import AutoImageProcessor, UVDocModel
 
 model_path = "PaddlePaddle/UVDoc_safetensors"
-model = UVDocForDocumentRectification.from_pretrained(
+model = UVDocModel.from_pretrained(
     model_path
     device_map="auto",
 )
-image_processor = AutoImageProcessor.from_pretrained(model_path).to(model.device)
+image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/doc_test.jpg", stream=True).raw)
 
-inputs = image_processor(images=[image, image], return_tensors="pt")
+inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
 result = image_processor.post_process_document_rectification(outputs.last_hidden_state)
@@ -92,10 +92,6 @@ print(result)
 
 </hfoption>
 </hfoptions>
-
-## UVDocForDocumentRectification
-
-[[autodoc]] UVDocForDocumentRectification
 
 ## UVDocConfig
 
