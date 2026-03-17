@@ -456,7 +456,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 self._tokenizer,
                 self.init_kwargs.get("name_or_path", None),
                 init_kwargs=self.init_kwargs,
-                fix_mistral_regex=kwargs.get("fix_mistral_regex"),
                 **kwargs,
             )
 
@@ -1268,7 +1267,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     return True
             return False
 
-        if is_offline_mode():
+        if local_files_only or is_offline_mode():
             is_local = True
 
         if pretrained_model_name_or_path is not None and (
