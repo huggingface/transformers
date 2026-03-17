@@ -24,6 +24,9 @@ TINYLLAMA_FILE = "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
 QWEN_MOE_REPO  = "gdax/Qwen1.5-MoE-A2.7B_gguf"
 QWEN_MOE_FILE  = "Qwen1.5-MoE-A2.7B_q4_k_m.gguf"
 
+QWEN3_MOE_REPO = "unsloth/Qwen3-30B-A3B-GGUF"
+QWEN3_MOE_FILE = "Qwen3-30B-A3B-Q4_K_M.gguf"
+
 DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
 
 
@@ -53,5 +56,14 @@ def test_bench_tinyllama(benchmark):
 @slow
 @require_gguf
 def test_bench_qwen_moe(benchmark):
-    """MoE model — old code walked the full state dict for every expert tensor."""
+    """Qwen1.5-MoE-A2.7B — medium MoE."""
     benchmark(_load_and_free, QWEN_MOE_REPO, QWEN_MOE_FILE, DEVICE)
+
+
+# ── Qwen3-30B-A3B (MoE, Q4_K_M ~17 GB) ─────────────────────────────────────
+
+@slow
+@require_gguf
+def test_bench_qwen3_moe_30b(benchmark):
+    """Qwen3-30B-A3B — large MoE, main target of the refactor."""
+    benchmark(_load_and_free, QWEN3_MOE_REPO, QWEN3_MOE_FILE, DEVICE)

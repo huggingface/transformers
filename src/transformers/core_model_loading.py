@@ -160,7 +160,7 @@ class Concatenate(ConversionOps):
         target_patterns: list[str],
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        target_pattern = self.get_target_pattern(target_patterns)
+        target_pattern = self.get_target_pattern(target_patterns, kwargs.get("full_layer_name"))
         all_tensors = []
         # Very important to keep the relative order of the source patterns here, so we iterate over them not the
         # input directly as it's unordered!
@@ -172,11 +172,16 @@ class Concatenate(ConversionOps):
                 all_tensors.append(tensors)
         return {target_pattern: torch.cat(all_tensors, dim=self.dim)}
 
-    def get_target_pattern(self, target_patterns: list[str]) -> str:
+    def get_target_pattern(self, target_patterns: list[str], full_layer_name: str | None = None) -> str:
         # Here we always return the target pattern
         if len(target_patterns) > 1:
             raise ValueError("Undefined Operation encountered!")
-        return target_patterns[0]
+        target = target_patterns[0]
+        # If target contains an unresolved \1 backreference, use the already-resolved
+        # full_layer_name passed from WeightConverter.convert instead.
+        if full_layer_name is not None and r"\1" in target:
+            return full_layer_name
+        return target
 
     @property
     def reverse_op(self) -> ConversionOps:
