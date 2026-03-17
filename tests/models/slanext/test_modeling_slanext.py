@@ -72,14 +72,24 @@ class SLANeXtModelTester:
 
     def get_config(self) -> SLANeXtConfig:
         config = SLANeXtConfig(
-            encoder_embed_dim=1,
-            encoder_depth=1,
-            encoder_num_heads=1,
-            encoder_global_attn_indexes=[1, 1, 1, 1],
-            out_channels=1,
-            hidden_size=1,
-            max_text_length=1,
-            loc_reg_num=8,
+            vision_config={
+                "image_size": 512,
+                "output_channels": 256,
+                "num_channels": 3,
+                "patch_size": 16,
+                "hidden_act": "gelu",
+                "layer_norm_eps": 1e-6,
+                "attention_dropout": 0.0,
+                "qkv_bias": True,
+                "use_abs_pos": True,
+                "use_rel_pos": True,
+                "window_size": 14,
+                "hidden_size": 768,
+                "num_hidden_layers": 12,
+                "num_attention_heads": 12,
+                "global_attn_indexes": [2, 5, 8, 11],
+                "mlp_dim": 3072,
+            }
         )
 
         return config
@@ -200,22 +210,16 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 @slow
 class SLANeXtModelIntegrationTest(unittest.TestCase):
     def setUp(self):
-        # model_path = "PaddlePaddle/SLANeXt_wired_safetensors"
-        model_path = "/workspace/ssd1/liujiaxuan01/trans_to_transformer/test/slanext/wired_tf_new"
-        # self.model = SLANeXtForTableRecognition.from_pretrained(model_path).float().to(torch_device)
+        model_path = "PaddlePaddle/SLANeXt_wired_safetensors"
         self.model = SLANeXtForTableRecognition.from_pretrained(model_path, dtype=torch.float32).to(torch_device)
         self.image_processor = SLANeXtImageProcessor.from_pretrained(model_path) if is_vision_available() else None
-        # url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png"
-        # self.image = Image.open(requests.get(url, stream=True).raw)
-        path = "/workspace/ssd1/liujiaxuan01/trans_to_transformer/test/slanext/table_recognition.jpg"
-        self.image = Image.open(path).convert("RGB")
+        url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png"
+        self.image = Image.open(requests.get(url, stream=True).raw)
 
     def test_inference_table_recognition_head(self):
-        # inputs = self.image_processor(images=self.image).to(torch_device)
         inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
-            # outputs = self.model(inputs)
             outputs = self.model(**inputs)
 
         pred_table_structure = self.image_processor.post_process_table_recognition(outputs)["structure"]

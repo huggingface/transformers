@@ -19,6 +19,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
@@ -70,33 +71,25 @@ class SLANeXtVisionAttention(GotOcr2VisionAttention):
         coordinates).
     """,
 )
+@strict(accept_kwargs=True)
 class SLANeXtConfig(PreTrainedConfig):
     model_type = "slanext"
     sub_configs = {"vision_config": SLANeXtVisionConfig}
 
-    def __init__(
-        self,
-        vision_config: dict | None = None,
-        post_conv_in_channels: int = 256,
-        post_conv_out_channels: int = 512,
-        out_channels: int = 50,
-        hidden_size: int = 512,
-        max_text_length: int = 500,
-        loc_reg_num: int = 8,
-        **kwargs,
-    ):
-        if vision_config is None:
-            self.vision_config = SLANeXtVisionConfig()
-        elif isinstance(vision_config, dict):
-            self.vision_config = SLANeXtVisionConfig(**vision_config)
-        self.post_conv_in_channels = post_conv_in_channels
-        self.post_conv_out_channels = post_conv_out_channels
-        self.out_channels = out_channels
-        self.hidden_size = hidden_size
-        self.max_text_length = max_text_length
-        self.loc_reg_num = loc_reg_num
+    vision_config: dict | SLANeXtVisionConfig | None = None
+    post_conv_in_channels: int = 256
+    post_conv_out_channels: int = 512
+    out_channels: int = 50
+    hidden_size: int = 512
+    max_text_length: int = 500
+    loc_reg_num: int = 8
 
-        super().__init__(**kwargs)
+    def __post_init__(self, **kwargs):
+        if self.vision_config is None:
+            self.vision_config = SLANeXtVisionConfig()
+        elif isinstance(self.vision_config, dict):
+            self.vision_config = SLANeXtVisionConfig(**self.vision_config)
+        super().__post_init__(**kwargs)
 
 
 class SLANeXtPreTrainedModel(PreTrainedModel):
