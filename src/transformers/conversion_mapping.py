@@ -165,12 +165,6 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(source_patterns=r"tracker_neck.", target_patterns="vision_encoder.neck."),
         ],
-        "sam3_tracker": [
-            WeightRenaming(
-                source_patterns=r"detector_model.vision_encoder.backbone.", target_patterns="vision_encoder.backbone."
-            ),
-            WeightRenaming(source_patterns=r"tracker_neck.", target_patterns="vision_encoder.neck."),
-        ],
         "t5gemma2_encoder": [
             WeightRenaming(r"(?<!decoder)(?<!text_model)\.embed_tokens\.", "text_model.embed_tokens."),
             WeightRenaming(r"(?<!decoder)(?<!text_model)\.norm\.", "text_model.norm."),
@@ -507,6 +501,15 @@ def register_checkpoint_conversion_mapping(
 VLMS = ["detr"]
 
 
+def extract_weight_conversions_for_model(model: PreTrainedModel) -> WeightConverter | WeightRenaming | None:
+    model_type = getattr(model.config, "model_type", None)
+    if model_type is not None:
+        model_specific_conversions = get_checkpoint_conversion_mapping(model_type)
+        if model_specific_conversions is not None:
+            return model_specific_conversions
+    return None
+
+
 def get_model_conversion_mapping(
     model: PreTrainedModel,
     key_mapping: dict[str, str] | None = None,
@@ -533,11 +536,19 @@ def get_model_conversion_mapping(
             for k, v in model._checkpoint_conversion_mapping.items()
         ]
 
-    model_type = getattr(model.config, "model_type", None)
-    if model_type is not None:
-        model_specific_conversions = get_checkpoint_conversion_mapping(model_type)
-        if model_specific_conversions is not None:
-            weight_conversions.extend(model_specific_conversions)
+    if (conversion := extract_weight_conversions_for_model(model)) is not None:
+        weight_conversions.extend(conversion)
+
+    # Recurse over submodules and collect all conversions
+    for submodule in model.children():
+        if (
+            submodule is not model
+            and isinstance(model, PreTrainedModel)
+            and submodule.config.__class__ != model.config.__class__
+        ):
+            conversion = extract_weight_conversions_for_model(submodule)
+            if conversion is not None:
+                weight_conversions.extend(conversion)
 
     if add_legacy:
         weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))

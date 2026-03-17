@@ -1080,7 +1080,8 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
-    _no_split_modules = ["Ernie4_5_VL_MoeDecoderLayer", "Ernie4_5_VL_MoeVisionBlock"]
+    config: Ernie4_5_VLMoeConfig
+    _no_split_modules = ["Ernie4_5_VLMoeDecoderLayer", "Ernie4_5_VLMoeVisionBlock"]
 
     def __init__(self, config: Ernie4_5_VLMoeConfig):
         super().__init__(config)
