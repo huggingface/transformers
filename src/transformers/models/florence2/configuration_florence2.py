@@ -17,6 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -26,6 +28,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="florence-community/Florence-2-base")
+@strict(accept_kwargs=True)
 class Florence2VisionConfig(PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 12):
@@ -60,51 +63,28 @@ class Florence2VisionConfig(PreTrainedConfig):
 
     model_type = "florence_vision"
 
-    def __init__(
-        self,
-        in_channels=3,
-        depths=(1, 1, 9, 1),
-        patch_size=(7, 3, 3, 3),
-        patch_stride=(4, 2, 2, 2),
-        patch_padding=(3, 1, 1, 1),
-        patch_prenorm=(False, True, True, True),
-        embed_dim=(128, 256, 512, 1024),
-        num_heads=(4, 8, 16, 32),
-        num_groups=(4, 8, 16, 32),
-        window_size=12,
-        drop_path_rate=0.1,
-        mlp_ratio=4.0,
-        qkv_bias=True,
-        activation_function="gelu",
-        projection_dim=1024,
-        max_temporal_embeddings=100,
-        max_position_embeddings=50,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        self.in_channels = in_channels
-        self.depths = list(depths)
-        self.patch_size = list(patch_size)
-        self.patch_stride = list(patch_stride)
-        self.patch_padding = list(patch_padding)
-        self.patch_prenorm = list(patch_prenorm)
-        self.embed_dim = list(embed_dim)
-        self.num_heads = list(num_heads)
-        self.num_groups = list(num_groups)
-        self.window_size = window_size
-        self.drop_path_rate = drop_path_rate
-        self.mlp_ratio = mlp_ratio
-        self.qkv_bias = qkv_bias
-        self.projection_dim = projection_dim
-        self.max_temporal_embeddings = max_temporal_embeddings
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.activation_function = activation_function
-
-        super().__init__(**kwargs)
+    in_channels: int = 3
+    depths: list[int] | tuple[int, ...] = (1, 1, 9, 1)
+    patch_size: list[int] | tuple[int, ...] = (7, 3, 3, 3)
+    patch_stride: list[int] | tuple[int, ...] = (4, 2, 2, 2)
+    patch_padding: list[int] | tuple[int, ...] = (3, 1, 1, 1)
+    patch_prenorm: list[bool] | tuple[bool, ...] = (False, True, True, True)
+    embed_dim: list[int] | tuple[int, ...] = (128, 256, 512, 1024)
+    num_heads: list[int] | tuple[int, ...] = (4, 8, 16, 32)
+    num_groups: list[int] | tuple[int, ...] = (4, 8, 16, 32)
+    window_size: int = 12
+    drop_path_rate: float = 0.1
+    mlp_ratio: float = 4.0
+    qkv_bias: bool = True
+    activation_function: str = "gelu"
+    projection_dim: int = 1024
+    max_temporal_embeddings: int = 100
+    max_position_embeddings: int = 50
+    initializer_range: float = 0.02
 
 
 @auto_docstring(checkpoint="florence-community/Florence-2-base")
+@strict(accept_kwargs=True)
 class Florence2Config(PreTrainedConfig):
     r"""
     Example:
@@ -134,36 +114,26 @@ class Florence2Config(PreTrainedConfig):
         "vision_config": Florence2VisionConfig,
     }
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        image_token_id=51289,
-        is_encoder_decoder=True,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "bart")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["bart"]()
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 51289
+    is_encoder_decoder: bool = True
+    tie_word_embeddings: bool = True
 
-        if isinstance(vision_config, dict):
-            vision_config = Florence2VisionConfig(**vision_config)
-        elif vision_config is None:
+    def __post_init__(self, **kwargs):
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "bart")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["bart"]()
+
+        if isinstance(self.vision_config, dict):
+            self.vision_config = Florence2VisionConfig(**self.vision_config)
+        elif self.vision_config is None:
             logger.info("vision_config is None. Initializing the Florence2VisionConfig with default values.")
-            vision_config = Florence2VisionConfig()
+            self.vision_config = Florence2VisionConfig()
 
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.image_token_id = image_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-
-        super().__init__(
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Florence2Config", "Florence2VisionConfig"]

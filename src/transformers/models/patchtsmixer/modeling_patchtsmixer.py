@@ -1123,7 +1123,7 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__(config)
 
-        self.use_return_dict = config.use_return_dict
+        self.return_dict = config.return_dict
 
         self.patcher = nn.Linear(config.patch_length, config.d_model)
         if config.use_positional_encoding:
@@ -1157,7 +1157,7 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
             `torch.FloatTensor` of shape `(batch_size, n_vars, num_patches, d_model)`
         """
 
-        return_dict = return_dict if return_dict is not None else self.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         # flatten [bs x num_patch x d_model]. common_channel/mix_channel: [bs x n_vars x num_patch x d_model]
         patches = self.patcher(past_values)
@@ -1225,7 +1225,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         """
         super().__init__(config)
 
-        self.use_return_dict = config.use_return_dict
+        self.return_dict = config.return_dict
         self.encoder = PatchTSMixerEncoder(config)
         self.patching = PatchTSMixerPatchify(config)
 
@@ -1267,7 +1267,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
             - 1 for values that are **observed**,
             - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
         """
-        return_dict = return_dict if return_dict is not None else self.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         mask = None
         if observed_mask is None:
@@ -1349,7 +1349,7 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
         self.model = PatchTSMixerModel(config, mask_input=True)
         self.head = PatchTSMixerPretrainHead(config=config)
         self.masked_loss = config.masked_loss
-        self.use_return_dict = config.use_return_dict
+        self.return_dict = config.return_dict
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1380,7 +1380,7 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
         return_loss (`bool`,  *optional*):
             Whether to return the loss in the `forward` call.
         """
-        return_dict = return_dict if return_dict is not None else self.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         if self.masked_loss is True:
             loss = torch.nn.MSELoss(reduction="none")
@@ -1537,7 +1537,7 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__(config)
         self.loss = config.loss
-        self.use_return_dict = config.use_return_dict
+        self.return_dict = config.return_dict
         self.prediction_channel_indices = config.prediction_channel_indices
         self.num_parallel_samples = config.num_parallel_samples
 
@@ -1609,7 +1609,7 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
         else:
             raise ValueError("Invalid loss function: Allowed values: mse and nll")
 
-        return_dict = return_dict if return_dict is not None else self.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         # past_values: tensor [batch_size x context_length x num_input_channels]
         model_output = self.model(
@@ -1780,7 +1780,7 @@ class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
         self.head = PatchTSMixerLinearHead(
             config=config,
         )
-        self.use_return_dict = config.use_return_dict
+        self.return_dict = config.return_dict
         if config.scaling in ["std", "mean", True]:
             self.inject_scale = InjectScalerStatistics4D(d_model=config.d_model, num_patches=config.num_patches)
         else:
@@ -1828,7 +1828,7 @@ class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
 
         loss = torch.nn.CrossEntropyLoss()
 
-        return_dict = return_dict if return_dict is not None else self.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         model_output = self.model(
             past_values,
@@ -1949,7 +1949,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         self.loss = config.loss
         self.distribution_output = config.distribution_output
 
-        self.use_return_dict = config.use_return_dict
+        self.return_dict = config.return_dict
         self.num_parallel_samples = config.num_parallel_samples
 
         if config.loss == "mse":
@@ -2022,7 +2022,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         else:
             raise ValueError("Invalid loss function: Allowed values: mse and nll")
 
-        return_dict = return_dict if return_dict is not None else self.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
         model_output = self.model(
             past_values,
             output_hidden_states=output_hidden_states,

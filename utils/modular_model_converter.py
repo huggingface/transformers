@@ -975,6 +975,9 @@ def replace_class_node(
     modular_class_attributes = {}
     for node in modular_class_node.body.body:
         if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
+            if hasattr(node.body[0].value, "func") and node.body[0].value.func.value == "AttributeError":
+                original_modeling_class_attributes.pop(node.body[0].targets[0].target.value)
+                continue  # delete unnecessary cls attribute, especially in configs
             modular_class_attributes[node.body[0].targets[0].target.value] = node
         elif m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
             modular_class_attributes[node.body[0].target.value] = node

@@ -1552,7 +1552,7 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         batch_size, _, height, width = pixel_values.shape
 
@@ -1774,7 +1774,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         raw_outputs = self.model(
             pixel_values,

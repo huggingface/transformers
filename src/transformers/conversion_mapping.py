@@ -63,9 +63,10 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
     "paligemma": "llava",
-    "ayavision": "llava",
+    "aya_vision": "llava",
     "fuyu": "llava",
-    "gotocr2": "llava",
+    "got_ocr2": "llava",
+    "shieldgemma2": "llava",
     "gemma3": "llava",
     "internvl": "llava",
     "llava_next": "llava",
@@ -88,12 +89,14 @@ def _build_checkpoint_conversion_mapping():
         ],
         "colpali": [
             WeightRenaming(source_patterns=r"vlm(?!\.model)", target_patterns="vlm.model"),
+            WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
         ],
         "emu3": [
             WeightRenaming(source_patterns=r"text_model.model", target_patterns="text_model"),
             WeightRenaming(source_patterns=r"text_model.lm_head", target_patterns="lm_head"),
         ],
-        "paddleocrvl": [
+        "paddleocr_vl": [
+            WeightRenaming(source_patterns=r"mlp_AR", target_patterns="model.projector"),
             WeightRenaming(
                 source_patterns=r"^model(?!(\.visual|\.projector|\.language_model))",
                 target_patterns="model.language_model",
@@ -113,6 +116,38 @@ def _build_checkpoint_conversion_mapping():
         "gemma3n_text": [
             WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
         ],
+        "timm_wrapper": [
+            # Simply add the prefix `timm_model`. Similar to `base_model_prefix` but also removes prefix
+            # when saving.TODO: Would be probably much cleaner with a `add_prefix` argument in WeightRenaming
+            WeightRenaming(
+                source_patterns=r"(.+)",
+                target_patterns=r"timm_model.\1",
+            )
+        ],
+        "pi0": [
+            WeightRenaming(source_patterns=r"state_proj", target_patterns="embed_action_time.state_proj"),
+            WeightRenaming(source_patterns=r"action_in_proj", target_patterns="embed_action_time.action_in_proj"),
+            WeightRenaming(
+                source_patterns=r"action_time_mlp_in", target_patterns="embed_action_time.action_time_mlp_in"
+            ),
+            WeightRenaming(
+                source_patterns=r"action_time_mlp_out", target_patterns="embed_action_time.action_time_mlp_out"
+            ),
+            WeightRenaming(source_patterns=r"^paligemma_with_expert.paligemma.model", target_patterns="model.vlm"),
+            WeightRenaming(source_patterns=r"^paligemma_with_expert.gemma_expert.model", target_patterns="model.dit"),
+            # Weight on the hub have only `lm_head` saved, but PI0 doesn't create any lm-head initialized!
+            WeightRenaming(
+                source_patterns=r"^paligemma_with_expert.gemma_expert.lm_head",
+                target_patterns="model.dit.embed_tokens",
+            ),
+            WeightRenaming(
+                source_patterns=r"^paligemma_with_expert.paligemma.lm_head",
+                target_patterns="model.vlm.language_model.embed_tokens",
+            ),
+        ],
+        "chmv2": [WeightRenaming(r"backbone.layer.", r"backbone.model.layer.")],
+        "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
+        "dinov3_vit": [WeightRenaming(r"(?<!model\.)layer.", r"model.layer.")],
         "timesfm2_5": [
             WeightRenaming("ff0", "fc1"),
             WeightRenaming("ff1", "fc2"),
@@ -127,6 +162,12 @@ def _build_checkpoint_conversion_mapping():
         "sam3_tracker": [
             WeightRenaming(
                 source_patterns=r"detector_model.vision_encoder.backbone.", target_patterns="vision_encoder.backbone"
+            ),
+            WeightRenaming(source_patterns=r"tracker_neck.", target_patterns="vision_encoder.neck."),
+        ],
+        "sam3_tracker": [
+            WeightRenaming(
+                source_patterns=r"detector_model.vision_encoder.backbone.", target_patterns="vision_encoder.backbone."
             ),
             WeightRenaming(source_patterns=r"tracker_neck.", target_patterns="vision_encoder.neck."),
         ],

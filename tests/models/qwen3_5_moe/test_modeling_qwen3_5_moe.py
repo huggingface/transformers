@@ -369,11 +369,14 @@ class Qwen3_5MoeVisionText2TextModelTester:
         input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
         input_ids[:, self.num_image_tokens] = self.image_token_id
         input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.image_token_id] = 1
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "mm_token_type_ids": mm_token_type_ids,
         }
         return config, inputs_dict
 
@@ -513,6 +516,7 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             input_ids = curr_input_dict["input_ids"][:1]
             pixel_values = curr_input_dict["pixel_values"][:one_img_length]
             image_grid_thw = curr_input_dict["image_grid_thw"][:1]
+            mm_token_type_ids = curr_input_dict["mm_token_type_ids"][:1]
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             with self.assertRaises(ValueError):
@@ -520,6 +524,7 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                     input_ids=input_ids,
                     pixel_values=pixel_values,
                     image_grid_thw=image_grid_thw,
+                    mm_token_type_ids=torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0),
                 )
 
             if hasattr(model.base_model, "rope_deltas"):
@@ -527,10 +532,14 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
 
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
+            mm_token_type_ids = torch.cat(
+                [curr_input_dict["mm_token_type_ids"][:1], curr_input_dict["mm_token_type_ids"][:1]], dim=0
+            )
             _ = model(
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
             )
 
     def test_image_forward(self):
@@ -571,12 +580,16 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 input_ids[b, image_start + 1] = self.model_tester.image_token_id
                 input_ids[b, image_start + 2] = self.model_tester.vision_end_token_id
 
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.model_tester.image_token_id] = 1
+
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             outputs = model(
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
             )
             self.assertIsNotNone(outputs)
 
@@ -652,12 +665,16 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                     input_ids[b, frame_token_start:frame_token_end] = self.model_tester.video_token_id
                     input_ids[b, frame_token_end] = self.model_tester.vision_end_token_id
 
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.model_tester.video_token_id] = 2
+
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             outputs = model(
                 input_ids=input_ids,
                 pixel_values_videos=pixel_values_videos,
                 video_grid_thw=video_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
             )
             self.assertIsNotNone(outputs)
 

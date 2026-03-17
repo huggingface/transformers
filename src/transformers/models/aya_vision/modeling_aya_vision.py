@@ -98,10 +98,6 @@ class AyaVisionPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_flex_attn = True
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": "DecoderLayer",
-        "attentions": "Attention",
-    }
 
 
 @dataclass
@@ -175,15 +171,15 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    @can_return_tuple
     @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -248,7 +244,7 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -317,7 +313,7 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -338,7 +334,7 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,

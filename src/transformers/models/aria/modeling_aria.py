@@ -898,8 +898,8 @@ class AriaModel(AriaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    @can_return_tuple
     @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -907,7 +907,7 @@ class AriaModel(AriaPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: torch.FloatTensor | None = None,
-        vision_feature_layer: int = -1,
+        vision_feature_layer: int | list[int] = -1,
         output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -1049,7 +1049,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: torch.FloatTensor | None = None,
-        vision_feature_layer: int = -1,
+        vision_feature_layer: int | list[int] = -1,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(

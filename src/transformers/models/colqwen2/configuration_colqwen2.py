@@ -13,8 +13,7 @@
 # limitations under the License.
 
 
-from copy import deepcopy
-from typing import Any
+from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
@@ -25,6 +24,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="vidore/colqwen2-v1.0-hf")
+@strict(accept_kwargs=True)
 class ColQwen2Config(PreTrainedConfig):
     r"""
     Example:
@@ -38,45 +38,28 @@ class ColQwen2Config(PreTrainedConfig):
     """
 
     model_type = "colqwen2"
-    sub_configs: dict[str, Any] = {"vlm_config": PreTrainedConfig}
+    sub_configs = {"vlm_config": PreTrainedConfig}
 
-    def __init__(
-        self,
-        vlm_config=None,
-        embedding_dim: int = 128,
-        initializer_range: float = 0.02,
-        tie_word_embeddings: bool = True,
-        **kwargs,
-    ):
-        if vlm_config is None:
-            vlm_config = CONFIG_MAPPING["qwen2_vl"]()
+    vlm_config: dict | PreTrainedConfig | None = None
+    embedding_dim: int = 128
+    initializer_range: float = 0.02
+
+    def __post_init__(self, **kwargs):
+        if self.vlm_config is None:
+            self.vlm_config = CONFIG_MAPPING["qwen2_vl"]()
             logger.info(
                 "`vlm_config` is `None`. Initializing `vlm_config` with the `Qwen2VLConfig` with default values."
             )
-        elif isinstance(vlm_config, dict):
-            vlm_config = deepcopy(vlm_config)
-            if "model_type" not in vlm_config:
-                raise KeyError(
-                    "The `model_type` key is missing in the `vlm_config` dictionary. Please provide the model type."
-                )
-            vlm_config = CONFIG_MAPPING[vlm_config["model_type"]](**vlm_config)
-        elif not isinstance(vlm_config, PreTrainedConfig):
-            raise TypeError(
-                f"Invalid type for `vlm_config`. Expected `PreTrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."
-            )
+        elif isinstance(self.vlm_config, dict):
+            self.vlm_config = CONFIG_MAPPING[self.vlm_config["model_type"]](**self.vlm_config)
 
-        if not hasattr(vlm_config, "vocab_size"):
-            vlm_config.vocab_size = vlm_config.get_text_config().vocab_size
-
-        self.vlm_config = vlm_config
-        self.embedding_dim = embedding_dim
-        self.initializer_range = initializer_range
-        self.tie_word_embeddings = tie_word_embeddings
+        if not hasattr(self.vlm_config, "vocab_size"):
+            self.vlm_config.vocab_size = self.vlm_config.get_text_config().vocab_size
 
         # Move `tie_word_embeddings` under `vlm_config` for BC
         if self.vlm_config.text_config.tie_word_embeddings and not self.vlm_config.tie_word_embeddings:
             self.vlm_config.tie_word_embeddings = self.vlm_config.text_config.tie_word_embeddings
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
     def get_text_config(self, *args, **kwargs) -> PreTrainedConfig:
         return self.vlm_config.get_text_config(*args, **kwargs)

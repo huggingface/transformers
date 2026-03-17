@@ -43,6 +43,7 @@ class ShieldGemma2ImageClassifierOutputWithNoAttention(ImageClassifierOutputWith
 class ShieldGemma2ForImageClassification(PreTrainedModel):
     config: ShieldGemma2Config
     input_modalities = ("image", "text")
+    base_model_prefix = "model"
 
     def __init__(self, config: ShieldGemma2Config):
         super().__init__(config=config)

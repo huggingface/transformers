@@ -516,7 +516,7 @@ class UnivNetModel(PreTrainedModel):
          [1, 140288]
          ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # Resolve batch sizes for noise_sequence and spectrogram
         spectrogram_batched = input_features.dim() == 3

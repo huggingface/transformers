@@ -248,15 +248,9 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **lm_kwargs,
     ) -> tuple | PerceptionLMModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         if (pixel_values is not None or pixel_values_videos is not None) and inputs_embeds is not None:
@@ -291,8 +285,6 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=True,
             logits_to_keep=logits_to_keep,
             **lm_kwargs,
@@ -339,8 +331,6 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **lm_kwargs,
     ) -> tuple | PerceptionLMCausalLMOutputWithPast:
@@ -401,8 +391,6 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             logits_to_keep=logits_to_keep,
             **lm_kwargs,
         )

@@ -25,6 +25,7 @@ from transformers.testing_utils import (
     Expectations,
     backend_empty_cache,
     require_bitsandbytes,
+    require_deterministic_for_xpu,
     require_flash_attn,
     require_torch,
     slow,
@@ -71,6 +72,7 @@ class Qwen2ModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch
 class Qwen2IntegrationTest(unittest.TestCase):
     @slow
+    @require_deterministic_for_xpu
     def test_model_450m_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
         model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-0.5B", device_map="auto")
@@ -78,11 +80,18 @@ class Qwen2IntegrationTest(unittest.TestCase):
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-2.2121, -1.6335, -1.4816, -1.5035, -1.9110, -1.8979, -1.9682, -2.1980]])
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
+        EXPECTED_MEAN = Expectations({
+            (None, None): torch.tensor([[-2.2121, -1.6335, -1.4816, -1.5035, -1.9110, -1.8979, -1.9682, -2.1980]]),
+            ("xpu", 3): torch.tensor([[-2.2419, -1.6216, -1.4517, -1.4963, -1.9229, -1.8966, -1.9580, -2.1484]]),
+        })  # fmt: off
+
+        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN.get_expectation(), rtol=1e-2, atol=1e-2)
         # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([2.7344, 4.2812, 4.1562, 2.3906, 1.1875, 2.1562, 3.1719, 3.1406, 1.2891, 3.6094, 3.3125, 1.8203, 2.9219, 3.2344, 1.5938, 6.2500, 7.4062, 7.2188, 6.5938, 6.0312, 6.1562, 5.3750, 5.9688, 5.5938, 6.1250, 1.2656, 1.6016, 3.4062, 1.7891, 3.6406])  # fmt: skip
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
+        EXPECTED_SLICE = Expectations({
+            (None, None): torch.tensor([2.7344, 4.2812, 4.1562, 2.3906, 1.1875, 2.1562, 3.1719, 3.1406, 1.2891, 3.6094, 3.3125, 1.8203, 2.9219, 3.2344, 1.5938, 6.2500, 7.4062, 7.2188, 6.5938, 6.0312, 6.1562, 5.3750, 5.9688, 5.5938, 6.1250, 1.2656, 1.6016, 3.4062, 1.7891, 3.6406]),
+            ("xpu", 3): torch.tensor([2.7500, 4.4062, 4.0625, 2.2656, 1.0859, 2.1094, 3.1719, 3.0781, 1.2656, 3.5312, 3.1719, 1.9062, 2.8750, 3.2812, 1.5156, 6.1562, 7.3125, 7.1250, 6.5312, 5.9688, 6.0938, 5.3438, 5.9375, 5.5938, 6.0938, 1.2344, 1.5391, 3.2969, 1.7266, 3.5312]),
+        })  # fmt: skip
+        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE.get_expectation(), rtol=1e-4, atol=1e-4)
 
         del model
         backend_empty_cache(torch_device)
@@ -174,9 +183,11 @@ class Qwen2IntegrationTest(unittest.TestCase):
 
     @slow
     def test_speculative_generation(self):
-        EXPECTED_TEXT_COMPLETION = (
-            "My favourite condiment is 100% natural and organic, and I love to use it to make my own sauces."
-        )
+        EXPECTED_TEXT_COMPLETION = Expectations({
+            (None, None): "My favourite condiment is 100% natural and organic, and I love to use it to make my own sauces.",
+            ("xpu", 3): "My favourite condiment is 100% natural, organic, gluten-free, vegan, and vegetarian. I have been making",
+        })  # fmt: off
+
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B", use_fast=False)
         model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-0.5B", device_map="auto", dtype=torch.float16)
@@ -189,7 +200,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
             input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=assistant_model
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION.get_expectation(), text)
 
         del model
         backend_empty_cache(torch_device)
@@ -215,7 +226,10 @@ class Qwen2IntegrationTest(unittest.TestCase):
             ],
             ("rocm", (9, 5)): [
                 "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"
-            ]
+            ],
+            ("xpu", 3): [
+                "My favourite condiment is 100% natural, organic, gluten free, vegan, and free from preservatives. I"
+            ],
         })  # fmt: off
         EXPECTED_TEXT_COMPLETION = expected_text_completions.get_expectation()
 
