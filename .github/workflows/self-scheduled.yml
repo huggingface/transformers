@@ -68,7 +68,7 @@ jobs:
     if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu", "run_quantization_torch_gpu"]'), inputs.job)
     strategy:
       matrix:
-        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
@@ -137,7 +137,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache]
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
     uses: ./.github/workflows/model_jobs.yml
     with:
@@ -158,7 +158,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache]
         slice_id: [0, 1, 2]
     uses: ./.github/workflows/model_jobs.yml
     with:
@@ -178,7 +178,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
@@ -323,7 +323,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
@@ -428,7 +428,7 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.quantization_matrix) }}
-        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
@@ -528,11 +528,11 @@ jobs:
       - name: Reinstall transformers in edit mode
         working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[testing]
-  
+
       - name: Install kernels
         working-directory: /transformers
         run: python3 -m pip install -U kernels
-  
+
       - name: NVIDIA-SMI
         run: nvidia-smi
 
@@ -562,7 +562,7 @@ jobs:
 
           echo "$machine_type"
           echo "machine_type=$machine_type" >> $GITHUB_ENV
-    
+
       - name: Run kernel tests on GPU
         working-directory: /transformers
         run: |
@@ -580,50 +580,6 @@ jobs:
           name: ${{ env.machine_type }}_run_kernels_gpu_test_reports
           path: /transformers/reports/${{ env.machine_type }}_run_kernels_gpu_test_reports
 
-  run_extract_warnings:
-    # Let's only do this for the job `run_models_gpu` to simplify the (already complex) logic.
-    if: ${{ always() && inputs.job == 'run_models_gpu' }}
-    name: Extract warnings in CI artifacts
-    runs-on: ubuntu-22.04
-    needs: [setup, run_models_gpu]
-    steps:
-      # Checkout in order to run `utils/extract_warnings.py`. Avoid **explicit** checkout (i.e. don't specify `ref`) for
-      # security reason.
-      - name: Checkout transformers
-        uses: actions/checkout@v4
-
-      - name: Install transformers
-        run: pip install transformers
-
-      - name: Show installed libraries and their versions
-        run: pip freeze
-
-      - name: Create output directory
-        run: mkdir warnings_in_ci
-
-      - uses: actions/download-artifact@v4
-        with:
-          path: warnings_in_ci
-
-      - name: Show artifacts
-        run: echo "$(python3 -c 'import os; d = os.listdir(); print(d)')"
-        working-directory: warnings_in_ci
-
-      - name: Extract warnings in CI artifacts
-        env:
-          github_run_id: ${{ github.run_id }}
-          access_token: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
-        run: |
-          python3 utils/extract_warnings.py --workflow_run_id "$github_run_id" --output_dir warnings_in_ci --token "$access_token" --from_gh
-          echo "$(python3 -c 'import os; import json; fp = open("warnings_in_ci/selected_warnings.json"); d = json.load(fp); d = "\n".join(d); print(d)')"
-
-      - name: Upload artifact
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: warnings_in_ci
-          path: warnings_in_ci/selected_warnings.json
-
   send_results:
     name: Slack Report
     needs: [
@@ -635,7 +591,6 @@ jobs:
       run_torch_cuda_extensions_gpu,
       run_quantization_torch_gpu,
       run_kernels_gpu,
-      run_extract_warnings
     ]
     if: always() && !cancelled()
     uses: ./.github/workflows/slack-report.yml
