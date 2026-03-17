@@ -168,7 +168,9 @@ class ModelManager:
             return AutoProcessor.from_pretrained(model_id, revision=revision, trust_remote_code=self.trust_remote_code)
         except OSError:
             try:
-                return AutoTokenizer.from_pretrained(model_id, revision=revision, trust_remote_code=self.trust_remote_code)
+                return AutoTokenizer.from_pretrained(
+                    model_id, revision=revision, trust_remote_code=self.trust_remote_code
+                )
             except OSError:
                 raise OSError(f"Failed to load processor for {model_id} with AutoProcessor and AutoTokenizer.")
 
@@ -185,7 +187,10 @@ class ModelManager:
 
             flash_attn = True if self.attn_implementation == "flash_attention_2" else "auto"
             return LlamaCppTransformersModel.from_pretrained(
-                model_id, revision=revision, n_gpu_layers=-1, flash_attn=flash_attn,
+                model_id,
+                revision=revision,
+                n_gpu_layers=-1,
+                flash_attn=flash_attn,
             )
 
         dtype = self.dtype if self.dtype in ["auto", None] else getattr(torch, self.dtype)
@@ -225,7 +230,9 @@ class ModelManager:
         self.loaded_models.clear()
 
     @staticmethod
-    def get_model_modality(model: PreTrainedModel, processor=None) -> Modality:
+    def get_model_modality(
+        model: PreTrainedModel, processor: ProcessorMixin | PreTrainedTokenizerFast | None = None
+    ) -> Modality:
         """Detect whether a model is an LLM or VLM based on its architecture."""
         if processor is not None and isinstance(processor, PreTrainedTokenizerBase):
             return Modality.LLM
