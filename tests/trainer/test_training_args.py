@@ -2,6 +2,7 @@ import dataclasses
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import torch
 
@@ -297,6 +298,27 @@ class TestTrainingArguments(unittest.TestCase):
 
         args = TrainingArguments(output_dir="tmp", report_to="tensorboard")
         self.assertEqual(args.report_to, ["tensorboard"])
+
+    def test_kubeflow_auto_enable(self):
+        """Test that kubeflow is auto-enabled when KUBEFLOW_TRAINER_SERVER_URL is set."""
+        with patch.dict(os.environ, {"KUBEFLOW_TRAINER_SERVER_URL": "https://test-url"}, clear=False):
+            # Should auto-add kubeflow when report_to is "none" (default)
+            args = TrainingArguments(output_dir="tmp", report_to="none")
+            self.assertIn("kubeflow", args.report_to)
+
+            # Should auto-add kubeflow to existing list
+            args = TrainingArguments(output_dir="tmp", report_to="tensorboard")
+            self.assertIn("kubeflow", args.report_to)
+            self.assertIn("tensorboard", args.report_to)
+
+            # Should not duplicate if already present
+            args = TrainingArguments(output_dir="tmp", report_to=["kubeflow", "tensorboard"])
+            self.assertEqual(args.report_to.count("kubeflow"), 1)
+
+        # Should not add kubeflow when env var is not set
+        with patch.dict(os.environ, {}, clear=True):
+            args = TrainingArguments(output_dir="tmp", report_to="none")
+            self.assertNotIn("kubeflow", args.report_to)
 
     def test_warmup_steps_validation(self):
         """Test warmup_steps validation for negative values."""
