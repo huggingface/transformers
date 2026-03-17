@@ -98,15 +98,20 @@ class IsaacProcessor(ProcessorMixin):
                 )
 
         pairs = zip(texts, batched_images, strict=True)
+        image_inputs = self.image_processor(images=batched_images, return_tensors=TensorType.PYTORCH)
+        vision_position_ids = image_inputs.pop("vision_position_ids")
+        vision_token_grids = image_inputs["vision_token_grids"]
+        vision_segment_lengths = (vision_token_grids[..., 0] // self.image_processor.pixel_shuffle_scale) * (
+            vision_token_grids[..., 1] // self.image_processor.pixel_shuffle_scale
+        )
+        vision_token_offsets = torch.zeros_like(vision_segment_lengths)
+        vision_token_lengths = torch.zeros_like(vision_segment_lengths)
+        vision_image_attention_mask = image_inputs["vision_patch_attention_mask"].any(dim=-1).to(dtype=torch.long)
 
         sample_input_ids: list[torch.Tensor] = []
         sample_position_ids: list[torch.Tensor] = []
-        sample_vision_patches: list[list[torch.Tensor]] = []
-        sample_vision_grids: list[torch.Tensor] = []
-        sample_vision_offsets: list[torch.Tensor] = []
-        sample_vision_lengths: list[torch.Tensor] = []
 
-        for text_value, sample_images in pairs:
+        for batch_idx, (text_value, sample_images) in enumerate(pairs):
             segments = text_value.split(self.vision_token)
             num_images = len(segments) - 1
             num_provided_images = len(sample_images)
@@ -114,12 +119,6 @@ class IsaacProcessor(ProcessorMixin):
                 raise ValueError(
                     f"IsaacProcessor expects one image per image token, got {num_images} tokens and {num_provided_images} images in sample with text {text_value} "
                 )
-
-            sample_image_features = (
-                self.image_processor(images=sample_images, return_tensors=TensorType.PYTORCH)
-                if sample_images
-                else None
-            )
 
             items: list[dict[str, Any]] = []
             total = 0
@@ -135,16 +134,13 @@ class IsaacProcessor(ProcessorMixin):
                     total += segment_length
 
                 if index < num_images:
-                    patches = sample_image_features["vision_patches"][index]
-                    image_position_ids = sample_image_features["vision_position_ids"][index]
-                    segment_length = int(sample_image_features["vision_segment_lengths"][index].item())
+                    segment_length = int(vision_segment_lengths[batch_idx, index].item())
                     items.append(
                         {
                             "type": "image",
                             "segment_length": segment_length,
-                            "position_ids": image_position_ids,
-                            "patches": patches,
-                            "grid": sample_image_features["vision_token_grids"][index],
+                            "image_index": index,
+                            "position_ids": vision_position_ids[batch_idx, index],
                         }
                     )
                     total += segment_length
@@ -152,7 +148,6 @@ class IsaacProcessor(ProcessorMixin):
             start = max(0, total - self.max_sequence_length)
             end = total
             input_ids_chunks, position_chunks = [], []
-            sample_patches_kept, vision_grids, vision_offsets, vision_lengths = [], [], [], []
             global_offset = 0
             position_offset = 0
 
@@ -181,12 +176,12 @@ class IsaacProcessor(ProcessorMixin):
                         input_ids_chunks.append(
                             torch.full((segment_kept_length,), self.image_pad_token_id, dtype=torch.long)
                         )
-                        sample_patches_kept.append(item["patches"])
-                        vision_grids.append(item["grid"])
-                        vision_offsets.append(segment_local_start)
-                        vision_lengths.append(segment_kept_length)
+                        vision_token_offsets[batch_idx, item["image_index"]] = segment_local_start
+                        vision_token_lengths[batch_idx, item["image_index"]] = segment_kept_length
                         position_offset += int(item["position_ids"][-1, 0].item()) + 1
                 else:
+                    if item["type"] == "image":
+                        vision_image_attention_mask[batch_idx, item["image_index"]] = 0
                     position_offset += (
                         segment_length if item["type"] == "text" else int(item["position_ids"][-1, 0].item()) + 1
                     )
@@ -199,15 +194,6 @@ class IsaacProcessor(ProcessorMixin):
             sample_position_ids.append(
                 torch.cat(position_chunks, 0) if position_chunks else torch.zeros((0, 3), dtype=torch.long)
             )
-            sample_vision_patches.append(sample_patches_kept)
-            if sample_patches_kept:
-                sample_vision_grids.append(torch.stack(vision_grids))
-                sample_vision_offsets.append(torch.tensor(vision_offsets, dtype=torch.long))
-                sample_vision_lengths.append(torch.tensor(vision_lengths, dtype=torch.long))
-            else:
-                sample_vision_grids.append(torch.zeros((0, 2), dtype=torch.long))
-                sample_vision_offsets.append(torch.zeros((0,), dtype=torch.long))
-                sample_vision_lengths.append(torch.zeros((0,), dtype=torch.long))
 
         batch_size = len(sample_input_ids)
         lengths = [int(sample_input.shape[0]) for sample_input in sample_input_ids]
@@ -226,9 +212,7 @@ class IsaacProcessor(ProcessorMixin):
 
         mm_token_type_ids = input_ids.eq(self.image_pad_token_id).to(dtype=torch.long)
 
-        image_counts = [len(patches) for patches in sample_vision_patches]
-        max_images = max(image_counts, default=0)
-        if max_images == 0:
+        if image_inputs["vision_patches"].numel() == 0:
             vision_patches = None
             vision_patch_attention_mask = None
             vision_token_grids = None
@@ -236,32 +220,12 @@ class IsaacProcessor(ProcessorMixin):
             vision_token_lengths = None
             vision_image_attention_mask = None
         else:
-            first_patch = next((patches[0] for patches in sample_vision_patches if patches), None)
-            patch_dim = first_patch.shape[-1]
-            patch_dtype = first_patch.dtype
-            max_patches = max((patch.shape[0] for patches in sample_vision_patches for patch in patches), default=0)
-
-            vision_patches = torch.zeros((batch_size, max_images, max_patches, patch_dim), dtype=patch_dtype)
-            vision_patch_attention_mask = torch.zeros((batch_size, max_images, max_patches), dtype=torch.long)
-            vision_token_grids = torch.zeros((batch_size, max_images, 2), dtype=torch.long)
-            vision_token_offsets = torch.zeros((batch_size, max_images), dtype=torch.long)
-            vision_token_lengths = torch.zeros((batch_size, max_images), dtype=torch.long)
-            vision_image_attention_mask = torch.zeros((batch_size, max_images), dtype=torch.long)
-
-            for batch_idx, sample_patches in enumerate(sample_vision_patches):
-                sample_image_count = len(sample_patches)
-                if sample_image_count == 0:
-                    continue
-
-                vision_token_grids[batch_idx, :sample_image_count] = sample_vision_grids[batch_idx]
-                vision_token_offsets[batch_idx, :sample_image_count] = sample_vision_offsets[batch_idx]
-                vision_token_lengths[batch_idx, :sample_image_count] = sample_vision_lengths[batch_idx]
-                vision_image_attention_mask[batch_idx, :sample_image_count] = 1
-
-                for image_idx, patches in enumerate(sample_patches):
-                    patch_count = int(patches.shape[0])
-                    vision_patches[batch_idx, image_idx, :patch_count] = patches
-                    vision_patch_attention_mask[batch_idx, image_idx, :patch_count] = 1
+            vision_patches = image_inputs["vision_patches"]
+            vision_patch_attention_mask = image_inputs["vision_patch_attention_mask"]
+            vision_token_grids = vision_token_grids
+            vision_token_offsets = vision_token_offsets
+            vision_token_lengths = vision_token_lengths
+            vision_image_attention_mask = vision_image_attention_mask
 
         return {
             "input_ids": input_ids,

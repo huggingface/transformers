@@ -24,7 +24,7 @@ from typing import Any
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, group_images_by_shape, reorder_images
-from ...image_utils import PILImageResampling
+from ...image_utils import ImageInput, PILImageResampling, make_nested_list_of_images
 from ...utils import TensorType, auto_docstring
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
@@ -156,7 +156,11 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
     MAX_PIXELS = 60_000_000  # 60‑megapixel ceiling ≈ 8200 × 7300 px
 
     resample = PILImageResampling.BILINEAR
-    model_input_names = ["vision_patches", "vision_token_grids", "vision_position_ids", "vision_segment_lengths"]
+    model_input_names = [
+        "vision_patches",
+        "vision_patch_attention_mask",
+        "vision_token_grids",
+    ]
     valid_kwargs = IsaacImageProcessorFastKwargs
     unused_kwargs = ["size", "do_center_crop", "crop_size", "pad_size", "do_pad"]
 
@@ -179,6 +183,14 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         kwargs.pop("do_resize", None)
         return super()._validate_preprocess_kwargs(**kwargs)
 
+    def _prepare_images_structure(
+        self,
+        images: ImageInput,
+        expected_ndims: int = 3,
+    ) -> ImageInput:
+        images = self.fetch_images(images)
+        return make_nested_list_of_images(images, expected_ndims=expected_ndims)
+
     def resize(
         self,
         image: torch.Tensor,
@@ -189,7 +201,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: list[torch.Tensor],
+        images: list[list[torch.Tensor]],
         do_resize: bool,
         interpolation: Any | None,
         do_rescale: bool | None,
@@ -205,12 +217,24 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         pixel_shuffle_scale: int | None = None,
         **kwargs,
     ) -> BatchFeature:
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        batch_size = len(images)
+        if all(len(sample_images) == 0 for sample_images in images):
+            tensors = {
+                "vision_patches": torch.zeros((batch_size, 0, 0, 0), dtype=torch.float32),
+                "vision_patch_attention_mask": torch.zeros((batch_size, 0, 0), dtype=torch.long),
+                "vision_token_grids": torch.zeros((batch_size, 0, 2), dtype=torch.long),
+                "vision_position_ids": torch.zeros((batch_size, 0, 0, 3), dtype=torch.long),
+            }
+            return BatchFeature(data=tensors, tensor_type=return_tensors)
+
+        grouped_images, grouped_images_index = group_images_by_shape(
+            images, disable_grouping=disable_grouping, is_nested=True
+        )
 
         grouped_outputs = {}
 
         for shape, stacked_images in grouped_images.items():
-            batch_size, channels, original_height, original_width = stacked_images.shape
+            grouped_batch_size, channels, original_height, original_width = stacked_images.shape
             target_height, target_width = get_image_size_for_max_num_patches(
                 original_height,
                 original_width,
@@ -243,7 +267,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
             _, height_tokens, width_tokens, patch_dim = patches.shape
 
             token_grid = (
-                torch.tensor([height_tokens, width_tokens], device=patches.device).long().expand(batch_size, 2)
+                torch.tensor([height_tokens, width_tokens], device=patches.device).long().expand(grouped_batch_size, 2)
             )
 
             if (height_tokens % pixel_shuffle_scale) or (width_tokens % pixel_shuffle_scale):
@@ -253,13 +277,8 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
             virtual_height = height_tokens // pixel_shuffle_scale
             virtual_width = width_tokens // pixel_shuffle_scale
 
-            segment_lengths = torch.full(
-                (batch_size,),
-                virtual_height * virtual_width,
-                dtype=torch.long,
-                device=patches.device,
-            )
-            image_token_positions = torch.arange(segment_lengths[0], device=patches.device, dtype=torch.long)
+            segment_length = virtual_height * virtual_width
+            image_token_positions = torch.arange(segment_length, device=patches.device, dtype=torch.long)
             image_position_ids = (
                 torch.stack(
                     (
@@ -270,24 +289,68 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
                     dim=-1,
                 )
                 .unsqueeze(0)
-                .expand(batch_size, -1, -1)
+                .expand(grouped_batch_size, -1, -1)
             )
             grouped_outputs[shape] = (
-                patches.reshape(batch_size, -1, patch_dim),
+                patches.reshape(grouped_batch_size, -1, patch_dim),
                 token_grid,
                 image_position_ids,
-                segment_lengths,
             )
 
-        keys = ("vision_patches", "vision_token_grids", "vision_position_ids", "vision_segment_lengths")
-        tensors: dict[str, torch.Tensor] = {}
-
-        for i, key in enumerate(keys):
-            slices = reorder_images(
+        keys = ("vision_patches", "vision_token_grids", "vision_position_ids")
+        nested_outputs = {
+            key: reorder_images(
                 {shape: values[i] for shape, values in grouped_outputs.items()},
                 grouped_images_index,
+                is_nested=True,
             )
-            tensors[key] = torch.stack(slices, dim=0)
+            for i, key in enumerate(keys)
+        }
+
+        first_patch = next(
+            patches for sample_patches in nested_outputs["vision_patches"] for patches in sample_patches
+        )
+        max_images = max(len(sample_patches) for sample_patches in nested_outputs["vision_patches"])
+        patch_dim = first_patch.shape[-1]
+        patch_dtype = first_patch.dtype
+        patch_device = first_patch.device
+        max_patches = max(
+            patches.shape[0] for sample_patches in nested_outputs["vision_patches"] for patches in sample_patches
+        )
+        max_position_tokens = max(
+            position_ids.shape[0]
+            for sample_position_ids in nested_outputs["vision_position_ids"]
+            for position_ids in sample_position_ids
+        )
+
+        tensors = {
+            "vision_patches": torch.zeros(
+                (batch_size, max_images, max_patches, patch_dim), device=patch_device, dtype=patch_dtype
+            ),
+            "vision_patch_attention_mask": torch.zeros(
+                (batch_size, max_images, max_patches), device=patch_device, dtype=torch.long
+            ),
+            "vision_token_grids": torch.zeros((batch_size, max_images, 2), device=patch_device, dtype=torch.long),
+            "vision_position_ids": torch.zeros(
+                (batch_size, max_images, max_position_tokens, 3), device=patch_device, dtype=torch.long
+            ),
+        }
+
+        for batch_idx, sample_patches in enumerate(nested_outputs["vision_patches"]):
+            sample_image_count = len(sample_patches)
+            if sample_image_count == 0:
+                continue
+
+            for image_idx, patches in enumerate(sample_patches):
+                patch_count = int(patches.shape[0])
+                position_ids = nested_outputs["vision_position_ids"][batch_idx][image_idx]
+
+                tensors["vision_patches"][batch_idx, image_idx, :patch_count] = patches
+                tensors["vision_patch_attention_mask"][batch_idx, image_idx, :patch_count] = 1
+                tensors["vision_token_grids"][batch_idx, image_idx] = nested_outputs["vision_token_grids"][batch_idx][
+                    image_idx
+                ]
+                tensors["vision_position_ids"][batch_idx, image_idx, : position_ids.shape[0]] = position_ids
 
         return BatchFeature(data=tensors, tensor_type=return_tensors)
 

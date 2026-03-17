@@ -139,7 +139,11 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
     MAX_PIXELS = 60_000_000  # 60‑megapixel ceiling ≈ 8200 × 7300 px
 
     resample = PILImageResampling.BILINEAR
-    model_input_names = ["vision_patches", "vision_token_grids", "vision_position_ids", "vision_segment_lengths"]
+    model_input_names = [
+        "vision_patches",
+        "vision_patch_attention_mask",
+        "vision_token_grids",
+    ]
     valid_kwargs = IsaacImageProcessorFastKwargs
     unused_kwargs = ["size", "do_center_crop", "crop_size", "pad_size", "do_pad"]
 
@@ -162,6 +166,14 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         kwargs.pop("do_resize", None)
         return super()._validate_preprocess_kwargs(**kwargs)
 
+    def _prepare_images_structure(
+        self,
+        images: ImageInput,
+        expected_ndims: int = 3,
+    ) -> ImageInput:
+        images = self.fetch_images(images)
+        return make_nested_list_of_images(images, expected_ndims=expected_ndims)
+
     def resize(
         self,
         image: torch.Tensor,
@@ -172,7 +184,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: list[torch.Tensor],
+        images: list[list[torch.Tensor]],
         do_resize: bool,
         interpolation: Any | None,
         do_rescale: bool | None,
@@ -188,12 +200,24 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         pixel_shuffle_scale: int | None = None,
         **kwargs,
     ) -> BatchFeature:
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        batch_size = len(images)
+        if all(len(sample_images) == 0 for sample_images in images):
+            tensors = {
+                "vision_patches": torch.zeros((batch_size, 0, 0, 0), dtype=torch.float32),
+                "vision_patch_attention_mask": torch.zeros((batch_size, 0, 0), dtype=torch.long),
+                "vision_token_grids": torch.zeros((batch_size, 0, 2), dtype=torch.long),
+                "vision_position_ids": torch.zeros((batch_size, 0, 0, 3), dtype=torch.long),
+            }
+            return BatchFeature(data=tensors, tensor_type=return_tensors)
+
+        grouped_images, grouped_images_index = group_images_by_shape(
+            images, disable_grouping=disable_grouping, is_nested=True
+        )
 
         grouped_outputs = {}
 
         for shape, stacked_images in grouped_images.items():
-            batch_size, channels, original_height, original_width = stacked_images.shape
+            grouped_batch_size, channels, original_height, original_width = stacked_images.shape
             target_height, target_width = get_image_size_for_max_num_patches(
                 original_height,
                 original_width,
@@ -226,7 +250,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
             _, height_tokens, width_tokens, patch_dim = patches.shape
 
             token_grid = (
-                torch.tensor([height_tokens, width_tokens], device=patches.device).long().expand(batch_size, 2)
+                torch.tensor([height_tokens, width_tokens], device=patches.device).long().expand(grouped_batch_size, 2)
             )
 
             if (height_tokens % pixel_shuffle_scale) or (width_tokens % pixel_shuffle_scale):
@@ -236,13 +260,8 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
             virtual_height = height_tokens // pixel_shuffle_scale
             virtual_width = width_tokens // pixel_shuffle_scale
 
-            segment_lengths = torch.full(
-                (batch_size,),
-                virtual_height * virtual_width,
-                dtype=torch.long,
-                device=patches.device,
-            )
-            image_token_positions = torch.arange(segment_lengths[0], device=patches.device, dtype=torch.long)
+            segment_length = virtual_height * virtual_width
+            image_token_positions = torch.arange(segment_length, device=patches.device, dtype=torch.long)
             image_position_ids = (
                 torch.stack(
                     (
@@ -253,24 +272,68 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
                     dim=-1,
                 )
                 .unsqueeze(0)
-                .expand(batch_size, -1, -1)
+                .expand(grouped_batch_size, -1, -1)
             )
             grouped_outputs[shape] = (
-                patches.reshape(batch_size, -1, patch_dim),
+                patches.reshape(grouped_batch_size, -1, patch_dim),
                 token_grid,
                 image_position_ids,
-                segment_lengths,
             )
 
-        keys = ("vision_patches", "vision_token_grids", "vision_position_ids", "vision_segment_lengths")
-        tensors: dict[str, torch.Tensor] = {}
-
-        for i, key in enumerate(keys):
-            slices = reorder_images(
+        keys = ("vision_patches", "vision_token_grids", "vision_position_ids")
+        nested_outputs = {
+            key: reorder_images(
                 {shape: values[i] for shape, values in grouped_outputs.items()},
                 grouped_images_index,
+                is_nested=True,
             )
-            tensors[key] = torch.stack(slices, dim=0)
+            for i, key in enumerate(keys)
+        }
+
+        first_patch = next(
+            patches for sample_patches in nested_outputs["vision_patches"] for patches in sample_patches
+        )
+        max_images = max(len(sample_patches) for sample_patches in nested_outputs["vision_patches"])
+        patch_dim = first_patch.shape[-1]
+        patch_dtype = first_patch.dtype
+        patch_device = first_patch.device
+        max_patches = max(
+            patches.shape[0] for sample_patches in nested_outputs["vision_patches"] for patches in sample_patches
+        )
+        max_position_tokens = max(
+            position_ids.shape[0]
+            for sample_position_ids in nested_outputs["vision_position_ids"]
+            for position_ids in sample_position_ids
+        )
+
+        tensors = {
+            "vision_patches": torch.zeros(
+                (batch_size, max_images, max_patches, patch_dim), device=patch_device, dtype=patch_dtype
+            ),
+            "vision_patch_attention_mask": torch.zeros(
+                (batch_size, max_images, max_patches), device=patch_device, dtype=torch.long
+            ),
+            "vision_token_grids": torch.zeros((batch_size, max_images, 2), device=patch_device, dtype=torch.long),
+            "vision_position_ids": torch.zeros(
+                (batch_size, max_images, max_position_tokens, 3), device=patch_device, dtype=torch.long
+            ),
+        }
+
+        for batch_idx, sample_patches in enumerate(nested_outputs["vision_patches"]):
+            sample_image_count = len(sample_patches)
+            if sample_image_count == 0:
+                continue
+
+            for image_idx, patches in enumerate(sample_patches):
+                patch_count = int(patches.shape[0])
+                position_ids = nested_outputs["vision_position_ids"][batch_idx][image_idx]
+
+                tensors["vision_patches"][batch_idx, image_idx, :patch_count] = patches
+                tensors["vision_patch_attention_mask"][batch_idx, image_idx, :patch_count] = 1
+                tensors["vision_token_grids"][batch_idx, image_idx] = nested_outputs["vision_token_grids"][batch_idx][
+                    image_idx
+                ]
+                tensors["vision_position_ids"][batch_idx, image_idx, : position_ids.shape[0]] = position_ids
 
         return BatchFeature(data=tensors, tensor_type=return_tensors)
 
@@ -730,15 +793,20 @@ class IsaacProcessor(ProcessorMixin):
                 )
 
         pairs = zip(texts, batched_images, strict=True)
+        image_inputs = self.image_processor(images=batched_images, return_tensors=TensorType.PYTORCH)
+        vision_position_ids = image_inputs.pop("vision_position_ids")
+        vision_token_grids = image_inputs["vision_token_grids"]
+        vision_segment_lengths = (vision_token_grids[..., 0] // self.image_processor.pixel_shuffle_scale) * (
+            vision_token_grids[..., 1] // self.image_processor.pixel_shuffle_scale
+        )
+        vision_token_offsets = torch.zeros_like(vision_segment_lengths)
+        vision_token_lengths = torch.zeros_like(vision_segment_lengths)
+        vision_image_attention_mask = image_inputs["vision_patch_attention_mask"].any(dim=-1).to(dtype=torch.long)
 
         sample_input_ids: list[torch.Tensor] = []
         sample_position_ids: list[torch.Tensor] = []
-        sample_vision_patches: list[list[torch.Tensor]] = []
-        sample_vision_grids: list[torch.Tensor] = []
-        sample_vision_offsets: list[torch.Tensor] = []
-        sample_vision_lengths: list[torch.Tensor] = []
 
-        for text_value, sample_images in pairs:
+        for batch_idx, (text_value, sample_images) in enumerate(pairs):
             segments = text_value.split(self.vision_token)
             num_images = len(segments) - 1
             num_provided_images = len(sample_images)
@@ -746,12 +814,6 @@ class IsaacProcessor(ProcessorMixin):
                 raise ValueError(
                     f"IsaacProcessor expects one image per image token, got {num_images} tokens and {num_provided_images} images in sample with text {text_value} "
                 )
-
-            sample_image_features = (
-                self.image_processor(images=sample_images, return_tensors=TensorType.PYTORCH)
-                if sample_images
-                else None
-            )
 
             items: list[dict[str, Any]] = []
             total = 0
@@ -767,16 +829,13 @@ class IsaacProcessor(ProcessorMixin):
                     total += segment_length
 
                 if index < num_images:
-                    patches = sample_image_features["vision_patches"][index]
-                    image_position_ids = sample_image_features["vision_position_ids"][index]
-                    segment_length = int(sample_image_features["vision_segment_lengths"][index].item())
+                    segment_length = int(vision_segment_lengths[batch_idx, index].item())
                     items.append(
                         {
                             "type": "image",
                             "segment_length": segment_length,
-                            "position_ids": image_position_ids,
-                            "patches": patches,
-                            "grid": sample_image_features["vision_token_grids"][index],
+                            "image_index": index,
+                            "position_ids": vision_position_ids[batch_idx, index],
                         }
                     )
                     total += segment_length
@@ -784,7 +843,6 @@ class IsaacProcessor(ProcessorMixin):
             start = max(0, total - self.max_sequence_length)
             end = total
             input_ids_chunks, position_chunks = [], []
-            sample_patches_kept, vision_grids, vision_offsets, vision_lengths = [], [], [], []
             global_offset = 0
             position_offset = 0
 
@@ -813,12 +871,12 @@ class IsaacProcessor(ProcessorMixin):
                         input_ids_chunks.append(
                             torch.full((segment_kept_length,), self.image_pad_token_id, dtype=torch.long)
                         )
-                        sample_patches_kept.append(item["patches"])
-                        vision_grids.append(item["grid"])
-                        vision_offsets.append(segment_local_start)
-                        vision_lengths.append(segment_kept_length)
+                        vision_token_offsets[batch_idx, item["image_index"]] = segment_local_start
+                        vision_token_lengths[batch_idx, item["image_index"]] = segment_kept_length
                         position_offset += int(item["position_ids"][-1, 0].item()) + 1
                 else:
+                    if item["type"] == "image":
+                        vision_image_attention_mask[batch_idx, item["image_index"]] = 0
                     position_offset += (
                         segment_length if item["type"] == "text" else int(item["position_ids"][-1, 0].item()) + 1
                     )
@@ -831,15 +889,6 @@ class IsaacProcessor(ProcessorMixin):
             sample_position_ids.append(
                 torch.cat(position_chunks, 0) if position_chunks else torch.zeros((0, 3), dtype=torch.long)
             )
-            sample_vision_patches.append(sample_patches_kept)
-            if sample_patches_kept:
-                sample_vision_grids.append(torch.stack(vision_grids))
-                sample_vision_offsets.append(torch.tensor(vision_offsets, dtype=torch.long))
-                sample_vision_lengths.append(torch.tensor(vision_lengths, dtype=torch.long))
-            else:
-                sample_vision_grids.append(torch.zeros((0, 2), dtype=torch.long))
-                sample_vision_offsets.append(torch.zeros((0,), dtype=torch.long))
-                sample_vision_lengths.append(torch.zeros((0,), dtype=torch.long))
 
         batch_size = len(sample_input_ids)
         lengths = [int(sample_input.shape[0]) for sample_input in sample_input_ids]
@@ -858,9 +907,7 @@ class IsaacProcessor(ProcessorMixin):
 
         mm_token_type_ids = input_ids.eq(self.image_pad_token_id).to(dtype=torch.long)
 
-        image_counts = [len(patches) for patches in sample_vision_patches]
-        max_images = max(image_counts, default=0)
-        if max_images == 0:
+        if image_inputs["vision_patches"].numel() == 0:
             vision_patches = None
             vision_patch_attention_mask = None
             vision_token_grids = None
@@ -868,32 +915,12 @@ class IsaacProcessor(ProcessorMixin):
             vision_token_lengths = None
             vision_image_attention_mask = None
         else:
-            first_patch = next((patches[0] for patches in sample_vision_patches if patches), None)
-            patch_dim = first_patch.shape[-1]
-            patch_dtype = first_patch.dtype
-            max_patches = max((patch.shape[0] for patches in sample_vision_patches for patch in patches), default=0)
-
-            vision_patches = torch.zeros((batch_size, max_images, max_patches, patch_dim), dtype=patch_dtype)
-            vision_patch_attention_mask = torch.zeros((batch_size, max_images, max_patches), dtype=torch.long)
-            vision_token_grids = torch.zeros((batch_size, max_images, 2), dtype=torch.long)
-            vision_token_offsets = torch.zeros((batch_size, max_images), dtype=torch.long)
-            vision_token_lengths = torch.zeros((batch_size, max_images), dtype=torch.long)
-            vision_image_attention_mask = torch.zeros((batch_size, max_images), dtype=torch.long)
-
-            for batch_idx, sample_patches in enumerate(sample_vision_patches):
-                sample_image_count = len(sample_patches)
-                if sample_image_count == 0:
-                    continue
-
-                vision_token_grids[batch_idx, :sample_image_count] = sample_vision_grids[batch_idx]
-                vision_token_offsets[batch_idx, :sample_image_count] = sample_vision_offsets[batch_idx]
-                vision_token_lengths[batch_idx, :sample_image_count] = sample_vision_lengths[batch_idx]
-                vision_image_attention_mask[batch_idx, :sample_image_count] = 1
-
-                for image_idx, patches in enumerate(sample_patches):
-                    patch_count = int(patches.shape[0])
-                    vision_patches[batch_idx, image_idx, :patch_count] = patches
-                    vision_patch_attention_mask[batch_idx, image_idx, :patch_count] = 1
+            vision_patches = image_inputs["vision_patches"]
+            vision_patch_attention_mask = image_inputs["vision_patch_attention_mask"]
+            vision_token_grids = vision_token_grids
+            vision_token_offsets = vision_token_offsets
+            vision_token_lengths = vision_token_lengths
+            vision_image_attention_mask = vision_image_attention_mask
 
         return {
             "input_ids": input_ids,
