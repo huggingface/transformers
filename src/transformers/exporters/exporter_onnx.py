@@ -81,8 +81,8 @@ class OnnxExporter(DynamoExporter):
         inputs = copy.deepcopy(sample_inputs)
         model, inputs = prepare_for_export(model, inputs)
 
-        with _patch_model(model), patch_torch_ops():
-            inputs_names, outputs_names = _get_inputs_outputs_names(model, inputs)
+        with patch_model(model), patch_torch_ops():
+            inputs_names, outputs_names = get_inputs_outputs_names(model, inputs)
             exported_program: ExportedProgram = super().export(model, inputs)
             patch_fx_graph(exported_program.graph_module)
             onnx_program: ONNXProgram = torch.onnx.export(
@@ -108,7 +108,7 @@ class OnnxExporter(DynamoExporter):
 
 
 @contextmanager
-def _patch_model(model):
+def patch_model(model):
     """Temporarily wrap model.forward to return flat dict[str, Tensor] with deduped outputs."""
 
     original_forward = model.forward
@@ -158,7 +158,7 @@ def _dedup_output_tensors(obj: Any, seen: dict | None = None) -> Any:
     return obj
 
 
-def _get_inputs_outputs_names(model: "PreTrainedModel", inputs: dict[str, Any]) -> tuple[list[str], list[str]]:
+def get_inputs_outputs_names(model: "PreTrainedModel", inputs: dict[str, Any]) -> tuple[list[str], list[str]]:
     """Get input/output names for ONNX export, disambiguating collisions with input./output. prefixes."""
 
     with torch.no_grad():

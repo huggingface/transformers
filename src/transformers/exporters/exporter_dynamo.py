@@ -20,15 +20,16 @@ export `PreTrainedModel` instances to `ExportedProgram` via `torch.export.export
 
 Helper sections below the exporter class:
 
-1. **Pytree registration** (`_register_pytrees_for_model`): flatten/unflatten
+1. **Pytree registration** (`register_cache_pytrees_for_model`): flatten/unflatten
    for Cache objects and other custom types so `torch.export` can trace through them.
-2. **Dynamic shapes** (`_get_auto_dynamic_shapes`): automatic `Dim.AUTO` shape
+2. **Dynamic shapes** (`get_auto_dynamic_shapes`): automatic `Dim.AUTO` shape
    inference for all tensor and cache inputs.
 """
 
 import copy
 import importlib
 import inspect
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 from ..utils import logging
@@ -74,17 +75,18 @@ class DynamoExporter(HfExporter):
 
         dynamic_shapes = self.export_config.dynamic_shapes
         if self.export_config.dynamic and dynamic_shapes is None:
-            dynamic_shapes = _get_auto_dynamic_shapes(inputs)
+            dynamic_shapes = get_auto_dynamic_shapes(inputs)
 
-        _register_pytrees_for_model(model)
-        exported_program: ExportedProgram = torch.export.export(
-            model,
-            args=(),
-            kwargs=inputs,
-            dynamic_shapes=dynamic_shapes,
-            strict=self.export_config.strict,
-            prefer_deferred_runtime_asserts_over_guards=self.export_config.prefer_deferred_runtime_asserts_over_guards,
-        )
+        register_cache_pytrees_for_model(model)
+        with patch_model(model, inputs):
+            exported_program: ExportedProgram = torch.export.export(
+                model,
+                args=(),
+                kwargs=inputs,
+                dynamic_shapes=dynamic_shapes,
+                strict=self.export_config.strict,
+                prefer_deferred_runtime_asserts_over_guards=self.export_config.prefer_deferred_runtime_asserts_over_guards,
+            )
 
         return exported_program
 
@@ -232,7 +234,7 @@ def _pytree_unflatten(values, context: Any) -> Any:
     return _unflatten_from_context(context, list(values))
 
 
-def _register_for_export(object_cls: type):
+def _register_pytree_node(object_cls: type):
     try:
         torch.utils._pytree.register_pytree_node(
             object_cls,
@@ -252,11 +254,11 @@ def _iter_subclasses(cls: type):
         yield from _iter_subclasses(subclass)
 
 
-def _register_pytrees_for_model(model: "PreTrainedModel"):
+def register_cache_pytrees_for_model(model: "PreTrainedModel"):
     """Register all relevant cache types as pytree nodes for torch.export."""
     # All transformers Cache subclasses
     for cache_type in _iter_subclasses(Cache):
-        _register_for_export(cache_type)
+        _register_pytree_node(cache_type)
     # Model-specific cache classes not inheriting from Cache (e.g. custom per-model caches)
     for _, obj in inspect.getmembers(inspect.getmodule(model)):
         if (
@@ -265,7 +267,7 @@ def _register_pytrees_for_model(model: "PreTrainedModel"):
             and obj.__name__.endswith("Cache")
             and not issubclass(obj, Cache)
         ):
-            _register_for_export(obj)
+            _register_pytree_node(obj)
 
 
 # ── Dynamic shapes ──────────────────────────────────────────────────────────
@@ -273,31 +275,56 @@ def _register_pytrees_for_model(model: "PreTrainedModel"):
 # DynamoConfig.dynamic is True and no explicit dynamic_shapes are provided.
 
 
+@contextmanager
+def patch_model(model: "PreTrainedModel", inputs: dict[str, Any]):
+    """Temporarily replace ``model.forward`` with a flat explicit signature derived from ``inputs``.
+
+    Prevents torch.export from expanding ``**kwargs: Unpack[TransformersKwargs]`` into
+    ``combined_args``, which would cause an arity mismatch with ``dynamic_shapes``.
+    """
+    original_forward = model.forward
+
+    def _flat_forward(**kwargs):
+        return original_forward(**kwargs)
+
+    _flat_forward.__signature__ = inspect.Signature(
+        [inspect.Parameter(k, inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None) for k in inputs]
+    )
+
+    try:
+        model.forward = _flat_forward
+        yield
+    finally:
+        model.forward = original_forward
+
+
 def _auto_dynamic_shape(tensor: torch.Tensor) -> dict[int, torch.export.Dim]:
     """Generate a dynamic shape with all dimensions set to Dim.AUTO for a given tensor."""
-    return dict.fromkeys(range(len(tensor.shape)), torch.export.Dim.AUTO)
+    return dict.fromkeys(range(tensor.dim()), torch.export.Dim.AUTO)
 
 
-def _get_auto_dynamic_shapes(inputs: dict[str, Any]) -> dict[str, Any]:
-    """Automatically generate dynamic shapes for all tensor inputs and cache inputs."""
-    dynamic_shapes = {}
-    for name, input in inputs.items():
-        if isinstance(input, torch.Tensor):
-            dynamic_shapes[name] = _auto_dynamic_shape(input)
-        elif input is None or isinstance(input, (int, float, bool, str)):
-            dynamic_shapes[name] = None
-        elif isinstance(input, dict):
-            dynamic_shapes[name] = _get_auto_dynamic_shapes(input)
-        elif isinstance(input, (list, tuple, set)):
-            dynamic_shapes[name] = type(input)(_get_auto_dynamic_shapes(dict(enumerate(input))).values())
-        elif hasattr(input, "__dict__"):
-            leaves, _ = _pytree_flatten(input)
-            dynamic_shapes[name] = [_auto_dynamic_shape(t) for t in leaves]
-        else:
-            raise ValueError(
-                f"Input '{name}' is of unsupported type '{type(input)}'. "
-                "Only torch.Tensor, Cache, int, float, bool, str, dict, list, tuple, set, "
-                "and objects with a __dict__ (e.g. custom cache classes) are supported."
-            )
+def get_auto_dynamic_shapes(inputs: Any) -> Any:
+    """Recursively build dynamic shapes for any input value.
 
-    return dynamic_shapes
+    - Tensors → per-dimension Dim.AUTO spec.
+    - Scalars / None → None (no dynamic dims).
+    - Objects with ``__dict__`` (ModelOutput, Cache, …) → flat list of leaf specs,
+      matching the ``TreeSpec(list, …)`` that torch.export produces for these types.
+    - Lists / tuples → same container type, recursed element-wise.
+    - Plain dicts → recursed dict of specs.
+    """
+    if isinstance(inputs, torch.Tensor):
+        return _auto_dynamic_shape(inputs)
+    if inputs is None or isinstance(inputs, (int, float, bool, str)):
+        return None
+    if hasattr(inputs, "__dict__"):
+        leaves, _ = _pytree_flatten(inputs)
+        return [_auto_dynamic_shape(t) for t in leaves]
+    if isinstance(inputs, (list, tuple)):
+        return type(inputs)(get_auto_dynamic_shapes(v) for v in inputs)
+    if isinstance(inputs, dict):
+        return {k: get_auto_dynamic_shapes(v) for k, v in inputs.items()}
+    raise ValueError(
+        f"Unsupported input type '{type(inputs)}'. "
+        "Only torch.Tensor, Cache, ModelOutput, int, float, bool, str, dict, list, and tuple are supported."
+    )
