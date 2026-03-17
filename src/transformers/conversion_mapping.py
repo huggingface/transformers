@@ -39,6 +39,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "deit": "vit",
     "pixio": "vit",
     "vit_mae": "vit",
+    "vit_msn": "vit",
     # Mixtral-style MoE
     "mixtral": "mixtral",
     "minimax": "mixtral",
@@ -82,21 +83,10 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("output.dense", "mlp.fc2"),
         ],
         "lw_detr": [
-            # LwDetr backbone uses VitDet-style attention (attention.attention.*) and output (attention.output)
-            # but VitDet-style MLP (intermediate.fc1/fc2) - no intermediate.dense
-            WeightRenaming("attention.attention.", "attention."),
-            WeightRenaming("attention.query", "q_proj"),
-            WeightRenaming("attention.key", "k_proj"),
-            WeightRenaming("attention.value", "v_proj"),
-            WeightRenaming("attention.output.dense", "attention.o_proj"),
-            WeightRenaming("attention.output.", "attention.o_proj."),
-            # Cross-attn: safetensors may serialize as attention.weights when tied
-            WeightRenaming("cross_attn.attention.weights", "cross_attn.attention_weights"),
-            # Backbone: some checkpoints (e.g. stevenbucaille) have projections at layer level
-            WeightRenaming(r"encoder.layer.(\d+).q_proj", r"encoder.layer.\1.attention.q_proj"),
-            WeightRenaming(r"encoder.layer.(\d+).k_proj", r"encoder.layer.\1.attention.k_proj"),
-            WeightRenaming(r"encoder.layer.(\d+).v_proj", r"encoder.layer.\1.attention.v_proj"),
-            WeightRenaming(r"encoder.layer.(\d+).o_proj", r"encoder.layer.\1.attention.o_proj"),
+            WeightRenaming("attention.attention.query", "attention.q_proj"),
+            WeightRenaming("attention.attention.key", "attention.k_proj"),
+            WeightRenaming("attention.attention.value", "attention.v_proj"),
+            WeightRenaming("attention.output", "attention.o_proj"),
         ],
         "segformer": [
             # Structural: three parallel ModuleLists collapsed into SegformerStage (4 stages for all variants)

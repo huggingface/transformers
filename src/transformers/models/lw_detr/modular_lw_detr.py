@@ -231,9 +231,7 @@ class LwDetrViTAttention(ViTAttention):
 
     def __init__(self, config: LwDetrViTConfig):
         super().__init__(config)
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=False
-        )
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.num_key_value_groups = 1
 
 
