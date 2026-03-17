@@ -1,5 +1,5 @@
 # coding = utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,12 +17,13 @@
 import inspect
 import unittest
 
+import requests
 from parameterized import parameterized
 
 from transformers import (
+    AutoImageProcessor,
     PPOCRV5ServerRecConfig,
     PPOCRV5ServerRecForTextRecognition,
-    PPOCRV5ServerRecImageProcessor,
     is_torch_available,
     is_vision_available,
 )
@@ -53,11 +54,29 @@ class PPOCRV5ServerRecModelTester:
         image_size=[48, 320],
         num_channels=3,
         is_training=False,
+        hidden_act="silu",
+        hidden_size=10,
+        mlp_ratio=2.0,
+        depth=2,
+        head_out_channels=18385,
+        conv_kernel_size=[1, 3],
+        qkv_bias=True,
+        num_attention_heads=2,
+        attention_dropout=0.0,
     ):
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
         self.is_training = is_training
+        self.hidden_act = hidden_act
+        self.hidden_size = hidden_size
+        self.mlp_ratio = mlp_ratio
+        self.depth = depth
+        self.head_out_channels = head_out_channels
+        self.conv_kernel_size = conv_kernel_size
+        self.qkv_bias = qkv_bias
+        self.num_attention_heads = num_attention_heads
+        self.attention_dropout = attention_dropout
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values = self.prepare_config_and_inputs()
@@ -71,40 +90,35 @@ class PPOCRV5ServerRecModelTester:
         return config, pixel_values
 
     def get_config(self) -> PPOCRV5ServerRecConfig:
+        backbone_config = {
+            "model_type": "hgnet_v2",
+            "arch": "L",
+            "return_idx": [0, 1, 2, 3],
+            "hidden_sizes": [16, 16, 16, 16],
+            "stem_channels": [3, 16, 16],
+            "stage_in_channels": [16, 16, 16, 16],
+            "stage_mid_channels": [16, 16, 16, 16],
+            "stage_out_channels": [16, 16, 16, 16],
+            "freeze_stem_only": True,
+            "freeze_at": 0,
+            "freeze_norm": True,
+            "lr_mult_list": [1.0, 1.0, 1.0, 1.0, 1.0],
+            "out_features": ["stage1", "stage2", "stage3", "stage4"],
+            "stage_downsample": [True, True, True, True],
+            "stage_downsample_strides": [[2, 1], [1, 2], [2, 1], [2, 1]],
+        }
+
         config = PPOCRV5ServerRecConfig(
-            stage_config={
-                "stage1": [48, 48, 128, 1, True, False, 3, 6, [2, 1]],
-                "stage2": [128, 96, 512, 1, True, False, 3, 6, [1, 2]],
-                "stage3": [512, 192, 1024, 3, True, True, 5, 6, [2, 1]],
-                "stage4": [1024, 384, 2048, 1, True, True, 5, 6, [2, 1]],
-            },
-            stem_channels=[3, 32, 48],
-            text_rec=True,
-            det=False,
-            use_lab=False,
-            use_last_conv=True,
-            class_expand=2048,
-            dropout_prob=0.0,
-            class_num=1000,
-            lr_mult_list=[1.0, 1.0, 1.0, 1.0, 1.0],
-            out_indices=None,
-            head_list=[
-                {
-                    "CTCHead": {
-                        "Neck": {
-                            "name": "svtr",
-                            "dims": 120,
-                            "depth": 2,
-                            "hidden_dims": 120,
-                            "kernel_size": [1, 3],
-                            "use_guide": True,
-                        },
-                        "Head": {"fc_decay": 0.00001},
-                    }
-                },
-                {"NRTRHead": {"nrtr_dim": 384, "max_text_length": 25}},
-            ],
-            decode_list={"CTCLabelDecode": 18385, "SARLabelDecode": 18387, "NRTRLabelDecode": 18388},
+            backbone_config=backbone_config,
+            hidden_act=self.hidden_act,
+            hidden_size=self.hidden_size,
+            mlp_ratio=self.mlp_ratio,
+            depth=self.depth,
+            head_out_channels=self.head_out_channels,
+            conv_kernel_size=self.conv_kernel_size,
+            qkv_bias=self.qkv_bias,
+            num_attention_heads=self.num_attention_heads,
+            attention_dropout=self.attention_dropout,
         )
 
         return config
@@ -118,6 +132,7 @@ class PPOCRV5ServerRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
     )
 
     has_attentions = False
+    test_resize_embeddings = False
 
     def setUp(self):
         self.model_tester = PPOCRV5ServerRecModelTester()
@@ -136,40 +151,20 @@ class PPOCRV5ServerRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="PPOCRV5ServerRec does not use test_inputs_embeds_matches_input_ids")
+    @unittest.skip(reason="PPOCRV5ServerRec does not use inputs_embeds")
     def test_inputs_embeds_matches_input_ids(self):
-        pass
-
-    @unittest.skip(reason="PPOCRV5ServerRec does not use test_init_weights_can_init_buffers")
-    def test_init_weights_can_init_buffers(self):
         pass
 
     @unittest.skip(reason="PPOCRV5ServerRec does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="PPOCRV5ServerRec does not support init all missing weights")
-    def test_can_init_all_missing_weights(self):
-        pass
-
     @unittest.skip(reason="PPOCRV5ServerRec does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="PPOCRV5ServerRec does not support batching inference")
-    def test_batching_equivalence(self):
-        pass
-
-    @unittest.skip(reason="PPOCRV5ServerRec does not use token embeddings")
-    def test_resize_tokens_embeddings(self):
-        pass
-
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
-        pass
-
-    @unittest.skip(reason="PPOCRV5ServerRec does not support this test")
-    def test_model_is_small(self):
         pass
 
     @unittest.skip(reason="PPOCRV5ServerRec does not support attention")
@@ -216,9 +211,40 @@ class PPOCRV5ServerRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
-    @unittest.skip(reason="PPOCRV5ServerRec does not support hidden_states")
     def test_hidden_states_output(self):
-        pass
+        # PP-OCRV5 uses HGNetV2 backbone: hidden_states = (embedding, stage1, ..., stageN) = num_stages + 1
+        config = self.model_tester.get_config()
+        num_expected_hidden_states = len(config.backbone_config.depths) + 1
+
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.hidden_states
+            self.assertIsNotNone(hidden_states)
+            self.assertEqual(len(hidden_states), num_expected_hidden_states)
+
+            # First hidden state (embedding output) is 2x downsampled
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [self.model_tester.image_size[0] // 2, self.model_tester.image_size[1] // 2],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict.copy(), config, model_class)
+
+            # Check that output_hidden_states also works via config (including backbone subconfig)
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+            if config.backbone_config is not None:
+                config.backbone_config.output_hidden_states = True
+            check_hidden_states_output(inputs_dict.copy(), config, model_class)
 
 
 @require_torch
@@ -226,16 +252,13 @@ class PPOCRV5ServerRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 @slow
 class PPOCRV5ServerRecModelIntegrationTest(unittest.TestCase):
     def setUp(self):
-        model_path = "./pp_ocrv5_server_rec_model"
-
+        model_path = "PaddlePaddle/PP-OCRv5_server_rec_safetensors"
         self.model = PPOCRV5ServerRecForTextRecognition.from_pretrained(model_path).to(torch_device)
         self.image_processor = (
-            PPOCRV5ServerRecImageProcessor.from_pretrained(model_path, return_tensors="pt")
-            if is_vision_available()
-            else None
+            AutoImageProcessor.from_pretrained(model_path, return_tensors="pt") if is_vision_available() else None
         )
-        path = "./general_ocr_rec_001.png"
-        self.image = Image.open(path).convert("RGB")
+        url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png"
+        self.image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
     def test_inference_text_recognition_head(self):
         inputs = self.image_processor(images=self.image, return_tensors="pt")["pixel_values"]
@@ -244,7 +267,9 @@ class PPOCRV5ServerRecModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(inputs)
 
-        pred_text = self.image_processor.post_process_text_recognition(outputs)[0][0]
+        results = self.image_processor.post_process_text_recognition(outputs)
         expected_text = "绿洲仕格维花园公寓"
+        expected_score = 0.9837473630905151
 
-        self.assertEqual(pred_text, expected_text)
+        self.assertEqual(results[0]["text"], expected_text)
+        torch.testing.assert_close(results[0]["score"], expected_score, rtol=2e-2, atol=2e-2)

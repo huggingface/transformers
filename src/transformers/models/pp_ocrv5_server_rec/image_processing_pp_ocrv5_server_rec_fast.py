@@ -19,421 +19,139 @@
 # limitations under the License.
 
 import math
+from typing import Optional
 
-import numpy as np
 import torch
+import torchvision.transforms.v2.functional as tvF
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast
-from ...image_utils import ChannelDimension
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
+from ...image_utils import PILImageResampling, SizeDict
 from ...utils import auto_docstring
+from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD  # noqa: F401
+from ...utils.generic import TensorType
+from .image_processing_pp_ocrv5_server_rec import PPOCRV5ServerRecImageProcessorKwargs
 
 
-@auto_docstring(custom_intro="FastImageProcessor for the PP-OCRv5_mobile_rec model.")
+@auto_docstring
 class PPOCRV5ServerRecImageProcessorFast(BaseImageProcessorFast):
-    r"""
-    Constructs a fast PPOCRV5ServerRec image processor that supports batch processing.
-
-    This processor is designed to handle multiple images efficiently while maintaining
-    strict compatibility with [`PPOCRV5ServerRecImageProcessor`]. The preprocessing
-    results are guaranteed to be identical to the non-fast version.
-
-    Args:
-        rec_image_shape (`List[int]`, *optional*, defaults to `[3, 48, 320]`):
-            The target image shape for recognition in format [channels, height, width].
-        max_img_width (`int`, *optional*, defaults to `3200`):
-            The maximum width allowed for the resized image.
-        character_list (`List[str]` or `str`, *optional*, defaults to `None`):
-            The list of characters for text recognition decoding. If `None`, defaults to
-            "0123456789abcdefghijklmnopqrstuvwxyz".
-        use_space_char (`bool`, *optional*, defaults to `True`):
-            Whether to include space character in the character list.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image pixel values to [0, 1] by dividing by 255.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image with mean=0.5 and std=0.5.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
-            The mean values for image normalization. Used for validation but actual
-            normalization uses fixed value 0.5 in `_resize_norm_img`.
-        image_std (`float` or `List[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
-            The standard deviation values for image normalization. Used for validation
-            but actual normalization uses fixed value 0.5 in `_resize_norm_img`.
-
-    Examples:
-
-    ```python
-    >>> from PIL import Image
-    >>> from transformers import PPOCRV5ServerRecImageProcessorFast
-
-    >>> processor = PPOCRV5ServerRecImageProcessorFast()
-
-    >>> # Process a single image
-    >>> image = Image.open("text_image.png")
-    >>> inputs = processor(image, return_tensors="pt")
-
-    >>> # Process multiple images in batch
-    >>> images = [Image.open(f"text_image_{i}.png") for i in range(4)]
-    >>> batch_inputs = processor(images, return_tensors="pt")
-    """
-
-    model_input_names = ["pixel_values"]
-
-    def __init__(
-        self,
-        rec_image_shape: list[int] | None = None,
-        max_img_width: int = 3200,
-        character_list: list[str] | str | None = None,
-        use_space_char: bool = True,
-        do_rescale: bool = True,
-        do_normalize: bool = True,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        **kwargs,
-    ) -> None:
-        super().__init__(**kwargs)
-        self.rec_image_shape = rec_image_shape if rec_image_shape is not None else [3, 48, 320]
-        self.max_img_width = max_img_width
-        self.do_rescale = do_rescale
-        self.do_normalize = do_normalize
-        # Set default image_mean and image_std for normalization (mean=0.5, std=0.5)
-        self.image_mean = image_mean if image_mean is not None else [0.5, 0.5, 0.5]
-        self.image_std = image_std if image_std is not None else [0.5, 0.5, 0.5]
-
-        # Initialize character list for decoding
-        self._init_character_list(character_list, use_space_char)
-
-    def _init_character_list(
-        self,
-        character_list: list[str] | str | None,
-        use_space_char: bool,
-    ) -> None:
-        """
-        Initialize the character list and character-to-index mapping for CTC decoding.
-
-        Args:
-            character_list (`List[str]` or `str`, *optional*):
-                The list of characters or a string of characters. If `None`, defaults to
-                "0123456789abcdefghijklmnopqrstuvwxyz".
-            use_space_char (`bool`):
-                Whether to include space character in the character list.
-        """
-        if character_list is None:
-            characters = list("0123456789abcdefghijklmnopqrstuvwxyz")
-        elif isinstance(character_list, str):
-            characters = list(character_list)
-        else:
-            characters = list(character_list)
-
-        if use_space_char:
-            characters.append(" ")
-
-        # Add CTC blank token at the beginning
-        characters = ["blank"] + characters
-
-        self.character = characters
-        self.char_to_idx = {char: idx for idx, char in enumerate(characters)}
-
-    def _pil_resize(self, img: np.ndarray, target_size: tuple[int, int]) -> np.ndarray:
-        """
-        Resize image to exactly match cv2.resize behavior using fixed-point arithmetic.
-
-        This implementation uses fixed-point arithmetic (matching OpenCV's internal approach)
-        with float32 precision for coordinate calculations to achieve maximum compatibility.
-
-        Args:
-            img (`np.ndarray`):
-                Input image in HWC format (height, width, channels).
-            target_size (`tuple[int, int]`):
-                Target size as (width, height) to match cv2.resize convention.
-
-        Returns:
-            `np.ndarray`: Resized image in HWC format.
-        """
-        h, w = img.shape[:2]
-        target_w, target_h = target_size
-
-        # Ensure uint8 format
-        if img.dtype != np.uint8:
-            img = np.clip(img, 0, 255).astype(np.uint8)
-
-        # Handle grayscale images
-        if len(img.shape) == 2:
-            img = img[:, :, np.newaxis]
-            squeeze_output = True
-        else:
-            squeeze_output = False
-
-        # OpenCV uses fixed-point arithmetic with these constants
-        INTER_RESIZE_COEF_BITS = 11
-        INTER_RESIZE_COEF_SCALE = 1 << INTER_RESIZE_COEF_BITS  # 2048
-
-        # Calculate scaling factors using float32 (like cv2)
-        scale_x = np.float32(w) / np.float32(target_w)
-        scale_y = np.float32(h) / np.float32(target_h)
-
-        # Create coordinate grids for output image using float32
-        out_y, out_x = np.meshgrid(
-            np.arange(target_h, dtype=np.float32), np.arange(target_w, dtype=np.float32), indexing="ij"
-        )
-
-        # Map output coordinates to input coordinates (pixel-center alignment) using float32
-        src_x = (out_x + np.float32(0.5)) * scale_x - np.float32(0.5)
-        src_y = (out_y + np.float32(0.5)) * scale_y - np.float32(0.5)
-
-        # Clip to valid range
-        src_x = np.clip(src_x, np.float32(0), np.float32(w - 1))
-        src_y = np.clip(src_y, np.float32(0), np.float32(h - 1))
-
-        # Get integer parts
-        x0 = np.floor(src_x).astype(np.int32)
-        y0 = np.floor(src_y).astype(np.int32)
-        x1 = np.minimum(x0 + 1, w - 1)
-        y1 = np.minimum(y0 + 1, h - 1)
-
-        # Calculate fractional parts (keep in float32)
-        fx = src_x - x0.astype(np.float32)
-        fy = src_y - y0.astype(np.float32)
-
-        # Convert to fixed-point (with rounding, matching cv2's behavior)
-        wx = np.round(fx * np.float32(INTER_RESIZE_COEF_SCALE)).astype(np.int32)
-        wy = np.round(fy * np.float32(INTER_RESIZE_COEF_SCALE)).astype(np.int32)
-
-        # Clamp to valid range
-        wx = np.minimum(wx, INTER_RESIZE_COEF_SCALE)
-        wy = np.minimum(wy, INTER_RESIZE_COEF_SCALE)
-
-        # Calculate the four interpolation weights in fixed-point
-        w0 = (INTER_RESIZE_COEF_SCALE - wx) * (INTER_RESIZE_COEF_SCALE - wy)
-        w1 = wx * (INTER_RESIZE_COEF_SCALE - wy)
-        w2 = (INTER_RESIZE_COEF_SCALE - wx) * wy
-        w3 = wx * wy
-
-        # Perform bilinear interpolation for each channel using fixed-point arithmetic
-        output = np.zeros((target_h, target_w, img.shape[2]), dtype=np.uint8)
-
-        for c in range(img.shape[2]):
-            # Get the four corner pixel values (as int32 for fixed-point math)
-            Ia = img[y0, x0, c].astype(np.int32)
-            Ib = img[y0, x1, c].astype(np.int32)
-            Ic = img[y1, x0, c].astype(np.int32)
-            Id = img[y1, x1, c].astype(np.int32)
-
-            # Fixed-point interpolation
-            val = w0 * Ia + w1 * Ib + w2 * Ic + w3 * Id
-
-            # Divide by INTER_RESIZE_COEF_SCALE^2 with rounding
-            # This is equivalent to: (val + (1 << 21)) >> 22
-            shift_bits = INTER_RESIZE_COEF_BITS * 2
-            val = (val + (1 << (shift_bits - 1))) >> shift_bits
-
-            # Clamp to [0, 255]
-            output[:, :, c] = np.clip(val, 0, 255).astype(np.uint8)
-
-        if squeeze_output:
-            output = output[:, :, 0]
-
-        return output
-
-    def _resize_norm_img(
-        self,
-        img: np.ndarray,
-        max_wh_ratio: float,
-        data_format: ChannelDimension | None = None,
-    ) -> np.ndarray:
-        """
-        Resize and normalize a single image while maintaining aspect ratio.
-
-        This method uses PIL-based resizing instead of cv2 while maintaining
-        consistent preprocessing results with [`PPOCRV5ServerRecImageProcessor`].
-
-        Args:
-            img (`np.ndarray`):
-                The input image in HWC format.
-            max_wh_ratio (`float`):
-                The maximum width-to-height ratio for resizing.
-            data_format (`ChannelDimension`, *optional*):
-                The channel dimension format of the output image.
-
-        Returns:
-            `np.ndarray`: The processed image in CHW format with padding.
-        """
-        img_c, img_h, img_w = self.rec_image_shape
-
-        # Calculate target width based on max_wh_ratio
-        target_w = int(img_h * max_wh_ratio)
-
-        if target_w > self.max_img_width:
-            # If target width exceeds max, resize to max width
-            resized_image = self._pil_resize(img, (self.max_img_width, img_h))
-            resized_w = self.max_img_width
-            target_w = self.max_img_width
-        else:
-            h, w = img.shape[:2]
-            ratio = w / float(h)
-            if math.ceil(img_h * ratio) > target_w:
-                resized_w = target_w
-            else:
-                resized_w = int(math.ceil(img_h * ratio))
-            resized_image = self._pil_resize(img, (resized_w, img_h))
-
-        # Convert to float32
-        resized_image = resized_image.astype(np.float32)
-
-        # Transpose to CHW format
-        resized_image = resized_image.transpose((2, 0, 1))
-
-        # Rescale to [0, 1]
-        if self.do_rescale:
-            resized_image = resized_image / 255.0
-
-        # Normalize with mean=0.5, std=0.5
-        if self.do_normalize:
-            resized_image = (resized_image - 0.5) / 0.5
-
-        # Create padded image
-        padding_im = np.zeros((img_c, img_h, target_w), dtype=np.float32)
-        padding_im[:, :, 0:resized_w] = resized_image
-
-        return padding_im
+    resample = PILImageResampling.BILINEAR
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    size = {"height": 48, "width": 320}
+    pad_size = {"height": 48, "width": 320}
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
+    do_pad = True
+    max_image_width = 3200
+    character_list = []
+    valid_kwargs = PPOCRV5ServerRecImageProcessorKwargs
 
     def _preprocess(
         self,
         images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        interpolation: Optional["tvF.InterpolationMode"],
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size: SizeDict | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        """
-        Preprocess a batch of images for text recognition.
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                # [Key Change] Use get_target_size to calculate target_size for resizing.
+                target_size = self.get_target_size(stacked_images)
+                stacked_images = self.resize(
+                    image=stacked_images.float(), size=target_size, interpolation=interpolation
+                )
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-        Args:
-            images (`List[torch.Tensor]`):
-                List of images to preprocess.
-            **kwargs:
-                Additional keyword arguments.
-
-        Returns:
-            `BatchFeature`: A dictionary containing the processed pixel values.
-        """
-        # Convert torch tensors to numpy arrays in HWC format
-        np_images = []
-        for img in images:
-            # img is a torch.Tensor in CHW format, convert to HWC numpy array
-            if isinstance(img, torch.Tensor):
-                img_np = img.permute(1, 2, 0).numpy()
-            else:
-                img_np = np.array(img)
-            np_images.append(img_np)
-
-        # Calculate max width-to-height ratio across all images
-        for img in np_images:
-            imgC, imgH, imgW = self.rec_image_shape
-            max_wh_ratio = imgW / imgH
-            h, w = img.shape[:2]
-            wh_ratio = w / float(h)
-            max_wh_ratio = max(max_wh_ratio, wh_ratio)
-
-        # Process each image
-        processed_images = []
-        for img in np_images:
-            processed_img = self._resize_norm_img(
-                img,
-                max_wh_ratio=max_wh_ratio,
+        # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            # Fused rescale and normalize
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            processed_images.append(processed_img)
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        # Stack into batch tensor
-        pixel_values = np.stack(processed_images, axis=0)
-        pixel_values = torch.from_numpy(pixel_values)
+        if do_pad and target_size.width < pad_size.width:
+            processed_images = self.pad(processed_images, pad_size=pad_size, disable_grouping=disable_grouping)
 
-        return BatchFeature(data={"pixel_values": pixel_values})
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
-    def _ctc_decode(
-        self,
-        text_index: np.ndarray,
-        text_prob: np.ndarray,
-        is_remove_duplicate: bool = True,
-    ) -> list[tuple[str, float]]:
-        """
-        Decode CTC output indices to text.
+    def get_target_size(self, images):
+        max_width = -1
+        max_height = -1
+        for image in images:
+            _, height, width = image.shape
+            if width > max_width:
+                max_width = width
+                max_height = height
 
-        This method is identical to the one in [`PPOCRV5ServerRecImageProcessor`] to ensure
-        consistent decoding results.
+        default_height, default_width = self.size["height"], self.size["width"]
+        ratio = max(max_width / max_height, default_width / default_height)
 
-        Args:
-            text_index (`np.ndarray`):
-                The predicted character indices with shape (batch_size, sequence_length).
-            text_prob (`np.ndarray`):
-                The predicted character probabilities with shape (batch_size, sequence_length).
-            is_remove_duplicate (`bool`, *optional*, defaults to `True`):
-                Whether to remove duplicate consecutive characters.
+        target_width = int(default_height * ratio)
+        target_height = default_height
 
-        Returns:
-            `List[Tuple[str, float]]`: A list of tuples containing (decoded_text, confidence_score).
-        """
-        result_list = []
-        ignored_tokens = [0]  # CTC blank token
-        batch_size = len(text_index)
+        if target_width > self.max_image_width:
+            target_width = self.max_image_width
+        else:
+            ratio = max_width / float(max_height)
+            if target_width >= math.ceil(default_height * ratio):
+                target_width = int(math.ceil(default_height * ratio))
 
-        for batch_idx in range(batch_size):
-            selection = np.ones(len(text_index[batch_idx]), dtype=bool)
-
-            if is_remove_duplicate:
-                selection[1:] = text_index[batch_idx][1:] != text_index[batch_idx][:-1]
-
-            for ignored_token in ignored_tokens:
-                selection &= text_index[batch_idx] != ignored_token
-
-            char_list = [self.character[text_id] for text_id in text_index[batch_idx][selection]]
-
-            if text_prob is not None:
-                conf_list = text_prob[batch_idx][selection]
-            else:
-                conf_list = [1] * len(selection)
-
-            if len(conf_list) == 0:
-                conf_list = [0]
-
-            text = "".join(char_list)
-            result_list.append((text, np.mean(conf_list).tolist()))
-
-        return result_list
+        return SizeDict(height=target_height, width=target_width)
 
     def post_process_text_recognition(
         self,
-        pred: np.ndarray,
+        outputs,
     ) -> tuple[list[str], list[float]]:
-        """
-        Post-process the model output to decode text recognition results.
+        logits = outputs.last_hidden_state
+        batch_size = logits.shape[0]
 
-        This method is identical to the one in [`PPOCRV5ServerRecImageProcessor`] to ensure
-        consistent post-processing behavior.
+        preds_prob, preds_idx = logits.max(dim=-1)
+        results = []
+        for idx in range(batch_size):
+            selection = torch.ones(len(preds_idx[idx]), dtype=torch.bool, device=preds_idx.device)
 
-        Args:
-            pred (`np.ndarray`):
-                The model output predictions. Expected shape is (batch_size, sequence_length, num_classes)
-                or a list/tuple containing such an array.
+            # remove_duplicate
+            selection[1:] = preds_idx[idx][1:] != preds_idx[idx][:-1]
+            # ignore blank token
+            selection &= preds_idx[idx] != 0
 
-        Returns:
-            `Tuple[List[str], List[float]]`: A tuple containing:
-                - texts: List of decoded text strings.
-                - scores: List of confidence scores for each decoded text.
-        """
-        preds = np.array(pred[0].detach().cpu())
-        preds_idx = preds.argmax(axis=-1)
-        preds_prob = preds.max(axis=-1)
+            char_list = []
+            for text_id in preds_idx[idx][selection]:
+                char_list.append(self.character_list[text_id])
 
-        text = self._ctc_decode(
-            preds_idx,
-            preds_prob,
-            is_remove_duplicate=True,
-        )
+            results.append(
+                {
+                    "text": "".join(char_list),
+                    "score": preds_prob[idx][selection].mean().item(),
+                }
+            )
 
-        texts = []
-        scores = []
-        for t in text:
-            texts.append(t[0])
-            scores.append(t[1])
-
-        return texts, scores
+        return results
 
 
 __all__ = ["PPOCRV5ServerRecImageProcessorFast"]

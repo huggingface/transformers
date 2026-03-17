@@ -21,7 +21,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_pp_ocrv5_server_rec import *
-    from .image_processing_pp_ocrv5_server_rec import *
+    from .image_processing_pp_ocrv5_server_rec_fast import *
     from .modeling_pp_ocrv5_server_rec import *
 else:
     import sys

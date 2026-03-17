@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-02-26.*
+*This model was released on 2025-05-20 and added to Hugging Face Transformers on 2026-03-17.*
 
 # PP-OCRv5_server_rec
 
@@ -28,7 +28,6 @@ rendered properly in your Markdown viewer.
 ## Model Architecture
 
 PP-OCRv5_server_rec is one of the PP-OCRv5_rec series, the latest generation of text recognition models developed by the PaddleOCR team. It is designed to efficiently and accurately support the recognition of Simplified Chinese, Traditional Chinese, English, Japanese, as well as complex text scenarios such as handwriting, vertical text, pinyin, and rare characters with a single model. While maintaining recognition performance, it also balances inference speed and model robustness, providing efficient and accurate technical support for document understanding in various scenarios. 
-
 
 ## Usage
 
@@ -45,12 +44,12 @@ from PIL import Image
 from transformers import AutoImageProcessor, AutoModel
 
 model_path="PaddlePaddle/PP-OCRv5_server_rec_safetensors"
-model = AutoModel.from_pretrained(model_path)
+model = AutoModel.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png", stream=True).raw).convert("RGB")
-inputs = image_processor(images=image, return_tensors="pt")['pixel_values']
-outputs = model(inputs)
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
+outputs = model(**inputs)
 
 results = image_processor.post_process_text_recognition(outputs)
 
@@ -74,19 +73,17 @@ import requests
 from PIL import Image
 from transformers import AutoImageProcessor, AutoModel
 
-model_path="PaddlePaddle/PP-OCRv5_server_rec_safetensors"
-model = AutoModel.from_pretrained(model_path)
-image_processor = AutoImageProcessor.from_pretrained(model_path, use_fast=True)
+model_path = "PaddlePaddle/PP-OCRv5_server_rec_safetensors"
+model = AutoModel.from_pretrained(model_path, device_map="auto")
+image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png", stream=True).raw).convert("RGB")
-inputs = image_processor(images=[image, image], return_tensors="pt")['pixel_values']
-outputs = model(inputs)
+inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
+outputs = model(**inputs)
 
 results = image_processor.post_process_text_recognition(outputs)
-
 for result in results:
     print(result)
-
 ```
 
 </hfoption>
@@ -104,14 +101,6 @@ for result in results:
 
 [[autodoc]] PPOCRV5ServerRecModel
 
-## PPOCRV5ServerRecImageProcessor
-
-[[autodoc]] PPOCRV5ServerRecImageProcessor
-
 ## PPOCRV5ServerRecImageProcessorFast
 
 [[autodoc]] PPOCRV5ServerRecImageProcessorFast
-
-## PPOCRV5ServerRecImageProcessor
-
-[[autodoc]] PPOCRV5ServerRecImageProcessor

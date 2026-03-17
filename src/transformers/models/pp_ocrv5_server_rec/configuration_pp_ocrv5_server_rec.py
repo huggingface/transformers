@@ -50,8 +50,6 @@ class PPOCRV5ServerRecConfig(PreTrainedConfig):
         attention_dropout: float = 0.0,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
             default_config_type="hgnet_v2",
@@ -79,6 +77,8 @@ class PPOCRV5ServerRecConfig(PreTrainedConfig):
         self.qkv_bias = qkv_bias
         self.num_attention_heads = num_attention_heads
         self.attention_dropout = attention_dropout
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["PPOCRV5ServerRecConfig"]
