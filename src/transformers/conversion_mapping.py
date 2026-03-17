@@ -166,9 +166,9 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"tracker_neck.", target_patterns="vision_encoder.neck."),
         ],
         "t5gemma2_encoder": [
-            WeightRenaming(r"(?<!decoder)(?<!text_model)\.embed_tokens\.", ".text_model.embed_tokens."),
-            WeightRenaming(r"(?<!decoder)(?<!text_model)\.norm\.", ".text_model.norm."),
-            WeightRenaming(r"(?<!vision_model.encoder)(?<!decoder)(?<!text_model)\.layers.", ".text_model.layers."),
+            WeightRenaming(r"^embed_tokens\.", "text_model.embed_tokens."),
+            WeightRenaming(r"^norm\.", "text_model.norm."),
+            WeightRenaming(r"^layers.", "text_model.layers."),
         ],
         "gpt_oss": [
             # NOTE: These converters are only applied if the model is being loaded from pre-dequantized checkpoint.
@@ -497,17 +497,38 @@ def register_checkpoint_conversion_mapping(
     _checkpoint_conversion_mapping_cache[model_type] = mapping
 
 
-# DO NOT MODIFY, KEPT FOR BC ONLY
+# TODO: move detr to `_build_checkpoint_conversion_mapping`
 VLMS = ["detr"]
 
 
-def extract_weight_conversions_for_model(model: PreTrainedModel) -> WeightConverter | WeightRenaming | None:
+def extract_weight_conversions_for_model(model: PreTrainedModel) -> list[WeightConverter | WeightRenaming] | None:
     model_type = getattr(model.config, "model_type", None)
     if model_type is not None:
         model_specific_conversions = get_checkpoint_conversion_mapping(model_type)
         if model_specific_conversions is not None:
             return model_specific_conversions
     return None
+
+
+def add_prefix_to_conversion(conversions: list[WeightConverter | WeightRenaming], prefix: str):
+    def add_prefix(pattern: str) -> str:
+        if pattern.startswith("^"):
+            pattern = rf"^{prefix}\.{pattern[1:]}"
+        else:
+            pattern = rf"{prefix}\.{pattern}"
+        return pattern
+
+    new_conversions = []
+    for conversion in conversions:
+        # We need to add the current prefix from submodule so that patterns match
+        conversion_kwargs = {
+            "source_patterns": [add_prefix(source) for source in conversion.source_patterns],
+            "target_patterns": [add_prefix(target) for target in conversion.target_patterns],
+        }
+        if hasattr(conversion, "operations"):
+            conversion_kwargs["operations"] = conversion.operations
+        new_conversions.append(conversion.__class__(**conversion_kwargs))
+    return new_conversions
 
 
 def get_model_conversion_mapping(
@@ -539,19 +560,20 @@ def get_model_conversion_mapping(
             for k, v in model._checkpoint_conversion_mapping.items()
         ]
 
-    if (conversion := extract_weight_conversions_for_model(model)) is not None:
-        weight_conversions.extend(conversion)
+    if (conversions := extract_weight_conversions_for_model(model)) is not None:
+        weight_conversions.extend(conversions)
 
     # Recurse over submodules and collect all conversions
-    for submodule in model.modules():
+    for name, submodule in model.named_modules():
         if (
             submodule is not model
             and isinstance(submodule, PreTrainedModel)
             and submodule.config.__class__ != model.config.__class__
         ):
-            conversion = extract_weight_conversions_for_model(submodule)
-            if conversion is not None:
-                weight_conversions.extend(conversion)
+            conversions = extract_weight_conversions_for_model(submodule)
+            if conversions is not None:
+                new_conversions = add_prefix_to_conversion(conversions, prefix=name)
+                weight_conversions.extend(new_conversions)
 
     if add_legacy:
         weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))
