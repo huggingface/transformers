@@ -331,17 +331,18 @@ class _NetworkDebugProfiler:
 _NETWORK_DEBUG_PROFILER = _NetworkDebugProfiler()
 
 
-def _parse_debug_network_env() -> tuple[bool, str | None]:
-    debug_network = os.environ.get("DEBUG_NETWORK", "").strip()
-    if not debug_network:
-        return False, None
+_DEFAULT_REPORT_PATH = "network_debug_report.json"
 
+
+def _parse_network_debug_env() -> tuple[bool, str]:
+    enabled_raw = os.environ.get("NETWORK_DEBUG_REPORT", "").strip()
     try:
-        enabled = bool(strtobool(debug_network))
+        enabled = bool(strtobool(enabled_raw)) if enabled_raw else False
     except ValueError:
-        return True, debug_network
+        enabled = False
 
-    return enabled, None
+    output_path = os.environ.get("NETWORK_DEBUG_REPORT_PATH", "").strip() or _DEFAULT_REPORT_PATH
+    return enabled, output_path
 
 
 def enable_network_debug_report(output_path: str | os.PathLike | None = None) -> None:
@@ -367,7 +368,7 @@ def get_network_debug_report() -> dict[str, Any]:
 
 
 def enable_network_debug_report_from_env() -> bool:
-    enabled, output_path = _parse_debug_network_env()
+    enabled, output_path = _parse_network_debug_env()
     if not enabled:
         return False
 
