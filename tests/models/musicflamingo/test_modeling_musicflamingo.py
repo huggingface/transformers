@@ -157,7 +157,6 @@ class MusicFlamingoForConditionalGenerationModelTest(ModelTesterMixin, Generatio
     """
 
     all_model_classes = (MusicFlamingoForConditionalGeneration,) if is_torch_available() else ()
-    # TODO: @eustlb, this is incorrect
     pipeline_model_mapping = (
         {
             "text-to-speech": MusicFlamingoForConditionalGeneration,
@@ -237,8 +236,7 @@ class MusicFlamingoForConditionalGenerationModelTest(ModelTesterMixin, Generatio
 @require_torch
 class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
     """
-    Slow tests against the public converted checkpoint to validate processor-model alignment and in-place fusion.
-    The original source checkpoint is private, so expected outputs are validated from committed fixtures.
+    Original model is private, but expected outputs are computed with checkpoint/code during integration.
     """
 
     @classmethod

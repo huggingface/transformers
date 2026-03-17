@@ -71,39 +71,17 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
     >>> configuration = model.config
     ```"""
 
-    def __init__(
-        self,
-        audio_config=None,
-        text_config=None,
-        audio_token_id=151669,
-        audio_bos_token_id=151670,
-        audio_eos_token_id=151671,
-        projector_hidden_act="gelu",
-        projector_bias=True,
-        head_dim=256,
-        rope_parameters=None,
-        **kwargs,
-    ):
-        super().__init__(
-            audio_config=audio_config,
-            text_config=text_config,
-            audio_token_id=audio_token_id,
-            projector_hidden_act=projector_hidden_act,
-            projector_bias=projector_bias,
-            **kwargs,
-        )
-        self.audio_bos_token_id = audio_bos_token_id
-        self.audio_eos_token_id = audio_eos_token_id
-        if rope_parameters is None:
-            rope_parameters = {
-                "rope_type": "default",
-                "rope_theta": 1200,
-            }
-        self.rope_parameters = rope_parameters
+    audio_bos_token_id: int = 151670
+    audio_eos_token_id: int = 151671
+    head_dim: int = 256
+    rope_parameters: dict | None = None
 
-        # NOTE for modular with `LlamaRotaryEmbedding`
-        self.head_dim = head_dim
-        self.max_position_embeddings = rope_parameters["rope_theta"]
+    def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_type": "default", "rope_theta": 1200}
+        self.max_position_embeddings = self.rope_parameters["rope_theta"]
+
+        super().__post_init__(**kwargs)
 
 
 class MusicFlamingoProcessorKwargs(AudioFlamingo3ProcessorKwargs): ...

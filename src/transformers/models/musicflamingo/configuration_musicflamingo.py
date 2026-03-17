@@ -19,13 +19,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="nvidia/music-flamingo-2601-hf")
-class MusicFlamingoConfig(PretrainedConfig):
+class MusicFlamingoConfig(PreTrainedConfig):
     r"""
     audio_bos_token_id (`int`, *optional*, defaults to 151670):
             The beginning-of-audio token index used to mark the start of audio spans.
@@ -54,54 +54,35 @@ class MusicFlamingoConfig(PretrainedConfig):
     ```"""
 
     model_type = "musicflamingo"
-    sub_configs = {"text_config": AutoConfig, "audio_config": AutoConfig}
+    sub_configs = {"audio_config": AutoConfig, "text_config": AutoConfig}
+    audio_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    audio_token_id: int = 151669
+    projector_hidden_act: str = "gelu"
+    projector_bias: bool = True
 
-    def __init__(
-        self,
-        audio_config=None,
-        text_config=None,
-        audio_token_id=151669,
-        audio_bos_token_id=151670,
-        audio_eos_token_id=151671,
-        projector_hidden_act="gelu",
-        projector_bias=True,
-        head_dim=256,
-        rope_parameters=None,
-        **kwargs,
-    ):
-        self.audio_token_id = audio_token_id
+    audio_bos_token_id: int = 151670
+    audio_eos_token_id: int = 151671
+    head_dim: int = 256
+    rope_parameters: dict | None = None
 
-        if isinstance(audio_config, dict):
-            audio_config["model_type"] = audio_config.get("model_type", "musicflamingo_encoder")
-            audio_config = CONFIG_MAPPING[audio_config["model_type"]](**audio_config)
-        elif audio_config is None:
-            audio_config = CONFIG_MAPPING["musicflamingo_encoder"]()
+    def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_type": "default", "rope_theta": 1200}
+        self.max_position_embeddings = self.rope_parameters["rope_theta"]
+        if isinstance(self.audio_config, dict):
+            self.audio_config["model_type"] = self.audio_config.get("model_type", "musicflamingo_encoder")
+            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
+        elif self.audio_config is None:
+            self.audio_config = CONFIG_MAPPING["musicflamingo_encoder"]()
 
-        self.audio_config = audio_config
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["qwen2"]()
 
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "qwen2")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["qwen2"]()
-
-        self.text_config = text_config
-        self.projector_hidden_act = projector_hidden_act
-        self.projector_bias = projector_bias
-
-        super().__init__(**kwargs)
-        self.audio_bos_token_id = audio_bos_token_id
-        self.audio_eos_token_id = audio_eos_token_id
-        if rope_parameters is None:
-            rope_parameters = {
-                "rope_type": "default",
-                "rope_theta": 1200,
-            }
-        self.rope_parameters = rope_parameters
-
-        # NOTE for modular with `LlamaRotaryEmbedding`
-        self.head_dim = head_dim
-        self.max_position_embeddings = rope_parameters["rope_theta"]
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["MusicFlamingoConfig"]
