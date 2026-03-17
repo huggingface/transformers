@@ -249,10 +249,63 @@ from transformers.models.llama.modeling_llama import LlamaAttention
         trf009 = [v for v in violations if v.rule_id == cms.TRF009]
         self.assertEqual(trf009, [])
 
+    # --- TRF010: strict config decorator ---
+
+    def test_trf010_allows_direct_config_with_strict(self):
+        source = """
+from huggingface_hub.dataclasses import strict
+
+@strict(accept_kwargs=True)
+class FooConfig(PretrainedConfig):
+    pass
+"""
+        file_path = Path("src/transformers/models/foo/configuration_foo.py")
+        violations = cms.analyze_file(file_path, source, enabled_rules={cms.TRF010})
+        trf010 = [v for v in violations if v.rule_id == cms.TRF010]
+        self.assertEqual(trf010, [])
+
+    def test_trf010_flags_missing_strict_on_direct_config(self):
+        source = """
+class FooConfig(PretrainedConfig):
+    pass
+"""
+        file_path = Path("src/transformers/models/foo/configuration_foo.py")
+        violations = cms.analyze_file(file_path, source, enabled_rules={cms.TRF010})
+        trf010 = [v for v in violations if v.rule_id == cms.TRF010]
+        self.assertEqual(len(trf010), 1)
+        self.assertIn("missing @strict(accept_kwargs=True)", trf010[0].message)
+
+    def test_trf010_ignores_non_direct_config_alias_wrappers(self):
+        source = """
+from huggingface_hub.dataclasses import strict
+
+@strict(accept_kwargs=True)
+class FooConfig(PretrainedConfig):
+    pass
+
+class FooCompatConfig(FooConfig):
+    pass
+"""
+        file_path = Path("src/transformers/models/foo/configuration_foo.py")
+        violations = cms.analyze_file(file_path, source, enabled_rules={cms.TRF010})
+        trf010 = [v for v in violations if v.rule_id == cms.TRF010]
+        self.assertEqual(trf010, [])
+
     # --- Utility tests ---
 
+    def test_analyze_file_allows_subscripted_class_bases(self):
+        source = """
+from collections import OrderedDict
+
+class _LazyConfigMapping(OrderedDict[str, str]):
+    pass
+"""
+        file_path = Path("src/transformers/models/auto/configuration_auto.py")
+        violations = cms.analyze_file(file_path, source)
+        self.assertEqual(violations, [])
+
     @patch("check_modeling_structure.subprocess.run")
-    def test_get_changed_modeling_files_filters_non_model_files(self, mock_run):
+    def test_get_changed_modeling_files_includes_configuration_files(self, mock_run):
         mock_run.side_effect = [
             subprocess.CompletedProcess(
                 args=["git", "diff"],
@@ -275,6 +328,7 @@ from transformers.models.llama.modeling_llama import LlamaAttention
             {
                 Path("src/transformers/models/foo/modeling_foo.py"),
                 Path("src/transformers/models/foo/modular_foo.py"),
+                Path("src/transformers/models/foo/configuration_foo.py"),
             },
         )
 
