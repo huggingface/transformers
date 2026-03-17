@@ -12,25 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Mistral4 model tests."""
 
-from ..core_model_loading import ConversionOps
-from ..utils import is_torch_available
-
-
-if is_torch_available():
-    import torch
-
-
-class QuarkDeserialize(ConversionOps):
-    def __init__(self, hf_quantizer):
-        self.hf_quantizer = hf_quantizer
-
-    def convert(
-        self,
-        input_dict: torch.Tensor,
-        full_layer_name: str | None = None,
-        **kwargs,
-    ) -> dict[str, torch.Tensor]:
-        value = list(input_dict.values())[0]
-        value = value[0] if isinstance(value, list) else value
-        return {full_layer_name: value}
+from .test_modeling_mistral4 import Mistral4IntegrationTest, Mistral4ModelTest
