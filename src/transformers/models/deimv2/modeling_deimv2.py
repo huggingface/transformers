@@ -17,28 +17,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
 from ... import initialization as init
-from ...activations import ACT2CLS, ACT2FN
+from ...activations import ACT2CLS
+from ...backbone_utils import load_backbone
 from ...image_transforms import center_to_corners_format, corners_to_center_format
-from ...modeling_layers import GradientCheckpointingLayer
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check, torch_int
-from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from .configuration_deimv2 import Deimv2Config, Deimv2DINOv3ViTConfig
+from .configuration_deimv2 import Deimv2Config
 
 
 @dataclass
@@ -79,30 +80,94 @@ class Deimv2DecoderOutput(ModelOutput):
     cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of the RT-DETR encoder-decoder model.
+    """
+)
+class Deimv2ModelOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the decoder of the model.
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
+        Stacked intermediate logits (logits of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
+    initial_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+        Initial reference points used for the first decoder layer.
+    init_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+        Initial reference points sent through the Transformer decoder.
+    enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+        picked as region proposals in the encoder stage. Output of bounding box binary classification (i.e.
+        foreground and background).
+    enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`):
+        Logits of predicted bounding boxes coordinates in the encoder stage.
+    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+        picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
+        foreground and background).
+    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Logits of predicted bounding boxes coordinates in the first stage.
+    denoising_meta_values (`dict`):
+        Extra dictionary for the denoising related values.
+    """
+
+    last_hidden_state: torch.FloatTensor | None = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
+    intermediate_logits: torch.FloatTensor | None = None
+    intermediate_reference_points: torch.FloatTensor | None = None
+    intermediate_predicted_corners: torch.FloatTensor | None = None
+    initial_reference_points: torch.FloatTensor | None = None
+    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    decoder_attentions: tuple[torch.FloatTensor] | None = None
+    cross_attentions: tuple[torch.FloatTensor] | None = None
+    encoder_last_hidden_state: torch.FloatTensor | None = None
+    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    encoder_attentions: tuple[torch.FloatTensor] | None = None
+    init_reference_points: torch.FloatTensor | None = None
+    enc_topk_logits: torch.FloatTensor | None = None
+    enc_topk_bboxes: torch.FloatTensor | None = None
+    enc_outputs_class: torch.FloatTensor | None = None
+    enc_outputs_coord_logits: torch.FloatTensor | None = None
+    denoising_meta_values: dict | None = None
+
+
+@use_kernel_forward_from_hub("RMSNorm")
 class Deimv2RMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        Deimv2RMSNorm is equivalent to T5LayerNorm
+        """
         super().__init__()
-        self.eps = eps
-        self.scale = nn.Parameter(torch.ones(dim))
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.float()
-        hidden_states = hidden_states * torch.rsqrt(hidden_states.pow(2).mean(-1, keepdim=True) + self.eps)
-        return (hidden_states * self.scale).to(input_dtype)
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class Deimv2SwiGLUFFN(nn.Module):
     def __init__(self, in_features: int, hidden_features: int, out_features: int):
         super().__init__()
-        self.w12 = nn.Linear(in_features, 2 * hidden_features)
-        self.w3 = nn.Linear(hidden_features, out_features)
+        self.gate_proj = nn.Linear(in_features, hidden_features)
+        self.up_proj = nn.Linear(in_features, hidden_features)
+        self.down_proj = nn.Linear(hidden_features, out_features)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        x12 = self.w12(hidden_states)
-        x1, x2 = x12.chunk(2, dim=-1)
-        hidden = F.silu(x1) * x2
-        return self.w3(hidden)
+        return self.down_proj(F.silu(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
 
 
 class Deimv2Gate(nn.Module):
@@ -352,55 +417,71 @@ class Deimv2RepVggBlock(nn.Module):
         return self.activation(y)
 
 
-class Deimv2DINOv3ViTEmbeddings(nn.Module):
-    """
-    Construct the CLS token, mask token, position and patch embeddings.
-    """
-
-    def __init__(self, config: Deimv2DINOv3ViTConfig):
+class Deimv2CSPRepLayer(nn.Module):
+    def __init__(
+        self, config: Deimv2Config, in_channels: int, out_channels: int, num_blocks: int, expansion: float = 1.0
+    ):
         super().__init__()
-        self.config = config
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.register_tokens = nn.Parameter(torch.empty(1, config.num_register_tokens, config.hidden_size))
-        self.patch_embeddings = nn.Conv2d(
-            config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
+        activation = config.activation_function
+        hidden_channels = int(out_channels * expansion)
+        self.conv1 = Deimv2ConvNormLayer(config, in_channels, hidden_channels * 2, 1, 1, activation=activation)
+        self.bottlenecks = nn.ModuleList(
+            [Deimv2RepVggBlock(config, hidden_channels, hidden_channels) for _ in range(num_blocks)]
         )
-
-    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
-        batch_size = pixel_values.shape[0]
-        target_dtype = self.patch_embeddings.weight.dtype
-
-        # (batch_size, num_channels, height, width) -> (batch_size, num_patches, hidden_size)
-        patch_embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
-        patch_embeddings = patch_embeddings.flatten(2).transpose(1, 2)
-
-        if bool_masked_pos is not None:
-            mask_token = self.mask_token.to(patch_embeddings.dtype)
-            patch_embeddings = torch.where(bool_masked_pos.unsqueeze(-1), mask_token, patch_embeddings)
-
-        # Add CLS and register tokens
-        cls_token = self.cls_token.expand(batch_size, -1, -1)
-        register_tokens = self.register_tokens.expand(batch_size, -1, -1)
-        embeddings = torch.cat([cls_token, register_tokens, patch_embeddings], dim=1)
-
-        return embeddings
-
-
-class Deimv2DINOv3ViTLayerScale(nn.Module):
-    def __init__(self, config) -> None:
-        super().__init__()
-        self.lambda1 = nn.Parameter(config.layerscale_value * torch.ones(config.hidden_size))
+        if config.encoder_has_trailing_conv:
+            self.conv3 = Deimv2ConvNormLayer(config, hidden_channels, out_channels, 3, 1, activation=activation)
+        else:
+            self.conv3 = nn.Identity()
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        return hidden_state * self.lambda1
+        hidden_state_1, hidden_state_2 = self.conv1(hidden_state).chunk(2, 1)
+        for bottleneck in self.bottlenecks:
+            hidden_state_2 = bottleneck(hidden_state_2)
+        return self.conv3(hidden_state_1 + hidden_state_2)
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
+class Deimv2RepNCSPELAN5(nn.Module):
+    def __init__(self, config: Deimv2Config, numb_blocks: int = 3):
+        super().__init__()
+        activation = config.activation_function
+        in_channels = config.encoder_hidden_dim
+        out_channels = config.encoder_hidden_dim
+        split_channels = config.encoder_hidden_dim * 2
+        csp_channels = round(config.hidden_expansion * config.encoder_hidden_dim // 2)
+        self.conv_dim = split_channels // 2
+        self.conv1 = Deimv2ConvNormLayer(config, in_channels, split_channels, 1, 1, activation=activation)
+        self.csp_rep1 = Deimv2CSPRepLayer(config, split_channels // 2, csp_channels, num_blocks=numb_blocks)
+        self.csp_rep2 = Deimv2CSPRepLayer(config, csp_channels, csp_channels, num_blocks=numb_blocks)
+        self.conv4 = Deimv2ConvNormLayer(
+            config, split_channels + (2 * csp_channels), out_channels, 1, 1, activation=activation
+        )
+
+    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
+        split_features = list(self.conv1(input_features).split((self.conv_dim, self.conv_dim), 1))
+        branch1 = self.csp_rep1(split_features[-1])
+        branch2 = self.csp_rep2(branch1)
+        split_features.extend([branch1, branch2])
+        merged_features = torch.cat(split_features, 1)
+        return self.conv4(merged_features)
+
+
+class Deimv2SCDown(nn.Module):
+    def __init__(self, config: Deimv2Config, kernel_size: int, stride: int):
+        super().__init__()
+        self.conv1 = Deimv2ConvNormLayer(config, config.encoder_hidden_dim, config.encoder_hidden_dim, 1, 1)
+        self.conv2 = Deimv2ConvNormLayer(
+            config,
+            config.encoder_hidden_dim,
+            config.encoder_hidden_dim,
+            kernel_size,
+            stride,
+            config.encoder_hidden_dim,
+        )
+
+    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
+        input_features = self.conv1(input_features)
+        input_features = self.conv2(input_features)
+        return input_features
 
 
 def eager_attention_forward(
@@ -429,394 +510,6 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
-
-
-def apply_rotary_pos_emb(
-    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, **kwargs
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Applies Rotary Position Embedding to the query and key tensors, but only to the patch tokens,
-    ignoring the prefix tokens (cls token and register tokens).
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-
-    num_tokens = q.shape[-2]
-    num_patches = sin.shape[-2]
-    num_prefix_tokens = num_tokens - num_patches  # cls token + register tokens
-
-    q_prefix_tokens, q_patches = q.split((num_prefix_tokens, num_patches), dim=-2)
-    k_prefix_tokens, k_patches = k.split((num_prefix_tokens, num_patches), dim=-2)
-
-    # apply rope only to patch tokens
-    q_patches = (q_patches * cos) + (rotate_half(q_patches) * sin)
-    k_patches = (k_patches * cos) + (rotate_half(k_patches) * sin)
-
-    q = torch.cat((q_prefix_tokens, q_patches), dim=-2)
-    k = torch.cat((k_prefix_tokens, k_patches), dim=-2)
-
-    return q, k
-
-
-class Deimv2DINOv3ViTAttention(nn.Module):
-    """
-    Multi-headed attention compatible with ALL_ATTENTION_FUNCTIONS.
-    """
-
-    def __init__(self, config: Deimv2DINOv3ViTConfig):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        self.is_causal = False
-
-        self.scaling = self.head_dim**-0.5
-        self.is_causal = False
-
-        self.dropout = config.attention_dropout
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.key_bias)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.value_bias)
-
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.query_bias)
-        self.o_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.proj_bias)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Input shape: Batch x Time x Channel"""
-
-        batch_size, patches, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(batch_size, patches, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-
-        return attn_output, attn_weights
-
-
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-class Deimv2DINOv3ViTDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
-
-
-class Deimv2DINOv3ViTMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        return self.down_proj(self.act_fn(self.up_proj(x)))
-
-
-class Deimv2DINOv3ViTGatedMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
-class Deimv2DINOv3ViTLayer(GradientCheckpointingLayer):
-    """This corresponds to the Block class in the original implementation."""
-
-    def __init__(self, config: Deimv2DINOv3ViTConfig):
-        super().__init__()
-
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = Deimv2DINOv3ViTAttention(config)
-        self.layer_scale1 = Deimv2DINOv3ViTLayerScale(config)
-        self.drop_path = (
-            Deimv2DINOv3ViTDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-        )
-
-        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        if config.use_gated_mlp:
-            self.mlp = Deimv2DINOv3ViTGatedMLP(config)
-        else:
-            self.mlp = Deimv2DINOv3ViTMLP(config)
-        self.layer_scale2 = Deimv2DINOv3ViTLayerScale(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-    ) -> torch.Tensor:
-        # Attention with residual connection
-        residual = hidden_states
-        hidden_states = self.norm1(hidden_states)
-        hidden_states, _ = self.attention(
-            hidden_states,
-            attention_mask=attention_mask,
-            position_embeddings=position_embeddings,
-        )
-        hidden_states = self.layer_scale1(hidden_states)
-        hidden_states = self.drop_path(hidden_states) + residual
-
-        # MLP with residual connection
-        residual = hidden_states
-        hidden_states = self.norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = self.layer_scale2(hidden_states)
-        hidden_states = self.drop_path(hidden_states) + residual
-
-        return hidden_states
-
-
-@compile_compatible_method_lru_cache(maxsize=32)
-def get_patches_center_coordinates(
-    num_patches_h: int, num_patches_w: int, dtype: torch.dtype, device: torch.device
-) -> torch.Tensor:
-    """
-    Computes the 2D coordinates of the centers of image patches, normalized to the range [-1, +1].
-    The center of each patch is exactly halfway between its top-left and bottom-right corners.
-
-    Args:
-        num_patches_h (int): Number of patches along the vertical (height) axis.
-        num_patches_w (int): Number of patches along the horizontal (width) axis.
-        dtype (torch.dtype): The desired data type of the returned tensor.
-
-    Returns:
-        torch.Tensor: A tensor of shape (height * width, 2), where each row contains the (y, x)
-            coordinates of a patch center, normalized to [-1, +1].
-    """
-    coords_h = torch.arange(0.5, num_patches_h, dtype=dtype, device=device)
-    coords_w = torch.arange(0.5, num_patches_w, dtype=dtype, device=device)
-    coords_h = coords_h / num_patches_h
-    coords_w = coords_w / num_patches_w
-    # (height, width, 2) -> (height * width, 2)
-    coords = torch.stack(torch.meshgrid(coords_h, coords_w, indexing="ij"), dim=-1)
-    coords = coords.flatten(0, 1)
-    # Shift range [0, 1] to [-1, +1]
-    coords = 2.0 * coords - 1.0
-    return coords
-
-
-def augment_patches_center_coordinates(
-    coords: torch.Tensor,
-    shift: float | None = None,
-    jitter: float | None = None,
-    rescale: float | None = None,
-) -> torch.Tensor:
-    # Shift coords by adding a uniform value in [-shift, shift]
-    if shift is not None:
-        shift_hw = torch.empty((1, 2), device=coords.device, dtype=coords.dtype)
-        shift_hw = shift_hw.uniform_(-shift, shift)
-        coords = coords + shift_hw
-
-    # Jitter coords by multiplying the range [-1, 1] by a log-uniform value in [1/jitter, jitter]
-    if jitter is not None:
-        jitter_range = np.log(jitter)
-        jitter_hw = torch.empty((1, 2), device=coords.device, dtype=coords.dtype)
-        jitter_hw = jitter_hw.uniform_(-jitter_range, jitter_range).exp()
-        coords = coords * jitter_hw
-
-    # Rescale coords by multiplying the range [-1, 1] by a log-uniform value in [1/rescale, rescale]
-    if rescale is not None:
-        rescale_range = np.log(rescale)
-        rescale_hw = torch.empty(1, device=coords.device, dtype=coords.dtype)
-        rescale_hw = rescale_hw.uniform_(-rescale_range, rescale_range).exp()
-        coords = coords * rescale_hw
-
-    return coords
-
-
-class Deimv2DINOv3ViTRopePositionEmbedding(nn.Module):
-    inv_freq: torch.Tensor
-
-    def __init__(self, config: Deimv2DINOv3ViTConfig):
-        super().__init__()
-
-        self.config = config
-        self.base = config.rope_theta
-        self.head_dim = config.hidden_size // config.num_attention_heads
-        self.num_patches_h = config.image_size // config.patch_size
-        self.num_patches_w = config.image_size // config.patch_size
-
-        inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        _, _, height, width = pixel_values.shape
-        num_patches_h = height // self.config.patch_size
-        num_patches_w = width // self.config.patch_size
-
-        device = pixel_values.device
-        device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
-
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            # Although we could precompute static patch_coords from image_size and patch_size in the config,
-            # the model was trained with random_scale, so it can process images of varying sizes.
-            # Therefore, it's better to compute patch_coords dynamically (with lru_cache).
-            patch_coords = get_patches_center_coordinates(
-                num_patches_h, num_patches_w, dtype=torch.float32, device=device
-            )
-            if self.training:
-                patch_coords = augment_patches_center_coordinates(
-                    patch_coords,
-                    shift=self.config.pos_embed_shift,
-                    jitter=self.config.pos_embed_jitter,
-                    rescale=self.config.pos_embed_rescale,
-                )
-
-            # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
-            angles = 2 * math.pi * patch_coords[:, :, None] * self.inv_freq[None, None, :]
-            angles = angles.flatten(1, 2)
-            angles = angles.tile(2)
-
-            cos = torch.cos(angles)
-            sin = torch.sin(angles)
-
-        dtype = pixel_values.dtype
-        return cos.to(dtype=dtype), sin.to(dtype=dtype)
-
-
-class Deimv2CSPRepLayer2(nn.Module):
-    def __init__(
-        self, config: Deimv2Config, in_channels: int, out_channels: int, num_blocks: int, expansion: float = 1.0
-    ):
-        super().__init__()
-        activation = config.activation_function
-        hidden_channels = int(out_channels * expansion)
-        self.conv1 = Deimv2ConvNormLayer(config, in_channels, hidden_channels * 2, 1, 1, activation=activation)
-        self.bottlenecks = nn.ModuleList(
-            [Deimv2RepVggBlock(config, hidden_channels, hidden_channels) for _ in range(num_blocks)]
-        )
-        if config.encoder_has_trailing_conv:
-            self.conv3 = Deimv2ConvNormLayer(config, hidden_channels, out_channels, 3, 1, activation=activation)
-        else:
-            self.conv3 = nn.Identity()
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        chunks = list(self.conv1(hidden_state).chunk(2, 1))
-        bottleneck_out = chunks[1]
-        for bottleneck in self.bottlenecks:
-            bottleneck_out = bottleneck(bottleneck_out)
-        return self.conv3(chunks[0] + bottleneck_out)
-
-
-class Deimv2RepNCSPELAN5(nn.Module):
-    def __init__(
-        self,
-        config: Deimv2Config,
-        numb_blocks: int = 3,
-        c1: int | None = None,
-        c2: int | None = None,
-        c3: int | None = None,
-        c4: int | None = None,
-    ):
-        super().__init__()
-        act = config.activation_function
-        c1 = c1 if c1 is not None else config.encoder_hidden_dim
-        c2 = c2 if c2 is not None else config.encoder_hidden_dim
-        c3 = c3 if c3 is not None else config.encoder_hidden_dim * 2
-        c4 = c4 if c4 is not None else round(config.hidden_expansion * config.encoder_hidden_dim // 2)
-        self.conv_dim = c3 // 2
-        self.conv1 = Deimv2ConvNormLayer(config, c1, c3, 1, 1, activation=act)
-        self.csp_rep1 = Deimv2CSPRepLayer2(config, c3 // 2, c4, num_blocks=numb_blocks)
-        self.csp_rep2 = Deimv2CSPRepLayer2(config, c4, c4, num_blocks=numb_blocks)
-        self.conv4 = Deimv2ConvNormLayer(config, c3 + (2 * c4), c2, 1, 1, activation=act)
-
-    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
-        split_features = list(self.conv1(input_features).split((self.conv_dim, self.conv_dim), 1))
-        branch1 = self.csp_rep1(split_features[-1])
-        branch2 = self.csp_rep2(branch1)
-        split_features.extend([branch1, branch2])
-        merged_features = torch.cat(split_features, 1)
-        return self.conv4(merged_features)
-
-
-class Deimv2SCDown(nn.Module):
-    def __init__(self, config: Deimv2Config, kernel_size: int, stride: int):
-        super().__init__()
-        self.conv1 = Deimv2ConvNormLayer(config, config.encoder_hidden_dim, config.encoder_hidden_dim, 1, 1)
-        self.conv2 = Deimv2ConvNormLayer(
-            config,
-            config.encoder_hidden_dim,
-            config.encoder_hidden_dim,
-            kernel_size,
-            stride,
-            config.encoder_hidden_dim,
-        )
-
-    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
-        input_features = self.conv1(input_features)
-        input_features = self.conv2(input_features)
-        return input_features
 
 
 class Deimv2SelfAttention(nn.Module):
@@ -1078,11 +771,11 @@ class Deimv2SpatialTuningAdapter(nn.Module):
         )
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        c1 = self.stem(pixel_values)
-        c2 = self.conv2(c1)
-        c3 = self.conv3(c2)
-        c4 = self.conv4(c3)
-        return c2, c3, c4
+        hidden_states = self.stem(pixel_values)
+        feature_map_8 = self.conv2(hidden_states)
+        feature_map_16 = self.conv3(feature_map_8)
+        feature_map_32 = self.conv4(feature_map_16)
+        return feature_map_8, feature_map_16, feature_map_32
 
 
 class Deimv2GAPFusion(nn.Module):
@@ -1124,12 +817,9 @@ class Deimv2LiteEncoder(nn.Module):
 
         self.bi_fusion = Deimv2GAPFusion(config, hidden_dim)
 
-        c1, c2 = hidden_dim, hidden_dim
-        c3 = hidden_dim * 2
-        c4 = round(config.hidden_expansion * hidden_dim // 2)
         num_blocks = round(3 * config.depth_mult)
-        self.fpn_block = Deimv2RepNCSPELAN5(config, numb_blocks=num_blocks, c1=c1, c2=c2, c3=c3, c4=c4)
-        self.pan_block = Deimv2RepNCSPELAN5(config, numb_blocks=num_blocks, c1=c1, c2=c2, c3=c3, c4=c4)
+        self.fpn_block = Deimv2RepNCSPELAN5(config, numb_blocks=num_blocks)
+        self.pan_block = Deimv2RepNCSPELAN5(config, numb_blocks=num_blocks)
 
     def forward(self, inputs_embeds=None, **kwargs) -> BaseModelOutput:
         feats = inputs_embeds
@@ -1148,27 +838,115 @@ class Deimv2LiteEncoder(nn.Module):
         return BaseModelOutput(last_hidden_state=outs)
 
 
-class Deimv2DINOv3Backbone(nn.Module):
+class Deimv2FrozenBatchNorm2d(nn.Module):
+    """
+    BatchNorm2d where the batch statistics and the affine parameters are fixed.
+
+    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
+    torchvision.models.resnet[18,34,50,101] produce nans.
+    """
+
+    def __init__(self, n):
+        super().__init__()
+        self.register_buffer("weight", torch.ones(n))
+        self.register_buffer("bias", torch.zeros(n))
+        self.register_buffer("running_mean", torch.zeros(n))
+        self.register_buffer("running_var", torch.ones(n))
+
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+    ):
+        num_batches_tracked_key = prefix + "num_batches_tracked"
+        if num_batches_tracked_key in state_dict:
+            del state_dict[num_batches_tracked_key]
+
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
+
+    def forward(self, x):
+        # move reshapes to the beginning
+        # to make it user-friendly
+        weight = self.weight.reshape(1, -1, 1, 1)
+        bias = self.bias.reshape(1, -1, 1, 1)
+        running_var = self.running_var.reshape(1, -1, 1, 1)
+        running_mean = self.running_mean.reshape(1, -1, 1, 1)
+        epsilon = 1e-5
+        scale = weight * (running_var + epsilon).rsqrt()
+        bias = bias - running_mean * scale
+        return x * scale + bias
+
+
+def replace_batch_norm(model):
+    r"""
+    Recursively replace all `torch.nn.BatchNorm2d` with `Deimv2FrozenBatchNorm2d`.
+
+    Args:
+        model (torch.nn.Module):
+            input model
+    """
+    for name, module in model.named_children():
+        if isinstance(module, nn.BatchNorm2d):
+            new_module = Deimv2FrozenBatchNorm2d(module.num_features)
+
+            if module.weight.device != torch.device("meta"):
+                new_module.weight.copy_(module.weight)
+                new_module.bias.copy_(module.bias)
+                new_module.running_mean.copy_(module.running_mean)
+                new_module.running_var.copy_(module.running_var)
+
+            model._modules[name] = new_module
+
+        if len(list(module.children())) > 0:
+            replace_batch_norm(module)
+
+
+class Deimv2ConvEncoder(nn.Module):
+    """
+    Convolutional backbone using the modeling_deimv2_resnet.py.
+
+    nn.BatchNorm2d layers are replaced by Deimv2FrozenBatchNorm2d as defined above.
+    https://github.com/lyuwenyu/RT-DETR/blob/main/Deimv2_pytorch/src/nn/backbone/presnet.py#L142
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        backbone = load_backbone(config)
+
+        if config.freeze_backbone_batch_norms:
+            # replace batch norm by frozen batch norm
+            with torch.no_grad():
+                replace_batch_norm(backbone)
+        self.model = backbone
+        self.intermediate_channel_sizes = self.model.channels
+        if config.encoder_type != "lite":
+            encoder_input_proj = []
+            for in_channel in self.intermediate_channel_sizes:
+                encoder_input_proj.append(
+                    nn.Sequential(
+                        nn.Conv2d(in_channel, config.encoder_hidden_dim, kernel_size=1, bias=False),
+                        nn.BatchNorm2d(config.encoder_hidden_dim),
+                    )
+                )
+            self.encoder_input_proj = nn.ModuleList(encoder_input_proj)
+
+    def forward(self, pixel_values: torch.Tensor) -> list[torch.Tensor]:
+        features = self.model(pixel_values).feature_maps
+        if hasattr(self, "encoder_input_proj"):
+            return [self.encoder_input_proj[i](feat) for i, feat in enumerate(features)]
+        return list(features)
+
+
+class Deimv2DINOv3ConvEncoder(nn.Module):
     def __init__(self, config: Deimv2Config):
         super().__init__()
-        vit_config = Deimv2DINOv3ViTConfig(**config.dinov3_backbone_config)
-
-        self.embeddings = Deimv2DINOv3ViTEmbeddings(vit_config)
-        self.rope_embeddings = Deimv2DINOv3ViTRopePositionEmbedding(vit_config)
-        self.layers = nn.ModuleList([Deimv2DINOv3ViTLayer(vit_config) for _ in range(vit_config.num_hidden_layers)])
-
-        self.apply_layernorm = config.dinov3_apply_layernorm
-        if self.apply_layernorm:
-            self.norm = nn.LayerNorm(vit_config.hidden_size, eps=vit_config.layer_norm_eps)
-
-        self.interaction_indexes = config.dinov3_interaction_indexes
-        self.patch_size = vit_config.patch_size
-        self.num_prefix_tokens = 1 + vit_config.num_register_tokens
+        self.backbone = load_backbone(config)
 
         self.sta = Deimv2SpatialTuningAdapter(config)
 
-        embed_dim = vit_config.hidden_size
-        hidden_dim = config.dinov3_hidden_dim or embed_dim
+        embed_dim = config.backbone_config.hidden_size
+        hidden_dim = config.encoder_hidden_dim
         sta_ch = config.sta_inplanes
         self.convs = nn.ModuleList(
             [
@@ -1180,28 +958,19 @@ class Deimv2DINOv3Backbone(nn.Module):
         self.norms = nn.ModuleList([nn.BatchNorm2d(hidden_dim) for _ in range(3)])
 
     def forward(self, pixel_values: torch.Tensor) -> list[torch.Tensor]:
-        hidden_states = self.embeddings(pixel_values)
-        position_embeddings = self.rope_embeddings(pixel_values)
+        backbone_output = self.backbone(pixel_values)
+        feature_maps = backbone_output.feature_maps
 
-        intermediate_outputs = []
-        for i, layer in enumerate(self.layers):
-            hidden_states = layer(hidden_states, position_embeddings=position_embeddings)
-            if i in self.interaction_indexes:
-                out = self.norm(hidden_states) if self.apply_layernorm else hidden_states
-                intermediate_outputs.append(out)
-
-        batch_size = pixel_values.shape[0]
-        h_patches = pixel_values.shape[2] // self.patch_size
-        w_patches = pixel_values.shape[3] // self.patch_size
+        patch_size = self.backbone.config.patch_size
+        h_patches = pixel_values.shape[2] // patch_size
+        w_patches = pixel_values.shape[3] // patch_size
 
         sem_feats = []
-        num_scales = len(intermediate_outputs)
-        for i, feat in enumerate(intermediate_outputs):
-            patch_tokens = feat[:, self.num_prefix_tokens :]
-            spatial = patch_tokens.transpose(1, 2).reshape(batch_size, -1, h_patches, w_patches).contiguous()
+        num_scales = len(feature_maps)
+        for i, feat in enumerate(feature_maps):
             resize_h = int(h_patches * 2 ** (num_scales - 2 - i))
             resize_w = int(w_patches * 2 ** (num_scales - 2 - i))
-            spatial = F.interpolate(spatial, size=[resize_h, resize_w], mode="bilinear", align_corners=False)
+            spatial = F.interpolate(feat, size=[resize_h, resize_w], mode="bilinear", align_corners=False)
             sem_feats.append(spatial)
 
         detail_feats = self.sta(pixel_values)
@@ -1275,6 +1044,7 @@ class Deimv2DecoderLayer(nn.Module):
         self.final_layer_norm = Deimv2RMSNorm(config.d_model)
         # gate
         self.gateway = Deimv2Gate(config.d_model)
+        self.use_gateway = config.use_gateway
         if config.use_gateway:
             self.gateway = Deimv2Gate(config.d_model)
         else:
@@ -1336,7 +1106,7 @@ class Deimv2DecoderLayer(nn.Module):
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        if hasattr(self, "gateway"):
+        if self.use_gateway:
             hidden_states = self.gateway(residual, hidden_states)
         else:
             hidden_states = residual + hidden_states
@@ -1345,7 +1115,8 @@ class Deimv2DecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states.clamp(min=-65504, max=65504))
+        clamp_value = torch.finfo(hidden_states.dtype).max
+        hidden_states = self.final_layer_norm(hidden_states.clamp(min=-clamp_value, max=clamp_value))
 
         return hidden_states
 
@@ -1381,6 +1152,7 @@ class Deimv2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        # initialize linear layer bias value according to a given probability value.
         if isinstance(module, (Deimv2ForObjectDetection, Deimv2Decoder)):
             if module.class_embed is not None:
                 for layer in module.class_embed:
@@ -1443,37 +1215,25 @@ class Deimv2PreTrainedModel(PreTrainedModel):
             init.constant_(module.reg_conf.layers[-1].bias, 0)
             init.constant_(module.reg_conf.layers[-1].weight, 0)
 
-        if isinstance(module, Deimv2SwiGLUFFN):
-            init.xavier_uniform_(module.w12.weight)
-            init.constant_(module.w12.bias, 0)
-            init.xavier_uniform_(module.w3.weight)
-            init.constant_(module.w3.bias, 0)
-
-        if isinstance(module, Deimv2RMSNorm):
-            init.ones_(module.scale)
-
         if isinstance(module, nn.LayerNorm):
             init.ones_(module.weight)
             init.zeros_(module.bias)
-
-        if isinstance(module, Deimv2DINOv3ViTEmbeddings):
-            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
-            if module.config.num_register_tokens > 0:
-                init.trunc_normal_(module.register_tokens, mean=0.0, std=self.config.initializer_range)
-            init.zeros_(module.mask_token)
-
-        if isinstance(module, Deimv2DINOv3ViTLayerScale) and self.config.dinov3_backbone_config is not None:
-            layerscale_value = self.config.dinov3_backbone_config.get("layerscale_value", 1.0)
-            init.constant_(module.lambda1, layerscale_value)
-
-        if isinstance(module, Deimv2DINOv3ViTRopePositionEmbedding):
-            inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
-            init.copy_(module.inv_freq, inv_freq)
 
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             init.xavier_uniform_(module.weight_embedding.weight)
         if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
             init.xavier_uniform_(module.denoising_class_embed.weight)
+
+        if isinstance(module, Deimv2SwiGLUFFN):
+            init.xavier_uniform_(module.gate_proj.weight)
+            init.constant_(module.gate_proj.bias, 0)
+            init.xavier_uniform_(module.up_proj.weight)
+            init.constant_(module.up_proj.bias, 0)
+            init.xavier_uniform_(module.down_proj.weight)
+            init.constant_(module.down_proj.bias, 0)
+
+        if isinstance(module, Deimv2RMSNorm):
+            init.ones_(module.weight)
 
 
 class Deimv2HybridEncoder(Deimv2PreTrainedModel):
@@ -1787,64 +1547,6 @@ class Deimv2Decoder(Deimv2PreTrainedModel):
         )
 
 
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for outputs of the RT-DETR encoder-decoder model.
-    """
-)
-class Deimv2ModelOutput(ModelOutput):
-    r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the decoder of the model.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-        Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
-        Stacked intermediate logits (logits of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-        Stacked intermediate reference points (reference points of each layer of the decoder).
-    intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-        Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
-    initial_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
-        Initial reference points used for the first decoder layer.
-    init_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
-        Initial reference points sent through the Transformer decoder.
-    enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
-        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
-        picked as region proposals in the encoder stage. Output of bounding box binary classification (i.e.
-        foreground and background).
-    enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`):
-        Logits of predicted bounding boxes coordinates in the encoder stage.
-    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
-        picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
-        foreground and background).
-    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-        Logits of predicted bounding boxes coordinates in the first stage.
-    denoising_meta_values (`dict`):
-        Extra dictionary for the denoising related values.
-    """
-
-    last_hidden_state: torch.FloatTensor | None = None
-    intermediate_hidden_states: torch.FloatTensor | None = None
-    intermediate_logits: torch.FloatTensor | None = None
-    intermediate_reference_points: torch.FloatTensor | None = None
-    intermediate_predicted_corners: torch.FloatTensor | None = None
-    initial_reference_points: torch.FloatTensor | None = None
-    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    decoder_attentions: tuple[torch.FloatTensor] | None = None
-    cross_attentions: tuple[torch.FloatTensor] | None = None
-    encoder_last_hidden_state: torch.FloatTensor | None = None
-    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    encoder_attentions: tuple[torch.FloatTensor] | None = None
-    init_reference_points: torch.FloatTensor | None = None
-    enc_topk_logits: torch.FloatTensor | None = None
-    enc_topk_bboxes: torch.FloatTensor | None = None
-    enc_outputs_class: torch.FloatTensor | None = None
-    enc_outputs_coord_logits: torch.FloatTensor | None = None
-    denoising_meta_values: dict | None = None
-
-
 def get_contrastive_denoising_training_group(
     targets,
     num_classes,
@@ -1977,23 +1679,11 @@ class Deimv2Model(Deimv2PreTrainedModel):
     def __init__(self, config: Deimv2Config):
         super().__init__(config)
 
-        if config.backbone_type == "dinov3":
-            self.dinov3_backbone = Deimv2DINOv3Backbone(config)
+        is_dinov3 = getattr(config.backbone_config, "model_type", None) == "dinov3_vit"
+        if is_dinov3:
+            self.backbone = Deimv2DINOv3ConvEncoder(config)
         else:
-            from ..d_fine.modeling_d_fine import DFineConvEncoder
-
-            self.backbone = DFineConvEncoder(config)
-            if config.encoder_type != "lite":
-                intermediate_channel_sizes = self.backbone.intermediate_channel_sizes
-                encoder_input_proj = []
-                for in_channel in intermediate_channel_sizes:
-                    encoder_input_proj.append(
-                        nn.Sequential(
-                            nn.Conv2d(in_channel, config.encoder_hidden_dim, kernel_size=1, bias=False),
-                            nn.BatchNorm2d(config.encoder_hidden_dim),
-                        )
-                    )
-                self.encoder_input_proj = nn.ModuleList(encoder_input_proj)
+            self.backbone = Deimv2ConvEncoder(config)
 
         if config.encoder_type == "lite":
             self.encoder = Deimv2LiteEncoder(config)
@@ -2037,9 +1727,6 @@ class Deimv2Model(Deimv2PreTrainedModel):
                 decoder_input_proj.append(nn.Sequential(conv, batchnorm))
         self.decoder_input_proj = nn.ModuleList(decoder_input_proj)
         self.decoder = Deimv2Decoder(config)
-
-        if config.use_spatial_tuning_adapter and config.backbone_type != "dinov3":
-            self.spatial_tuning_adapter = Deimv2SpatialTuningAdapter(config)
 
         self.post_init()
 
@@ -2131,14 +1818,7 @@ class Deimv2Model(Deimv2PreTrainedModel):
             if pixel_mask is None:
                 pixel_mask = torch.ones(((batch_size, height, width)), device=device)
 
-            if self.config.backbone_type == "dinov3":
-                proj_feats = self.dinov3_backbone(pixel_values)
-            elif self.config.encoder_type == "lite":
-                features = self.backbone(pixel_values, pixel_mask)
-                proj_feats = [source for source, mask in features]
-            else:
-                features = self.backbone(pixel_values, pixel_mask)
-                proj_feats = [self.encoder_input_proj[level](source) for level, (source, mask) in enumerate(features)]
+            proj_feats = self.backbone(pixel_values)
         else:
             batch_size = inputs_embeds.shape[0]
             device = inputs_embeds.device
@@ -2180,8 +1860,6 @@ class Deimv2Model(Deimv2PreTrainedModel):
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
 
         if self.training and self.config.num_denoising > 0 and labels is not None:
-            from ..d_fine.modeling_d_fine import get_contrastive_denoising_training_group
-
             (
                 denoising_class,
                 denoising_bbox_unact,
@@ -2242,8 +1920,6 @@ class Deimv2Model(Deimv2PreTrainedModel):
 
         init_reference_points = reference_points_unact.detach()
 
-        from ..d_fine.modeling_d_fine import DFineModelOutput
-
         decoder_outputs = self.decoder(
             inputs_embeds=target,
             encoder_hidden_states=source_flatten,
@@ -2255,7 +1931,7 @@ class Deimv2Model(Deimv2PreTrainedModel):
             **kwargs,
         )
 
-        return DFineModelOutput(
+        return Deimv2ModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
             intermediate_logits=decoder_outputs.intermediate_logits,

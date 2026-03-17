@@ -97,7 +97,6 @@ SPECIAL_CASES_TO_ALLOW = {
     "DetrConfig": True,
     "DFineConfig": True,
     "Deimv2Config": True,
-    "Deimv2DINOv3ViTConfig": True,
     "GroundingDinoConfig": True,
     "MMGroundingDinoConfig": True,
     "RTDetrConfig": True,
