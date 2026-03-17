@@ -114,8 +114,16 @@ class CamembertTokenizer(TokenizersBackend):
             additional_special_tokens = ["<s>NOTUSED", "</s>NOTUSED", "<unk>NOTUSED"]
 
         if vocab is not None:
-            self._vocab = vocab
-            unk_index = next((i for i, (tok, _) in enumerate(self._vocab) if tok == str(unk_token)), 0)
+            if isinstance(vocab, dict):
+                # Vocab from tokenizer.json (BPE format) is dict {token: id}.
+                # Unigram expects list of (token, score) tuples.
+                id_to_token = {i: token for token, i in vocab.items()}
+                sorted_ids = sorted(id_to_token.keys())
+                self._vocab = [(id_to_token[i], 0.0) for i in sorted_ids]
+                unk_id = vocab.get(str(unk_token)); unk_index = sorted_ids.index(unk_id) if unk_id is not None and unk_id in sorted_ids else 0
+            else:
+                self._vocab = vocab
+                unk_index = next((i for i, (tok, _) in enumerate(self._vocab) if tok == str(unk_token)), 0)
             self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=unk_index, byte_fallback=False))
         else:
             self._vocab = [
