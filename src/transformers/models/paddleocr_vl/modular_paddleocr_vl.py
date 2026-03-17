@@ -23,6 +23,7 @@ from typing import Optional
 import numpy as np
 import torch
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
@@ -578,7 +579,8 @@ class PaddleOCRVLProcessor(ProcessorMixin):
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
+@auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
+@strict(accept_kwargs=True)
 class PaddleOCRVisionConfig(SiglipVisionConfig):
     r"""
     Example:
@@ -600,31 +602,23 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
     model_type = "paddleocr_vl_vision"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        hidden_size=1152,
-        intermediate_size=4304,
-        num_hidden_layers=27,
-        num_attention_heads=16,
-        num_channels=3,
-        image_size=384,
-        patch_size=14,
-        hidden_act="gelu_pytorch_tanh",
-        layer_norm_eps=1e-6,
-        attention_dropout=0.0,
-        spatial_merge_size=2,
-        **kwargs,
-    ):
-        super().__init__()
-        self.spatial_merge_size = spatial_merge_size
+    hidden_size: int = 1152
+    intermediate_size: int = 4304
+    num_hidden_layers: int = 27
+    num_attention_heads: int = 16
+    image_size: int = 384
+    patch_size: int = 14
+    spatial_merge_size: int = 2
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
+@auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
+@strict(accept_kwargs=True)
 class PaddleOCRTextConfig(Ernie4_5Config):
     model_type = "paddleocr_vl_text"
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
+@auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
+@strict(accept_kwargs=True)
 class PaddleOCRVLConfig(Qwen2VLConfig):
     r"""
     Example:
@@ -644,18 +638,11 @@ class PaddleOCRVLConfig(Qwen2VLConfig):
 
     sub_configs = {"vision_config": PaddleOCRVisionConfig, "text_config": PaddleOCRTextConfig}
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        image_token_id=100295,
-        video_token_id=100296,
-        vision_start_token_id=101305,
-        vision_end_token_id=101306,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        super().__init__()
+    image_token_id: int = 100295
+    video_token_id: int = 100296
+    vision_start_token_id: int = 101305
+    vision_end_token_id: int = 101306
+    tie_word_embeddings: int = True
 
 
 class PaddleOCRProjector(nn.Module):
@@ -1070,7 +1057,6 @@ class PaddleOCRVLCausalLMOutputWithPast(Qwen2VLCausalLMOutputWithPast):
 
 
 class PaddleOCRVLModel(Qwen2VLModel):
-    _checkpoint_conversion_mapping = {"^model": "language_model"}
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
 
     def __init__(self, config: PaddleOCRVLConfig):
@@ -1214,11 +1200,6 @@ class PaddleOCRVLModel(Qwen2VLModel):
 
 
 class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
-    _checkpoint_conversion_mapping = {
-        "^visual": "model.visual",
-        "^mlp_AR": "model.projector",
-        r"^model(?!(\.visual|\.projector|\.language_model))": "model.language_model",
-    }
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
 
     def get_video_features(self):

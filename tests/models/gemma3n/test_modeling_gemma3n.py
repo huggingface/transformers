@@ -109,6 +109,9 @@ class Gemma3nAudioModelTester:
             conf_attention_context_left=5,
         )
 
+    def get_config(self):
+        return self.get_audio_encoder_config()
+
     def prepare_config_and_inputs_for_common(self):
         # Prepare inputs for the audio encoder
         feature_extractor_config = self.get_feature_extractor_config()
@@ -146,7 +149,7 @@ class Gemma3nAudioModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Gemma3nAudioModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Gemma3nAudioConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Gemma3nAudioConfig, hidden_size=32)
         torch.manual_seed(0)
 
         # The following values are golden outputs from a deterministic run of the components.
@@ -406,6 +409,10 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
             atols=atols,
             rtols=rtols,
         )
+
+    @unittest.skip("Intentionally not reversable (no changes) as only load time within a VLM depends on this")
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
 
     @pytest.mark.generate
     @unittest.skip("Gemma3n does not support QuantizedCache as it performs cache manipulation in the forward pass")
@@ -796,7 +803,7 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
         self.config_tester = ConfigTester(
             self,
             config_class=Gemma3nConfig,
-            hidden_size=37,
+            hidden_size=32,
             text_config={"activation_sparsity_pattern": None},
         )
 
@@ -857,6 +864,12 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     @pytest.mark.generate
     @unittest.skip("Gemma3n does not support QuantizedCache as it performs cache manipulation in the forward pass")
     def test_generate_with_quant_cache(self):
+        pass
+
+    @unittest.skip(
+        "Conversion only for the `CausalLM` loading from saved `ConditionalLM`, doesn't apply to simple VLM"
+    )
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
 
     def _check_hidden_states_for_generate(

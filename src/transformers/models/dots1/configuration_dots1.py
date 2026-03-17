@@ -12,15 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="rednote-hilab/dots.llm1.base")
+@strict(accept_kwargs=True)
 class Dots1Config(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
@@ -69,68 +70,41 @@ class Dots1Config(PreTrainedConfig):
         "num_local_experts": "n_routed_experts",
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 152064,
-        hidden_size: int | None = 4608,
-        intermediate_size: int | None = 10944,
-        moe_intermediate_size: int | None = 1408,
-        num_hidden_layers: int | None = 62,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = 32,
-        n_shared_experts: int | None = None,
-        n_routed_experts: int | None = None,
-        n_group: int | None = 1,
-        topk_group: int | None = 1,
-        num_experts_per_tok: int | None = None,
-        first_k_dense_replace: int | None = 0,
-        norm_topk_prob: bool | None = False,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 2048,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-6,
-        use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        routed_scaling_factor: float | None = 1.0,
-        sliding_window: int | None = 4096,
-        max_window_layers: int | None = 62,
-        layer_types: list[str] | None = None,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = None,
-        eos_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.moe_intermediate_size = moe_intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.n_shared_experts = n_shared_experts
-        self.n_routed_experts = n_routed_experts
-        self.num_experts_per_tok = num_experts_per_tok
-        self.first_k_dense_replace = first_k_dense_replace
-        self.norm_topk_prob = norm_topk_prob
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-        self.n_group = n_group
-        self.topk_group = topk_group
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.routed_scaling_factor = routed_scaling_factor
-        self.sliding_window = sliding_window
-        self.max_window_layers = max_window_layers
+    vocab_size: int = 152064
+    hidden_size: int = 4608
+    intermediate_size: int = 10944
+    moe_intermediate_size: int = 1408
+    num_hidden_layers: int = 62
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = 32
+    n_shared_experts: int | None = None
+    n_routed_experts: int | None = None
+    n_group: int | None = 1
+    topk_group: int | None = 1
+    num_experts_per_tok: int | None = None
+    first_k_dense_replace: int | None = 0
+    norm_topk_prob: bool | None = False
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 2048
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int | None = 0.0
+    routed_scaling_factor: float = 1.0
+    sliding_window: int | None = 4096
+    max_window_layers: int | None = 62
+    layer_types: list[str] | None = None
+    pad_token_id: int | None = None
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
 
-        self.layer_types = layer_types
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+
         if self.layer_types is None:
             self.layer_types = [
                 "sliding_attention"
@@ -138,15 +112,8 @@ class Dots1Config(PreTrainedConfig):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.rope_parameters = rope_parameters
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Dots1Config"]

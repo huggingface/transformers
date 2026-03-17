@@ -14,6 +14,8 @@
 # limitations under the License.
 """XLNet configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
@@ -22,6 +24,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="xlnet/xlnet-large-cased")
+@strict(accept_kwargs=True)
 class XLNetConfig(PreTrainedConfig):
     r"""
     ff_activation (`str` or `Callable`, *optional*, defaults to `"gelu"`):
@@ -103,78 +106,47 @@ class XLNetConfig(PreTrainedConfig):
         "num_hidden_layers": "n_layer",
     }
 
-    def __init__(
-        self,
-        vocab_size=32000,
-        d_model=1024,
-        n_layer=24,
-        n_head=16,
-        d_inner=4096,
-        ff_activation="gelu",
-        attn_type="bi",
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        dropout=0.1,
-        mem_len=512,
-        reuse_len=None,
-        use_mems_eval=True,
-        use_mems_train=False,
-        bi_data=False,
-        clamp_len=-1,
-        same_length=False,
-        summary_type="last",
-        summary_use_proj=True,
-        summary_activation="tanh",
-        summary_last_dropout=0.1,
-        start_n_top=5,
-        end_n_top=5,
-        pad_token_id=5,
-        bos_token_id=1,
-        eos_token_id=2,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.d_model = d_model
-        self.n_layer = n_layer
-        self.n_head = n_head
-        if d_model % n_head != 0:
-            raise ValueError(f"'d_model % n_head' ({d_model % n_head}) should be equal to 0")
-        if "d_head" in kwargs:
-            if kwargs["d_head"] != d_model // n_head:
-                raise ValueError(
-                    f"`d_head` ({kwargs['d_head']}) should be equal to `d_model // n_head` ({d_model // n_head})"
-                )
-        self.d_head = d_model // n_head
-        self.ff_activation = ff_activation
-        self.d_inner = d_inner
-        self.attn_type = attn_type
+    vocab_size: int = 32000
+    d_model: int = 1024
+    n_layer: int = 24
+    n_head: int = 16
+    d_inner: int = 4096
+    d_head: int | None = None
+    ff_activation: str = "gelu"
+    attn_type: str = "bi"
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    dropout: float | int = 0.1
+    mem_len: int | None = 512
+    reuse_len: int | None = None
+    use_mems_eval: bool = True
+    use_mems_train: bool = False
+    bi_data: bool = False
+    clamp_len: int = -1
+    same_length: bool = False
+    summary_type: str = "last"
+    summary_use_proj: bool = True
+    summary_activation: str = "tanh"
+    summary_last_dropout: float | int = 0.1
+    start_n_top: int = 5
+    end_n_top: int = 5
+    pad_token_id: int | None = 5
+    bos_token_id: int | None = 1
+    eos_token_id: int | None = 2
+    tie_word_embeddings: bool = True
 
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
+    def __post_init__(self, **kwargs):
+        self.d_head = self.d_head or self.d_model // self.n_head
+        super().__post_init__(**kwargs)
 
-        self.dropout = dropout
-        self.mem_len = mem_len
-        self.reuse_len = reuse_len
-        self.bi_data = bi_data
-        self.clamp_len = clamp_len
-        self.same_length = same_length
-
-        self.summary_type = summary_type
-        self.summary_use_proj = summary_use_proj
-        self.summary_activation = summary_activation
-        self.summary_last_dropout = summary_last_dropout
-        self.start_n_top = start_n_top
-        self.end_n_top = end_n_top
-
-        self.bos_token_id = bos_token_id
-        self.pad_token_id = pad_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-
-        self.use_mems_eval = use_mems_eval
-        self.use_mems_train = use_mems_train
-        super().__init__(**kwargs)
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.d_model % self.n_head != 0:
+            raise ValueError(f"'d_model % n_head' ({self.d_model % self.n_head}) should be equal to 0")
+        if self.d_head != self.d_model // self.n_head:
+            raise ValueError(
+                f"`d_head` ({self.d_head}) should be equal to `d_model // n_head` ({self.d_model // self.n_head})"
+            )
 
     @property
     def max_position_embeddings(self):

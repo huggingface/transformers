@@ -15,14 +15,13 @@ from collections.abc import Callable
 
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -57,6 +56,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5V")
+@strict(accept_kwargs=True)
 class Glm4vMoeTextConfig(Glm4MoeConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
@@ -98,73 +98,20 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    ignore_keys_at_rope_validation = {"mrope_section"}
 
-    def __init__(
-        self,
-        vocab_size: int | None = 151424,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 10944,
-        num_hidden_layers: int | None = 46,
-        num_attention_heads: int | None = 96,
-        num_key_value_heads: int | None = 8,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 65536,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-5,
-        use_cache: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = True,
-        attention_dropout: float | None = 0.0,
-        moe_intermediate_size: int | None = 1408,
-        num_experts_per_tok: int | None = 8,
-        n_shared_experts: int | None = 1,
-        n_routed_experts: int | None = 128,
-        routed_scaling_factor: float | None = 1.0,
-        n_group: int | None = 1,
-        topk_group: int | None = 1,
-        first_k_dense_replace: int | None = 1,
-        norm_topk_prob: bool | None = True,
-        pad_token_id: int | None = None,
-        eos_token_id: int | None = None,
-        bos_token_id: int | None = None,
-        router_aux_loss_coef: float | None = 0.0001,
-        **kwargs,
-    ):
-        self.pad_token_id = pad_token_id
-        self.eos_token_id = eos_token_id
-        self.bos_token_id = bos_token_id
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vocab_size: int = 151424
+    max_position_embeddings: int = 65536
+    attention_bias: bool = True
+    router_aux_loss_coef: float = 0.0001
+    use_qk_norm = AttributeError()
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.rope_parameters = rope_parameters
-        kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
-
-        # MoE arguments
-        self.moe_intermediate_size = moe_intermediate_size
-        self.num_experts_per_tok = num_experts_per_tok
-        self.n_group = n_group
-        self.topk_group = topk_group
-        self.n_shared_experts = n_shared_experts
-        self.n_routed_experts = n_routed_experts
-        self.routed_scaling_factor = routed_scaling_factor
-        self.first_k_dense_replace = first_k_dense_replace
-        self.norm_topk_prob = norm_topk_prob
-        self.router_aux_loss_coef = router_aux_loss_coef
-        PreTrainedConfig.__init__(self, ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
+    def __post_init__(self, **kwargs):
+        super().__post_init__(self, **kwargs)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5V")
+@strict(accept_kwargs=True)
 class Glm4vMoeConfig(Glm4vConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 151339):
@@ -189,20 +136,8 @@ class Glm4vMoeConfig(Glm4vConfig):
     >>> configuration = model.config
     ```"""
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        image_token_id=151363,
-        video_token_id=151364,
-        image_start_token_id=151339,
-        image_end_token_id=151340,
-        video_start_token_id=151341,
-        video_end_token_id=151342,
-        tie_word_embeddings=False,
-        **kwargs,
-    ):
-        super().__init__()
+    image_token_id: int = 151363
+    video_token_id: int = 151364
 
 
 class Glm4vMoeTextAttention(Glm4Attention):
@@ -216,7 +151,6 @@ class Glm4vMoeTextAttention(Glm4Attention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
@@ -234,9 +168,7 @@ class Glm4vMoeTextAttention(Glm4Attention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; position_ids needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -293,12 +225,7 @@ class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
     input_modalities = ("text", "image", "video")
     _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
-
-    _can_record_outputs = {
-        "hidden_states": Glm4vMoeTextDecoderLayer,
-        "attentions": Glm4vMoeTextAttention,
-        "router_logits": Glm4vMoeTextTopkRouter,
-    }
+    _can_record_outputs = {}
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -322,6 +249,12 @@ class Glm4vMoeVisionModel(Glm4vVisionModel):
 
 @auto_docstring
 class Glm4vMoeTextModel(Glm4vTextModel):
+    _can_record_outputs = {
+        "hidden_states": Glm4vMoeTextDecoderLayer,
+        "attentions": Glm4vMoeTextAttention,
+        "router_logits": Glm4vMoeTextTopkRouter,
+    }
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -330,7 +263,6 @@ class Glm4vMoeTextModel(Glm4vTextModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -343,15 +275,11 @@ class Glm4vMoeTextModel(Glm4vTextModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
         # the hard coded `3` is for temporal, height and width.
         if position_ids is None:
-            position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
 
@@ -376,7 +304,6 @@ class Glm4vMoeTextModel(Glm4vTextModel):
             "config": self.config,
             "inputs_embeds": inputs_embeds,
             "attention_mask": attention_mask,
-            "cache_position": cache_position,
             "past_key_values": past_key_values,
             "position_ids": text_position_ids,
         }
@@ -395,7 +322,6 @@ class Glm4vMoeTextModel(Glm4vTextModel):
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
             hidden_states = layer_outputs
@@ -433,7 +359,6 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Glm4vMoeCausalLMOutputWithPast:
@@ -447,7 +372,6 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             mm_token_type_ids=mm_token_type_ids,
             **kwargs,
         )
