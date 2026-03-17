@@ -41,7 +41,7 @@ class UVDocConvLayer(nn.Module):
         kernel_size: int = 3,
         stride: int = 1,
         padding: int = 0,
-        padding_mode: str = "zero",
+        padding_mode: str = "zeros",
         bias: bool = False,
         dilation: int = 1,
         activation: str = "relu",
