@@ -233,7 +233,7 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
         self.audio_tower = AutoModel.from_config(config.audio_config)
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         self.multi_modal_projector = MusicFlamingoMultiModalProjector(config)
-        self.pos_emb = MusicFlamingoRotaryEmbedding(config.audio_config)
+        self.pos_emb = MusicFlamingoRotaryEmbedding(config)
 
         # Initialize weights and apply final processing
         self.post_init()

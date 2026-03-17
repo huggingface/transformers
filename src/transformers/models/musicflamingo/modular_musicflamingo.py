@@ -377,7 +377,7 @@ class MusicFlamingoPreTrainedModel(AudioFlamingo3PreTrainedModel):
 class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
     def __init__(self, config: MusicFlamingoConfig):
         super().__init__(config)
-        self.pos_emb = MusicFlamingoRotaryEmbedding(config.audio_config)
+        self.pos_emb = MusicFlamingoRotaryEmbedding(config)
 
     def get_audio_features(
         self,
