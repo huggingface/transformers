@@ -49,6 +49,25 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _is_strix_halo():
+    """Detect if running on AMD Strix Halo APU (gfx1151) where mmap causes OOM issues."""
+    if not torch.cuda.is_available():
+        return False
+    try:
+        # Strix Halo is identified by gfx1151 architecture
+        for i in range(torch.cuda.device_count()):
+            props = torch.cuda.get_device_properties(i)
+            if hasattr(props, "gcnArchName") and "gfx1151" in str(props.gcnArchName).lower():
+                return True
+    except Exception:
+        pass
+    return False
+
+
+# Cache Strix Halo detection to avoid repeated checks
+_IS_STRIX_HALO = _is_strix_halo()
+
+
 def build_glob_alternation(
     globs: list[WeightRenaming | WeightConverter | str],
 ) -> tuple[re.Pattern, dict[str, str], dict[str, str]]:
@@ -785,6 +804,12 @@ GLOBAL_WORKERS = min(4, os.cpu_count() or 4)
 def _materialize_copy(tensor: torch.Tensor, device=None, dtype=None) -> torch.Tensor:
     # This slicing is what actually loads the tensor from the safetensors slice object
     tensor = tensor[...]
+
+    # On Strix Halo APUs, mmap does not work well and causes OOM.
+    # Force a CPU copy to materialize the tensor before moving to device.
+    if _IS_STRIX_HALO and isinstance(tensor, torch.Tensor) and tensor.device.type == "cpu":
+        tensor = tensor.to(device="cpu", copy=True)
+
     if dtype is not None or device is not None:
         tensor = tensor.to(device=device, dtype=dtype)
     return tensor
