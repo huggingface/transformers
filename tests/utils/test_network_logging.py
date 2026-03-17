@@ -20,11 +20,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import httpx
 
 from transformers.utils.network_logging import (
-    clear_network_debug_report,
-    disable_network_debug_report,
-    enable_network_debug_report,
-    format_network_debug_report,
-    get_network_debug_report,
+    _clear_network_debug_report,
+    _disable_network_debug_report,
+    _enable_network_debug_report,
+    _format_network_debug_report,
+    _get_network_debug_report,
 )
 
 
@@ -56,16 +56,16 @@ class NetworkLoggingTester(unittest.TestCase):
         cls._server.server_close()
 
     def tearDown(self):
-        disable_network_debug_report()
+        _disable_network_debug_report()
 
     def test_network_debug_report_records_httpx_requests(self):
-        enable_network_debug_report()
-        clear_network_debug_report()
+        _enable_network_debug_report()
+        _clear_network_debug_report()
 
         response = httpx.get(f"{self._base_url}/slow")
         self.assertEqual(response.text, "ok")
 
-        report = get_network_debug_report()
+        report = _get_network_debug_report()
         matching_requests = [request for request in report["requests"] if request["url"].endswith("/slow")]
         self.assertEqual(len(matching_requests), 1)
 
@@ -76,7 +76,7 @@ class NetworkLoggingTester(unittest.TestCase):
         self.assertGreater(request["total_ms"], 0)
         self.assertIn("receive_response_headers", request["phases_ms"])
 
-        summary = format_network_debug_report()
+        summary = _format_network_debug_report()
         self.assertIn("Network debug report", summary)
         self.assertIn("Slowest requests:", summary)
         self.assertIn("/slow", summary)

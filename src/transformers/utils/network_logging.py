@@ -345,39 +345,33 @@ def _parse_network_debug_env() -> tuple[bool, str]:
     return enabled, output_path
 
 
-def enable_network_debug_report(output_path: str | os.PathLike | None = None) -> None:
-    """
-    Enable global `httpx` request tracing and collect a per-request timing report.
-
-    The optional `output_path` writes the full JSON report at the end of the pytest run.
-    """
-
+def _enable_network_debug_report(output_path: str | os.PathLike | None = None) -> None:
     _NETWORK_DEBUG_PROFILER.enable(output_path=output_path)
 
 
-def disable_network_debug_report() -> None:
+def _disable_network_debug_report() -> None:
     _NETWORK_DEBUG_PROFILER.disable()
 
 
-def clear_network_debug_report() -> None:
+def _clear_network_debug_report() -> None:
     _NETWORK_DEBUG_PROFILER.clear()
 
 
-def get_network_debug_report() -> dict[str, Any]:
+def _get_network_debug_report() -> dict[str, Any]:
     return _NETWORK_DEBUG_PROFILER.build_report()
 
 
-def enable_network_debug_report_from_env() -> bool:
+def _enable_network_debug_report_from_env() -> bool:
     enabled, output_path = _parse_network_debug_env()
     if not enabled:
         return False
 
-    enable_network_debug_report(output_path=output_path)
+    _enable_network_debug_report(output_path=output_path)
     return True
 
 
-def format_network_debug_report(max_requests: int = 20, max_routes: int = 10) -> str:
-    report = get_network_debug_report()
+def _format_network_debug_report(max_requests: int = 20, max_routes: int = 10) -> str:
+    report = _get_network_debug_report()
     if report["total_requests"] == 0:
         return "Network debug report: no httpx requests captured."
 
@@ -428,7 +422,7 @@ class NetworkDebugPlugin:
     """Pytest plugin that handles all network debug orchestration including xdist coordination."""
 
     def pytest_configure(self, config):
-        enable_network_debug_report_from_env()
+        _enable_network_debug_report_from_env()
         if not _NETWORK_DEBUG_PROFILER.enabled:
             return
 
@@ -473,7 +467,7 @@ class NetworkDebugPlugin:
             report_path = f"Failed to write JSON report: {error}"
 
         terminalreporter.section("Network debug", sep="=")
-        for line in format_network_debug_report().splitlines():
+        for line in _format_network_debug_report().splitlines():
             terminalreporter.write_line(line)
         if report_path is not None:
             terminalreporter.write_line(f"JSON report: {report_path}")
@@ -487,11 +481,5 @@ def register_network_debug_plugin(config) -> None:
 
 
 __all__ = [
-    "clear_network_debug_report",
-    "disable_network_debug_report",
-    "enable_network_debug_report",
-    "enable_network_debug_report_from_env",
-    "format_network_debug_report",
-    "get_network_debug_report",
     "register_network_debug_plugin",
 ]
