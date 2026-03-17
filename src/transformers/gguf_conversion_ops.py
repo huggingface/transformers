@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .core_model_loading import ConversionOps
+from .core_model_loading import ConversionOps, WeightConverter
 
 
 if TYPE_CHECKING:
@@ -323,3 +323,52 @@ class BloomReshapeQKVBias(ConversionOps):
     @property
     def reverse_op(self) -> ConversionOps:
         raise NotImplementedError("BloomReshapeQKVBias is one-way")
+
+
+class GGUFDequantizer(WeightConverter):
+    """``WeightConverter`` that always prepends ``GGUFDequantize`` as the first operation.
+
+    Dequantization (converting raw GGUF bytes to ``torch.Tensor``) is handled
+    by ``GGUFQuantizer.spawn_materialize`` before the op chain runs, so
+    ``GGUFDequantize`` acts as a key-rename pass-through at that point.
+
+    Compact form using ``*`` as a layer-index wildcard::
+
+        GGUFDequantizer(
+            "blk.*.attn_q.weight",
+            "model.layers.*.self_attn.q_proj.weight",
+            [ReversePermuteAttnQ()],
+        )
+
+    ``*`` in source patterns is converted to ``(\\d+)`` (capturing group).
+    ``*`` in target patterns is converted to ``\\1`` (backreference).
+    Non-layer tensors simply omit ``*``::
+
+        GGUFDequantizer("token_embd.weight", "model.embed_tokens.weight")
+
+    The explicit list form is also supported::
+
+        GGUFDequantizer(
+            source_patterns=["blk.0.attn_q.weight"],
+            target_patterns=["model.layers.0.self_attn.q_proj.weight"],
+            operations=[ReversePermuteAttnQ()],
+        )
+    """
+
+    def __init__(self, source_patterns, target_patterns, operations=None):
+        # Normalise to lists
+        if isinstance(source_patterns, str):
+            source_patterns = [source_patterns]
+        if isinstance(target_patterns, str):
+            target_patterns = [target_patterns]
+
+        # * in source → capturing group (\d+) for the layer index
+        # * in target → backreference \1 substituted by rename_source_key
+        source_patterns = [p.replace("*", r"(\d+)") for p in source_patterns]
+        target_patterns = [p.replace("*", r"\1") for p in target_patterns]
+
+        super().__init__(
+            source_patterns=source_patterns,
+            target_patterns=target_patterns,
+            operations=[GGUFDequantize(), *(operations or [])],
+        )
