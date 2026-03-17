@@ -72,14 +72,7 @@ class UVDocModelTester:
         return config, pixel_values
 
     def get_config(self) -> UVDocConfig:
-        dilation_values = {
-            "bridge_block_1": 1,
-            "bridge_block_2": 2,
-            "bridge_block_3": 5,
-            "bridge_block_4": [8, 3, 2],
-            "bridge_block_5": [12, 7, 4],
-            "bridge_block_6": [18, 12, 6],
-        }
+        dilation_values = [[1], [2], [5], [8, 3, 2], [12, 7, 4], [18, 12, 6]]
 
         self.dilation_values = dilation_values
 

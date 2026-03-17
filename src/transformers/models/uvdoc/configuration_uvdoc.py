@@ -35,17 +35,18 @@ from ...utils import auto_docstring
     kernel_size (`int`, *optional*, defaults to 5):
         The size of convolutional kernels used in the backbone network, typically an odd integer to ensure
         symmetric padding and preserve spatial dimensions of feature maps.
-    block_stride_values (`List[int]`, *optional*, defaults to `[1, 2, 2, 2]`):
+    block_stride_values (`List[int]`, *optional*, defaults to `[1, 2, 2]`):
         The strides for downsampling operations in the backbone network, corresponding to the scale factor between
         consecutive stages of the model. Smaller strides reduce the spatial dimension of feature maps while retaining
-    feature_map_multipliers (`List[int]`, *optional*, defaults to `[1, 2, 4, 8, 16]`):
+    feature_map_multipliers (`List[int]`, *optional*, defaults to `[1, 2, 4]`):
         The scaling factors for feature map dimensions in multi-scale feature fusion modules, used to align
         feature maps of different resolutions for document structure restoration.
-    block_counts_per_stage (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
+    block_counts_per_stage (`List[int]`, *optional*, defaults to `[3, 4, 6]`):
         The number of residual blocks in each stage of the model backbone, determining the depth of the network.
         More blocks enhance feature extraction capability but increase inference time.
-    dilation_values (`Dict[str, Union[int, List[int]]]`, *optional*, defaults to `None`):
-        A dictionary of dilation rates for dilated convolutional layers in bridge modules.
+    dilation_values (`List[List[int]]`, *optional*, defaults to `None`):
+        A nested list of dilation rates for dilated convolutional layers in bridge modules.
+        Each inner list contains dilation rates for a single bridge block.
         Dilated convolution expands the receptive field without increasing kernel size,
         critical for capturing long-range geometric dependencies in distorted documents.
     padding_mode (`str`, *optional*, defaults to `"reflect"`):
@@ -71,7 +72,7 @@ class UVDocConfig(PreTrainedConfig):
         block_stride_values: list | None = None,
         feature_map_multipliers: list | None = None,
         block_counts_per_stage: list | None = None,
-        dilation_values: dict | None = None,
+        dilation_values: list | None = None,
         padding_mode: str = "reflect",
         upsample_size: list | None = None,
         upsample_mode: str = "bilinear",
@@ -80,9 +81,9 @@ class UVDocConfig(PreTrainedConfig):
         self.num_filter = num_filter
         self.in_channels = in_channels
         self.kernel_size = kernel_size
-        self.block_stride_values = block_stride_values
-        self.feature_map_multipliers = feature_map_multipliers
-        self.block_counts_per_stage = block_counts_per_stage
+        self.block_stride_values = block_stride_values if block_stride_values is not None else [1, 2, 2]
+        self.feature_map_multipliers = feature_map_multipliers if feature_map_multipliers is not None else [1, 2, 4]
+        self.block_counts_per_stage = block_counts_per_stage if block_counts_per_stage is not None else [3, 4, 6]
         self.dilation_values = dilation_values
         self.padding_mode = padding_mode
         self.upsample_size = upsample_size

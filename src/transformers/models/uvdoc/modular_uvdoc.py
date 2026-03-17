@@ -46,17 +46,18 @@ from ...utils.output_capturing import capture_outputs
     kernel_size (`int`, *optional*, defaults to 5):
         The size of convolutional kernels used in the backbone network, typically an odd integer to ensure
         symmetric padding and preserve spatial dimensions of feature maps.
-    block_stride_values (`List[int]`, *optional*, defaults to `[1, 2, 2, 2]`):
+    block_stride_values (`List[int]`, *optional*, defaults to `[1, 2, 2]`):
         The strides for downsampling operations in the backbone network, corresponding to the scale factor between
         consecutive stages of the model. Smaller strides reduce the spatial dimension of feature maps while retaining
-    feature_map_multipliers (`List[int]`, *optional*, defaults to `[1, 2, 4, 8, 16]`):
+    feature_map_multipliers (`List[int]`, *optional*, defaults to `[1, 2, 4]`):
         The scaling factors for feature map dimensions in multi-scale feature fusion modules, used to align
         feature maps of different resolutions for document structure restoration.
-    block_counts_per_stage (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
+    block_counts_per_stage (`List[int]`, *optional*, defaults to `[3, 4, 6]`):
         The number of residual blocks in each stage of the model backbone, determining the depth of the network.
         More blocks enhance feature extraction capability but increase inference time.
-    dilation_values (`Dict[str, Union[int, List[int]]]`, *optional*, defaults to `None`):
-        A dictionary of dilation rates for dilated convolutional layers in bridge modules.
+    dilation_values (`List[List[int]]`, *optional*, defaults to `None`):
+        A nested list of dilation rates for dilated convolutional layers in bridge modules.
+        Each inner list contains dilation rates for a single bridge block.
         Dilated convolution expands the receptive field without increasing kernel size,
         critical for capturing long-range geometric dependencies in distorted documents.
     padding_mode (`str`, *optional*, defaults to `"reflect"`):
@@ -82,7 +83,7 @@ class UVDocConfig(PreTrainedConfig):
         block_stride_values: list | None = None,
         feature_map_multipliers: list | None = None,
         block_counts_per_stage: list | None = None,
-        dilation_values: dict | None = None,
+        dilation_values: list | None = None,
         padding_mode: str = "reflect",
         upsample_size: list | None = None,
         upsample_mode: str = "bilinear",
@@ -91,10 +92,10 @@ class UVDocConfig(PreTrainedConfig):
         self.num_filter = num_filter
         self.in_channels = in_channels
         self.kernel_size = kernel_size
-        self.block_stride_values = block_stride_values
-        self.feature_map_multipliers = feature_map_multipliers
-        self.block_counts_per_stage = block_counts_per_stage
-        self.dilation_values = dilation_values
+        self.block_stride_values = block_stride_values if block_stride_values is not None else [1, 2, 2]
+        self.feature_map_multipliers = feature_map_multipliers if feature_map_multipliers is not None else [1, 2, 4]
+        self.block_counts_per_stage = block_counts_per_stage if block_counts_per_stage is not None else [3, 4, 6]
+        self.dilation_values = dilation_values if dilation_values is not None else [[1], [2], [5], [8, 3, 2], [12, 7, 4], [18, 12, 6]]
         self.padding_mode = padding_mode
         self.upsample_size = upsample_size
         self.upsample_mode = upsample_mode
@@ -236,7 +237,7 @@ class UVDocResNetStraight(nn.Module):
 
         self.stages = nn.ModuleList([])
         for feature_map_multipliers, block_count, block_stride in zip(
-            config.feature_map_multipliers[:3], config.block_counts_per_stage[:3], config.block_stride_values[:3]
+            config.feature_map_multipliers, config.block_counts_per_stage, config.block_stride_values
         ):
             stage_layers = nn.ModuleList([])
             out_channels = config.num_filter * feature_map_multipliers
@@ -297,22 +298,6 @@ class UVDocResNetHead(nn.Module):
         return hidden_state
 
 
-@auto_docstring
-class UVDocPreTrainedModel(PreTrainedModel):
-    config: UVDocConfig
-    base_model_prefix = "model"
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    _can_compile_fullgraph = True
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        """Initialize the weights."""
-        if isinstance(module, nn.PReLU):
-            module.reset_parameters()
-
-
 class UVDocConvLayer(nn.Module):
     def __init__(
         self,
@@ -368,20 +353,13 @@ class UVDocConvLayer(nn.Module):
 
 
 class UVDocBridgeBlock(nn.Module):
-    def __init__(self, config, block_index):
+    def __init__(self, config, dilation_value):
         super().__init__()
-        dilation_values = config.dilation_values[block_index]
         in_channels = config.num_filter * config.feature_map_multipliers[2]
 
         self.blocks = nn.ModuleList([])
-
-        if isinstance(dilation_values, int):
-            self.blocks.append(
-                UVDocConvLayer(in_channels, in_channels, padding=dilation_values, dilation=dilation_values)
-            )
-        else:
-            for dilation in dilation_values:
-                self.blocks.append(UVDocConvLayer(in_channels, in_channels, padding=dilation, dilation=dilation))
+        for dilation in dilation_value:
+            self.blocks.append(UVDocConvLayer(in_channels, in_channels, padding=dilation, dilation=dilation))
 
     def forward(self, hidden_state):
         for block in self.blocks:
@@ -419,6 +397,22 @@ class UVDocPointPositions2D(nn.Module):
 
 
 @auto_docstring
+class UVDocPreTrainedModel(PreTrainedModel):
+    config: UVDocConfig
+    base_model_prefix = "model"
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    _can_compile_fullgraph = True
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        """Initialize the weights."""
+        if isinstance(module, nn.PReLU):
+            module.reset_parameters()
+
+
+@auto_docstring
 class UVDocModel(UVDocPreTrainedModel):
     def __init__(self, config: UVDocConfig):
         super().__init__(config)
@@ -430,8 +424,8 @@ class UVDocModel(UVDocPreTrainedModel):
         self.resnet_down = UVDocResNetStraight(config)
 
         self.bridge = nn.ModuleList([])
-        for block_index in config.dilation_values.keys():
-            self.bridge.append(UVDocBridgeBlock(config, block_index))
+        for dilation_value in config.dilation_values:
+            self.bridge.append(UVDocBridgeBlock(config, dilation_value))
 
         self.num_bridge_layers = len(self.bridge)
 

@@ -104,7 +104,7 @@ class UVDocResNetStraight(nn.Module):
 
         self.stages = nn.ModuleList([])
         for feature_map_multipliers, block_count, block_stride in zip(
-            config.feature_map_multipliers[:3], config.block_counts_per_stage[:3], config.block_stride_values[:3]
+            config.feature_map_multipliers, config.block_counts_per_stage, config.block_stride_values
         ):
             stage_layers = nn.ModuleList([])
             out_channels = config.num_filter * feature_map_multipliers
@@ -165,22 +165,6 @@ class UVDocResNetHead(nn.Module):
         return hidden_state
 
 
-@auto_docstring
-class UVDocPreTrainedModel(PreTrainedModel):
-    config: UVDocConfig
-    base_model_prefix = "model"
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    _can_compile_fullgraph = True
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        """Initialize the weights."""
-        if isinstance(module, nn.PReLU):
-            module.reset_parameters()
-
-
 class UVDocConvLayer(nn.Module):
     def __init__(
         self,
@@ -236,20 +220,13 @@ class UVDocConvLayer(nn.Module):
 
 
 class UVDocBridgeBlock(nn.Module):
-    def __init__(self, config, block_index):
+    def __init__(self, config, dilation_value):
         super().__init__()
-        dilation_values = config.dilation_values[block_index]
         in_channels = config.num_filter * config.feature_map_multipliers[2]
 
         self.blocks = nn.ModuleList([])
-
-        if isinstance(dilation_values, int):
-            self.blocks.append(
-                UVDocConvLayer(in_channels, in_channels, padding=dilation_values, dilation=dilation_values)
-            )
-        else:
-            for dilation in dilation_values:
-                self.blocks.append(UVDocConvLayer(in_channels, in_channels, padding=dilation, dilation=dilation))
+        for dilation in dilation_value:
+            self.blocks.append(UVDocConvLayer(in_channels, in_channels, padding=dilation, dilation=dilation))
 
     def forward(self, hidden_state):
         for block in self.blocks:
@@ -287,6 +264,22 @@ class UVDocPointPositions2D(nn.Module):
 
 
 @auto_docstring
+class UVDocPreTrainedModel(PreTrainedModel):
+    config: UVDocConfig
+    base_model_prefix = "model"
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    _can_compile_fullgraph = True
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        """Initialize the weights."""
+        if isinstance(module, nn.PReLU):
+            module.reset_parameters()
+
+
+@auto_docstring
 class UVDocModel(UVDocPreTrainedModel):
     def __init__(self, config: UVDocConfig):
         super().__init__(config)
@@ -298,8 +291,8 @@ class UVDocModel(UVDocPreTrainedModel):
         self.resnet_down = UVDocResNetStraight(config)
 
         self.bridge = nn.ModuleList([])
-        for block_index in config.dilation_values.keys():
-            self.bridge.append(UVDocBridgeBlock(config, block_index))
+        for dilation_value in config.dilation_values:
+            self.bridge.append(UVDocBridgeBlock(config, dilation_value))
 
         self.num_bridge_layers = len(self.bridge)
 
