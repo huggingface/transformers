@@ -138,7 +138,6 @@ class PPChart2TableVisionText2TextModelTester:
 class PPChart2TableModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            PPChart2TableModel,
             PPChart2TableForConditionalGeneration,
         )
         if is_torch_available()
@@ -159,19 +158,7 @@ class PPChart2TableModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(
-        reason="PPChart2Table have reused the GotOcr2 model, which does not implement the latest logic for capturing attentions and hidden_states introduced in Transformers v5."
-    )
-    def test_get_image_features_attentions(self):
-        pass
-
-    @unittest.skip(
-        reason="PPChart2Table have reused the GotOcr2 model, which does not implement the latest logic for capturing attentions and hidden_states introduced in Transformers v5."
-    )
-    def test_get_image_features_hidden_states(self):
-        pass
-
-
+@slow
 @require_torch
 class PPChart2TableIntegrationTest(unittest.TestCase):
     def setUp(self):
@@ -184,7 +171,6 @@ class PPChart2TableIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @slow
     def test_small_model_integration_test_pp_chart2table(self):
         inputs = self.processor(self.image, return_tensors="pt").to(torch_device)
         generate_ids = self.model.generate(
@@ -199,7 +185,6 @@ class PPChart2TableIntegrationTest(unittest.TestCase):
         expected_output = "年份 | 单家五星级旅游饭店年平均营收 (百万元) | 单家五星级旅游饭店年平均利润 (百万元)\n"
         self.assertEqual(decoded_output, expected_output)
 
-    @slow
     def test_small_model_integration_test_pp_chart2table_batched(self):
         inputs = self.processor([self.image, self.image], return_tensors="pt").to(torch_device)
         generate_ids = self.model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=6)
