@@ -43,7 +43,6 @@ SPECIAL_CASES_TO_ALLOW = {
     "BambaConfig": ["attn_layer_indices"],
     "Dots1Config": ["max_window_layers"],
     "JambaConfig": ["attn_layer_offset", "attn_layer_period", "expert_layer_offset", "expert_layer_period"],
-    "PPChart2TableConfig": ["tie_word_embeddings"],
     "JetMoeConfig": ["output_router_logits"],
     "Phi3Config": ["embd_pdrop"],
     "EncodecConfig": ["overlap"],

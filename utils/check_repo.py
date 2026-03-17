@@ -194,7 +194,6 @@ IGNORE_NON_TESTED = (
         "PaddleOCRVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
         "PaddleOCRVisionTransformer",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
         "PaddleOCRTextModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
-        "PPChart2TableModel",  # Building part of bigger (tested) model. Tested implicitly through PPChart2TableForConditionalGeneration.
         "PPChart2TableVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PPChart2TableForConditionalGeneration.
         "PPChart2TableTextModel",  # Building part of bigger (tested) model. Tested implicitly through PPChart2TableForConditionalGeneration.
         "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
