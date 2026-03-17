@@ -18,8 +18,7 @@ import unittest
 import requests
 from PIL import Image
 
-from transformers import TextNetConfig
-from transformers.models.textnet.image_processing_textnet import TextNetImageProcessorPil
+from transformers import TextNetConfig, TextNetImageProcessorPil
 from transformers.testing_utils import (
     require_torch,
     require_vision,
