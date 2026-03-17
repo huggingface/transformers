@@ -12,12 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="karpathy/nanochat-d32")
+@strict(accept_kwargs=True)
 class NanoChatConfig(PretrainedConfig):
     r"""
     Example:
@@ -47,55 +51,31 @@ class NanoChatConfig(PretrainedConfig):
         "layers.*.mlp.fc2": "rowwise",
     }
 
-    def __init__(
-        self,
-        vocab_size: int = 50304,
-        hidden_size: int = 768,
-        intermediate_size: int | None = 8192,
-        num_hidden_layers: int = 12,
-        num_attention_heads: int = 6,
-        num_key_value_heads: int | None = None,
-        max_position_embeddings: int = 2048,
-        hidden_act: str = "relu2",
-        attention_dropout: float = 0.0,
-        rms_norm_eps: float = 1e-6,
-        initializer_range: float = 0.02,
-        rope_parameters: RopeParameters | dict | None = None,
-        use_cache: bool = True,
-        final_logit_softcapping: float | None = 15.0,
-        attention_bias: bool = False,
-        bos_token_id: int = 0,
-        eos_token_id: int = 1,
-        pad_token_id: int = 1,
-        tie_word_embeddings: bool = False,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vocab_size: int = 50304
+    hidden_size: int = 768
+    intermediate_size: int = 8192
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 6
+    num_key_value_heads: int | None = None
+    max_position_embeddings: int = 2048
+    hidden_act: str = "relu2"
+    attention_dropout: float | int = 0.0
+    rms_norm_eps: float = 1e-6
+    initializer_range: float = 0.02
+    rope_parameters: RopeParameters | dict | None = None
+    use_cache: bool = True
+    final_logit_softcapping: float | None = 15.0
+    attention_bias: bool = False
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 1
+    pad_token_id: int | None = 1
+    tie_word_embeddings: bool = False
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_act = hidden_act
-        self.attention_dropout = attention_dropout
-        self.rms_norm_eps = rms_norm_eps
-        self.initializer_range = initializer_range
-        self.use_cache = use_cache
-        self.final_logit_softcapping = final_logit_softcapping
-        self.attention_bias = attention_bias
-        self.rope_parameters = rope_parameters
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["NanoChatConfig"]

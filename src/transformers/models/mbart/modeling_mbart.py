@@ -991,7 +991,7 @@ class MBartForConditionalGeneration(MBartPreTrainedModel, GenerationMixin):
         ['nett', 'sehr', 'ganz', 'nicht', 'so']
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None:
             if use_cache:

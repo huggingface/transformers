@@ -17,10 +17,11 @@
 from collections.abc import Callable
 
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -54,6 +55,7 @@ _CONFIG_FOR_DOC = "Exaone4Config"
 
 
 @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.0-32B")
+@strict(accept_kwargs=True)
 class Exaone4Config(PreTrainedConfig):
     r"""
     sliding_window_pattern (`str`, *optional*):
@@ -103,64 +105,39 @@ class Exaone4Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 102400,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 16384,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = 32,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 2048,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-5,
-        use_cache: bool | None = True,
-        bos_token_id: int | None = 0,
-        eos_token_id: int | None = 2,
-        pad_token_id: int | None = None,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_dropout: float | None = 0.0,
-        sliding_window: int | None = 4096,
-        sliding_window_pattern: int | None = 4,
-        layer_types: list[str] | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_dropout = attention_dropout
-        self.sliding_window = sliding_window
-        self.sliding_window_pattern = sliding_window_pattern
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.tie_word_embeddings = tie_word_embeddings
+    vocab_size: int = 102400
+    hidden_size: int = 4096
+    intermediate_size: int = 16384
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    num_key_value_heads: int = 32
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 2048
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 2
+    pad_token_id: int | None = None
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_dropout: float | int = 0.0
+    sliding_window: int | None = 4096
+    sliding_window_pattern: str | int | None = 4
+    layer_types: list[str] | None = None
 
-        self.layer_types = layer_types
+    def __post_init__(self, **kwargs):
         if self.sliding_window is None:
-            sliding_window_pattern = 0
+            self.sliding_window_pattern = 0
         if self.layer_types is None:
             self.layer_types = [
                 "sliding_attention"
-                if ((i + 1) % (sliding_window_pattern) != 0 and i < self.num_hidden_layers)
+                if ((i + 1) % (self.sliding_window_pattern) != 0 and i < self.num_hidden_layers)
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        self.rope_parameters = rope_parameters
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 class Exaone4RMSNorm(LlamaRMSNorm):
