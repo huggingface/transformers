@@ -105,7 +105,7 @@ class FalconMambaCache:
         self.intermediate_size = config.intermediate_size
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
-        self.seen_tokens = [0 for _ in range(config.num_hidden_layers)]
+        self.has_previous_state = False
 
         self.conv_states: list[torch.Tensor] = []
         self.ssm_states: list[torch.Tensor] = []
@@ -131,27 +131,25 @@ class FalconMambaCache:
             self.conv_states.append(conv_state)
             self.ssm_states.append(ssm_state)
 
-    def update_conv_state(self, layer_idx: int, new_conv_state: torch.Tensor, seq_len: int) -> torch.Tensor:
+    def update_conv_state(
+        self, layer_idx: int, new_conv_state: torch.Tensor, cache_init: bool = False
+    ) -> torch.Tensor:
         # This `if` blocks is only reached in multigpu and if `layer_device_map` is not passed. It is used
         # when the cache is initialized in the forward pass (e.g. FalconMamba)
         if self.conv_states[layer_idx].device != new_conv_state.device:
             self.conv_states[layer_idx] = self.conv_states[layer_idx].to(new_conv_state.device)
 
-        conv_state = self.conv_states[layer_idx]
-        # In prefill, it will be padded or truncated to `conv_kernel_size` always
-        effective_seq_len = seq_len
-        if not self.has_previous_state:
-            effective_seq_len = self.conv_kernel_size
-        cache_position = torch.arange(effective_seq_len, device=conv_state.device) + self.seen_tokens[layer_idx]
-        cache_position = cache_position.clamp(0, self.conv_kernel_size - 1)
+        if cache_init:
+            self.conv_states[layer_idx].copy_(new_conv_state)
+        else:
+            conv_state = self.conv_states[layer_idx].roll(shifts=-1, dims=-1)
+            conv_state[:, :, -1:] = new_conv_state
+            self.conv_states[layer_idx].copy_(conv_state)
 
-        # Update it
-        self.seen_tokens[layer_idx] += seq_len
+        # If last layer is updated, set the flag
+        if layer_idx == len(self.conv_states) - 1:
+            self.has_previous_state = True
 
-        conv_state = conv_state.roll(shifts=-1, dims=-1)
-        conv_state[:, :, cache_position] = new_conv_state.to(device=conv_state.device, dtype=conv_state.dtype)
-        self.conv_states[layer_idx].zero_()
-        self.conv_states[layer_idx] += conv_state
         return self.conv_states[layer_idx]
 
     def update_ssm_state(self, layer_idx: int, new_ssm_state: torch.Tensor):
@@ -160,16 +158,11 @@ class FalconMambaCache:
         return self.ssm_states[layer_idx]
 
     def reset(self):
-        self.seen_tokens = [0 for _ in range(len(self.seen_tokens))]
+        self.has_previous_state = False
         for layer_idx in range(len(self.conv_states)):
             # In-place ops prevent breaking the static address
             self.conv_states[layer_idx].zero_()
             self.ssm_states[layer_idx].zero_()
-
-    @property
-    def has_previous_state(self) -> bool:
-        """Returns whether the cache was already used or not for at least one `forward`."""
-        return self.seen_tokens[-1] > 0
 
 
 def rms_forward(hidden_states, variance_epsilon=1e-6):
