@@ -222,24 +222,14 @@ class UVDocConvLayer(nn.Module):
         kernel_size: int = 3,
         stride: int = 1,
         padding: int = 0,
-        padding_mode: str | None = None,
+        padding_mode: str = "zero",
         bias: bool = False,
-        dilation: int | None = None,
+        dilation: int = 1,
         activation: str = "relu",
     ):
         super().__init__()
 
-        if dilation is None and padding_mode is None:
-            self.conv = nn.Conv2d(
-                in_channels,
-                out_channels,
-                bias=bias,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=padding,
-            )
-        elif padding_mode is not None:
-            self.conv = nn.Conv2d(
+        self.conv = nn.Conv2d(
                 in_channels,
                 out_channels,
                 bias=bias,
@@ -247,15 +237,6 @@ class UVDocConvLayer(nn.Module):
                 stride=stride,
                 padding=padding,
                 padding_mode=padding_mode,
-            )
-        else:
-            self.conv = nn.Conv2d(
-                in_channels,
-                out_channels,
-                bias=bias,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=padding,
                 dilation=dilation,
             )
         self.norm = nn.BatchNorm2d(out_channels)
