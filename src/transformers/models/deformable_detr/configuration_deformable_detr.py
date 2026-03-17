@@ -29,6 +29,8 @@ class DeformableDetrConfig(PreTrainedConfig):
         Number of object queries, i.e. detection slots. This is the maximal number of objects
         [`DeformableDetrModel`] can detect in a single image. In case `two_stage` is set to `True`, we use
         `two_stage_num_proposals` instead.
+    return_intermediate (`bool`, *optional*, defaults to True):
+        Whether to return the intermediate state or not
     position_embedding_type (`str`, *optional*, defaults to `"sine"`):
         Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
     dilation (`bool`, *optional*, defaults to `False`):
@@ -45,14 +47,12 @@ class DeformableDetrConfig(PreTrainedConfig):
         Deformable DETR, which are further fed into the decoder for iterative bounding box refinement.
     two_stage_num_proposals (`int`, *optional*, defaults to 300):
         The number of region proposals to be generated, in case `two_stage` is set to `True`.
-    disable_custom_kernels (`bool`, *optional*, defaults to `False`):
-        Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
-        kernels are not supported by PyTorch ONNX export.
     with_box_refine (`bool`, *optional*, defaults to `False`):
         Whether to apply iterative bounding box refinement, where each decoder layer refines the bounding boxes
         based on the predictions from the previous layer.
-    return_intermediate (`bool`, *optional*, defaults to True):
-        Whether to return the intermediate state or not
+    disable_custom_kernels (`bool`, *optional*, defaults to `False`):
+        Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
+        kernels are not supported by PyTorch ONNX export.
 
     Examples:
 

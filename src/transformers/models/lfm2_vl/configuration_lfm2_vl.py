@@ -24,12 +24,10 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @strict(accept_kwargs=True)
 class Lfm2VlConfig(PreTrainedConfig):
     r"""
-    downsample_factor (`int`, *optional*, defaults to 2):
-        The downsample_factor factor of the vision backbone.
-    projector_bias (`bool`, *optional*, defaults to `True`):
-        Whether to use bias in the multimodal projector.
     projector_use_layernorm (`bool`, *optional*, defaults to `True`):
         Whether to use layernorm in the multimodal projector.
+    downsample_factor (`int`, *optional*, defaults to 2):
+        The downsample_factor factor of the vision backbone.
     """
 
     model_type = "lfm2_vl"

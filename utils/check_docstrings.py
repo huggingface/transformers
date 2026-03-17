@@ -51,6 +51,7 @@ from git import Repo
 from transformers import logging
 from transformers.utils import direct_transformers_import
 from transformers.utils.auto_docstring import (
+    ConfigArgs,
     ImageProcessorArgs,
     ModelArgs,
     ModelOutputArgs,
@@ -82,6 +83,7 @@ class DecoratedItem:
     init_def_line: int | None = None  # 1-based line number of __init__ def (if has_init)
     is_model_output: bool = False  # Whether the class inherits from ModelOutput
     is_processor: bool = False  # Whether the class inherits from ProcessorMixin
+    is_config: bool = False  # Whether the class inherits from PreTrainedConfig
 
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
@@ -845,6 +847,8 @@ def find_matching_model_files(check_all: bool = False):
     potential_files += glob.glob(image_processing_glob_pattern)
     processing_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/processing_*.py")
     potential_files += glob.glob(processing_glob_pattern)
+    configuration_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/configuration_*.py")
+    potential_files += glob.glob(configuration_glob_pattern)
     matching_files = []
     for file_path in potential_files:
         if os.path.isfile(file_path):
@@ -1091,8 +1095,16 @@ def generate_new_docstring_for_class(
         args_in_signature = get_args_in_dataclass(lines, dataclass_content)
         output_docstring_indent = 4
         source_args_doc = [ModelOutputArgs]
+    elif item.is_config:
+        # Config class (PreTrainedConfig subclass) - args are class-level type annotations,
+        # docstring is at class body level (no __init__ in source; @strict generates one at runtime).
+        current_line_end = item.def_line - 1  # Convert to 0-based
+        sig_end_line = current_line_end + 1
+        args_in_signature = item.args
+        output_docstring_indent = 4
+        source_args_doc = [ConfigArgs]
     else:
-        # Class has no __init__ and is not a ModelOutput - nothing to document
+        # Class has no __init__ and is not a ModelOutput or Config - nothing to document
         return "", None, None, [], [], []
 
     docstring_start_line = sig_end_line if '"""' in lines[sig_end_line] else None
@@ -1173,6 +1185,7 @@ def _build_ast_indexes(source: str) -> list[DecoratedItem]:
         init_def_line = None
         is_model_output = False
         is_processor = False
+        is_config = False
 
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             # For functions/methods, extract args directly
@@ -1182,13 +1195,15 @@ def _build_ast_indexes(source: str) -> list[DecoratedItem]:
                 is_processor = True
         elif isinstance(node, ast.ClassDef):
             # For classes, look for __init__ method and check if it's a ModelOutput or Processor
-            # Check if class inherits from ModelOutput or ProcessorMixin
+            # Check if class inherits from ModelOutput, ProcessorMixin, or PreTrainedConfig
             for base in node.bases:
                 if isinstance(base, ast.Name):
                     if "ModelOutput" in base.id:
                         is_model_output = True
                     elif "ProcessorMixin" in base.id or "Processor" in base.id:
                         is_processor = True
+                    elif base.id == "PreTrainedConfig":
+                        is_config = True
             # Look for __init__ method in the class body
             for class_item in node.body:
                 if isinstance(class_item, ast.FunctionDef) and class_item.name == "__init__":
@@ -1198,6 +1213,20 @@ def _build_ast_indexes(source: str) -> list[DecoratedItem]:
                     # Update body_start_line to be the __init__ body start
                     body_start_line = class_item.body[0].lineno if class_item.body else class_item.lineno + 1
                     break
+            # For config classes (PreTrainedConfig subclasses), extract class-level type annotations as args.
+            # These use @strict from huggingface_hub which generates __init__ from annotations, so there is
+            # no explicit __init__ in the source. The docstring and parameters live at the class body level.
+            if is_config and not has_init:
+                for class_item in node.body:
+                    if isinstance(class_item, ast.AnnAssign) and isinstance(class_item.target, ast.Name):
+                        attr_name = class_item.target.id
+                        if attr_name.startswith("_"):
+                            continue
+                        # Skip ClassVar annotations (class-level metadata, not config parameters)
+                        ann = class_item.annotation
+                        if isinstance(ann, ast.Subscript) and isinstance(ann.value, ast.Name) and ann.value.id == "ClassVar":
+                            continue
+                        arg_names.append(attr_name)
 
         decorated_items.append(
             DecoratedItem(
@@ -1211,6 +1240,7 @@ def _build_ast_indexes(source: str) -> list[DecoratedItem]:
                 init_def_line=init_def_line,
                 is_model_output=is_model_output,
                 is_processor=is_processor,
+                is_config=is_config,
             )
         )
 

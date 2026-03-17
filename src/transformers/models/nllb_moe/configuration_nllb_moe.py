@@ -25,7 +25,21 @@ from ...utils import auto_docstring
 @strict(accept_kwargs=True)
 class NllbMoeConfig(PreTrainedConfig):
     r"""
-    second_expert_policy ( `str`, *optional*, default to `"all"`):
+    router_bias (`bool`, *optional*, defaults to `False`):
+        Whether or not the classifier of the router should have a bias.
+    router_dtype (`str`, *optional*, default to `"float32"`):
+        The `dtype` used for the routers. It is preferable to keep the `dtype` to `"float32"` as specified in the
+        *selective precision* discussion in [the paper](https://huggingface.co/papers/2101.03961).
+    router_ignore_padding_tokens (`bool`, *optional*, defaults to `False`):
+        Whether to ignore padding tokens when routing. if `False`, the padding tokens are not routed to any
+        experts.
+    expert_capacity (`int`, *optional*, defaults to 64):
+        Number of tokens that can be stored in each expert.
+    encoder_sparse_step (`int`, *optional*, defaults to 4):
+        Frequency of the sparse layers in the encoder. 4 means that one out of 4 layers will be sparse.
+    decoder_sparse_step (`int`, *optional*, defaults to 4):
+        Frequency of the sparse layers in the decoder. 4 means that one out of 4 layers will be sparse.
+    second_expert_policy (`str`, *optional*, default to `"all"`):
         The policy used for the sampling the probability of being sampled to a second expert for each token.
     normalize_router_prob_before_dropping (`bool`, *optional*, defaults to `True`):
         Whether or not to normalize the router probabilities before applying a mask based on the experts capacity
@@ -37,20 +51,6 @@ class NllbMoeConfig(PreTrainedConfig):
     moe_eval_capacity_token_fraction (`float`, *optional*, defaults to 1.0):
         Fraction of tokens as capacity during validation, if set to negative, uses the same as training. Should be
         in range: (0.0, 1.0].
-    expert_capacity (`int`, *optional*, defaults to 64):
-        Number of tokens that can be stored in each expert.
-    encoder_sparse_step (`int`, *optional*, defaults to 4):
-        Frequency of the sparse layers in the encoder. 4 means that one out of 4 layers will be sparse.
-    decoder_sparse_step (`int`, *optional*, defaults to 4):
-        Frequency of the sparse layers in the decoder. 4 means that one out of 4 layers will be sparse.
-    router_dtype (`str`, *optional*, default to `"float32"`):
-        The `dtype` used for the routers. It is preferable to keep the `dtype` to `"float32"` as specified in the
-        *selective precision* discussion in [the paper](https://huggingface.co/papers/2101.03961).
-    router_ignore_padding_tokens (`bool`, *optional*, defaults to `False`):
-        Whether to ignore padding tokens when routing. if `False`, the padding tokens are not routed to any
-        experts.
-    router_bias (`bool`, *optional*, defaults to `False`):
-        Whether or not the classifier of the router should have a bias.
     moe_token_dropout (`float`, *optional*, default to 0.2):
         Masking rate for MoE expert output masking (EOM), which is implemented via a Dropout2d on the expert
         outputs.

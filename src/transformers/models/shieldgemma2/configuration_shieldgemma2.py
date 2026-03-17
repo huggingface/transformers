@@ -25,14 +25,15 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @strict(accept_kwargs=True)
 class ShieldGemma2Config(PreTrainedConfig):
     r"""
+    tie_word_embeddings (`bool`, *optional*):
+        Whether to tie the word embeddings. Defaults to the value of `text_config.tie_word_embeddings` if not set.
     mm_tokens_per_image (`int`, *optional*, defaults to 256):
         The number of tokens per image embedding.
     boi_token_index (`int`, *optional*, defaults to 255999):
         The begin-of-image token index to wrap the image prompt.
     eoi_token_index (`int`, *optional*, defaults to 256000):
         The end-of-image token index to wrap the image prompt.
-    tie_word_embeddings (`bool`, *optional*):
-            Whether to tie the word embeddings. Defaults to the value of `text_config.tie_word_embeddings` if not set.
+
     Example:
 
     ```python

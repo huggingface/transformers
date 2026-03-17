@@ -23,7 +23,8 @@ from ...utils import auto_docstring
 @strict(accept_kwargs=True)
 class DonutSwinConfig(PreTrainedConfig):
     r"""
-    window_size (`int`, *optional*, defaults to 7): Size of windows.
+    window_size (`int`, *optional*, defaults to 7):
+        Size of windows.
 
     Example:
 

@@ -26,14 +26,14 @@ from ...utils import auto_docstring
 @strict(accept_kwargs=True)
 class WavLMConfig(PreTrainedConfig):
     r"""
+    feat_proj_dropout (`float`, *optional*, defaults to 0.0):
+        The dropout probability for output of the feature encoder.
     final_dropout (`float`, *optional*, defaults to 0.1):
         The dropout probability for the final projection layer of [`WavLMForCTC`].
     feat_extract_norm (`str`, *optional*, defaults to `"group"`):
         The norm to be applied to 1D convolutional layers in feature encoder. One of `"group"` for group
         normalization of only the first 1D convolutional layer or `"layer"` for layer normalization of all 1D
         convolutional layers.
-    feat_proj_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout probability for output of the feature encoder.
     feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
         The non-linear activation function (function or string) in the 1D convolutional layers of the feature
         extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
@@ -54,6 +54,10 @@ class WavLMConfig(PreTrainedConfig):
         embeddings layer.
     num_conv_pos_embedding_groups (`int`, *optional*, defaults to 16):
         Number of groups of 1D convolutional positional embeddings layer.
+    num_buckets (`int`, *optional*, defaults to 320):
+        The number of buckets to use for each attention layer
+    max_bucket_distance (`int`, *optional*, defaults to 800):
+        Maximum bucket distance
     do_stable_layer_norm (`bool`, *optional*, defaults to `False`):
         Whether to apply *stable* layer norm architecture of the Transformer encoder. `do_stable_layer_norm is
         True` corresponds to applying layer norm before the attention layer, whereas `do_stable_layer_norm is
@@ -112,6 +116,9 @@ class WavLMConfig(PreTrainedConfig):
         *XVector* model. The length of *tdnn_dilation* has to match the length of *tdnn_dim*.
     xvector_output_dim (`int`, *optional*, defaults to 512):
         Dimensionality of the *XVector* embedding vectors.
+    num_ctc_classes (`int`, *optional*, defaults to 80):
+        Specifies the number of classes (phoneme tokens and blank token) for phoneme-level CTC loss. Only relevant
+        when using an instance of [`UniSpeechForPreTraining`].
     add_adapter (`bool`, *optional*, defaults to `False`):
         Whether a convolutional network should be stacked on top of the Wav2Vec2 Encoder. Can be very useful for
         warm-starting Wav2Vec2 for SpeechEncoderDecoder models.
@@ -125,13 +132,6 @@ class WavLMConfig(PreTrainedConfig):
     output_hidden_size (`int`, *optional*):
         Dimensionality of the encoder output layer. If not defined, this defaults to *hidden-size*. Only relevant
         if `add_adapter is True`.
-    max_bucket_distance (`int`, *optional*, defaults to 800):
-        Maximum bucket distance
-    num_buckets (`int`, *optional*, defaults to 320):
-        The number of buckets to use for each attention layer
-    num_ctc_classes (`int`, *optional*, defaults to 80):
-        Specifies the number of classes (phoneme tokens and blank token) for phoneme-level CTC loss. Only relevant
-        when using an instance of [`UniSpeechForPreTraining`].
 
     Example:
 

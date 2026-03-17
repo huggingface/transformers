@@ -39,6 +39,8 @@ class SEWDConfig(PreTrainedConfig):
         `("p2c", "c2p")`, `("p2c", "c2p")`.
     norm_rel_ebd (`str`, *optional*, defaults to `"layer_norm"`):
         Whether to use layer norm in relative embedding (`"layer_norm"` if yes)
+    feat_proj_dropout (`float`, *optional*, defaults to 0.0):
+        The dropout probability for output of the feature encoder.
     final_dropout (`float`, *optional*, defaults to 0.1):
         The dropout probability for the final projection layer of [`SEWDForCTC`].
     feature_layer_norm_eps (`float`, *optional*, defaults to 1e-5):
@@ -47,8 +49,6 @@ class SEWDConfig(PreTrainedConfig):
         The norm to be applied to 1D convolutional layers in feature encoder. One of `"group"` for group
         normalization of only the first 1D convolutional layer or `"layer"` for layer normalization of all 1D
         convolutional layers.
-    feat_proj_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout probability for output of the feature encoder.
     feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
         The non-linear activation function (function or string) in the 1D convolutional layers of the feature
         extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.

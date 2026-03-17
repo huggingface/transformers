@@ -25,11 +25,6 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="microsoft/kosmos-2.5")
 @strict(accept_kwargs=True)
 class Kosmos2_5TextConfig(PreTrainedConfig):
-    r"""
-    activation_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout ratio for activations inside the fully connected layer.
-    ```"""
-
     model_type = "kosmos_2_5_text_model"
     base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -63,13 +58,13 @@ class Kosmos2_5TextConfig(PreTrainedConfig):
 @strict(accept_kwargs=True)
 class Kosmos2_5VisionConfig(PreTrainedConfig):
     r"""
+    patch_embed_hidden_size (`int`, *optional*, defaults to 768):
+        Dimensionality of the input patch_embedding layer in the Transformer encoder.
     dense_act_fn (`str` or `function`, *optional*, defaults to `"gelu_new"`):
         The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
         `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported.
     max_num_patches (`int`, *optional*, defaults to 4096):
         Maximum sequence length (here number of patches) supported by the model.
-    patch_embed_hidden_size (`int`, *optional*, defaults to 768):
-        Dimensionality of the input patch_embedding layer in the Transformer encoder.
 
     Example:
 

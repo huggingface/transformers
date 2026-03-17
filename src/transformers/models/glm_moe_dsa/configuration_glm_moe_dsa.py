@@ -39,22 +39,7 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int | None`, *optional*, defaults to 32):
         Number of heads for the indexer projections (DSA).
-    indexer_rope_interleave (`bool`, *optional*, defaults to `True`):
-        Whether the indexer uses interleaved rotary position embeddings.
-
-
-    ```python
-    >>> from transformers import GlmMoeDsaConfig, GlmMoeDsaModel
-
-    >>> # Initializing a GLM-MoE-DSA configuration
-    >>> configuration = GlmMoeDsaConfig()
-
-    >>> # Initializing a model from the configuration
-    >>> model = GlmMoeDsaModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+    """
 
     model_type = "glm_moe_dsa"
     keys_to_ignore_at_inference = ["past_key_values"]

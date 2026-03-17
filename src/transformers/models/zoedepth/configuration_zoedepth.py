@@ -32,8 +32,6 @@ ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 @strict(accept_kwargs=True)
 class ZoeDepthConfig(PreTrainedConfig):
     r"""
-    batch_norm_eps (`float`, *optional*, defaults to 1e-05):
-        The epsilon used by the batch normalization layers.
     readout_type (`str`, *optional*, defaults to `"project"`):
         The readout type to use when processing the readout token (CLS token) of the intermediate hidden states of
         the ViT backbone. Can be one of [`"ignore"`, `"add"`, `"project"`].

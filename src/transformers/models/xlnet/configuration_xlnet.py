@@ -38,6 +38,18 @@ class XLNetConfig(PreTrainedConfig):
         [quickstart](https://huggingface.co/transformers/quickstart.html#using-the-past) for more information.
     reuse_len (`int`, *optional*):
         The number of tokens in the current batch to be cached and reused in the future.
+    use_mems_eval (`bool`, *optional*, defaults to `True`):
+        Whether or not the model should make use of the recurrent memory mechanism in evaluation mode.
+    use_mems_train (`bool`, *optional*, defaults to `False`):
+        Whether or not the model should make use of the recurrent memory mechanism in train mode.
+        <Tip>
+        For pretraining, it is recommended to set `use_mems_train` to `True`. For fine-tuning, it is recommended to
+        set `use_mems_train` to `False` as discussed
+        [here](https://github.com/zihangdai/xlnet/issues/41#issuecomment-505102587). If `use_mems_train` is set to
+        `True`, one has to make sure that the train batches are correctly pre-processed, *e.g.* `batch_1 = [[This
+        line is], [This is the]]` and `batch_2 = [[ the first line], [ second line]]` and that all batches are of
+        equal size.
+        </Tip>
     bi_data (`bool`, *optional*, defaults to `False`):
         Whether or not to use bidirectional input pipeline. Usually set to `True` during pretraining and `False`
         during finetuning.
@@ -59,9 +71,6 @@ class XLNetConfig(PreTrainedConfig):
     summary_activation (`str`, *optional*):
         Argument used when doing sequence summary. Used in the sequence classification and multiple choice models.
         Pass `"tanh"` for a tanh activation to the output, any other value will result in no activation.
-    summary_proj_to_labels (`boo`, *optional*, defaults to `True`):
-        Used in the sequence classification and multiple choice models.
-        Whether the projection outputs should have `config.num_labels` or `config.hidden_size` classes.
     summary_last_dropout (`float`, *optional*, defaults to 0.1):
         Used in the sequence classification and multiple choice models.
         The dropout ratio to be used after the projection and activation.
@@ -69,18 +78,6 @@ class XLNetConfig(PreTrainedConfig):
         Used in the SQuAD evaluation script.
     end_n_top (`int`, *optional*, defaults to 5):
         Used in the SQuAD evaluation script.
-    use_mems_eval (`bool`, *optional*, defaults to `True`):
-        Whether or not the model should make use of the recurrent memory mechanism in evaluation mode.
-    use_mems_train (`bool`, *optional*, defaults to `False`):
-        Whether or not the model should make use of the recurrent memory mechanism in train mode.
-        <Tip>
-        For pretraining, it is recommended to set `use_mems_train` to `True`. For fine-tuning, it is recommended to
-        set `use_mems_train` to `False` as discussed
-        [here](https://github.com/zihangdai/xlnet/issues/41#issuecomment-505102587). If `use_mems_train` is set to
-        `True`, one has to make sure that the train batches are correctly pre-processed, *e.g.* `batch_1 = [[This
-        line is], [This is the]]` and `batch_2 = [[ the first line], [ second line]]` and that all batches are of
-        equal size.
-        </Tip>
 
     Examples:
 

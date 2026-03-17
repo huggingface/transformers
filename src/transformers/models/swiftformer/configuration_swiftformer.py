@@ -39,8 +39,6 @@ class SwiftFormerConfig(PreTrainedConfig):
         Dropout rate for the ConvEncoder component of SwiftFormer.
     use_layer_scale (`bool`, *optional*, defaults to `True`):
         Whether to scale outputs from token mixers.
-    batch_norm_eps (`float`, *optional*, defaults to 1e-05):
-        The epsilon used by the batch normalization layers.
 
     Example:
 

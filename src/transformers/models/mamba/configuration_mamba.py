@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="state-spaces/mamba-2.8b")
 @strict(accept_kwargs=True)
 class MambaConfig(PreTrainedConfig):
-    """
+    r"""
     layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
         The epsilon to use in the layer normalization layers.
     expand (`int`, *optional*, defaults to 2):

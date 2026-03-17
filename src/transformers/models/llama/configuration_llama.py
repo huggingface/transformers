@@ -29,19 +29,6 @@ from ...utils.type_validators import interval
 @auto_docstring(checkpoint="meta-llama/Llama-2-7b-hf")
 @strict(accept_kwargs=True)
 class LlamaConfig(PreTrainedConfig):
-    r"""
-    ```python
-    >>> from transformers import LlamaModel, LlamaConfig
-
-    >>> # Initializing a LLaMA llama-7b style configuration
-    >>> configuration = LlamaConfig()
-
-    >>> # Initializing a model from the llama-7b style configuration
-    >>> model = LlamaModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
 
     model_type = "llama"
     keys_to_ignore_at_inference = ["past_key_values"]

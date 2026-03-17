@@ -30,19 +30,6 @@ from ...utils.type_validators import interval
 @auto_docstring(checkpoint="inceptionai/Jais-2-8B-Chat")
 @strict(accept_kwargs=True)
 class Jais2Config(PreTrainedConfig):
-    r"""
-    ```python
-    >>> from transformers import Jais2Model, Jais2Config
-
-    >>> # Initializing a Jais2 jais2-7b style configuration
-    >>> configuration = Jais2Config()
-
-    >>> # Initializing a model from the jais2-7b style configuration
-    >>> model = Jais2Model(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
 
     model_type = "jais2"
     keys_to_ignore_at_inference = ["past_key_values"]

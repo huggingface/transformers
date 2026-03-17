@@ -49,7 +49,7 @@ class SmolLM3Config(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    """
 
     model_type = "smollm3"
     keys_to_ignore_at_inference = ["past_key_values"]

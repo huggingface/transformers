@@ -76,6 +76,9 @@ class IdeficsPerceiverConfig(PreTrainedConfig):
 @strict(accept_kwargs=True)
 class IdeficsConfig(PreTrainedConfig):
     r"""
+    additional_vocab_size (`int`, *optional*, defaults to 0):
+        Additional vocabulary size of the model, typically for the special "<img>" token. Additional vocab tokens
+        are always trainable whereas regular vocab tokens can be frozen or not.
     alpha_initializer (`str`, *optional*, defaults to `"zeros"`):
         Initialization type for the alphas.
     alphas_initializer_range (`float`, *optional*, defaults to 0.0):
@@ -83,21 +86,24 @@ class IdeficsConfig(PreTrainedConfig):
         Attention.
     alpha_type (`str`, *optional*, defaults to `"float"`):
         Whether the gating alphas should be vectors or single floats.
-    additional_vocab_size (`int`, *optional*, defaults to 0):
-        Additional vocabulary size of the model, typically for the special "<img>" token. Additional vocab tokens
-        are always trainable whereas regular vocab tokens can be frozen or not.
     cross_layer_interval (`int`, *optional*, default to 1):
         Interval for cross attention (from text to image) layers.
-    qk_layer_norms (`bool`, *optional*, defaults to `False`): Whether to add layer norm after q and k
-    freeze_text_layers (`bool`, *optional*, defaults to `True`): Whether to freeze text layers
+    qk_layer_norms (`bool`, *optional*, defaults to `False`):
+        Whether to add layer norm after q and k
+    freeze_text_layers (`bool`, *optional*, defaults to `True`):
+        Whether to freeze text layers
     freeze_text_module_exceptions (`bool`, *optional*, defaults to `[]`):
         Exceptions to freezing text layers when `freeze_text_layers` is `True`
-    freeze_lm_head (`bool`, *optional*, defaults to `False`): Whether to freeze lm head
-    freeze_vision_layers (`bool`, *optional*, defaults to `True`):  Whether to freeze vision layers
+    freeze_lm_head (`bool`, *optional*, defaults to `False`):
+        Whether to freeze lm head
+    freeze_vision_layers (`bool`, *optional*, defaults to `True`):
+        Whether to freeze vision layers
     freeze_vision_module_exceptions (`bool`, *optional*, defaults to `[]`):
         Exceptions to freezing vision layers when `freeze_vision_layers` is `True`
-    use_resampler (`bool`, *optional*, defaults to `False`): Whether to use the Resampler
-    perceiver_config (`IdeficsPerceiverConfig`,  *optional*): Custom perceiver config or dict
+    use_resampler (`bool`, *optional*, defaults to `False`):
+        Whether to use the Resampler
+    perceiver_config (`IdeficsPerceiverConfig`,  *optional*):
+        Custom perceiver config or dict
 
     Example:
 

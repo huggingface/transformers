@@ -23,10 +23,16 @@ from ...utils import auto_docstring
 @strict(accept_kwargs=True)
 class CvtConfig(PreTrainedConfig):
     r"""
+    patch_stride (`list[int]`, *optional*, defaults to `[4, 2, 2]`):
+        The stride size of each encoder's patch embedding.
     patch_padding (`list[int]`, *optional*, defaults to `[2, 1, 1]`):
         The padding size of each encoder's patch embedding.
     depth (`list[int]`, *optional*, defaults to `[1, 2, 10]`):
         The number of layers in each encoder block.
+    attention_drop_rate (`list[float]`, *optional*, defaults to `[0.0, 0.0, 0.0]`):
+        The dropout ratio for the attention probabilities.
+    drop_rate (`list[float]`, *optional*, defaults to `[0.0, 0.0, 0.0]`):
+        The dropout ratio for the patch embeddings probabilities.
     cls_token (`list[bool]`, *optional*, defaults to `[False, False, True]`):
         Whether or not to add a classification token to the output of each of the last 3 stages.
     qkv_projection_method (`list[string]`, *optional*, defaults to ["dw_bn", "dw_bn", "dw_bn"]`):
@@ -42,12 +48,6 @@ class CvtConfig(PreTrainedConfig):
         The padding size for query in attention layer
     stride_q (`list[int]`, *optional*, defaults to `[1, 1, 1]`):
         The stride size for query in attention layer
-    attention_drop_rate (`list[float]`, *optional*, defaults to `[0.0, 0.0, 0.0]`):
-        The dropout ratio for the attention probabilities.
-    drop_rate (`list[float]`, *optional*, defaults to `[0.0, 0.0, 0.0]`):
-        The dropout ratio for the patch embeddings probabilities.
-    patch_stride (`list[int]`, *optional*, defaults to `[4, 2, 2]`):
-        The stride size of each encoder's patch embedding.
 
     Example:
 

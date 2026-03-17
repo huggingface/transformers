@@ -151,7 +151,7 @@ class GlmOcrConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    """
 
     model_type = "glm_ocr"
     sub_configs = {"vision_config": GlmOcrVisionConfig, "text_config": GlmOcrTextConfig}

@@ -43,7 +43,7 @@ class CohereConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config # doctest: +SKIP
-    ```"""
+    """
 
     model_type = "cohere"
     keys_to_ignore_at_inference = ["past_key_values"]

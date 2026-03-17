@@ -26,16 +26,16 @@ from ...utils import auto_docstring
 @strict(accept_kwargs=True)
 class HubertConfig(PreTrainedConfig):
     r"""
+    feat_proj_layer_norm (`bool`, *optional*, defaults to `True`):
+        Whether to apply LayerNorm to the output of the feature encoder.
+    feat_proj_dropout (`float`, *optional*, defaults to 0.0):
+        The dropout probability for output of the feature encoder.
     final_dropout (`float`, *optional*, defaults to 0.1):
         The dropout probability for the final projection layer of [`Wav2Vec2ForCTC`].
     feat_extract_norm (`str`, *optional*, defaults to `"group"`):
         The norm to be applied to 1D convolutional layers in feature encoder. One of `"group"` for group
         normalization of only the first 1D convolutional layer or `"layer"` for layer normalization of all 1D
         convolutional layers.
-    feat_proj_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout probability for output of the feature encoder.
-    feat_proj_layer_norm (`bool`, *optional*, defaults to `True`):
-        Whether to apply LayerNorm to the output of the feature encoder.
     feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
         The non-linear activation function (function or string) in the 1D convolutional layers of the feature
         extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.

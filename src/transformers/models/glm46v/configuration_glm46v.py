@@ -50,7 +50,7 @@ class Glm46VConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    """
 
     model_type = "glm46v"
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}

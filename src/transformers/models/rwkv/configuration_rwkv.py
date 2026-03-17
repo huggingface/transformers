@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="RWKV/rwkv-4-169m-pile")
 @strict(accept_kwargs=True)
 class RwkvConfig(PreTrainedConfig):
-    """
+    r"""
     context_length (`int`, *optional*, defaults to 1024):
         The maximum sequence length that this model can be used with in a single forward (using it in RNN mode
         lets use any sequence length).

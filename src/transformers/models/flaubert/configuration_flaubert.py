@@ -26,6 +26,10 @@ class FlaubertConfig(PreTrainedConfig):
     pre_norm (`bool`, *optional*, defaults to `False`):
         Whether to apply the layer normalization before or after the feed forward layer following the attention in
         each layer (Vaswani et al., Tensor2Tensor for Neural Machine Translation. 2018)
+    emb_dim (`int`, *optional*, defaults to 2048):
+        The dimensionality of embedding layer.
+    gelu_activation (`bool`, *optional*, defaults to True):
+        Whether to use GeLU activation function.
     sinusoidal_embeddings (`bool`, *optional*, defaults to `False`):
         Whether or not to use sinusoidal positional embeddings instead of absolute positional embeddings.
     causal (`bool`, *optional*, defaults to `False`):
@@ -42,6 +46,8 @@ class FlaubertConfig(PreTrainedConfig):
         on how to use them.
     embed_init_std (`float`, *optional*, defaults to 2048^-0.5):
         The standard deviation of the truncated_normal_initializer for initializing the embedding matrices.
+    embed_init_std (`float`, *optional*, defaults to `2048**-0.5`):
+        Initializer std for embedding layers.
     bos_index (`int`, *optional*, defaults to 0):
         The index of the beginning of sentence token in the vocabulary.
     eos_index (`int`, *optional*, defaults to 1):
@@ -52,6 +58,8 @@ class FlaubertConfig(PreTrainedConfig):
         The index of the unknown token in the vocabulary.
     mask_index (`int`, *optional*, defaults to 5):
         The index of the masking token in the vocabulary.
+    is_encoder (`bool`, *optional*, defaults to True):
+        Whether the model is used as an encoder.
     summary_type (`string`, *optional*, defaults to "first"):
         Argument used when doing sequence summary. Used in the sequence classification and multiple choice models.
         Has to be one of the following options:
@@ -80,14 +88,6 @@ class FlaubertConfig(PreTrainedConfig):
         Model agnostic parameter to identify masked tokens when generating text in an MLM context.
     lang_id (`int`, *optional*, defaults to 1):
         The ID of the language used by the model. This parameter is used when generating text in a given language.
-    emb_dim (`int`, *optional*, defaults to 2048):
-        The dimensionality of embedding layer.
-    gelu_activation (`bool`, *optional*, defaults to True):
-        Whether to use GeLU activation function.
-    embed_init_std (`float`, *optional*, defaults to `2048**-0.5`):
-        Initializer std for embedding layers.
-    is_encoder (`bool`, *optional*, defaults to True):
-        Whether the model is used as an encoder.
     """
 
     model_type = "flaubert"

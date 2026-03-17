@@ -36,8 +36,6 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         The epsilon used by the rms normalization layers.
     norm_bias (`bool`, *optional*, defaults to `False`):
         Whether to use bias in the normalization layers.
-    embedding_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout ratio for the embeddings.
     mlp_dropout (`float`, *optional*, defaults to 0.0):
         The dropout ratio for the MLP layers.
     decoder_bias (`bool`, *optional*, defaults to `True`):
@@ -49,8 +47,6 @@ class ModernBertDecoderConfig(PreTrainedConfig):
     local_attention (`int`, *optional*, defaults to 128):
         The sliding window size for local attention. Only used for layers that use local attention. Note that for
         the decoder to match ModernBERT this is actually half of the sliding window size, so 128 => 64.
-    global_attn_every_n_layers (`int`, *optional*, defaults to 3):
-        Every `global_attn_every_n_layers` layers will use global attention instead of local attention.
 
     Examples:
 

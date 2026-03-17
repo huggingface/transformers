@@ -26,7 +26,6 @@ logger = logging.get_logger(__name__)
 @strict(accept_kwargs=True)
 class ClapTextConfig(PreTrainedConfig):
     r"""
-
     Examples:
 
     ```python

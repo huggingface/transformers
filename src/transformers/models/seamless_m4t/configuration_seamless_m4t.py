@@ -151,7 +151,7 @@ class SeamlessM4TConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    """
 
     model_type = "seamless_m4t"
     attribute_map = {"num_hidden_layers": "decoder_layers", "num_attention_heads": "decoder_attention_heads"}

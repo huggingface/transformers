@@ -22,19 +22,6 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="microsoft/bitnet-b1.58-2B-4T")
 @strict(accept_kwargs=True)
 class BitNetConfig(PreTrainedConfig):
-    r"""
-    ```python
-    >>> from transformers import BitNetModel, BitNetConfig
-
-    >>> # Initializing a BitNet style configuration
-    >>> configuration = BitNetConfig()
-
-    >>> # Initializing a model from the BitNet style configuration
-    >>> model = BitNetModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
 
     model_type = "bitnet"
     keys_to_ignore_at_inference = ["past_key_values"]

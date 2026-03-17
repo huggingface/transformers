@@ -65,8 +65,6 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
     r"""
     use_bias (`bool`, *optional*, defaults to `False`):
         Whether to use a bias in any of the projections including mlp and attention for example
-    mlp_layer_types (`list`, *optional*):
-        MLP (Moe vs Dense) pattern for each layer.
     moe_k (`int`, *optional*, defaults to 6):
         Number of selected experts.
     moe_num_experts (`int`, *optional*, defaults to 64):
@@ -75,6 +73,8 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
         The number of experts that are shared for all MoE forwards.
     moe_norm_min (`float`, *optional*, defaults to 1e-12):
         Minimum division value during routing normalization.
+    mlp_layer_types (`list`, *optional*):
+        MLP (Moe vs Dense) pattern for each layer.
     """
 
     model_type = "ernie4_5_vl_moe_text"

@@ -38,8 +38,6 @@ class GLPNConfig(PreTrainedConfig):
     mlp_ratios (`list[int]`, *optional*, defaults to `[4, 4, 4, 4]`):
         Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
         encoder blocks.
-    hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-        The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
     decoder_hidden_size (`int`, *optional*, defaults to 64):
         The dimension of the decoder.
     max_depth (`int`, *optional*, defaults to 10):

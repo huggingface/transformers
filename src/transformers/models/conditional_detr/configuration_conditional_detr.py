@@ -25,15 +25,13 @@ from ..auto import AutoConfig
 @strict(accept_kwargs=True)
 class ConditionalDetrConfig(PreTrainedConfig):
     r"""
+    num_queries (`int`, *optional*, defaults to 100):
+        Number of object queries, i.e. detection slots. This is the maximal number of objects
+        [`ConditionalDetrModel`] can detect in a single image. For COCO, we recommend 100 queries.
     auxiliary_loss (`bool`, *optional*, defaults to `False`):
         Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
     position_embedding_type (`str`, *optional*, defaults to `"sine"`):
         Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
-    eos_coefficient (`float`, *optional*, defaults to 0.1):
-        Relative classification weight of the 'no-object' class in the object detection loss.
-    num_queries (`int`, *optional*, defaults to 100):
-        Number of object queries, i.e. detection slots. This is the maximal number of objects
-        [`ConditionalDetrModel`] can detect in a single image. For COCO, we recommend 100 queries.
     dilation (`bool`, *optional*, defaults to `False`):
         Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
         `use_timm_backbone` = `True`.

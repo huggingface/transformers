@@ -28,13 +28,6 @@ logger = logging.get_logger(__name__)
 @strict(accept_kwargs=True)
 class VisionEncoderDecoderConfig(PreTrainedConfig):
     r"""
-    kwargs (*optional*):
-        Dictionary of keyword arguments. Notably:
-            - **encoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
-              the encoder config.
-            - **decoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
-              the decoder config.
-
     Examples:
 
     ```python

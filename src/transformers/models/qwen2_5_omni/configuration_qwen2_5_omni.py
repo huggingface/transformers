@@ -32,12 +32,12 @@ logger = logging.get_logger(__name__)
 @strict(accept_kwargs=True)
 class Qwen2_5OmniVisionEncoderConfig(PreTrainedConfig):
     r"""
-    fullatt_block_indexes (`int`, *optional*, defaults to `[7, 15, 23, 31]`):
-        Indices of layers with full attention
-    out_hidden_size (`int`, *optional*, defaults to 3584):
-        The output hidden size of the vision model.
     window_size (`int`, *optional*, defaults to 11):
         Size of windows.
+    out_hidden_size (`int`, *optional*, defaults to 3584):
+        The output hidden size of the vision model.
+    fullatt_block_indexes (`int`, *optional*, defaults to `[7, 15, 23, 31]`):
+        Indices of layers with full attention
 
     Example:
 
@@ -122,10 +122,6 @@ class Qwen2_5OmniAudioEncoderConfig(PreTrainedConfig):
 @strict(accept_kwargs=True)
 class Qwen2_5OmniTextConfig(PreTrainedConfig):
     r"""
-    max_window_layers (`int`, *optional*, defaults to 28):
-        The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
-        additional layer afterwards will use SWA (Sliding Window Attention).
-
     Example:
 
     ```python
@@ -308,9 +304,6 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
         The tts codec pad token index to encode the pad of tts codec.
     tts_codec_mask_token_id (`int`, *optional*, defaults to 8296):
         The tts codec mask token index to encode the mask of tts codec.
-    max_window_layers (`int`, *optional*, defaults to 28):
-        The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
-        additional layer afterwards will use SWA (Sliding Window Attention).
     position_id_per_seconds (`int`, *optional*, defaults to 25):
         The increment of position id per second.
     seconds_per_chunk (`int`, *optional*, defaults to 2):
@@ -414,6 +407,12 @@ class Qwen2_5OmniDiTConfig(PreTrainedConfig):
         The multiplier for the feedforward layer in each transformer block.
     emb_dim (`int`, *optional*, defaults to 512):
         The dimension of the embedding layer.
+    block_size (`int`, *optional*, defaults to 64):
+        Number of tokens (frames) in each processing block.
+    look_ahead_layers (`list[int]`, *optional*, defaults to `[10]`):
+        Number of transformer layers that are permitted to attend to future blocks
+    look_backward_layers (`list[int]`, *optional*, defaults to `[0, 20]`):
+        Number of transformer layers that attend to past blocks beyond the current block boundary
     repeats (`int`, *optional*, defaults to 2):
         The number of times the codec embeddings are repeated.
     num_embeds (`int`, *optional*, defaults to 8193):
@@ -436,12 +435,6 @@ class Qwen2_5OmniDiTConfig(PreTrainedConfig):
         The scale of the Res2Net block in the encoder.
     enc_se_channels (`int`, *optional*, defaults to 64):
         The number of output channels after squeeze in the SqueezeExcitationBlock.
-    block_size (`int`, *optional*, defaults to 64):
-        Number of tokens (frames) in each processing block.
-    look_ahead_layers (`list[int]`, *optional*, defaults to `[10]`):
-        Number of transformer layers that are permitted to attend to future blocks
-    look_backward_layers (`list[int]`, *optional*, defaults to `[0, 20]`):
-        Number of transformer layers that attend to past blocks beyond the current block boundary
     """
 
     model_type = "qwen2_5_omni_dit"
@@ -564,11 +557,15 @@ class Qwen2_5OmniToken2WavConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 @strict(accept_kwargs=True)
 class Qwen2_5OmniConfig(PreTrainedConfig):
-    """
-    thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
-    talker_config (`dict`, *optional*): Configuration of the underlying talker sub-model.
-    token2wav_config (`dict`, *optional*): Configuration of the underlying codec sub-model.
-    enable_audio_output (`bool`, *optional*, defaults to `True`): Whether enable audio output and load talker and token2wav module.
+    r"""
+    thinker_config (`dict`, *optional*):
+        Configuration of the underlying thinker sub-model.
+    talker_config (`dict`, *optional*):
+        Configuration of the underlying talker sub-model.
+    token2wav_config (`dict`, *optional*):
+        Configuration of the underlying codec sub-model.
+    enable_audio_output (`bool`, *optional*, defaults to `True`):
+        Whether enable audio output and load talker and token2wav module.
 
     Example:
 

@@ -23,9 +23,6 @@ from ...utils import auto_docstring
 @strict(accept_kwargs=True)
 class MarkupLMConfig(PreTrainedConfig):
     r"""
-    max_tree_id_unit_embeddings (`int`, *optional*, defaults to 1024):
-        The maximum value that the tree id unit embedding might ever use. Typically set this to something large
-        just in case (e.g., 1024).
     max_xpath_tag_unit_embeddings (`int`, *optional*, defaults to 256):
         The maximum value that the xpath tag unit embedding might ever use. Typically set this to something large
         just in case (e.g., 256).
@@ -36,13 +33,10 @@ class MarkupLMConfig(PreTrainedConfig):
         The id of the padding token in the xpath tags.
     subs_pad_id (`int`, *optional*, defaults to 1001):
         The id of the padding token in the xpath subscripts.
-    xpath_tag_unit_hidden_size (`int`, *optional*, defaults to 32):
-        The hidden size of each tree id unit. One complete tree index will have
-        (50*xpath_tag_unit_hidden_size)-dim.
-    max_depth (`int`, *optional*, defaults to 50):
-        The maximum depth in xpath.
     xpath_unit_hidden_size (`int`, *optional*, defaults to 32):
         The hidden size of each unit in xpath.
+    max_depth (`int`, *optional*, defaults to 50):
+        The maximum depth in xpath.
 
     Examples:
 

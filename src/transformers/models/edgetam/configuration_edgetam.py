@@ -152,7 +152,7 @@ class EdgeTamMaskDecoderConfig(PreTrainedConfig):
 class EdgeTamConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `EdgeTamPromptEncoderConfig`], *optional*):
-         Dictionary of configuration options used to initialize [`EdgeTamPromptEncoderConfig`].
+        Dictionary of configuration options used to initialize [`EdgeTamPromptEncoderConfig`].
     mask_decoder_config (Union[`dict`, `EdgeTamMaskDecoderConfig`], *optional*):
         Dictionary of configuration options used to initialize [`EdgeTamMaskDecoderConfig`].
 

@@ -49,7 +49,8 @@ class DbrxAttentionConfig(PreTrainedConfig):
 )
 class DbrxFFNConfig(PreTrainedConfig):
     r"""
-    ffn_act_fn (`dict`, *optional*, defaults to `None`): A dict specifying activation function for the FFN.
+    ffn_act_fn (`dict`, *optional*, defaults to `None`):
+        A dict specifying activation function for the FFN.
         The dict should have a key 'name' with the value being the name of the activation function along with
         any additional keyword arguments. If `None`, then set to `{"name": "silu"}`.
     ffn_hidden_size (`int`, *optional*, defaults to 3584):

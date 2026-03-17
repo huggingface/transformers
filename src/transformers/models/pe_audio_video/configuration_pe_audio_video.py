@@ -40,7 +40,7 @@ class PeAudioVideoEncoderConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    """
 
     model_type = "pe_audio_video_encoder"
     base_config_key = "audio_video_config"

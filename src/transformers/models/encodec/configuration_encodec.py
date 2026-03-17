@@ -26,12 +26,12 @@ from ...utils import auto_docstring
 @strict(accept_kwargs=True)
 class EncodecConfig(PreTrainedConfig):
     r"""
-    chunk_length_s (`float`, *optional*):
-        If defined the audio is pre-processed into chunks of lengths `chunk_length_s` and then encoded.
     target_bandwidths (`list[float]`, *optional*, defaults to `[1.5, 3.0, 6.0, 12.0, 24.0]`):
         The range of different bandwidths the model can encode audio with.
     normalize (`bool`, *optional*, defaults to `False`):
         Whether the audio shall be normalized when passed.
+    chunk_length_s (`float`, *optional*):
+        If defined the audio is pre-processed into chunks of lengths `chunk_length_s` and then encoded.
     overlap (`float`, *optional*):
         Defines the overlap between each chunk. It is used to compute the `chunk_stride` using the following
         formulae : `int((1.0 - self.overlap) * self.chunk_length)`.

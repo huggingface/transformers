@@ -25,6 +25,8 @@ from ...utils import auto_docstring
 @strict(accept_kwargs=True)
 class Emu3VQVAEConfig(PreTrainedConfig):
     r"""
+    embed_dim (`int`, *optional*, defaults to 4):
+        Dimension of the quantized vector in codebook.
     out_channels (`int`, *optional*, defaults to 3):
         Output channel of decoder.
     temporal_downsample_factor (`int`, *optional*, defaults to 4):
@@ -35,8 +37,6 @@ class Emu3VQVAEConfig(PreTrainedConfig):
         Channel scaling factor of the intermediate blocks.
     num_res_blocks (`int`, *optional*, defaults to 2):
         Residual block number in each stage.
-    embed_dim (`int`, *optional*, defaults to 4):
-        Dimension of the quantized vector in codebook.
     attn_resolutions (`list[int]`, *optional*, defaults to `[3]`):
         Stage indices to apply attention.
 
@@ -51,7 +51,7 @@ class Emu3VQVAEConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    """
 
     model_type = "emu3_vqgan"
     base_config_key = "vq_config"

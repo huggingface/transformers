@@ -25,15 +25,28 @@ from ...utils import auto_docstring
 @strict(accept_kwargs=True)
 class Data2VecAudioConfig(PreTrainedConfig):
     r"""
-    final_dropout (`float`, *optional*, defaults to 0.1):
-        The dropout probability for the final projection layer of [`Data2VecAudioForCTC`].
     feat_proj_dropout (`float`, *optional*, defaults to 0.0):
         The dropout probability for output of the feature encoder.
+    final_dropout (`float`, *optional*, defaults to 0.1):
+        The dropout probability for the final projection layer of [`Data2VecAudioForCTC`].
     feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
         The non-linear activation function (function or string) in the 1D convolutional layers of the feature
         extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
+    conv_dim (`tuple[int]` or `list[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
+        A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
+        feature encoder. The length of *conv_dim* defines the number of 1D convolutional layers.
+    conv_stride (`tuple[int]` or `list[int]`, *optional*, defaults to `(5, 2, 2, 2, 2, 2, 2)`):
+        A tuple of integers defining the stride of each 1D convolutional layer in the feature encoder. The length
+        of *conv_stride* defines the number of convolutional layers and has to match the length of *conv_dim*.
+    conv_bias (`bool`, *optional*, defaults to `False`):
+        Whether the 1D convolutional layers have a bias.
     num_conv_pos_embedding_groups (`int`, *optional*, defaults to 16):
         Number of groups of 1D convolutional positional embeddings layer.
+    conv_pos_kernel_size (`int`, *optional*, defaults to `19`):
+        Kernel size of positional conv module.
+    num_conv_pos_embeddings (`int`, *optional*, defaults to 128):
+        Number of convolutional positional embeddings. Defines the kernel size of 1D convolutional positional
+        embeddings layer.
     mask_time_prob (`float`, *optional*, defaults to 0.05):
         Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
         procedure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
@@ -68,6 +81,8 @@ class Data2VecAudioConfig(PreTrainedConfig):
     use_weighted_layer_sum (`bool`, *optional*, defaults to `False`):
         Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
         instance of [`Data2VecAudioForSequenceClassification`].
+    classifier_proj_size (`int`, *optional*, defaults to 256):
+        Dimensionality of the projection before token mean-pooling for classification.
     tdnn_dim (`tuple[int]` or `list[int]`, *optional*, defaults to `(512, 512, 512, 512, 1500)`):
         A tuple of integers defining the number of output channels of each 1D convolutional layer in the *TDNN*
         module of the *XVector* model. The length of *tdnn_dim* defines the number of *TDNN* layers.
@@ -92,21 +107,6 @@ class Data2VecAudioConfig(PreTrainedConfig):
     output_hidden_size (`int`, *optional*):
         Dimensionality of the encoder output layer. If not defined, this defaults to *hidden-size*. Only relevant
         if `add_adapter is True`.
-    classifier_proj_size (`int`, *optional*, defaults to 256):
-        Dimensionality of the projection before token mean-pooling for classification.
-    num_conv_pos_embeddings (`int`, *optional*, defaults to 128):
-        Number of convolutional positional embeddings. Defines the kernel size of 1D convolutional positional
-        embeddings layer.
-    conv_dim (`tuple[int]` or `list[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
-        A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
-        feature encoder. The length of *conv_dim* defines the number of 1D convolutional layers.
-    conv_stride (`tuple[int]` or `list[int]`, *optional*, defaults to `(5, 2, 2, 2, 2, 2, 2)`):
-        A tuple of integers defining the stride of each 1D convolutional layer in the feature encoder. The length
-        of *conv_stride* defines the number of convolutional layers and has to match the length of *conv_dim*.
-    conv_bias (`bool`, *optional*, defaults to `False`):
-        Whether the 1D convolutional layers have a bias.
-    conv_pos_kernel_size (`int`, *optional*, defaults to `19`):
-        Kernel size of positional conv module.
 
     Example:
 

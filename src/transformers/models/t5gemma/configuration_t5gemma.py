@@ -46,7 +46,7 @@ class T5GemmaModuleConfig(PreTrainedConfig):
     >>> model = T5GemmaModuleModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    """
 
     model_type = "t5_gemma_module"
     keys_to_ignore_at_inference = ["past_key_values"]

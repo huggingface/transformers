@@ -29,25 +29,17 @@ from ...utils import auto_docstring
 @strict(accept_kwargs=True)
 class GraniteMoeSharedConfig(PreTrainedConfig):
     r"""
-    embedding_multiplier (`float`, *optional*, defaults to 1.0): embedding multiplier
-    logits_scaling (`float`, *optional*, defaults to 1.0): divisor for output logits
-    residual_multiplier (`float`, *optional*, defaults to 1.0): residual multiplier
-    attention_multiplier (`float`, *optional*, defaults to 1.0): attention multiplier
-    shared_intermediate_size (`int`, *optional*, defaults to 1024): intermediate size for shared experts.
-    position_embedding_type (`str`, *optional*): Positional embedding type to be used; defaults to None. Allowed options: `[None, "rope"]`
-
-    ```python
-    >>> from transformers import GraniteMoeSharedModel, GraniteMoeSharedConfig
-
-    >>> # Initializing a GraniteMoeShared granitemoe-3b style configuration
-    >>> configuration = GraniteMoeSharedConfig()
-
-    >>> # Initializing a model from the granitemoe-7b style configuration
-    >>> model = GraniteMoeSharedModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+    embedding_multiplier (`float`, *optional*, defaults to 1.0):
+        embedding multiplier
+    logits_scaling (`float`, *optional*, defaults to 1.0):
+        divisor for output logits
+    residual_multiplier (`float`, *optional*, defaults to 1.0):
+        residual multiplier
+    attention_multiplier (`float`, *optional*, defaults to 1.0):
+        attention multiplier
+    shared_intermediate_size (`int`, *optional*, defaults to 1024):
+        intermediate size for shared experts.
+    """
 
     model_type = "granitemoeshared"
     keys_to_ignore_at_inference = ["past_key_values"]

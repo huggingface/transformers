@@ -26,6 +26,8 @@ from ...utils import auto_docstring
 @strict(accept_kwargs=True)
 class PvtV2Config(BackboneConfigMixin, PreTrainedConfig):
     r"""
+    num_encoder_blocks (`[int]`, *optional*, defaults to 4):
+        The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
     sr_ratios (`list[int]`, *optional*, defaults to `[8, 4, 2, 1]`):
         Spatial reduction ratios in each encoder block.
     patch_sizes (`list[int]`, *optional*, defaults to `[7, 3, 3, 3]`):
@@ -40,8 +42,6 @@ class PvtV2Config(BackboneConfigMixin, PreTrainedConfig):
     linear_attention (`bool`, *optional*, defaults to `False`):
         Use linear attention complexity. If set to True, `sr_ratio` is ignored and average pooling is used for
         dimensionality reduction in the attention layers rather than strided convolution.
-    num_encoder_blocks (`[int]`, *optional*, defaults to 4):
-        The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
 
     Example:
 

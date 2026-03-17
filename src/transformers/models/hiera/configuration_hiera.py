@@ -24,8 +24,6 @@ from ...utils import auto_docstring
 @strict(accept_kwargs=True)
 class HieraConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
-    layer_norm_init (`float`, *optional*, defaults to 1.0):
-        The initial weight value for layer normalization layers.
     patch_stride (`list(int)`, *optional*, defaults to `[4, 4]`):
         The stride of the patch.
     patch_padding (`list(int)`, *optional*, defaults to `[3, 3]`):
@@ -42,6 +40,8 @@ class HieraConfig(BackboneConfigMixin, PreTrainedConfig):
         The size of the masked unit.
     masked_unit_attention (`list(bool)`, *optional*, defaults to `[True, True, False, False]`):
         Whether to use masked unit attention in each layer of the Transformer encoder.
+    layer_norm_init (`float`, *optional*, defaults to 1.0):
+        The initial weight value for layer normalization layers.
     decoder_depth (`int`, *optional*):
         Depth of the decoder for MAE pretraining.
     normalize_pixel_loss (`bool`, *optional*, defaults to `True`):

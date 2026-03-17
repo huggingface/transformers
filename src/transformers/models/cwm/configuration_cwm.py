@@ -28,19 +28,6 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="facebook/cwm")
 @strict(accept_kwargs=True)
 class CwmConfig(PreTrainedConfig):
-    r"""
-    ```python
-    >>> from transformers import CwmModel, CwmConfig
-
-    >>> # Initializing a Cwm cwm-7b style configuration
-    >>> configuration = CwmConfig()
-
-    >>> # Initializing a model from the cwm-7b style configuration
-    >>> model = CwmModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
 
     model_type = "cwm"
     keys_to_ignore_at_inference = ["past_key_values"]

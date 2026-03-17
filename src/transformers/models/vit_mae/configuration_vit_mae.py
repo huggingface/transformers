@@ -23,13 +23,13 @@ from ...utils import auto_docstring
 @strict(accept_kwargs=True)
 class ViTMAEConfig(PreTrainedConfig):
     r"""
+    decoder_num_hidden_layers (`int`, *optional*, defaults to 8):
+        Number of hidden layers in the decoder.
     mask_ratio (`float`, *optional*, defaults to 0.75):
         The ratio of the number of masked tokens in the input sequence.
     norm_pix_loss (`bool`, *optional*, defaults to `False`):
         Whether or not to train with normalized pixels (see Table 3 in the paper). Using normalized pixels improved
         representation quality in the experiments of the authors.
-    decoder_num_hidden_layers (`int`, *optional*, defaults to 8):
-        Number of hidden layers in the decoder.
 
     Example:
 

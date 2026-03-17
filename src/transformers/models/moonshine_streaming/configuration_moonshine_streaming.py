@@ -44,7 +44,7 @@ class MoonshineStreamingEncoderConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    """
 
     model_type = "moonshine_streaming_encoder"
 
@@ -94,7 +94,7 @@ class MoonshineStreamingConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    """
 
     model_type = "moonshine_streaming"
     sub_configs = {"encoder_config": MoonshineStreamingEncoderConfig}

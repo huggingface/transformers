@@ -110,12 +110,12 @@ class BlipVisionConfig(PreTrainedConfig):
 @strict(accept_kwargs=True)
 class BlipConfig(PreTrainedConfig):
     r"""
+    image_text_hidden_size (`int`, *optional*, defaults to 256):
+        Dimensionality of the hidden state of the image-text fusion layer.
     label_smoothing (float, *optional*):
         A float in [0.0, 1.0]. Specifies the amount of smoothing when computing the loss, where 0.0 means no smoothing. The targets
         become a mixture of the original ground truth and a uniform distribution as described in
         `Rethinking the Inception Architecture for Computer Vision <https://huggingface.co/papers/1512.00567>`__. Default: :math:`0.0`.
-    image_text_hidden_size (`int`, *optional*, defaults to 256):
-        Dimensionality of the hidden state of the image-text fusion layer.
 
     Example:
 

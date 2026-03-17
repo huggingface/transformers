@@ -34,8 +34,6 @@ class UdopConfig(PreTrainedConfig):
         `"gated-gelu"` feed forward projection. Original Udop uses `"relu"`.
     max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
         The maximum absolute position embeddings for relative position encoding.
-    add_cross_attention (`bool`, *optional*, defaults to `False`):
-        Whether cross-attention layers should be added to the model.
     """
 
     model_type = "udop"

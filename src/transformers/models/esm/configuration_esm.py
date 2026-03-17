@@ -156,21 +156,21 @@ class EsmFoldConfig(PreTrainedConfig):
 @strict(accept_kwargs=True)
 class EsmConfig(PreTrainedConfig):
     r"""
-    is_folding_model (`bool`, defaults to `False`):
-        When this is enabled, ESMFold model will be initialized.
-    position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-        Type of position embedding. Choose either `"absolute"` or "rotary"`.
     mask_token_id (`int`, *optional*):
         The index of the mask token in the vocabulary. This must be included in the config because of the
         "mask-dropout" scaling trick, which will scale the inputs depending on the number of masked tokens.
+    position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
+        Type of position embedding. Choose either `"absolute"` or "rotary"`.
     emb_layer_norm_before (`bool`, *optional*):
         Whether to apply layer normalization after embeddings but before the main stem of the network.
     token_dropout (`bool`, defaults to `False`):
         When this is enabled, masked tokens are treated as if they had been dropped out by input dropout.
-    vocab_list (`list`, *optional*):
-        List of the vocabulary items.
+    is_folding_model (`bool`, defaults to `False`):
+        When this is enabled, ESMFold model will be initialized.
     esmfold_config (`dict`, *optional*):
         Configuration to initiate the ESMFold module.
+    vocab_list (`list`, *optional*):
+        List of the vocabulary items.
 
     Examples:
 

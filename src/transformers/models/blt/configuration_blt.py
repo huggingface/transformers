@@ -27,10 +27,10 @@ logger = logging.get_logger(__name__)
 @strict(accept_kwargs=True)
 class BltLocalEncoderConfig(PreTrainedConfig):
     r"""
-    cross_attn_k (`int`, *optional*, defaults to 2):
-        Number of cross-attention heads used in the model.
     cross_attn_all_layers (`bool`, *optional*, defaults to `True`):
         Whether all attention layers have cross attention.
+    cross_attn_k (`int`, *optional*, defaults to 2):
+        Number of cross-attention heads used in the model.
     hidden_size_global (`int`, *int*, defaults to 2048):
         Hidden size of the global transformer layer.
     """
@@ -65,10 +65,10 @@ class BltLocalEncoderConfig(PreTrainedConfig):
 @strict(accept_kwargs=True)
 class BltLocalDecoderConfig(PreTrainedConfig):
     r"""
-    cross_attn_k (`int`, *optional*, defaults to 2):
-        Number of cross-attention heads used in the model.
     cross_attn_all_layers (`bool`, *optional*, defaults to `True`):
         Whether all attention layers have cross attention.
+    cross_attn_k (`int`, *optional*, defaults to 2):
+        Number of cross-attention heads used in the model.
     hidden_size_global (`int`, *int*, defaults to 2048):
         Hidden size of the global transformer layer.
     """

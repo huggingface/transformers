@@ -24,6 +24,8 @@ from ..auto.configuration_auto import AutoConfig
 @strict(accept_kwargs=True)
 class RagConfig(PreTrainedConfig):
     r"""
+    prefix (`str`, *optional*):
+        A string prefix prepended to every input before passing to the generator model.
     title_sep (`str`, *optional*, defaults to  `" / "`):
         Separator inserted between the title and the text of the retrieved document when calling [`RagRetriever`].
     doc_sep (`str`, *optional*, defaults to  `" // "`):
@@ -53,24 +55,22 @@ class RagConfig(PreTrainedConfig):
         [`~models.rag.retrieval_rag.LegacyIndex`]
     use_dummy_dataset (`bool`, *optional*, defaults to `False`):
         Whether to load a "dummy" variant of the dataset specified by `dataset`.
+    reduce_loss (`bool`, *optional*, defaults to `False`):
+        Whether or not to reduce the NLL loss using the `torch.Tensor.sum` operation.
     label_smoothing (`float`, *optional*, defaults to 0.0):
         Only relevant if `return_loss` is set to `True`. Controls the `epsilon` parameter value for label smoothing
         in the loss calculation. If set to 0, no label smoothing is performed.
-    do_marginalize (`bool`, *optional*, defaults to `False`):
-        If `True`, the logits are marginalized over all documents by making use of
-        `torch.nn.functional.log_softmax`.
-    reduce_loss (`bool`, *optional*, defaults to `False`):
-        Whether or not to reduce the NLL loss using the `torch.Tensor.sum` operation.
     do_deduplication (`bool`, *optional*, defaults to `True`):
         Whether or not to deduplicate the generations from different context documents for a given input. Has to be
         set to `False` if used while training with distributed backend.
     exclude_bos_score (`bool`, *optional*, defaults to `False`):
         Whether or not to disregard the BOS token when computing the loss.
-    output_retrieved(`bool`, *optional*, defaults to `False`):
+    do_marginalize (`bool`, *optional*, defaults to `False`):
+        If `True`, the logits are marginalized over all documents by making use of
+        `torch.nn.functional.log_softmax`.
+    output_retrieved (`bool`, *optional*, defaults to `False`):
         If set to `True`, `retrieved_doc_embeds`, `retrieved_doc_ids`, `context_input_ids` and
         `context_attention_mask` are returned. See returned tensors for more detail.
-    prefix (`str`, *optional*):
-        A string prefix prepended to every input before passing to the generator model.
     dataset_revision (`str`, *optional*,):
         The revision (commit hash, tag, or branch) of the Hugging Face dataset used for retrieval.
     """

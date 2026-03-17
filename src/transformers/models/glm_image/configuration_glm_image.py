@@ -28,10 +28,6 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="zai-org/GLM-Image")
 @strict(accept_kwargs=True)
 class GlmImageVQVAEConfig(PreTrainedConfig):
-    r"""
-    num_embeddings (`int`, *optional*, defaults to 16384):
-        Number of codebook embeddings.
-    """
 
     model_type = "glm_image_vqmodel"
     base_config_key = "vq_config"
@@ -47,9 +43,6 @@ class GlmImageVQVAEConfig(PreTrainedConfig):
 @strict(accept_kwargs=True)
 class GlmImageVisionConfig(PreTrainedConfig):
     r"""
-    out_hidden_size (`int`, *optional*, defaults to 4096):
-        The output hidden size of the vision model.
-
     Example:
 
     ```python
@@ -170,7 +163,7 @@ class GlmImageConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    """
 
     model_type = "glm_image"
     sub_configs = {

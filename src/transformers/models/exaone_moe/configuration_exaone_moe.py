@@ -28,13 +28,6 @@ from ...utils import auto_docstring
 @strict(accept_kwargs=True)
 class ExaoneMoeConfig(PreTrainedConfig):
     r"""
-    n_group (`int`, *optional*, defaults to 1):
-        Number of groups for routed experts.
-    mlp_layer_types (`list`, *optional*):
-        MLP pattern for each layer. Prioritized over `first_k_dense_replace`.
-    first_k_dense_replace (`int`, *optional*, defaults to 1):
-        Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
-                                                    \--k dense layers--/
     sliding_window_pattern (`str`, *optional*, defaults to 4):
         The pattern to use for sliding window attention. Can be one of:
             - `None`: No sliding window attention is used
@@ -46,6 +39,13 @@ class ExaoneMoeConfig(PreTrainedConfig):
             - Layer 0, 1, 2: local attention,
             - Layer 3: global attention,
             ...(repeated)
+    mlp_layer_types (`list`, *optional*):
+        MLP pattern for each layer. Prioritized over `first_k_dense_replace`.
+    first_k_dense_replace (`int`, *optional*, defaults to 1):
+        Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
+                                                    \--k dense layers--/
+    n_group (`int`, *optional*, defaults to 1):
+        Number of groups for routed experts.
 
     Example:
 

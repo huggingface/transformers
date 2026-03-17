@@ -125,12 +125,10 @@ class Qwen3_5MoeTextConfig(PreTrainedConfig):
 @strict(accept_kwargs=True)
 class Qwen3_5MoeVisionConfig(PreTrainedConfig):
     r"""
-    num_position_embeddings (`int`, *optional*, defaults to 2304):
-        The maximum sequence length that this model might ever be used with
     out_hidden_size (`int`, *optional*, defaults to 3584):
         The output hidden size of the vision model.
-    deepstack_visual_indexes (`list[int]`, *optional*, defaults to `[8, 16, 24]`):
-        Indexed of layers for deepstack embeddings.
+    num_position_embeddings (`int`, *optional*, defaults to 2304):
+        The maximum sequence length that this model might ever be used with
     """
 
     model_type = "qwen3_5_moe"

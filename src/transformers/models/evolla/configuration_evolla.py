@@ -34,7 +34,8 @@ class SaProtConfig(PreTrainedConfig):
     emb_layer_norm_before (`bool`, *optional*, defaults to `False`):
         Whether to apply layer normalization before the position embedding in the protein sequence model.
     token_dropout (`bool`, *optional*, defaults to `True`):
-        Whether to apply dropout to the tokens in the protein sequence model."""
+
+    """
 
     vocab_size: int = 446
     mask_token_id: int = 4

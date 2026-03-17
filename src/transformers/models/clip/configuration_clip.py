@@ -121,25 +121,12 @@ class CLIPVisionConfig(PreTrainedConfig):
 @strict(accept_kwargs=True)
 class CLIPConfig(PreTrainedConfig):
     r"""
-    [`CLIPConfig`] is the configuration class to store the configuration of a [`CLIPModel`]. It is used to instantiate
-    a CLIP model according to the specified arguments, defining the text model and vision model configs. Instantiating
-    a configuration with the defaults will yield a similar configuration to that of the CLIP
-    [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`CLIPTextConfig`].
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`CLIPVisionConfig`].
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of text and vision projection layers.
-        logit_scale_init_value (`float | int`, *optional*, defaults to 2.6592):
-            The initial value of the *logit_scale* parameter. Default is used as per the original CLIP implementation.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+    text_config (`dict`, *optional*):
+        Dictionary of configuration options used to initialize [`CLIPTextConfig`].
+    vision_config (`dict`, *optional*):
+        Dictionary of configuration options used to initialize [`CLIPVisionConfig`].
+    logit_scale_init_value (`float | int`, *optional*, defaults to 2.6592):
+        The initial value of the *logit_scale* parameter. Default is used as per the original CLIP implementation.
 
     Example:
 

@@ -60,7 +60,7 @@ class Qwen2VLTextConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    """
 
     model_type = "qwen2_vl_text"
     base_config_key = "text_config"

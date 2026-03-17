@@ -25,11 +25,6 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="microsoft/kosmos-2-patch14-224")
 @strict(accept_kwargs=True)
 class Kosmos2TextConfig(PreTrainedConfig):
-    r"""
-    activation_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout ratio for activations inside the fully connected layer.
-    ```"""
-
     model_type = "kosmos_2_text_model"
     base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]

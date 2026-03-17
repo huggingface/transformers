@@ -28,14 +28,14 @@ from ...utils import auto_docstring
 @strict(accept_kwargs=True)
 class PixioConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
-    n_cls_tokens (`int`, *optional*, defaults to 8):
-        Number of class tokens in the Transformer encoder.
     apply_layernorm (`bool`, *optional*, defaults to `True`):
         Whether to apply layer normalization to the feature maps in case the model is used as backbone.
     reshape_hidden_states (`bool`, *optional*, defaults to `True`):
         Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
         case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
         seq_len, hidden_size)`.
+    n_cls_tokens (`int`, *optional*, defaults to 8):
+        Number of class tokens in the Transformer encoder.
 
     Example:
 

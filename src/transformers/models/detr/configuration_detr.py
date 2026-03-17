@@ -28,11 +28,11 @@ class DetrConfig(PreTrainedConfig):
     num_queries (`int`, *optional*, defaults to 100):
         Number of object queries, i.e. detection slots. This is the maximal number of objects
         [`ConditionalDetrModel`] can detect in a single image. For COCO, we recommend 100 queries.
+    position_embedding_type (`str`, *optional*, defaults to `"sine"`):
+        Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
     dilation (`bool`, *optional*, defaults to `False`):
         Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
         `use_timm_backbone` = `True`.
-    position_embedding_type (`str`, *optional*, defaults to `"sine"`):
-        Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
 
     Examples:
 

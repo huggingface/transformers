@@ -32,8 +32,6 @@ class RTDetrV2Config(PreTrainedConfig):
     initializer_bias_prior_prob (`float`, *optional*):
         The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
         If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
-    batch_norm_eps (`float`, *optional*, defaults to 1e-05):
-        The epsilon used by the batch normalization layers.
     freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
         Whether to freeze the batch normalization layers in the backbone.
     encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
@@ -104,8 +102,6 @@ class RTDetrV2Config(PreTrainedConfig):
         Relative weight of the L1 bounding box loss in the object detection loss.
     weight_loss_giou (`float`, *optional*, defaults to 2.0):
         Relative weight of the generalized IoU loss in the object detection loss.
-    eos_coefficient (`float`, *optional*, defaults to 0.0001):
-        Relative classification weight of the 'no-object' class in the object detection loss.
     decoder_n_levels (`int`, *optional*, defaults to 3):
         The number of feature levels used by the decoder.
     decoder_offset_scale (`float`, *optional*, defaults to 0.5):

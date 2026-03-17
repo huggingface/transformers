@@ -42,7 +42,7 @@ class Qwen3MoeConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    """
 
     model_type = "qwen3_moe"
     keys_to_ignore_at_inference = ["past_key_values"]

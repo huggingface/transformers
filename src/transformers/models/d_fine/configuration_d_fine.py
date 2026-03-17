@@ -30,7 +30,7 @@ from ..auto import AutoConfig
 @auto_docstring(checkpoint="ustc-community/dfine-xlarge-coco")
 @strict(accept_kwargs=True)
 class DFineConfig(PreTrainedConfig):
-    """
+    r"""
     initializer_bias_prior_prob (`float`, *optional*):
         The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
         If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
@@ -38,35 +38,18 @@ class DFineConfig(PreTrainedConfig):
         Whether to freeze the batch normalization layers in the backbone.
     encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
         Multi level features input for encoder.
-    encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
-        The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-        `"relu"`, `"silu"` and `"gelu_new"` are supported.
-    eval_size (`tuple[int, int]`, *optional*):
-        Height and width used to computes the effective height and width of the position embeddings after taking
-        into account the stride.
-    decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
-        Multi level features dimension for decoder
-    decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
-        The non-linear activation function (function or string) in the decoder. If string, `"gelu"`,
-        `"relu"`, `"silu"` and `"gelu_new"` are supported.
-    use_focal_loss (`bool`, *optional*, defaults to `True`):
-        Parameter informing if focal focal should be used.
-    focal_loss_alpha (`float`, *optional*, defaults to 0.75):
-        Parameter alpha used to compute the focal loss.
-    focal_loss_gamma (`float`, *optional*, defaults to 2.0):
-        Parameter gamma used to compute the focal loss.
-    eval_idx (`int`, *optional*, defaults to -1):
-        Index of the decoder layer to use for evaluation. If negative, counts from the end
-        (e.g., -1 means use the last layer). This allows for early prediction in the decoder
-        stack while still training later layers.
-    batch_norm_eps (`float`, *optional*, defaults to 1e-05):
-        The epsilon used by the batch normalization layers.
     feat_strides (`list[int]`, *optional*, defaults to `[8, 16, 32]`):
         Strides used in each feature map.
     encode_proj_layers (`list[int]`, *optional*, defaults to `[2]`):
         Indexes of the projected layers to be used in the encoder.
     positional_encoding_temperature (`int`, *optional*, defaults to 10000):
         The temperature parameter used to create the positional encodings.
+    encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+        `"relu"`, `"silu"` and `"gelu_new"` are supported.
+    eval_size (`tuple[int, int]`, *optional*):
+        Height and width used to computes the effective height and width of the position embeddings after taking
+        into account the stride.
     normalize_before (`bool`, *optional*, defaults to `False`):
         Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
         feed-forward modules.
@@ -74,10 +57,15 @@ class DFineConfig(PreTrainedConfig):
         Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
     num_queries (`int`, *optional*, defaults to 300):
         Number of object queries.
+    decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
+        Multi level features dimension for decoder
     num_feature_levels (`int`, *optional*, defaults to 3):
         The number of input feature levels.
     decoder_n_points (`int`, *optional*, defaults to 4):
         The number of sampled keys in each feature level for each attention head in the decoder.
+    decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
+        The non-linear activation function (function or string) in the decoder. If string, `"gelu"`,
+        `"relu"`, `"silu"` and `"gelu_new"` are supported.
     num_denoising (`int`, *optional*, defaults to 100):
         The total number of denoising tasks or queries to be used for contrastive denoising.
     label_noise_ratio (`float`, *optional*, defaults to 0.5):
@@ -101,6 +89,12 @@ class DFineConfig(PreTrainedConfig):
         The relative weight of the bounding box loss used by the Hungarian Matcher.
     matcher_giou_cost (`float`, *optional*, defaults to 2.0):
         The relative weight of the giou loss of used by the Hungarian Matcher.
+    use_focal_loss (`bool`, *optional*, defaults to `True`):
+        Parameter informing if focal focal should be used.
+    focal_loss_alpha (`float`, *optional*, defaults to 0.75):
+        Parameter alpha used to compute the focal loss.
+    focal_loss_gamma (`float`, *optional*, defaults to 2.0):
+        Parameter gamma used to compute the focal loss.
     weight_loss_vfl (`float`, *optional*, defaults to 1.0):
         Relative weight of the varifocal loss in the object detection loss.
     weight_loss_bbox (`float`, *optional*, defaults to 5.0):
@@ -111,8 +105,10 @@ class DFineConfig(PreTrainedConfig):
         Relative weight of the fine-grained localization loss in the object detection loss.
     weight_loss_ddf (`float`, *optional*, defaults to 1.5):
         Relative weight of the decoupled distillation focal loss in the object detection loss.
-    eos_coefficient (`float`, *optional*, defaults to 0.0001):
-        Relative classification weight of the 'no-object' class in the object detection loss.
+    eval_idx (`int`, *optional*, defaults to -1):
+        Index of the decoder layer to use for evaluation. If negative, counts from the end
+        (e.g., -1 means use the last layer). This allows for early prediction in the decoder
+        stack while still training later layers.
     layer_scale (`float`, *optional*, defaults to `1.0`):
         Scaling factor for the hidden dimension in later decoder layers. Used to adjust the
         model capacity after the evaluation layer.

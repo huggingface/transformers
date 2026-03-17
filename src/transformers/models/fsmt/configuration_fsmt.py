@@ -31,6 +31,8 @@ class FSMTConfig(PreTrainedConfig):
     tgt_vocab_size (`int`):
         Vocabulary size of the decoder. Defines the number of different tokens that can be represented by the
         `inputs_ids` passed to the forward method in the decoder.
+    max_length (`int`, *optional*, defaults to 200):
+        Maximum length to generate.
     num_beams (`int`, *optional*, defaults to 5):
         Number of beams for beam search that will be used by default in the `generate` method of the model. 1 means
         no beam search.
@@ -42,8 +44,6 @@ class FSMTConfig(PreTrainedConfig):
     early_stopping (`bool`, *optional*, defaults to `False`):
         Flag that will be used by default in the `generate` method of the model. Whether to stop the beam search
         when at least `num_beams` sentences are finished per batch or not.
-    max_length (`int`, *optional*, defaults to 200):
-        Maximum length to generate.
 
     Examples:
 

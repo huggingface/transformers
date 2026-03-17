@@ -86,8 +86,6 @@ class Pix2StructTextConfig(PreTrainedConfig):
 @strict(accept_kwargs=True)
 class Pix2StructVisionConfig(PreTrainedConfig):
     r"""
-    dense_act_fn (`Union[Callable, str]`, *optional*, defaults to `"gelu_new"`):
-        The non-linear activation function (function or string).
     patch_embed_hidden_size (`int`, *optional*, defaults to 768):
         Dimensionality of the input patch_embedding layer in the Transformer encoder.
     d_ff (`int`, *optional*, defaults to 2048):
@@ -96,6 +94,8 @@ class Pix2StructVisionConfig(PreTrainedConfig):
         Dimensionality of the key, query, value projections per attention head.
     The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
         `"relu"`, `"selu"` and `"gelu_new"` `"gelu"` are supported.
+    dense_act_fn (`Union[Callable, str]`, *optional*, defaults to `"gelu_new"`):
+        The non-linear activation function (function or string).
     seq_len (`int`, *optional*, defaults to 4096):
         Maximum sequence length (here number of patches) supported by the model.
     relative_attention_num_buckets (`int`, *optional*, defaults to 32):

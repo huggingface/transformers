@@ -102,13 +102,13 @@ class LasrEncoderConfig(PreTrainedConfig):
 @strict(accept_kwargs=True)
 class LasrCTCConfig(PreTrainedConfig):
     r"""
-        ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
-            Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
-            instance of [`LasrForCTC`].
-        ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
-            Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
-            occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
-            of [`LasrForCTC`].
+    ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
+        Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
+        instance of [`LasrForCTC`].
+    ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
+        Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
+        occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
+        of [`LasrForCTC`].
 
     Example:
         ```python

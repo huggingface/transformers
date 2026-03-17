@@ -39,8 +39,6 @@ class ModernBertConfig(PreTrainedConfig):
         Whether to use bias in the normalization layers.
     local_attention (`int`, *optional*, defaults to 128):
         The window size for local attention.
-    embedding_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout ratio for the embeddings.
     mlp_dropout (`float`, *optional*, defaults to 0.0):
         The dropout ratio for the MLP layers.
     decoder_bias (`bool`, *optional*, defaults to `True`):
@@ -58,11 +56,6 @@ class ModernBertConfig(PreTrainedConfig):
         Whether to use sparse prediction for the masked language model instead of returning the full dense logits.
     sparse_pred_ignore_index (`int`, *optional*, defaults to -100):
         The index to ignore for the sparse prediction.
-    reference_compile (`bool`, *optional*):
-        Whether to compile the layers of the model which were compiled during pretraining. If `None`, then parts of
-        the model will be compiled if 1) `triton` is installed, 2) the model is not on MPS, 3) the model is not
-        shared between devices, and 4) the model is not resized after initialization. If `True`, then the model may
-        be faster in some scenarios. This argument is deprecated and will be removed in a future version
 
     Examples:
 

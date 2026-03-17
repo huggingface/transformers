@@ -3286,6 +3286,7 @@ def _process_regular_parameters(
         # Skip parameters that should be ignored
         if (
             param_name in ARGS_TO_IGNORE
+            or param_name.startswith("_")  # Private/internal params (e.g. ClassVar-backed fields in configs)
             or param.kind == inspect.Parameter.VAR_POSITIONAL
             or param.kind == inspect.Parameter.VAR_KEYWORD
         ):
@@ -3333,8 +3334,17 @@ def _process_regular_parameters(
                 "description": description if description else "\n    <fill_description>",
                 "default": param_default,
             }
+            # Try to get the correct source file; for classes decorated with @strict (huggingface_hub),
+            # func.__code__.co_filename points to the wrapper in huggingface_hub, not the config file.
+            try:
+                if parent_class is not None:
+                    _source_file = inspect.getsourcefile(parent_class) or func.__code__.co_filename
+                else:
+                    _source_file = inspect.getsourcefile(inspect.unwrap(func)) or func.__code__.co_filename
+            except (TypeError, OSError):
+                _source_file = func.__code__.co_filename
             undocumented_parameters.append(
-                f"[ERROR] `{param_name}` is part of {func.__qualname__}'s signature, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
+                f"[ERROR] `{param_name}` is part of {func.__qualname__}'s signature, but not documented. Make sure to add it to the docstring of the function in {_source_file}."
             )
 
     return docstring, missing_args

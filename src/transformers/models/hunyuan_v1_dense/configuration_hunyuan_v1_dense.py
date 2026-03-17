@@ -26,6 +26,7 @@ class HunYuanDenseV1Config(PreTrainedConfig):
     r"""
     eod_token_id (int, *optional*, defaults to 3):
         Token ID representing the end-of-document marker. Used to indicate the termination of a text sequence.
+
         Example: In multi-document processing, this token helps the model distinguish between separate documents.
     """
 

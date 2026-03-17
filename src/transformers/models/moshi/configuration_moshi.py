@@ -91,16 +91,16 @@ class MoshiDepthConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="kmhf/hf-moshiko")
 @strict(accept_kwargs=True)
 class MoshiConfig(PreTrainedConfig):
-    """
-    depth_decoder_config (`PreTrainedConfig | dict`, *optional*):
-        Configuration for the depth decoder.
-    audio_encoder_config (`PreTrainedConfig | dict`, *optional*):
-        Configuration for the audio encoder.
+    r"""
     audio_vocab_size (`int`, *optional*):
         Vocabulary size of the audio part of model. Defines the number of different tokens that can be
         represented by the `audio_codes` passed when calling the Moshi models.
     ffn_dim (`int`, *optional*, defaults to 22528):
         Dimensionality of the "intermediate" (often named feed-forward) layer in the main decoder block. Must be even.
+    audio_encoder_config (`PreTrainedConfig | dict`, *optional*):
+        Configuration for the audio encoder.
+    depth_decoder_config (`PreTrainedConfig | dict`, *optional*):
+        Configuration for the depth decoder.
 
     Example:
 

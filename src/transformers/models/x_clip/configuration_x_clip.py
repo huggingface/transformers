@@ -64,8 +64,6 @@ class XCLIPTextConfig(PreTrainedConfig):
 @strict(accept_kwargs=True)
 class XCLIPVisionConfig(PreTrainedConfig):
     r"""
-    num_frames (`int`, *optional*, defaults to 8):
-        The number of frames in each video.
     mit_hidden_size (`int`, *optional*, defaults to 512):
         Dimensionality of the encoder layers of the Multiframe Integration Transformer (MIT).
     mit_intermediate_size (`int`, *optional*, defaults to 2048):
@@ -75,6 +73,8 @@ class XCLIPVisionConfig(PreTrainedConfig):
         Number of hidden layers in the Multiframe Integration Transformer (MIT).
     mit_num_attention_heads (`int`, *optional*, defaults to 8):
         Number of attention heads for each attention layer in the Multiframe Integration Transformer (MIT).
+    num_frames (`int`, *optional*, defaults to 8):
+        The number of frames in each video.
 
     Example:
 

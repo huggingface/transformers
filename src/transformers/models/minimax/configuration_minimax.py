@@ -56,7 +56,7 @@ class MiniMaxConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    """
 
     model_type = "minimax"
     keys_to_ignore_at_inference = ["past_key_values"]

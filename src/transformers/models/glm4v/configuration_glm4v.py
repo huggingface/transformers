@@ -151,7 +151,7 @@ class Glm4vConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    """
 
     model_type = "glm4v"
     sub_configs = {"vision_config": Glm4vVisionConfig, "text_config": Glm4vTextConfig}

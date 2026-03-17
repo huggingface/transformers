@@ -25,10 +25,6 @@ class CTRLConfig(PreTrainedConfig):
     r"""
     dff (`int`, *optional*, defaults to 8192):
         Dimensionality of the inner dimension of the feed forward networks (FFN).
-    resid_pdrop (`float`, *optional*, defaults to 0.1):
-        The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-    embd_pdrop (`int`, *optional*, defaults to 0.1):
-        The dropout ratio for the embeddings.
 
     Examples:
 

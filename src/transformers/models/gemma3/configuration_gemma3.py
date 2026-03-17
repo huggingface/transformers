@@ -34,12 +34,12 @@ logger = logging.get_logger(__name__)
 @strict(accept_kwargs=True)
 class Gemma3TextConfig(PreTrainedConfig):
     r"""
+    query_pre_attn_scalar (`float`, *optional*, defaults to 256):
+        scaling factor used on the attention scores
     final_logit_softcapping (`float`, *optional*):
         Scaling factor when applying tanh softcapping on the logits.
     attn_logit_softcapping (`float`, *optional*):
         Scaling factor when applying tanh softcapping on the attention scores.
-    query_pre_attn_scalar (`float`, *optional*, defaults to 256):
-        scaling factor used on the attention scores
     use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
         If True, the model will attend to all text tokens instead of using a causal mask. This does not change
         behavior for vision tokens.

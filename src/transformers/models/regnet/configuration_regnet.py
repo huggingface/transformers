@@ -23,14 +23,14 @@ from ...utils import auto_docstring
 @strict(accept_kwargs=True)
 class RegNetConfig(PreTrainedConfig):
     r"""
+    groups_width (`int`, *optional*, defaults to 64):
+        Width of group for each stage.
     layer_type (`str`, *optional*, defaults to `"y"`):
         The layer to use, it can be either `"x" or `"y"`. An `x` layer is a ResNet's BottleNeck layer with
         `reduction` fixed to `1`. While a `y` layer is a `x` but with squeeze and excitation. Please refer to the
         paper for a detailed explanation of how these layers were constructed.
     downsample_in_first_stage (`bool`, *optional*, defaults to `False`):
         If `True`, the first stage will downsample the inputs using a `stride` of 2.
-    groups_width (`int`, *optional*, defaults to 64):
-        Width of group for each stage.
 
     Example:
     ```python

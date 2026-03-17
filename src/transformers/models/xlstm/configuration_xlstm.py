@@ -56,7 +56,7 @@ else:
 @auto_docstring(checkpoint="NX-AI/xLSTM-7b")
 @strict(accept_kwargs=True)
 class xLSTMConfig(PreTrainedConfig):
-    """
+    r"""
     num_blocks (int, optional, *optional*, defaults to 32):
         Number of blocks of the xLSTM model, use num_hidden_layers if None.
     num_heads (int, optional, *optional*, defaults to 8):

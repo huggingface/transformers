@@ -43,7 +43,7 @@ class Lfm2MoeConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    """
 
     model_type = "lfm2_moe"
     keys_to_ignore_at_inference = ["past_key_values"]

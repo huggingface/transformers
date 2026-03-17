@@ -27,6 +27,8 @@ logger = logging.get_logger(__name__)
 @strict(accept_kwargs=True)
 class ChameleonVQVAEConfig(PreTrainedConfig):
     r"""
+    resolution (`int`, *optional*, defaults to 512):
+        Resolution of the input images.
     base_channels (`int`, *optional*, defaults to 128):
         Base channel count.
     channel_multiplier (`list[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
@@ -39,8 +41,6 @@ class ChameleonVQVAEConfig(PreTrainedConfig):
         Dropout rate.
     attn_type (`str`, *optional*, defaults to `"vanilla"`):
         Attention type used in VQ-GAN encoder. Can be "vanilla" or None
-    resolution (`int`, *optional*, defaults to 512):
-        Resolution of the input images.
     """
 
     model_type = "chameleon_vqgan"
@@ -84,7 +84,7 @@ class ChameleonConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    """
 
     model_type = "chameleon"
     sub_configs = {"vq_config": ChameleonVQVAEConfig}

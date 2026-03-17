@@ -23,13 +23,13 @@ from ...utils import auto_docstring
 @strict(accept_kwargs=True)
 class LEDConfig(PreTrainedConfig):
     r"""
-    attention_window (`int` or `list[int]`, *optional*, defaults to 512):
-        Size of an attention window around each token. If an `int`, use the same size for all layers. To specify a
-        different window size for each layer, use a `list[int]` where `len(attention_window) == num_hidden_layers`.
     max_encoder_position_embeddings (`int`, *optional*, defaults to 16384):
         The maximum sequence length that the encoder might ever be used with.
     max_decoder_position_embeddings (`int`, *optional*, defaults to 16384):
         The maximum sequence length that the decoder might ever be used with.
+    attention_window (`int` or `list[int]`, *optional*, defaults to 512):
+        Size of an attention window around each token. If an `int`, use the same size for all layers. To specify a
+        different window size for each layer, use a `list[int]` where `len(attention_window) == num_hidden_layers`.
 
     Example:
 

@@ -29,8 +29,6 @@ class SwitchTransformersConfig(PreTrainedConfig):
         Number of sparse (MoE) dense hidden layers in the Transformer encoder layer.
         Note: When set to 0 with `num_layers=1`, the current implementation may still create a sparse layer
         due to the sparse step calculation. This edge case is not encountered in existing checkpoints.
-    num_decoder_layers (`int`, *optional*, defaults to 12):
-        Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
     num_sparse_decoder_layers (`int`, *optional*, defaults to 3):
         Number of sparse (MoE) dense hidden layers in the Transformer decoder layer.
         Note: When set to 0 with `num_decoder_layers=1`, the current implementation may still create a sparse

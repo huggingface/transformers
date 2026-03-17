@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="openai-community/openai-gpt")
 @strict(accept_kwargs=True)
 class OpenAIGPTConfig(PreTrainedConfig):
-    """
+    r"""
     afn (`str` or `Callable`, *optional*, defaults to `"gelu"`):
         The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
         `"relu"`, `"silu"` and `"gelu_new"` are supported.

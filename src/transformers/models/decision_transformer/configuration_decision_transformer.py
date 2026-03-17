@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="")
 @strict(accept_kwargs=True)
 class DecisionTransformerConfig(PreTrainedConfig):
-    """
+    r"""
     state_dim (`int`, *optional*, defaults to 17):
         The state size for the RL environment
     act_dim (`int`, *optional*, defaults to 4):
