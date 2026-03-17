@@ -189,7 +189,7 @@ else:
             ("perceiver", {"torchvision": "PerceiverImageProcessor", "pil": "PerceiverImageProcessorPil"}),
             ("perception_lm", {"torchvision": "PerceptionLMImageProcessor"}),
             ("phi4_multimodal", {"torchvision": "Phi4MultimodalImageProcessor"}),
-            ("pi0", {"torchvision": "Pi0ImageProcessor"}),
+            ("pi0", {"torchvision": "PI0ImageProcessor"}),
             ("pix2struct", {"torchvision": "Pix2StructImageProcessor", "pil": "Pix2StructImageProcessorPil"}),
             ("pixio", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
             ("pixtral", {"torchvision": "PixtralImageProcessor", "pil": "PixtralImageProcessorPil"}),
