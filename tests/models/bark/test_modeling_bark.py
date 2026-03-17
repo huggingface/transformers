@@ -491,10 +491,10 @@ class BarkModelTester:
 
     def get_config(self):
         return BarkConfig(
-            self.semantic_model_tester.get_config(),
-            self.coarse_acoustics_model_tester.get_config(),
-            self.fine_acoustics_model_tester.get_config(),
-            self.codec_model_tester.get_config(),
+            semantic_config=self.semantic_model_tester.get_config(),
+            coarse_acoustics_config=self.coarse_acoustics_model_tester.get_config(),
+            fine_acoustics_config=self.fine_acoustics_model_tester.get_config(),
+            codec_config=self.codec_model_tester.get_config(),
         )
 
     def get_pipeline_config(self):
