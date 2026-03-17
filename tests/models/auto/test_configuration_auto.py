@@ -121,6 +121,9 @@ class AutoConfigTest(unittest.TestCase):
         class NewModelConfigLocal(BertConfig):
             model_type = "new-model"
 
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+
         try:
             AutoConfig.register("new-model", NewModelConfigLocal)
             # If remote code is not set, the default is to use local
