@@ -591,17 +591,13 @@ class DefaultFlowCallback(TrainerCallback):
         # End training
         if state.global_step >= state.max_steps:
             control.should_training_stop = True
-            # Evaluate at the end if we have a step-based eval strategy and this step
+    # Evaluate at the end if we have a step-based eval strategy and this step
             # wasn't already going to be evaluated (to avoid duplicate evaluation).
-<<<<<<< HEAD
             if (
                 args.eval_strategy == IntervalStrategy.STEPS
                 and state.global_step % state.eval_steps != 0
                 and args.eval_delay <= state.global_step
             ):
-=======
-            if args.eval_strategy == IntervalStrategy.STEPS and state.global_step % state.eval_steps != 0:
->>>>>>> 681ccf6df2 (style: format trainer_callback.py)
                 control.should_evaluate = True
             # Save the model at the end if we have a save strategy
             if args.save_strategy == SaveStrategy.STEPS:
