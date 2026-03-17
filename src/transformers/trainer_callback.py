@@ -591,7 +591,7 @@ class DefaultFlowCallback(TrainerCallback):
         # End training
         if state.global_step >= state.max_steps:
             control.should_training_stop = True
-    # Evaluate at the end if we have a step-based eval strategy and this step
+            # Evaluate at the end if we have a step-based eval strategy and this step
             # wasn't already going to be evaluated (to avoid duplicate evaluation).
             if (
                 args.eval_strategy == IntervalStrategy.STEPS

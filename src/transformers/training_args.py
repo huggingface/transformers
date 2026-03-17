@@ -1091,7 +1091,6 @@ class TrainingArguments:
             "help": "Whether to run through the entire `evaluation` step at the very beginning of training as a sanity check."
         },
     )
-
     eval_do_concat_batches: bool = field(
         default=True,
         metadata={
