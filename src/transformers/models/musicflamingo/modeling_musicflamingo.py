@@ -31,7 +31,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -265,14 +265,20 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor,
         rote_timestamps: torch.Tensor | None = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padded feature indices.
         rote_timestamps (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
             Timestamps in seconds for each encoder output position, used to compute rotary time embeddings.
         """
-        encoder_output = self.audio_tower(input_features, input_features_mask=input_features_mask)
+        encoder_output = self.audio_tower(
+            input_features,
+            input_features_mask=input_features_mask,
+            return_dict=True,
+            **kwargs,
+        )
         hidden_states = encoder_output.last_hidden_state
         if rote_timestamps is not None:
             cos, sin = self.pos_emb(rote_timestamps.to(hidden_states.device), seq_len=hidden_states.shape[-2])
@@ -282,8 +288,8 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
         # Mask according to the audio tower output lengths, accounting for both conv downsampling and final avg pooling
         _, post_lengths = self.audio_tower._get_feat_extract_output_lengths(input_features_mask.sum(-1).to(torch.long))
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
-        audio_embeds = audio_embeds[valid_mask.to(audio_embeds.device)]
-        return audio_embeds
+        encoder_output.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
+        return encoder_output
 
     @can_return_tuple
     @auto_docstring
@@ -373,8 +379,11 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
 
         if input_features is not None and input_ids is not None:
             audio_embeds = self.get_audio_features(
-                input_features, input_features_mask, rote_timestamps=rote_timestamps
-            )
+                input_features,
+                input_features_mask,
+                rote_timestamps=rote_timestamps,
+                return_dict=True,
+            ).pooler_output
 
             # replace text-audio token placeholders with audio embeddings
             audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
