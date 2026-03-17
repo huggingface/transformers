@@ -156,7 +156,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
     MAX_PIXELS = 60_000_000  # 60‑megapixel ceiling ≈ 8200 × 7300 px
 
     resample = PILImageResampling.BILINEAR
-    model_input_names = ["patches", "token_grids", "mm_token_type_ids"]
+    model_input_names = ["vision_patches", "vision_token_grids", "vision_position_dims", "vision_segment_lengths"]
     valid_kwargs = IsaacImageProcessorFastKwargs
     unused_kwargs = ["size", "do_center_crop", "crop_size", "pad_size", "do_pad"]
 
@@ -240,20 +240,10 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
             )
 
             patches = torch_extract_patches(image_batch, patch_size, patch_size)
-            _, height_tokens, width_tokens, _ = patches.shape
+            _, height_tokens, width_tokens, patch_dim = patches.shape
 
             token_grid = (
                 torch.tensor([height_tokens, width_tokens], device=patches.device).long().expand(batch_size, 2)
-            )
-
-            real_dim = (
-                torch.tensor(
-                    [1, height_tokens, width_tokens],
-                    dtype=torch.long,
-                    device=patches.device,
-                )
-                .unsqueeze(0)
-                .repeat(batch_size, 1)
             )
 
             if (height_tokens % pixel_shuffle_scale) or (width_tokens % pixel_shuffle_scale):
@@ -263,7 +253,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
             virtual_height = height_tokens // pixel_shuffle_scale
             virtual_width = width_tokens // pixel_shuffle_scale
 
-            virtual_dim = (
+            position_dims = (
                 torch.tensor(
                     [1, virtual_height, virtual_width],
                     dtype=torch.long,
@@ -272,9 +262,20 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
                 .unsqueeze(0)
                 .repeat(batch_size, 1)
             )
-            grouped_outputs[shape] = (patches, token_grid, virtual_dim, real_dim)
+            segment_lengths = torch.full(
+                (batch_size,),
+                virtual_height * virtual_width,
+                dtype=torch.long,
+                device=patches.device,
+            )
+            grouped_outputs[shape] = (
+                patches.reshape(batch_size, -1, patch_dim),
+                token_grid,
+                position_dims,
+                segment_lengths,
+            )
 
-        keys = ("patches", "token_grids", "virtual_pixel_size", "real_pixel_size")
+        keys = ("vision_patches", "vision_token_grids", "vision_position_dims", "vision_segment_lengths")
         tensors: dict[str, torch.Tensor] = {}
 
         for i, key in enumerate(keys):

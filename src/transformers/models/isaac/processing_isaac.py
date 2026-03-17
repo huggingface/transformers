@@ -130,18 +130,16 @@ class IsaacProcessor(ProcessorMixin):
 
                 if index < num_images:
                     feature = self.image_processor(images=sample_images[index], return_tensors=TensorType.PYTORCH)
-                    patches = feature["patches"][0].reshape(-1, feature["patches"].shape[-1])
-                    virtual_pixel_size = feature["virtual_pixel_size"][0].to(torch.long).tolist()
-                    real_pixel_size = feature["real_pixel_size"][0].to(torch.long).tolist()
-                    dims = tuple((virtual_pixel_size + [1, 1, 1])[:3])
-                    segment_length = int(dims[0] * dims[1] * dims[2])
+                    patches = feature["vision_patches"][0]
+                    dims = tuple(feature["vision_position_dims"][0].to(torch.long).tolist())
+                    segment_length = int(feature["vision_segment_lengths"][0].item())
                     items.append(
                         {
                             "type": "image",
                             "segment_length": segment_length,
                             "dims": dims,
                             "patches": patches,
-                            "grid": (int(real_pixel_size[1]), int(real_pixel_size[2])),
+                            "grid": tuple(feature["vision_token_grids"][0].to(torch.long).tolist()),
                         }
                     )
                     total += segment_length
