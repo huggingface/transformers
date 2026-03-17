@@ -18,6 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -27,6 +29,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
+@strict(accept_kwargs=True)
 class JanusVisionConfig(PreTrainedConfig):
     r"""
     num_image_tokens (`int`, *optional*, defaults to 576):
@@ -38,52 +41,28 @@ class JanusVisionConfig(PreTrainedConfig):
     model_type = "janus_vision_model"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        hidden_size=1024,
-        num_hidden_layers=24,
-        num_attention_heads=16,
-        num_channels=3,
-        patch_size=16,
-        image_size=384,
-        attention_dropout=0.0,
-        layer_norm_eps=1e-6,
-        hidden_act="gelu",
-        mlp_ratio=4.0,
-        attention_bias=True,
-        hidden_dropout_rate=0.0,
-        projection_dim=2048,
-        projection_dropout=0.0,
-        use_qk_norm=False,
-        initializer_range=0.02,
-        depth=2,
-        num_image_tokens=576,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.image_size = image_size
-        self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
-
-        self.mlp_ratio = mlp_ratio
-        self.attention_bias = attention_bias
-        self.hidden_dropout_rate = hidden_dropout_rate
-        self.projection_dim = projection_dim
-        self.projection_dropout = projection_dropout
-        self.use_qk_norm = use_qk_norm
-        self.initializer_range = initializer_range
-        self.depth = depth
-        self.num_image_tokens = num_image_tokens
+    hidden_size: int = 1024
+    num_hidden_layers: int = 24
+    num_attention_heads: int = 16
+    num_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] = 384
+    patch_size: int | list[int] | tuple[int, int] = 16
+    hidden_act: str = "gelu"
+    layer_norm_eps: float = 1e-6
+    attention_dropout: float | int = 0.0
+    mlp_ratio: float | int = 4.0
+    attention_bias: bool = True
+    hidden_dropout_rate: float = 0.0
+    projection_dim: int = 2048
+    projection_dropout: float | int = 0.0
+    use_qk_norm: bool = False
+    initializer_range: float = 0.02
+    depth: int = 2
+    num_image_tokens: int = 576
 
 
 @auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
+@strict(accept_kwargs=True)
 class JanusVQVAEConfig(PreTrainedConfig):
     r"""
     image_token_embed_dim (`int`, *optional*, defaults to 2048):
@@ -103,46 +82,26 @@ class JanusVQVAEConfig(PreTrainedConfig):
     model_type = "janus_vqgan"
     base_config_key = "vq_config"
 
-    def __init__(
-        self,
-        embed_dim: int = 8,
-        num_embeddings: int = 16384,
-        double_latent: bool = False,
-        latent_channels: int = 256,
-        num_patches: int = 32,
-        in_channels: int = 3,
-        out_channels: int = 3,
-        base_channels: int = 128,
-        channel_multiplier: list[int] = [1, 1, 2, 2, 4],
-        num_res_blocks: int = 2,
-        dropout: float = 0.0,
-        initializer_range=0.02,
-        projection_dim=2048,
-        num_hidden_layers=2,
-        hidden_act="gelu",
-        image_token_embed_dim=2048,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.embed_dim = embed_dim
-        self.num_embeddings = num_embeddings
-        self.double_latent = double_latent
-        self.latent_channels = latent_channels
-        self.in_channels = in_channels
-        self.base_channels = base_channels
-        self.channel_multiplier = channel_multiplier
-        self.num_res_blocks = num_res_blocks
-        self.dropout = dropout
-        self.initializer_range = initializer_range
-        self.num_patches = num_patches
-        self.out_channels = out_channels
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.hidden_act = hidden_act
-        self.image_token_embed_dim = image_token_embed_dim
+    embed_dim: int = 8
+    num_embeddings: int = 16384
+    double_latent: bool = False
+    latent_channels: int = 256
+    in_channels: int = 3
+    base_channels: int = 128
+    channel_multiplier: list[int] | tuple[int, ...] = (1, 1, 2, 2, 4)
+    num_res_blocks: int = 2
+    dropout: float | int = 0.0
+    initializer_range: float = 0.02
+    num_patches: int = 32
+    out_channels: int = 3
+    projection_dim: int = 2048
+    num_hidden_layers: int = 2
+    hidden_act: str = "gelu"
+    image_token_embed_dim = 2048
 
 
 @auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
+@strict(accept_kwargs=True)
 class JanusConfig(PreTrainedConfig):
     r"""
     Example:
@@ -176,61 +135,34 @@ class JanusConfig(PreTrainedConfig):
         "vq_config": JanusVQVAEConfig,
     }
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        vq_config=None,
-        image_token_id=100581,
-        **kwargs,
-    ):
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "llama")
-            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    vq_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 100581
 
-        elif text_config is None:
+    def __post_init__(self, **kwargs):
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "llama")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
             logger.info("`text_config` is None. Initializing with default values")
             self.text_config = CONFIG_MAPPING["llama"]()
-        elif isinstance(text_config, PreTrainedConfig):
-            self.text_config = text_config
-        else:
-            raise ValueError(
-                f"Invalid type for `text_config`. Must be either `dict` or `LlamaConfig`."
-                f" Type found: {type(text_config)}"
-            )
 
-        if vision_config is None:
+        if self.vision_config is None:
             logger.info("`vision_config` is None. Initializing with default JanusVisionConfig values")
             self.vision_config = JanusVisionConfig()
-        elif isinstance(vision_config, dict):
-            self.vision_config = JanusVisionConfig(**vision_config)
-        elif isinstance(vision_config, JanusVisionConfig):
-            self.vision_config = vision_config
-        else:
-            raise ValueError(
-                f"Invalid type for `vision_config`. Must be either `dict` or `JanusVisionConfig`."
-                f" Type found: {type(vision_config)}"
-            )
+        elif isinstance(self.vision_config, dict):
+            self.vision_config = JanusVisionConfig(**self.vision_config)
 
-        if vq_config is None:
+        if self.vq_config is None:
             logger.info("`vq_config` is None. Initializing with default JanusVQVAEConfig values")
             self.vq_config = JanusVQVAEConfig()
-        elif isinstance(vq_config, dict):
-            self.vq_config = JanusVQVAEConfig(**vq_config)
-        elif isinstance(vq_config, JanusVQVAEConfig):
-            self.vq_config = vq_config
-        else:
-            raise ValueError(
-                f"Invalid type for `vq_config`. Must be either `dict` or `JanusVQVAEConfig`."
-                f" Type found: {type(vq_config)}"
-            )
+        elif isinstance(self.vq_config, dict):
+            self.vq_config = JanusVQVAEConfig(**self.vq_config)
 
-        self.initializer_range = self.vision_config.initializer_range
         # This dimension is required when decoding discrete image tokens to continuous input.
         self.vq_config.num_patches = self.vision_config.image_size // self.vision_config.patch_size
-        # The default is only the index for the 1B model, 7B uses a different one
-        self.image_token_id = image_token_id
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["JanusVQVAEConfig", "JanusVisionConfig", "JanusConfig"]
