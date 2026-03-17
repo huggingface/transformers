@@ -13,15 +13,15 @@
 # limitations under the License.
 """StableLM model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="stabilityai/stablelm-3b-4e1t")
+@strict(accept_kwargs=True)
 class StableLmConfig(PreTrainedConfig):
     r"""
     use_parallel_residual (`bool`, *optional*, defaults to `False`):
@@ -42,57 +42,31 @@ class StableLmConfig(PreTrainedConfig):
     model_type = "stablelm"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        vocab_size: int | None = 50304,
-        intermediate_size: int | None = 6912,
-        hidden_size: int | None = 2560,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = 32,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 4096,
-        initializer_range: float | None = 0.02,
-        layer_norm_eps: float | None = 1.0e-5,
-        use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        use_qkv_bias: bool | None = False,
-        qk_layernorm: bool | None = False,
-        use_parallel_residual: bool | None = False,
-        hidden_dropout: float | None = 0.0,
-        attention_dropout: float | None = 0.0,
-        bos_token_id: int | None = 0,
-        eos_token_id: int | None = 0,
-        pad_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
+    vocab_size: int = 50304
+    intermediate_size: int = 6912
+    hidden_size: int = 2560
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    num_key_value_heads: int = 32
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 4096
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1.0e-5
+    use_cache: bool = True
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    use_qkv_bias: bool = False
+    qk_layernorm: bool = False
+    use_parallel_residual: bool = False
+    hidden_dropout: float | int = 0.0
+    attention_dropout: float | int = 0.0
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 0
+    pad_token_id: int | None = None
 
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        self.use_qkv_bias = use_qkv_bias
-        self.qk_layernorm = qk_layernorm
-        self.use_parallel_residual = use_parallel_residual
-        self.hidden_dropout = hidden_dropout
-        self.attention_dropout = attention_dropout
-        self.rope_parameters = rope_parameters
+    def __post_init__(self, **kwargs):
         kwargs.setdefault("partial_rotary_factor", 0.25)  # assign default for BC
-
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["StableLmConfig"]

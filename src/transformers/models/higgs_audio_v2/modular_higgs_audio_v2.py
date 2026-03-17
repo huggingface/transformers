@@ -15,6 +15,7 @@
 
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
@@ -39,6 +40,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="bosonai/higgs-audio-v2-generation-3B-base")
+@strict(accept_kwargs=True)
 class HiggsAudioV2Config(LlamaConfig):
     r"""
     audio_bos_token_id (`int`, *optional*, defaults to 128013):
@@ -65,76 +67,35 @@ class HiggsAudioV2Config(LlamaConfig):
     >>> configuration = model.config
     ```"""
 
-    def __init__(
-        self,
-        vocab_size=128256,
-        hidden_size=3072,
-        intermediate_size=8192,
-        num_hidden_layers=28,
-        num_attention_heads=24,
-        num_key_value_heads=8,
-        hidden_act="silu",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        rms_norm_eps=1e-05,
-        use_cache=True,
-        pad_token_id=128001,
-        bos_token_id=1,
-        eos_token_id=128009,
-        pretraining_tp=1,
-        tie_word_embeddings=False,
-        rope_parameters={
-            "factor": 32.0,
-            "rope_theta": 500000.0,
-            "high_freq_factor": 0.5,
-            "low_freq_factor": 0.125,
-            "original_max_position_embeddings": 1024,
-            "rope_type": "llama3",
-        },
-        attention_bias=False,
-        attention_dropout=0.0,
-        mlp_bias=False,
-        head_dim=128,
-        num_codebooks=8,
-        codebook_size=1024,
-        audio_token_id=128016,
-        audio_bos_token_id=128013,
-        audio_delay_token_id=128014,
-        audio_stream_bos_id=1024,
-        audio_stream_eos_id=1025,
-        **kwargs,
-    ):
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            rms_norm_eps=rms_norm_eps,
-            use_cache=use_cache,
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            pretraining_tp=pretraining_tp,
-            tie_word_embeddings=tie_word_embeddings,
-            rope_parameters=rope_parameters,
-            attention_bias=attention_bias,
-            attention_dropout=attention_dropout,
-            mlp_bias=mlp_bias,
-            head_dim=head_dim,
-            **kwargs,
-        )
-        self.num_codebooks = num_codebooks
-        self.codebook_size = codebook_size
-        self.audio_token_id = audio_token_id
-        self.audio_bos_token_id = audio_bos_token_id
-        self.audio_delay_token_id = audio_delay_token_id
-        self.audio_stream_bos_id = audio_stream_bos_id
-        self.audio_stream_eos_id = audio_stream_eos_id
+    vocab_size: int = 128256
+    rms_norm_eps: float = 1e-5
+    hidden_size: int = 3072
+    intermediate_size: int = 8192
+    num_hidden_layers: int = 28
+    num_attention_heads: int = 24
+    num_key_value_heads: int = 8
+    pad_token_id: int | None = 128001
+    eos_token_id: int | None = 128009
+    head_dim: int | None = 128
+    num_codebooks: int = 8
+    codebook_size: int = 1024
+    audio_token_id: int = 128016
+    audio_bos_token_id: int = 128013
+    audio_delay_token_id: int = 128014
+    audio_stream_bos_id: int = 1024
+    audio_stream_eos_id: int = 1025
+
+    def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {
+                "factor": 32.0,
+                "rope_theta": 500000.0,
+                "high_freq_factor": 0.5,
+                "low_freq_factor": 0.125,
+                "original_max_position_embeddings": 1024,
+                "rope_type": "llama3",
+            }
+        super().__post_init__(**kwargs)
 
 
 class HiggsAudioV2MLP(LlamaMLP):

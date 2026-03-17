@@ -43,7 +43,7 @@ class WavLMAttention(nn.Module):
         self,
         embed_dim: int,
         num_heads: int,
-        dropout: float = 0.0,
+        dropout: float | int = 0.0,
         num_buckets: int = 320,
         max_distance: int = 800,
         has_relative_position_bias: bool = True,
