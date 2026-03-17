@@ -19,6 +19,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
+from ...modeling_layers import DropPath
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutputWithNoAttention,
@@ -34,37 +35,6 @@ from .configuration_convnext import ConvNextConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-# Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->ConvNext
-class ConvNextDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
 
 
 class ConvNextLayerNorm(nn.LayerNorm):
@@ -143,7 +113,7 @@ class ConvNextLayer(nn.Module):
             if config.layer_scale_init_value > 0
             else None
         )
-        self.drop_path = ConvNextDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         residual = features

@@ -28,6 +28,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
+from ...modeling_layers import DropPath
 from ...modeling_outputs import BaseModelOutputWithPooling, Seq2SeqLMOutput, Seq2SeqModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import MultiModalData, ProcessorMixin, Unpack
@@ -37,7 +38,6 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..bart.modeling_bart import eager_attention_forward, shift_tokens_right
-from ..beit.modeling_beit import BeitDropPath
 from ..llama4.modeling_llama4 import Llama4VisionMLP
 from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel, LlavaPreTrainedModel
 from ..llava.processing_llava import LlavaProcessorKwargs
@@ -884,10 +884,6 @@ class Florence2PostProcessor:
         return parsed_dict
 
 
-class Florence2VisionDropPath(BeitDropPath):
-    pass
-
-
 class Florence2VisionLearnedAbsolutePositionEmbedding2D(nn.Module):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -1056,7 +1052,7 @@ class Florence2VisionChannelBlock(nn.Module):
         )
         self.norm1 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.channel_attn = Florence2VisionChannelAttention(config=config, stage_idx=stage_idx)
-        self.drop_path1 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path1 = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
         self.conv2 = nn.Conv2d(
             dim_in,
@@ -1067,7 +1063,7 @@ class Florence2VisionChannelBlock(nn.Module):
         )
         self.norm2 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.ffn = Florence2VisionMLP(config=config, stage_idx=stage_idx)
-        self.drop_path2 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path2 = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor):
         batch_size, embed_dim, height, width = hidden_states.shape
@@ -1192,7 +1188,7 @@ class Florence2VisionSpatialBlock(nn.Module):
         )
         self.norm1 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.window_attn = Florence2VisionWindowAttention(config=config, stage_idx=stage_idx)
-        self.drop_path1 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path1 = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
         self.conv2 = nn.Conv2d(
             config.embed_dim[stage_idx],
@@ -1203,7 +1199,7 @@ class Florence2VisionSpatialBlock(nn.Module):
         )
         self.norm2 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.ffn = Florence2VisionMLP(config=config, stage_idx=stage_idx)
-        self.drop_path2 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path2 = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor):
         batch_size, embed_dim, height, width = hidden_states.shape

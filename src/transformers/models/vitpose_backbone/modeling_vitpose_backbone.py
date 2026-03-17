@@ -125,7 +125,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->VitPoseBackbone
+# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VitPoseBackbone
 class VitPoseBackboneSelfAttention(nn.Module):
     def __init__(self, config: VitPoseBackboneConfig):
         super().__init__()
@@ -181,7 +181,7 @@ class VitPoseBackboneSelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->VitPoseBackbone
+# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VitPoseBackbone
 class VitPoseBackboneSelfOutput(nn.Module):
     """
     The residual connection is defined in VitPoseBackboneLayer instead of here (as is the case with other models), due to the

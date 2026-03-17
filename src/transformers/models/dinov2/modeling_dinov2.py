@@ -22,7 +22,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import DropPath, GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -178,7 +178,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->Dinov2
+# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Dinov2
 class Dinov2SelfAttention(nn.Module):
     def __init__(self, config: Dinov2Config):
         super().__init__()
@@ -234,7 +234,7 @@ class Dinov2SelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->Dinov2
+# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Dinov2
 class Dinov2SelfOutput(nn.Module):
     """
     The residual connection is defined in Dinov2Layer instead of here (as is the case with other models), due to the
@@ -276,37 +276,6 @@ class Dinov2LayerScale(nn.Module):
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         return hidden_state * self.lambda1
-
-
-# Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath
-class Dinov2DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
 
 
 class Dinov2MLP(nn.Module):
@@ -354,7 +323,7 @@ class Dinov2Layer(GradientCheckpointingLayer):
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = Dinov2Attention(config)
         self.layer_scale1 = Dinov2LayerScale(config)
-        self.drop_path = Dinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 

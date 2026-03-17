@@ -23,12 +23,12 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import DropPath, GradientCheckpointingLayer, drop_path_schedule
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
-from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..vit.modeling_vit import ViTMLP, eager_attention_forward
@@ -651,9 +651,46 @@ class SwinStage(GradientCheckpointingLayer):
         return hidden_states, reshaped_hidden_states
 
 
-class SwinEncoder(nn.Module):
+@auto_docstring
+class SwinPreTrainedModel(PreTrainedModel):
+    config: SwinConfig
+    base_model_prefix = "swin"
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["SwinStage"]
+    _supports_sdpa = True
+    _supports_flash_attn = False
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+    _can_compile_fullgraph = True
+    _can_record_outputs = {
+        # capture_initial_input=True: prepend the embedding input (args[0] of SwinStage 0) so that
+        # hidden_states[0] has the same shape as the patch embeddings (num_patches, embed_dim).
+        "hidden_states": OutputRecorder(SwinStage, index=0, capture_initial_input=True),
+        # reshaped_hidden_states are collected explicitly by SwinEncoder (per stage) and the stem
+        # is prepended in SwinModel.forward, so they are NOT captured via hooks here.
+        # index=1: SwinAttention returns (attn_output, attn_weights); capture weights at index 1.
+        "attentions": OutputRecorder(SwinAttention, index=1, capture_initial_input=False),
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+        if isinstance(module, SwinEmbeddings):
+            if module.mask_token is not None:
+                init.zeros_(module.mask_token)
+            if module.position_embeddings is not None:
+                init.zeros_(module.position_embeddings)
+        elif isinstance(module, SwinRelativePositionBias):
+            init.zeros_(module.relative_position_bias_table)
+            init.copy_(module.relative_position_index, module._create_relative_position_index())
+
+
+class SwinEncoder(SwinPreTrainedModel):
     def __init__(self, config: SwinConfig, grid_size: tuple[int, int]):
-        super().__init__()
+        super().__init__(config)
         self.num_layers = len(config.depths)
         self.config = config
         dpr = drop_path_schedule(config, num_layers=sum(config.depths))
@@ -671,7 +708,10 @@ class SwinEncoder(nn.Module):
                 for i_layer in range(self.num_layers)
             ]
         )
+        self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -711,43 +751,6 @@ class SwinEncoder(nn.Module):
 
 
 @auto_docstring
-class SwinPreTrainedModel(PreTrainedModel):
-    config: SwinConfig
-    base_model_prefix = "swin"
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["SwinStage"]
-    _supports_sdpa = True
-    _supports_flash_attn = False
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-    _can_compile_fullgraph = True
-    _can_record_outputs = {
-        # capture_initial_input=True: prepend the embedding input (args[0] of SwinStage 0) so that
-        # hidden_states[0] has the same shape as the patch embeddings (num_patches, embed_dim).
-        "hidden_states": OutputRecorder(SwinStage, index=0, capture_initial_input=True),
-        # reshaped_hidden_states are collected explicitly by SwinEncoder (per stage) and the stem
-        # is prepended in SwinModel.forward, so they are NOT captured via hooks here.
-        # index=1: SwinAttention returns (attn_output, attn_weights); capture weights at index 1.
-        "attentions": OutputRecorder(SwinAttention, index=1, capture_initial_input=False),
-    }
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        super()._init_weights(module)
-        if isinstance(module, SwinEmbeddings):
-            if module.mask_token is not None:
-                init.zeros_(module.mask_token)
-            if module.position_embeddings is not None:
-                init.zeros_(module.position_embeddings)
-        elif isinstance(module, SwinRelativePositionBias):
-            init.zeros_(module.relative_position_bias_table)
-            init.copy_(module.relative_position_index, module._create_relative_position_index())
-
-
-@auto_docstring
 class SwinModel(SwinPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
         r"""
@@ -773,8 +776,7 @@ class SwinModel(SwinPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1015,17 +1017,15 @@ class SwinBackbone(BackboneMixin, SwinPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @merge_with_config_defaults
-    @capture_outputs
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
-        """
-        Returns:
-
+        r"""
         Examples:
 
         ```python
@@ -1049,8 +1049,9 @@ class SwinBackbone(BackboneMixin, SwinPreTrainedModel):
         >>> feature_maps = outputs.feature_maps
         >>> list(feature_maps[-1].shape)
         [1, 768, 7, 7]
-        ```"""
-        output_hidden_states = kwargs.pop("output_hidden_states", self.config.output_hidden_states)
+        ```
+        """
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
 
         embedding_output, input_dimensions = self.embeddings(pixel_values)
 
@@ -1061,7 +1062,6 @@ class SwinBackbone(BackboneMixin, SwinPreTrainedModel):
             embedding_output,
             input_dimensions,
             always_partition=True,
-            output_hidden_states=True,
             output_hidden_states_before_downsampling=True,
             **kwargs,
         )
@@ -1079,7 +1079,7 @@ class SwinBackbone(BackboneMixin, SwinPreTrainedModel):
 
         return BackboneOutput(
             feature_maps=feature_maps,
-            hidden_states=encoder_outputs.reshaped_hidden_states if output_hidden_states else None,
+            hidden_states=encoder_outputs.reshaped_hidden_states,
             attentions=encoder_outputs.attentions,
         )
 

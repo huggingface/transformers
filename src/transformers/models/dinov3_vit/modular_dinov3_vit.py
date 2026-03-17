@@ -23,7 +23,6 @@ from torch import nn
 
 from transformers.models.arcee.modeling_arcee import ArceeMLP
 from transformers.models.dinov2.modeling_dinov2 import (
-    Dinov2DropPath,
     Dinov2LayerScale,
     Dinov2PreTrainedModel,
     eager_attention_forward,
@@ -33,7 +32,7 @@ from transformers.models.pixtral.modeling_pixtral import PixtralAttention, rotat
 
 from ... import initialization as init
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import DropPath, GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -296,10 +295,6 @@ class DINOv3ViTLayerScale(Dinov2LayerScale):
     pass
 
 
-class DINOv3ViTDropPath(Dinov2DropPath):
-    pass
-
-
 class DINOv3ViTMLP(ArceeMLP):
     pass
 
@@ -317,7 +312,7 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = DINOv3ViTAttention(config)
         self.layer_scale1 = DINOv3ViTLayerScale(config)
-        self.drop_path = DINOv3ViTDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 

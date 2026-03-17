@@ -125,7 +125,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->AST
+# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->AST
 class ASTSelfAttention(nn.Module):
     def __init__(self, config: ASTConfig):
         super().__init__()
@@ -181,7 +181,7 @@ class ASTSelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->AST
+# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->AST
 class ASTSelfOutput(nn.Module):
     """
     The residual connection is defined in ASTLayer instead of here (as is the case with other models), due to the
@@ -216,7 +216,7 @@ class ASTAttention(nn.Module):
         return output
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->AST
+# Copied from transformers.models.vit.modeling_vit.ViTMLP with ViT->AST
 class ASTIntermediate(nn.Module):
     def __init__(self, config: ASTConfig):
         super().__init__()
@@ -232,7 +232,7 @@ class ASTIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->AST
+# Copied from transformers.models.vit.modeling_vit.ViTMLP with ViT->AST
 class ASTOutput(nn.Module):
     def __init__(self, config: ASTConfig):
         super().__init__()

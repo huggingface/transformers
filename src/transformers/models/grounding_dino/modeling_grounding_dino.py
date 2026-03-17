@@ -26,6 +26,7 @@ from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
 from ...file_utils import ModelOutput
 from ...integrations import use_kernel_forward_from_hub
+from ...modeling_layers import DropPath
 from ...modeling_pos_embed_utils import encode_sinusoidal_position_embedding
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging, torch_compilable_check
@@ -824,37 +825,6 @@ class GroundingDinoBiMultiHeadAttention(nn.Module):
         return (vision_attn_output, vision_attn_weights), (text_attn_output, text_attn_weights)
 
 
-# Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->GroundingDino
-class GroundingDinoDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
-
-
 class GroundingDinoFusionLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -866,7 +836,7 @@ class GroundingDinoFusionLayer(nn.Module):
         self.attn = GroundingDinoBiMultiHeadAttention(config)
 
         # add layer scale for training stability
-        self.drop_path = GroundingDinoDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         init_values = 1e-4
         self.vision_param = nn.Parameter(init_values * torch.ones(config.d_model), requires_grad=True)
         self.text_param = nn.Parameter(init_values * torch.ones(config.d_model), requires_grad=True)

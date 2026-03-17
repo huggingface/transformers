@@ -185,7 +185,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->Vivit
+# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Vivit
 class VivitSelfAttention(nn.Module):
     def __init__(self, config: VivitConfig):
         super().__init__()
@@ -241,7 +241,7 @@ class VivitSelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->Vivit
+# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Vivit
 class VivitSelfOutput(nn.Module):
     """
     The residual connection is defined in VivitLayer instead of here (as is the case with other models), due to the

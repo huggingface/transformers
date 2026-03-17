@@ -266,7 +266,7 @@ class VideoMAESelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->VideoMAE
+# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VideoMAE
 class VideoMAESelfOutput(nn.Module):
     """
     The residual connection is defined in VideoMAELayer instead of here (as is the case with other models), due to the
@@ -301,7 +301,7 @@ class VideoMAEAttention(nn.Module):
         return output
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate ViT->VideoMAE
+# Copied from transformers.models.vit.modeling_vit.ViTMLP ViT->VideoMAE
 class VideoMAEIntermediate(nn.Module):
     def __init__(self, config: VideoMAEConfig):
         super().__init__()
@@ -317,7 +317,7 @@ class VideoMAEIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTOutput ViT->VideoMAE
+# Copied from transformers.models.vit.modeling_vit.ViTMLP ViT->VideoMAE
 class VideoMAEOutput(nn.Module):
     def __init__(self, config: VideoMAEConfig):
         super().__init__()

@@ -23,7 +23,7 @@ from torch import Tensor, nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import DropPath, GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging, torch_int
@@ -34,7 +34,7 @@ from .configuration_swinv2 import Swinv2Config
 logger = logging.get_logger(__name__)
 
 
-# drop_path, Swinv2PatchEmbeddings, Swinv2PatchMerging and Swinv2DropPath are from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/swin_transformer_v2.py.
+# Swinv2PatchEmbeddings and Swinv2PatchMerging are from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/swin_transformer_v2.py.
 
 
 @dataclass
@@ -164,37 +164,6 @@ def window_reverse(windows, window_size, height, width):
     windows = windows.view(-1, height // window_size, width // window_size, window_size, window_size, num_channels)
     windows = windows.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, height, width, num_channels)
     return windows
-
-
-# Copied from transformers.models.swin.modeling_swin.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Copied from transformers.models.swin.modeling_swin.SwinDropPath with Swin->Swinv2
-class Swinv2DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
 
 
 # Copied from transformers.models.swin.modeling_swin.SwinEmbeddings with Swin->Swinv2
@@ -614,7 +583,7 @@ class Swinv2Layer(nn.Module):
             else (pretrained_window_size, pretrained_window_size),
         )
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.drop_path = Swinv2DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.intermediate = Swinv2Intermediate(config, dim)
         self.output = Swinv2Output(config, dim)
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)

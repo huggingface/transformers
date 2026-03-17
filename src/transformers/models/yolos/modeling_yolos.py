@@ -239,7 +239,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->Yolos
+# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Yolos
 class YolosSelfAttention(nn.Module):
     def __init__(self, config: YolosConfig):
         super().__init__()
@@ -295,7 +295,7 @@ class YolosSelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->Yolos
+# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Yolos
 class YolosSelfOutput(nn.Module):
     """
     The residual connection is defined in YolosLayer instead of here (as is the case with other models), due to the
@@ -330,7 +330,7 @@ class YolosAttention(nn.Module):
         return output
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->Yolos
+# Copied from transformers.models.vit.modeling_vit.ViTMLP with ViT->Yolos
 class YolosIntermediate(nn.Module):
     def __init__(self, config: YolosConfig):
         super().__init__()
@@ -346,7 +346,7 @@ class YolosIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->Yolos
+# Copied from transformers.models.vit.modeling_vit.ViTMLP with ViT->Yolos
 class YolosOutput(nn.Module):
     def __init__(self, config: YolosConfig):
         super().__init__()

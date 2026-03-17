@@ -25,7 +25,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import DropPath, GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -177,31 +177,6 @@ class ClapOutput(ModelOutput):
 
     def to_tuple(self) -> tuple[Any]:
         return tuple(v.to_tuple() if isinstance(v, ModelOutput) else v for v in self.values())
-
-
-# Adapted from transformers.models.swin.modeling_swin.SwinDropPath
-class ClapDropPath(nn.Module):
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). This is a slightly
-    refactored version of the `SwinDropPath` implementation.
-    """
-
-    def __init__(self, drop_prob=None):
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states):
-        if self.drop_prob == 0.0 or not self.training:
-            return hidden_states
-
-        keep_prob = 1 - self.drop_prob
-        # work with diff dim tensors, not just 2D ConvNets
-        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
-
-        random_tensor = keep_prob + torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
-        random_tensor.floor_()  # binarize
-        output = hidden_states.div(keep_prob) * random_tensor
-        return output
 
 
 # Adapted from https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/feature_fusion.py#L133
@@ -499,7 +474,7 @@ class ClapAudioOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinLayer with SwinDropPath->ClapDropPath, Swin->ClapAudio
+# Copied from transformers.models.swin.modeling_swin.SwinLayer with Swin->ClapAudio
 class ClapAudioLayer(nn.Module):
     def __init__(self, config, dim, input_resolution, num_heads, drop_path_rate=0.0, shift_size=0):
         super().__init__()
@@ -509,7 +484,7 @@ class ClapAudioLayer(nn.Module):
         self.input_resolution = input_resolution
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = ClapAudioAttention(config, dim, num_heads, window_size=self.window_size)
-        self.drop_path = ClapDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.intermediate = ClapAudioIntermediate(config, dim)
         self.output = ClapAudioOutput(config, dim)

@@ -19,7 +19,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import DropPath, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -340,37 +340,6 @@ class VJEPA2RopeAttention(nn.Module):
         return context_layer, attention_probs
 
 
-# Adapted from transformers.models.beit.modeling_dinov2.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Adapted from transformers.models.beit.modeling_beit.BeitDropPath
-class VJEPA2DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None):
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
-
-
 class VJEPA2MLP(nn.Module):
     def __init__(self, config: VJEPA2Config, hidden_size: int = 1024, mlp_ratio: float = 4.0):
         super().__init__()
@@ -406,7 +375,7 @@ class VJEPA2Layer(GradientCheckpointingLayer):
 
         self.norm1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         self.attention = VJEPA2RopeAttention(config, hidden_size, num_attention_heads)
-        self.drop_path = VJEPA2DropPath(drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = DropPath(drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         self.norm2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         self.mlp = VJEPA2MLP(config, hidden_size=hidden_size, mlp_ratio=mlp_ratio)
 

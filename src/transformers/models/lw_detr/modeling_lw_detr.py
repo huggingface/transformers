@@ -80,81 +80,58 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class LwDetrViTSelfAttention(nn.Module):
+class LwDetrViTAttention(nn.Module):
+    """LwDetr ViT attention with k_proj bias=False."""
+
     def __init__(self, config: LwDetrViTConfig):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
-                f"heads {config.num_attention_heads}."
-            )
-
         self.config = config
         self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.dropout_prob = config.dropout_prob
-        self.scaling = self.attention_head_size**-0.5
+        self.head_dim = config.hidden_size // config.num_attention_heads
+        self.attention_dropout = config.attention_probs_dropout_prob
+        self.hidden_dropout = config.hidden_dropout_prob
+        self.scaling = self.head_dim**-0.5
         self.is_causal = False
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.qkv_bias)
         self.num_key_value_groups = 1
 
     def forward(
         self,
         hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size = hidden_states.shape[0]
-        new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        key_layer = self.key(hidden_states).view(*new_shape).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
-        query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
 
-        context_layer, attention_probs = attention_interface(
+        attn_output, attn_weights = attention_interface(
             self,
-            query_layer,
-            key_layer,
-            value_layer,
-            None,
-            is_causal=self.is_causal,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            dropout=0.0 if not self.training else self.dropout_prob,
             **kwargs,
         )
 
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.reshape(new_context_layer_shape)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        attn_output = nn.functional.dropout(attn_output, p=self.hidden_dropout, training=self.training)
 
-        return context_layer, attention_probs
-
-
-class LwDetrViTAttention(nn.Module):
-    def __init__(self, config: LwDetrViTConfig):
-        """
-        Args:
-            config (`LwDetrViTConfig`):
-                Model configuration.
-        """
-        super().__init__()
-        self.attention = LwDetrViTSelfAttention(config)
-        self.output = nn.Linear(config.hidden_size, config.hidden_size)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states, **kwargs)
-        output = self.output(self_attn_output)
-        return output
+        return attn_output, attn_weights
 
 
 class LwDetrViTMlp(nn.Module):
@@ -208,7 +185,7 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
                 batch_size // self.num_windows, self.num_windows * seq_len, channels
             )
 
-        attention_output = self.attention(hidden_states_norm, **kwargs)
+        attention_output, _ = self.attention(hidden_states_norm, **kwargs)
         attention_output = attention_output * self.gamma_1
 
         if not self.window:
@@ -327,7 +304,7 @@ class LwDetrViTPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": LwDetrViTLayer,
-        "attentions": LwDetrViTSelfAttention,
+        "attentions": LwDetrViTAttention,
     }
 
     @torch.no_grad()

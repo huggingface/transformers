@@ -23,6 +23,7 @@ from torch import Tensor, nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
+from ...modeling_layers import DropPath
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutputWithNoAttention,
@@ -273,37 +274,6 @@ class BitEmbeddings(nn.Module):
         return embedding
 
 
-# Copied from transformers.models.convnext.modeling_convnext.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Bit
-class BitDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
-
-
 def make_div(value, divisor=8):
     min_value = divisor
     new_value = max(min_value, int(value + divisor / 2) // divisor * divisor)
@@ -362,7 +332,7 @@ class BitPreActivationBottleneckLayer(nn.Module):
         self.norm3 = BitGroupNormActivation(config, mid_channels)
         self.conv3 = WeightStandardizedConv2d(mid_channels, out_channels, 1, eps=1e-8, padding=config.global_padding)
 
-        self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
+        self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
 
     def forward(self, hidden_states):
         hidden_states_preact = self.norm1(hidden_states)
@@ -428,7 +398,7 @@ class BitBottleneckLayer(nn.Module):
         self.norm2 = BitGroupNormActivation(config, num_channels=mid_chs)
         self.conv3 = WeightStandardizedConv2d(mid_chs, out_channels, 1, eps=1e-8, padding=config.global_padding)
         self.norm3 = BitGroupNormActivation(config, num_channels=out_channels, apply_activation=False)
-        self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
+        self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
 
         self.activation = ACT2FN[config.hidden_act]
 

@@ -21,6 +21,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
+from ...modeling_layers import DropPath
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -47,9 +48,6 @@ else:
 
 
 logger = logging.get_logger(__name__)
-
-
-# drop_path and DinatDropPath are from the timm library.
 
 
 @dataclass
@@ -207,37 +205,6 @@ class DinatDownsampler(nn.Module):
         return input_feature
 
 
-# Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Dinat
-class DinatDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
-
-
 class NeighborhoodAttention(nn.Module):
     def __init__(self, config, dim, num_heads, kernel_size, dilation):
         super().__init__()
@@ -376,7 +343,7 @@ class DinatLayer(nn.Module):
         self.attention = NeighborhoodAttentionModule(
             config, dim, num_heads, kernel_size=self.kernel_size, dilation=self.dilation
         )
-        self.drop_path = DinatDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.intermediate = DinatIntermediate(config, dim)
         self.output = DinatOutput(config, dim)

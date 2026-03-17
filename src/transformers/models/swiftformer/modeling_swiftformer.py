@@ -20,7 +20,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2CLS
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import DropPath, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -55,36 +55,6 @@ class SwiftFormerPatchEmbedding(nn.Module):
 
     def forward(self, x):
         return self.patch_embedding(x)
-
-
-# Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-class SwiftFormerDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, config: SwiftFormerConfig) -> None:
-        super().__init__()
-        self.drop_prob = config.drop_path_rate
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
 
 
 class SwiftFormerEmbeddings(nn.Module):
@@ -271,7 +241,7 @@ class SwiftFormerEncoderBlock(nn.Module):
         self.local_representation = SwiftFormerLocalRepresentation(config, dim=dim)
         self.attn = SwiftFormerEfficientAdditiveAttention(config, dim=dim)
         self.linear = SwiftFormerMlp(config, in_features=dim)
-        self.drop_path = SwiftFormerDropPath(config) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.use_layer_scale = use_layer_scale
         if use_layer_scale:
             self.layer_scale_1 = nn.Parameter(
