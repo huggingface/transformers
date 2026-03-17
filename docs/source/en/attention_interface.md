@@ -215,6 +215,9 @@ Use this [workaround](https://github.com/huggingface/transformers/blob/main/src/
 
 Decoder-only models use causal (unidirectional) attention by default, where each token only attends to itself and previous tokens. Set `is_causal=False` to switch to bidirectional attention, where every token attends to every other token. This lets you use decoder-only models as text encoders, for example, to generate embeddings.
 
+> [!NOTE]
+> This only works for causal (decoder) models. It does not turn encoder models into decoder models.
+
 Set `is_causal=False` in the model config to make bidirectional attention the default for every forward pass.
 
 ```py
