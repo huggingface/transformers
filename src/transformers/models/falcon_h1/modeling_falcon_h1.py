@@ -215,6 +215,7 @@ class FalconHybridMambaAttentionDynamicCache:
         return self.conv_states[layer_idx]
 
     def reset(self):
+        self.has_previous_state = False
         self.conv_states.zero_()
         self.ssm_states.zero_()
 

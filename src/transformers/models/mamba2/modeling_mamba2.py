@@ -178,6 +178,7 @@ class Mamba2Cache:
         return self.ssm_states[layer_idx]
 
     def reset(self):
+        self.has_previous_state = False
         self.conv_states.zero_()
         self.ssm_states.zero_()
 

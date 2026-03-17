@@ -136,7 +136,11 @@ class MambaCache:
             self.conv_states[layer_idx] = self.conv_states[layer_idx].to(new_conv_state.device)
 
         conv_state = self.conv_states[layer_idx]
-        cache_position = torch.arange(seq_len, device=conv_state.device) + self.seen_tokens
+        # In prefill, it will be padded or truncated to `conv_kernel_size` always
+        effective_seq_len = seq_len
+        if not self.has_previous_state:
+            effective_seq_len = self.conv_kernel_size
+        cache_position = torch.arange(effective_seq_len, device=conv_state.device) + self.seen_tokens[layer_idx]
         cache_position = cache_position.clamp(0, self.conv_kernel_size - 1)
 
         # Update it
@@ -154,6 +158,7 @@ class MambaCache:
         return self.ssm_states[layer_idx]
 
     def reset(self):
+        self.seen_tokens = [0 for _ in range(len(self.seen_tokens))]
         for layer_idx in range(len(self.conv_states)):
             # In-place ops prevent breaking the static address
             self.conv_states[layer_idx].zero_()
