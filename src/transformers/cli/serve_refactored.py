@@ -78,9 +78,9 @@ class Serve:
 
         import uvicorn
 
-        from .serving.app import build_app
-        from .serving.handlers.chat_completion import ChatCompletionHandler
+        from .serving.chat_completion import ChatCompletionHandler
         from .serving.model_manager import ModelManager
+        from .serving.server import build_server
 
         # Seed
         if default_seed is not None:
@@ -110,7 +110,7 @@ class Serve:
             force_model=force_model,
         )
 
-        app = build_app(model_manager, chat_handler, enable_cors=enable_cors)
+        app = build_server(model_manager, chat_handler, enable_cors=enable_cors)
 
         config = uvicorn.Config(app, host=host, port=port, log_level=log_level)
         self.server = uvicorn.Server(config)

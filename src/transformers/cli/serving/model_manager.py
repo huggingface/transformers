@@ -30,8 +30,7 @@ import transformers
 from transformers import AutoTokenizer, BitsAndBytesConfig, PreTrainedTokenizerBase
 
 from ...utils import logging
-from .protocol import Modality
-from .utils import reset_torch_cache
+from .utils import Modality, reset_torch_cache
 
 
 if TYPE_CHECKING:

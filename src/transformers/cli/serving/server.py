@@ -25,15 +25,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from ...utils import logging
-from .handlers.chat_completion import ChatCompletionHandler
+from .chat_completion import ChatCompletionHandler
 from .model_manager import ModelManager
-from .protocol import X_REQUEST_ID
+from .utils import X_REQUEST_ID
 
 
 logger = logging.get_logger(__name__)
 
 
-def build_app(
+def build_server(
     model_manager: ModelManager,
     chat_handler: ChatCompletionHandler,
     enable_cors: bool = False,

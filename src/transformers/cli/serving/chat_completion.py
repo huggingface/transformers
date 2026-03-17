@@ -32,6 +32,7 @@ import torch
 
 if TYPE_CHECKING:
     from transformers import PreTrainedTokenizerFast, ProcessorMixin
+
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
@@ -43,15 +44,15 @@ from tokenizers.decoders import DecodeStream
 from transformers import GenerationConfig, PreTrainedModel
 from transformers.generation.streamers import BaseStreamer
 
-from ....utils import logging
-from ..model_manager import ModelManager
-from ..protocol import (
+from ...utils import logging
+from .model_manager import ModelManager
+from .utils import (
     UNUSED_CHAT_COMPLETION_FIELDS,
     TransformersCompletionCreateParamsStreaming,
+    _StreamError,
     get_processor_inputs_from_messages,
+    set_torch_seed,
 )
-from ..utils import _StreamError, set_torch_seed
-from .base import BaseHandler
 
 
 logger = logging.get_logger(__name__)
@@ -100,7 +101,7 @@ class DirectStreamer(BaseStreamer):
         self._loop.call_soon_threadsafe(self._queue.put_nowait, None)
 
 
-class ChatCompletionHandler(BaseHandler):
+class ChatCompletionHandler:
     """Handler for the `/v1/chat/completions` endpoint.
 
     Supports both streaming (SSE) and non-streaming (JSON) responses.
@@ -111,55 +112,10 @@ class ChatCompletionHandler(BaseHandler):
     """
 
     def __init__(self, model_manager: ModelManager, force_model: str | None = None):
-        super().__init__(model_manager)
+        self.model_manager = model_manager
         self.force_model = force_model
 
-    def _validate_request(self, body: dict) -> None:
-        """Validate a chat completion request. Raises HTTPException if invalid."""
-        logger.debug(f"Validating request: {body}")
-
-        input_keys = set(body.keys())
-        unexpected = input_keys - TransformersCompletionCreateParamsStreaming.__mutable_keys__
-        if unexpected:
-            logger.error(f"Unexpected keys in the request: {unexpected}")
-            raise HTTPException(status_code=422, detail=f"Unexpected keys in the request: {unexpected}")
-
-        # TODO: add back strict Pydantic validation (input_validation flag)
-        unused = input_keys & UNUSED_CHAT_COMPLETION_FIELDS
-        if unused:
-            logger.error(f"Unsupported fields in the request: {unused}")
-            raise HTTPException(status_code=422, detail=f"Unsupported fields in the request: {unused}")
-
-    def _build_generation_config(self, body: dict, model_generation_config: GenerationConfig) -> GenerationConfig:
-        """Map Chat Completions API params to a GenerationConfig.
-
-        If `body` contains a `generation_config` JSON string, it is used as baseline
-        (overriding the model default). Other body params are applied on top.
-        """
-        if body.get("generation_config") is not None:
-            generation_config = GenerationConfig(**json.loads(body["generation_config"]))
-        else:
-            generation_config = copy.deepcopy(model_generation_config)
-            self._apply_default_generation_config(generation_config)
-
-        if body.get("max_tokens") is not None:
-            generation_config.max_new_tokens = int(body["max_tokens"])
-        if body.get("frequency_penalty") is not None:
-            generation_config.repetition_penalty = 1.0 + float(body["frequency_penalty"])
-        if body.get("logit_bias") is not None:
-            generation_config.sequence_bias = {(int(k),): v for k, v in body["logit_bias"].items()}
-        if body.get("stop") is not None:
-            generation_config.stop_strings = body["stop"]
-        if body.get("temperature") is not None:
-            generation_config.temperature = float(body["temperature"])
-            if float(body["temperature"]) == 0.0:
-                generation_config.do_sample = False
-        if body.get("top_p") is not None:
-            generation_config.top_p = float(body["top_p"])
-        if body.get("seed") is not None:
-            set_torch_seed(body["seed"])
-
-        return generation_config
+    # ----- entry point -----
 
     def handle_request(self, body: dict, request_id: str) -> StreamingResponse | JSONResponse:
         """Validate the request, load the model, and dispatch to streaming or non-streaming."""
@@ -211,7 +167,7 @@ class ChatCompletionHandler(BaseHandler):
         queue: asyncio.Queue = asyncio.Queue()
 
         streamer = DirectStreamer(processor, loop, queue, skip_special_tokens=True)
-        gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config}
+        gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config, "tokenizer": processor}
 
         def _run() -> None:
             try:
@@ -259,7 +215,7 @@ class ChatCompletionHandler(BaseHandler):
         gen_config: GenerationConfig,
     ) -> JSONResponse:
         """Run generation synchronously and return a JSONResponse."""
-        sequences = model.generate(**inputs, generation_config=gen_config)
+        sequences = model.generate(**inputs, generation_config=gen_config, tokenizer=processor)
 
         input_len = inputs["input_ids"].shape[-1]
         generated_ids = sequences[0, input_len:]
@@ -275,6 +231,61 @@ class ChatCompletionHandler(BaseHandler):
             self._build_completion(request_id, content, model_id, finish_reason="length" if hit_max else "stop"),
             media_type="application/json",
         )
+
+    # ----- helpers -----
+
+    def _validate_request(self, body: dict) -> None:
+        """Validate a chat completion request. Raises HTTPException if invalid."""
+        logger.debug(f"Validating request: {body}")
+
+        input_keys = set(body.keys())
+        unexpected = input_keys - TransformersCompletionCreateParamsStreaming.__mutable_keys__
+        if unexpected:
+            logger.error(f"Unexpected keys in the request: {unexpected}")
+            raise HTTPException(status_code=422, detail=f"Unexpected keys in the request: {unexpected}")
+
+        # TODO: add back strict Pydantic validation (input_validation flag)
+        unused = input_keys & UNUSED_CHAT_COMPLETION_FIELDS
+        if unused:
+            logger.error(f"Unsupported fields in the request: {unused}")
+            raise HTTPException(status_code=422, detail=f"Unsupported fields in the request: {unused}")
+
+    @staticmethod
+    def _apply_default_generation_config(generation_config: GenerationConfig) -> None:
+        """Apply sensible serving defaults. Many models ship with too few max_new_tokens."""
+        if generation_config.max_new_tokens is None or generation_config.max_new_tokens < 1024:
+            generation_config.max_new_tokens = 1024
+
+    def _build_generation_config(self, body: dict, model_generation_config: GenerationConfig) -> GenerationConfig:
+        """Map Chat Completions API params to a GenerationConfig.
+
+        If `body` contains a `generation_config` JSON string, it is used as baseline
+        (overriding the model default). Other body params are applied on top.
+        """
+        if body.get("generation_config") is not None:
+            generation_config = GenerationConfig(**json.loads(body["generation_config"]))
+        else:
+            generation_config = copy.deepcopy(model_generation_config)
+            self._apply_default_generation_config(generation_config)
+
+        if body.get("max_tokens") is not None:
+            generation_config.max_new_tokens = int(body["max_tokens"])
+        if body.get("frequency_penalty") is not None:
+            generation_config.repetition_penalty = 1.0 + float(body["frequency_penalty"])
+        if body.get("logit_bias") is not None:
+            generation_config.sequence_bias = {(int(k),): v for k, v in body["logit_bias"].items()}
+        if body.get("stop") is not None:
+            generation_config.stop_strings = body["stop"]
+        if body.get("temperature") is not None:
+            generation_config.temperature = float(body["temperature"])
+            if float(body["temperature"]) == 0.0:
+                generation_config.do_sample = False
+        if body.get("top_p") is not None:
+            generation_config.top_p = float(body["top_p"])
+        if body.get("seed") is not None:
+            set_torch_seed(body["seed"])
+
+        return generation_config
 
     # ----- response builders -----
 
@@ -319,4 +330,11 @@ class ChatCompletionHandler(BaseHandler):
             system_fingerprint="",
             object="chat.completion.chunk",
         )
-        return self.chunk_to_sse(chunk)
+        return self._chunk_to_sse(chunk)
+
+    @staticmethod
+    def _chunk_to_sse(chunk) -> str:
+        """Format a pydantic model or string as an SSE event."""
+        if isinstance(chunk, str):
+            return chunk if chunk.startswith("data: ") else f"data: {chunk}\n\n"
+        return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
