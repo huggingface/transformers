@@ -30,7 +30,7 @@ COMMON_ENV_VARIABLES = {
     # will be adjust in `CircleCIJob.to_dict`.
     "RUN_FLAKY": True,
     "DISABLE_SAFETENSORS_CONVERSION": True,
-    "DEBUG_NETWORK": "network_debug_report.json",
+    "NETWORK_DEBUG_REPORT": True,
 }
 # Disable the use of {"s": None} as the output is way too long, causing the navigation on CircleCI impractical
 COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "vvv": None, "rsfE":None, "random-order-bucket": "module", "random-order-seed": "${CIRCLE_BUILD_NUM:-0}"}
