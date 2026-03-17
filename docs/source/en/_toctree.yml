@@ -173,15 +173,11 @@
       title: DeepSpeed
     - local: debugging
       title: Multi-GPU debugging
-    - local: perf_train_cpu_many
-      title: Distributed CPUs
     - local: perf_train_gpu_many
       title: Parallelism methods
     title: Distributed training
   - isExpanded: false
     sections:
-    - local: perf_train_gpu_one
-      title: GPU
     - local: perf_train_cpu
       title: CPU
     - local: perf_train_special
@@ -189,7 +185,7 @@
     - local: perf_train_gaudi
       title: Intel Gaudi
     - local: perf_hardware
-      title: Build your own machine
+      title: GPU setup for deep learning
     - local: model_memory_anatomy
       title: Model training anatomy
     title: Hardware
