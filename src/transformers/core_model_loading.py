@@ -37,7 +37,6 @@ from .utils import is_env_variable_true
 from .utils.loading_report import LoadStateDictInfo
 from .utils.logging import get_logger, tqdm
 
-
 _torch_distributed_available = torch.distributed.is_available()
 
 if TYPE_CHECKING:
@@ -47,6 +46,22 @@ if TYPE_CHECKING:
 
 
 logger = get_logger(__name__)
+
+
+def _is_strix_halo() -> bool:
+    """Check if the current system is an AMD Strix Halo APU.
+
+    Strix Halo has known issues with mmap causing OOM errors. This function detects
+    the Radeon 8060S Graphics GPU which is specific to Strix Halo.
+    """
+    if not torch.cuda.is_available():
+        return False
+    try:
+        device_name = torch.cuda.get_device_name()
+        # Radeon 8060S Graphics is the GPU identifier for Strix Halo
+        return "Radeon 8060S" in device_name
+    except Exception:
+        return False
 
 
 def build_glob_alternation(
@@ -67,7 +82,9 @@ def build_glob_alternation(
                 i += 1
                 body = src.replace("*", r".*")
                 branches.append(f"(?P<{group_name}>{body})")
-                tgt_group_to_glob[group_name] = glob.target_patterns[0]  # we index with the first target
+                tgt_group_to_glob[group_name] = glob.target_patterns[
+                    0
+                ]  # we index with the first target
         else:
             group_name = f"g{i}"
             src_group_to_glob[group_name] = glob
@@ -92,7 +109,11 @@ class ConversionOps:
 
     @abstractmethod
     def convert(
-        self, input_dict: dict[str, Any], source_patterns: list[str], target_patterns: list[str], **kwargs
+        self,
+        input_dict: dict[str, Any],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
         raise NotImplementedError
 
@@ -109,7 +130,11 @@ class Chunk(ConversionOps):
 
     @torch.no_grad
     def convert(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+        self,
+        input_dict: dict[str, torch.Tensor],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        **kwargs,
     ) -> dict[str, torch.Tensor]:
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
@@ -118,7 +143,9 @@ class Chunk(ConversionOps):
         chunks = torch.chunk(tensor, sizes, dim=self.dim)
         return dict(zip(targets, chunks))
 
-    def get_target_patterns(self, input_dict: dict, target_patterns: list[str]) -> list[str]:
+    def get_target_patterns(
+        self, input_dict: dict, target_patterns: list[str]
+    ) -> list[str]:
         # Here we always return the target patterns
         if len(input_dict) > 1 or len(target_patterns) == 1:
             raise ValueError("Undefined Operation encountered!")
@@ -186,11 +213,15 @@ class MergeModulelist(ConversionOps):
     ) -> dict[str, torch.Tensor]:
         merged: dict[str, torch.Tensor] = {}
         for source_pattern, tensors in input_dict.items():
-            target_pattern = self.get_target_pattern(input_dict, source_pattern, target_patterns)
+            target_pattern = self.get_target_pattern(
+                input_dict, source_pattern, target_patterns
+            )
             merged[target_pattern] = torch.stack(tensors, dim=self.dim)
         return merged
 
-    def get_target_pattern(self, input_dict: dict, source_pattern: str, target_patterns: list[str]) -> str:
+    def get_target_pattern(
+        self, input_dict: dict, source_pattern: str, target_patterns: list[str]
+    ) -> str:
         # Here it's a single operation, so we use the target
         if len(input_dict) == 1:
             if len(target_patterns) == 1:
@@ -214,21 +245,33 @@ class SplitModulelist(ConversionOps):
 
     @torch.no_grad
     def convert(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+        self,
+        input_dict: dict[str, torch.Tensor],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        **kwargs,
     ) -> dict[str, torch.Tensor]:
         all_tensors = {}
         for source_pattern, tensors in input_dict.items():
             tensor = tensors[0] if isinstance(tensors, list) else tensors
             # We split in the number of tensors present in the given dim
             sizes = tensor.size(self.dim)
-            targets = self.get_target_patterns(input_dict, source_pattern, target_patterns, sizes)
+            targets = self.get_target_patterns(
+                input_dict, source_pattern, target_patterns, sizes
+            )
             chunks = torch.chunk(tensor, sizes, dim=self.dim)
             # We squeeze each chunk here as well to make sure to give them their original shape
-            all_tensors.update({target: chunk.squeeze() for target, chunk in zip(targets, chunks)})
+            all_tensors.update(
+                {target: chunk.squeeze() for target, chunk in zip(targets, chunks)}
+            )
         return all_tensors
 
     def get_target_patterns(
-        self, input_dict: dict, source_pattern: str, target_patterns: list[str], sizes: int
+        self,
+        input_dict: dict,
+        source_pattern: str,
+        target_patterns: list[str],
+        sizes: int,
     ) -> list[str]:
         # Here it's a single operation, so we use the target
         if len(input_dict) == 1:
@@ -257,26 +300,45 @@ class Transpose(ConversionOps):
 
     @torch.no_grad
     def convert(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+        self,
+        input_dict: dict[str, torch.Tensor],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        **kwargs,
     ) -> dict[str, torch.Tensor]:
-        target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
+        target_pattern = self.get_target_pattern(
+            input_dict, source_patterns, target_patterns
+        )
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         # In this case, always transpose
         if not self.check_dims:
-            return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
+            return {
+                target_pattern: torch.transpose(
+                    tensor, dim0=self.dim0, dim1=self.dim1
+                ).contiguous()
+            }
         # In this case, check the shapes before transposing
         else:
             # NOTE: this rely on the first param name, so cannot be used for many-to-one operation
-            expected_shape = kwargs["model"].get_parameter(kwargs["full_layer_name"]).shape
+            expected_shape = (
+                kwargs["model"].get_parameter(kwargs["full_layer_name"]).shape
+            )
             # The shapes are the same: do NOT transpose
             if tensor.shape == expected_shape:
                 return {target_pattern: tensor}
             else:
-                return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
+                return {
+                    target_pattern: torch.transpose(
+                        tensor, dim0=self.dim0, dim1=self.dim1
+                    ).contiguous()
+                }
 
     def get_target_pattern(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
+        self,
+        input_dict: dict[str, torch.Tensor],
+        source_patterns: list[str],
+        target_patterns: list[str],
     ) -> str:
         if len(input_dict) != 1:
             raise ValueError("Undefined Operation encountered!")
@@ -355,7 +417,9 @@ class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
 
     def split_list_into_chunks(self, tensor_list: list[torch.Tensor], chunks: int = 2):
         split_size = math.ceil(len(tensor_list) / chunks)  # best effort split size
-        return [tensor_list[i * split_size : (i + 1) * split_size] for i in range(chunks)]
+        return [
+            tensor_list[i * split_size : (i + 1) * split_size] for i in range(chunks)
+        ]
 
     @torch.no_grad()
     def convert(
@@ -375,8 +439,13 @@ class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
                 )
 
             tensors = input_dict.get(key, [])
-            split_tensor_lists = self.split_list_into_chunks(tensors, chunks=len(target_patterns))
-            stacked_tensors = (torch.stack(tensor_group, dim=self.stack_dim) for tensor_group in split_tensor_lists)
+            split_tensor_lists = self.split_list_into_chunks(
+                tensors, chunks=len(target_patterns)
+            )
+            stacked_tensors = (
+                torch.stack(tensor_group, dim=self.stack_dim)
+                for tensor_group in split_tensor_lists
+            )
             for idx, tensor_group in enumerate(stacked_tensors):
                 split_and_fused[target_patterns[idx]].append(tensor_group)
 
@@ -387,7 +456,9 @@ class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return ErnieSplitAndDecoupleTextVisionExperts(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
+        return ErnieSplitAndDecoupleTextVisionExperts(
+            stack_dim=self.stack_dim, concat_dim=self.concat_dim
+        )
 
 
 class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
@@ -434,12 +505,15 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
                 )
 
             # Assuming that we get single sized lists here to index with 0
-            split_tensors.append(input_dict[key][0].chunk(fused_modules, dim=self.concat_dim))
+            split_tensors.append(
+                input_dict[key][0].chunk(fused_modules, dim=self.concat_dim)
+            )
 
         decoupled = {}
         for idx, key in enumerate(target_patterns):
             tensor_groups = [
-                list(torch.unbind(tensor_group[idx], dim=self.stack_dim)) for tensor_group in split_tensors
+                list(torch.unbind(tensor_group[idx], dim=self.stack_dim))
+                for tensor_group in split_tensors
             ]
             tensor_list = list(chain.from_iterable(tensor_groups))
             targets = [key.replace("*", f"{i}") for i in range(len(tensor_list))]
@@ -449,7 +523,9 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return ErnieFuseAndSplitTextVisionExperts(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
+        return ErnieFuseAndSplitTextVisionExperts(
+            stack_dim=self.stack_dim, concat_dim=self.concat_dim
+        )
 
 
 class Force16BytesAlignment(ConversionOps):
@@ -460,16 +536,25 @@ class Force16BytesAlignment(ConversionOps):
 
     @torch.no_grad()
     def convert(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+        self,
+        input_dict: dict[str, torch.Tensor],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        **kwargs,
     ) -> dict[str, torch.Tensor]:
-        target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
+        target_pattern = self.get_target_pattern(
+            input_dict, source_patterns, target_patterns
+        )
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         tensor = tensor.clone() if tensor.data_ptr() % 16 != 0 else tensor
         return {target_pattern: tensor}
 
     def get_target_pattern(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
+        self,
+        input_dict: dict[str, torch.Tensor],
+        source_patterns: list[str],
+        target_patterns: list[str],
     ) -> str:
         if len(input_dict) != 1:
             raise ValueError("Undefined Operation encountered!")
@@ -529,15 +614,21 @@ class WeightTransform:
     distributed_operation: TensorParallelLayer | None = None
     quantization_operation: ConversionOps | None = None
 
-    collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
-    layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
+    collected_tensors: dict[str, list[Future]] = field(
+        default_factory=lambda: defaultdict(list), init=False
+    )
+    layer_targets: dict[str, set[str]] = field(
+        default_factory=lambda: defaultdict(set), init=False
+    )
 
     def __setattr__(self, name, value):
         if name in ("source_patterns", "target_patterns"):
             # We do not allow to re-set the patterns, as they are linked between each other and changing one
             # without the other can mess-up with the capturing groups/compiled sources
             if hasattr(self, name):
-                raise ValueError(f"Cannot assign to field {name}, you should create a new instance")
+                raise ValueError(
+                    f"Cannot assign to field {name}, you should create a new instance"
+                )
             # Switch str to list
             elif isinstance(value, str):
                 value = [value]
@@ -564,7 +655,9 @@ class WeightTransform:
                 f"Multiple different capturing groups found in target_patterns: {unique_capturing_groups}. "
                 f"All target patterns must use the same capturing group pattern."
             )
-        unique_capturing_group = unique_capturing_groups.pop() if unique_capturing_groups else None
+        unique_capturing_group = (
+            unique_capturing_groups.pop() if unique_capturing_groups else None
+        )
 
         # We also need to check capturing groups in the sources during reverse mapping (e.g. timm_wrapper, sam3)
         for i, pattern in enumerate(self.source_patterns):
@@ -586,7 +679,9 @@ class WeightTransform:
             branches.append(f"(?P<{group_name}>{pattern})")
         self.compiled_sources = re.compile("|".join(branches))
 
-    def add_tensor(self, target_key: str, source_key: str, source_pattern: str, future: Future):
+    def add_tensor(
+        self, target_key: str, source_key: str, source_pattern: str, future: Future
+    ):
         self.collected_tensors[source_pattern].append(future)
         self.layer_targets[target_key].add(source_key)
 
@@ -603,7 +698,9 @@ class WeightTransform:
             return source_key, None
 
         # Find the source that produced the match (it's the first group that matched, as the search stops after first branch match)
-        matching_group_name = next(name for name, val in match_object.groupdict().items() if val is not None)
+        matching_group_name = next(
+            name for name, val in match_object.groupdict().items() if val is not None
+        )
         source_pattern_that_matched = self.source_patterns[int(matching_group_name[1:])]
         # If we matched, we always replace with the first target pattern, in case we have several (one to many transform)
         replacement = self.target_patterns[0]
@@ -611,8 +708,12 @@ class WeightTransform:
         if r"\1" in replacement:
             # The index of the internal group we need to replace is the index of the matched named group as it comes
             # inside that matched named group
-            replaced_group_idx = self.compiled_sources.groupindex[matching_group_name] + 1
-            replacement = replacement.replace(r"\1", match_object.group(replaced_group_idx))
+            replaced_group_idx = (
+                self.compiled_sources.groupindex[matching_group_name] + 1
+            )
+            replacement = replacement.replace(
+                r"\1", match_object.group(replaced_group_idx)
+            )
         renamed_key = source_key.replace(match_object.group(0), replacement)
         return renamed_key, source_pattern_that_matched
 
@@ -629,7 +730,9 @@ class WeightTransform:
             kwargs["operations"] = [op.reverse_op for op in self.operations[::-1]]
 
         reverse_transform = self.__class__(
-            source_patterns=self.target_patterns, target_patterns=self.source_patterns, **kwargs
+            source_patterns=self.target_patterns,
+            target_patterns=self.source_patterns,
+            **kwargs,
         )
 
         return reverse_transform
@@ -651,7 +754,9 @@ class WeightTransform:
             tensors = self.collected_tensors.pop(key)
             # Async loading
             if isinstance(tensors[0], Future):
-                tensors = [future.result() for future in tensors if future.result() is not None]
+                tensors = [
+                    future.result() for future in tensors if future.result() is not None
+                ]
             # Sync loading
             elif callable(tensors[0]):
                 tensors = [func() for func in tensors]
@@ -684,7 +789,10 @@ class WeightRenaming(WeightTransform):
 
         if hf_quantizer is not None and self.quantization_operation is not None:
             with log_conversion_errors(
-                layer_name, loading_info, (len(collected_tensors), layer_name), self.quantization_operation
+                layer_name,
+                loading_info,
+                (len(collected_tensors), layer_name),
+                self.quantization_operation,
             ):
                 collected_tensors = self.quantization_operation.convert(
                     collected_tensors,
@@ -712,9 +820,15 @@ class WeightConverter(WeightTransform):
 
     def __post_init__(self):
         WeightTransform.__post_init__(self)
-        if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
+        if (
+            bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1)
+            >= 2
+        ):
             # We allow many-to-many only if we use an internal operation that can handle it
-            if not any(isinstance(op, _INTERNAL_MANY_TO_MANY_CONVERSIONS) for op in self.operations):
+            if not any(
+                isinstance(op, _INTERNAL_MANY_TO_MANY_CONVERSIONS)
+                for op in self.operations
+            ):
                 raise ValueError(
                     f"source keys={self.source_patterns}, target_patterns={self.target_patterns} but you can only have one to many, one to one or many to one."
                 )
@@ -734,7 +848,9 @@ class WeightConverter(WeightTransform):
         collected_tensors = self.materialize_tensors()
 
         for op in self.operations:
-            with log_conversion_errors(layer_name, loading_info, (len(collected_tensors), layer_name), op):
+            with log_conversion_errors(
+                layer_name, loading_info, (len(collected_tensors), layer_name), op
+            ):
                 collected_tensors = op.convert(
                     collected_tensors,
                     source_patterns=self.source_patterns,
@@ -753,16 +869,25 @@ class WeightConverter(WeightTransform):
             full_name = layer_name.replace(".*.", ".0.")
 
         try:
-            prefix, _, suffix = next(full_name.partition(k) for k in collected_tensors.keys() if k in full_name)
+            prefix, _, suffix = next(
+                full_name.partition(k)
+                for k in collected_tensors.keys()
+                if k in full_name
+            )
             # Rename the tensors
-            collected_tensors = {prefix + k + suffix: v for k, v in collected_tensors.items()}
+            collected_tensors = {
+                prefix + k + suffix: v for k, v in collected_tensors.items()
+            }
         # some quantizers need to already rename in `convert` as they cannot only rely on prefix and suffix
         except StopIteration:
             pass
 
         if hf_quantizer is not None and self.quantization_operation is not None:
             with log_conversion_errors(
-                layer_name, loading_info, (len(collected_tensors), layer_name), self.quantization_operation
+                layer_name,
+                loading_info,
+                (len(collected_tensors), layer_name),
+                self.quantization_operation,
             ):
                 collected_tensors = self.quantization_operation.convert(
                     collected_tensors,
@@ -785,6 +910,17 @@ GLOBAL_WORKERS = min(4, os.cpu_count() or 4)
 def _materialize_copy(tensor: torch.Tensor, device=None, dtype=None) -> torch.Tensor:
     # This slicing is what actually loads the tensor from the safetensors slice object
     tensor = tensor[...]
+
+    # On Strix Halo (AMD APU), mmap causes OOM issues. Force a copy on CPU before
+    # any device/dtype conversion to avoid this problem.
+    # See: https://github.com/huggingface/transformers/issues/44756
+    if (
+        _is_strix_halo()
+        and isinstance(tensor, torch.Tensor)
+        and tensor.device.type == "cpu"
+    ):
+        tensor = tensor.to(device="cpu", copy=True)
+
     if dtype is not None or device is not None:
         tensor = tensor.to(device=device, dtype=dtype)
     return tensor
@@ -811,13 +947,20 @@ def spawn_materialize(
 
 
 def spawn_tp_materialize(
-    thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, sharding_method, tensor_idx, device=None, dtype=None
+    thread_pool: ThreadPoolExecutor | None,
+    tensor: torch.Tensor,
+    sharding_method,
+    tensor_idx,
+    device=None,
+    dtype=None,
 ) -> Future | Callable:
     """Materialize and shard a tensor (according to the TP-plan) from file asynchronously if `thread_pool` is provided, or
     return a Callable that will load the tensor synchronously when called."""
 
     def _job():
-        return sharding_method.shard_tensor(tensor, tensor_idx=tensor_idx, device=device, dtype=dtype)
+        return sharding_method.shard_tensor(
+            tensor, tensor_idx=tensor_idx, device=device, dtype=dtype
+        )
 
     if thread_pool is not None:
         return thread_pool.submit(_job)
@@ -849,7 +992,8 @@ def log_conversion_errors(
     op: list[ConversionOps] | ConversionOps | None = None,
 ):
     """Catch all exceptions during `convert` calls, and log the errors for later. Re-raise a `SkipParameters` exception
-    that will be caught later to skip the parameters that raised the original Exception."""
+    that will be caught later to skip the parameters that raised the original Exception.
+    """
     try:
         yield
     except Exception as e:
@@ -857,7 +1001,9 @@ def log_conversion_errors(
         if loading_info is None:
             raise e
 
-        def _format_op_name(curr_op: list[ConversionOps] | ConversionOps | None) -> str | None:
+        def _format_op_name(
+            curr_op: list[ConversionOps] | ConversionOps | None,
+        ) -> str | None:
             if curr_op is None:
                 return None
             if isinstance(curr_op, (list, tuple, set)):
@@ -912,19 +1058,29 @@ def set_param_for_module(
     else:
         if not isinstance(param_value, torch.nn.Parameter):
             if param_name not in module_obj._buffers:
-                param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
+                param_value = torch.nn.Parameter(
+                    param_value, requires_grad=param_value.is_floating_point()
+                )
 
         # Remove from missing keys (it's either mismatched, or all good)
         loading_info.missing_keys.discard(target_name)
 
         # Determine expected shape: for TP, use sharded shape; otherwise, use full shape
         if distributed_operation is not None:
-            expected_shape = torch.Size(distributed_operation.get_expected_sharded_shape(ref.shape))
+            expected_shape = torch.Size(
+                distributed_operation.get_expected_sharded_shape(ref.shape)
+            )
         else:
             expected_shape = ref.shape
 
-        if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
-            loading_info.mismatched_keys.add((target_name, param_value.shape, expected_shape))
+        if (
+            ref is not None
+            and param_value.shape != expected_shape
+            and hf_quantizer is None
+        ):
+            loading_info.mismatched_keys.add(
+                (target_name, param_value.shape, expected_shape)
+            )
         else:
             # super important otherwise _init_weight will re-init the param
             param_value._is_hf_initialized = True
@@ -947,8 +1103,12 @@ def offload_and_maybe_resave_param(
     # We need to remove from missing keys
     loading_info.missing_keys.discard(target_name)
     # If not already offloaded, or if we applied any special Operation except Renaming, we need to re-save
-    if target_name not in disk_offload_index or isinstance(applied_ops, WeightConverter):
-        disk_offload_index = offload_weight(param, target_name, disk_offload_folder, disk_offload_index)
+    if target_name not in disk_offload_index or isinstance(
+        applied_ops, WeightConverter
+    ):
+        disk_offload_index = offload_weight(
+            param, target_name, disk_offload_folder, disk_offload_index
+        )
     return disk_offload_index
 
 
@@ -988,7 +1148,8 @@ def rename_source_key(
     if prefix is not None and meta_state_dict is not None:
         if (
             renamed_key.startswith(prefix)
-            and meta_state_dict.get(re.sub(f"^{prefix}.", "", renamed_key, count=1)) is not None
+            and meta_state_dict.get(re.sub(f"^{prefix}.", "", renamed_key, count=1))
+            is not None
         ):
             renamed_key = re.sub(f"^{prefix}.", "", renamed_key, count=1)
         elif meta_state_dict.get(f"{prefix}.{renamed_key}") is not None:
@@ -1116,7 +1277,9 @@ def convert_and_load_state_dict_in_model(
     # we cannot use it either to control the memory as we are under memory constraints, so we need to be sequential.
     # When doing on-the-fly quantization, we also use sync loading to avoid worker threads loading full-precision
     # tensors to GPU faster than the main thread can quantize them, which would cause a large memory spike.
-    has_on_the_fly_quantization = hf_quantizer is not None and not hf_quantizer.pre_quantized
+    has_on_the_fly_quantization = (
+        hf_quantizer is not None and not hf_quantizer.pre_quantized
+    )
     if (
         is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD")
         or "disk" in device_map.values()
@@ -1127,17 +1290,25 @@ def convert_and_load_state_dict_in_model(
         thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
 
     renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
-    converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
+    converters = [
+        entry for entry in weight_mapping if isinstance(entry, WeightConverter)
+    ]
     param_name_to_load: dict[str, WeightRenaming | WeightConverter] = {}
 
     # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and group to source {'g0': '*.block_sparse_moe.'}
     # and target to source {'g0': '*.mlp.'}. This allows us to quickly find which pattern matched.
     if tp_plan != {}:
-        tp_plan_alt, tp_plan_by_group_name, _ = build_glob_alternation(list(tp_plan.keys()))
+        tp_plan_alt, tp_plan_by_group_name, _ = build_glob_alternation(
+            list(tp_plan.keys())
+        )
     if dtype_plan != {}:
-        dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
+        dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(
+            list(dtype_plan.keys())
+        )
 
-    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
+    pattern_to_converter = {
+        k: converter for converter in converters for k in converter.source_patterns
+    }
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
@@ -1145,9 +1316,14 @@ def convert_and_load_state_dict_in_model(
         renamed_key, source_pattern = rename_source_key(
             original_key, renamings, converters, prefix, meta_model_state_dict
         )
-        if renamed_key not in meta_model_state_dict and original_key in meta_model_state_dict:
+        if (
+            renamed_key not in meta_model_state_dict
+            and original_key in meta_model_state_dict
+        ):
             # Key should probably not have been renamed but we might need the `prefix` to be added.`
-            renamed_key, source_pattern = rename_source_key(original_key, [], [], prefix, meta_model_state_dict)
+            renamed_key, source_pattern = rename_source_key(
+                original_key, [], [], prefix, meta_model_state_dict
+            )
 
         # 2. finally, collect the tensor into the proper converter
         if renamed_key in meta_model_state_dict:
@@ -1159,7 +1335,9 @@ def convert_and_load_state_dict_in_model(
                 mapping = param_name_to_load.setdefault(renamed_key, new_converter)
             # Otherwise, only potential renaming
             else:
-                mapping = param_name_to_load.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
+                mapping = param_name_to_load.setdefault(
+                    renamed_key, WeightRenaming(original_key, renamed_key)
+                )
                 source_pattern = original_key
 
             # 3. Handle dtype casting
@@ -1191,7 +1369,9 @@ def convert_and_load_state_dict_in_model(
             elif dtype_plan != {} and dtype_policy_alt.search(renamed_key):
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
                 if matched_dtype_pattern is not None:
-                    _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
+                    _dtype = dtype_plan[
+                        dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]
+                    ]
             elif empty_param is not None and empty_param.dtype != _dtype:
                 _dtype = empty_param.dtype  # usually correct when initializing
 
@@ -1199,15 +1379,22 @@ def convert_and_load_state_dict_in_model(
             future_or_tensor = None
             if device_mesh and tp_plan:
                 if matched_tp_pattern := tp_plan_alt.search(renamed_key):
-                    matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
+                    matched_tp_pattern = tp_plan_by_group_name[
+                        matched_tp_pattern.lastgroup
+                    ]
                     if getattr(mapping, "distributed_operation", None) is None:
-                        tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
+                        tp_layer = ALL_PARALLEL_STYLES[
+                            model.tp_plan[matched_tp_pattern]
+                        ].__class__
                         mapping.distributed_operation = tp_layer(
-                            device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
+                            device_mesh=device_mesh,
+                            rank=device_mesh.get_local_rank(),
+                            empty_param=empty_param.clone(),
                         )
                     shard_index = (
                         len(mapping.collected_tensors.get(source_pattern, []))
-                        if isinstance(mapping, WeightConverter) and isinstance(mapping.operations[0], MergeModulelist)
+                        if isinstance(mapping, WeightConverter)
+                        and isinstance(mapping.operations[0], MergeModulelist)
                         else None
                     )
                     future_or_tensor = spawn_tp_materialize(
@@ -1220,19 +1407,29 @@ def convert_and_load_state_dict_in_model(
                     )
 
             if future_or_tensor is None:
-                param_device = get_device(device_map, renamed_key, valid_torch_device=True)
-                future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
+                param_device = get_device(
+                    device_map, renamed_key, valid_torch_device=True
+                )
+                future_or_tensor = spawn_materialize(
+                    thread_pool, tensor, param_device, _dtype
+                )
 
-            mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
+            mapping.add_tensor(
+                renamed_key, original_key, source_pattern, future_or_tensor
+            )
         elif source_pattern is not None:  # add all target keys as unexpected
             mapping = pattern_to_converter[source_pattern]
             for k in mapping.target_patterns:
-                loading_info.unexpected_keys.add(renamed_key.replace(mapping.target_patterns[0], k))
+                loading_info.unexpected_keys.add(
+                    renamed_key.replace(mapping.target_patterns[0], k)
+                )
         else:
             loading_info.unexpected_keys.add(renamed_key)
 
     try:
-        for first_param_name, mapping in tqdm(param_name_to_load.items(), desc="Loading weights"):
+        for first_param_name, mapping in tqdm(
+            param_name_to_load.items(), desc="Loading weights"
+        ):
             try:
                 realized_value = mapping.convert(
                     first_param_name,
@@ -1245,9 +1442,16 @@ def convert_and_load_state_dict_in_model(
                     param = param[0] if isinstance(param, list) else param
                     param_device = get_device(device_map, target_name)
                     # Offloading support
-                    if param_device == "disk" and (target_name not in model_buffers or offload_buffers):
+                    if param_device == "disk" and (
+                        target_name not in model_buffers or offload_buffers
+                    ):
                         disk_offload_index = offload_and_maybe_resave_param(
-                            target_name, param, loading_info, disk_offload_folder, disk_offload_index, mapping
+                            target_name,
+                            param,
+                            loading_info,
+                            disk_offload_folder,
+                            disk_offload_index,
+                            mapping,
                         )
                     else:
                         set_param_for_module(
@@ -1276,7 +1480,9 @@ def convert_and_load_state_dict_in_model(
     return loading_info, disk_offload_index
 
 
-def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch.Tensor]):
+def revert_weight_conversion(
+    model: PreTrainedModel, state_dict: dict[str, torch.Tensor]
+):
     """
     Revert the conversion mapping that was used to load the model with `from_pretrained`, or the default one
     if the model was created in another way and is part of the default mappings.
@@ -1296,23 +1502,39 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
         return state_dict
 
     # Reverse all Transform to correctly match keys
-    reverse_weight_conversion = [conversion.reverse_transform() for conversion in weight_conversions]
+    reverse_weight_conversion = [
+        conversion.reverse_transform() for conversion in weight_conversions
+    ]
     # If we are still here, we need to create the (reverse) conversion mapping from scratch
-    renamings = [entry for entry in reverse_weight_conversion if isinstance(entry, WeightRenaming)]
-    converters = [entry for entry in reverse_weight_conversion if isinstance(entry, WeightConverter)]
-    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
+    renamings = [
+        entry
+        for entry in reverse_weight_conversion
+        if isinstance(entry, WeightRenaming)
+    ]
+    converters = [
+        entry
+        for entry in reverse_weight_conversion
+        if isinstance(entry, WeightConverter)
+    ]
+    pattern_to_converter = {
+        k: converter for converter in converters for k in converter.source_patterns
+    }
     conversion_mapping = {}
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
         # Rename the key according to all renaming pattern and optional weight converter patterns
-        renamed_key, source_pattern = rename_source_key(original_key, renamings, converters)
+        renamed_key, source_pattern = rename_source_key(
+            original_key, renamings, converters
+        )
         if source_pattern is not None:
             new_converter = deepcopy(pattern_to_converter[source_pattern])
             # each target key gets its own converter instance
             mapping = conversion_mapping.setdefault(renamed_key, new_converter)
         else:
-            mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
+            mapping = conversion_mapping.setdefault(
+                renamed_key, WeightRenaming(original_key, renamed_key)
+            )
             source_pattern = original_key
 
         mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
@@ -1320,7 +1542,9 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     new_state_dict = {}
     for first_param_name, reversed_converter in conversion_mapping.items():
         # Apply the reverse converter
-        realized_value = reversed_converter.convert(first_param_name, model=model, config=model.config)
+        realized_value = reversed_converter.convert(
+            first_param_name, model=model, config=model.config
+        )
         for target_name, param in realized_value.items():
             param = param[0] if isinstance(param, list) else param
             new_state_dict[target_name] = param
