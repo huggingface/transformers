@@ -19,7 +19,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
-from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -222,13 +221,6 @@ class ErnieModel(BertModel):
         else:
             use_cache = False
 
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
         if use_cache and past_key_values is None:
             past_key_values = (
                 EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
@@ -273,39 +265,6 @@ class ErnieModel(BertModel):
             pooler_output=pooled_output,
             past_key_values=encoder_outputs.past_key_values,
         )
-
-    # No longer Copied from transformers.models.bert.modeling_bert.BertModel._create_attention_masks
-    def _create_attention_masks(
-        self,
-        attention_mask,
-        encoder_attention_mask,
-        embedding_output,
-        encoder_hidden_states,
-        past_key_values,
-    ):
-        if self.config.is_decoder:
-            attention_mask = create_causal_mask(
-                config=self.config,
-                inputs_embeds=embedding_output,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-            )
-        else:
-            attention_mask = create_bidirectional_mask(
-                config=self.config,
-                inputs_embeds=embedding_output,
-                attention_mask=attention_mask,
-            )
-
-        if encoder_attention_mask is not None:
-            encoder_attention_mask = create_bidirectional_mask(
-                config=self.config,
-                inputs_embeds=embedding_output,
-                attention_mask=encoder_attention_mask,
-                encoder_hidden_states=encoder_hidden_states,
-            )
-
-        return attention_mask, encoder_attention_mask
 
 
 class ErnieForPreTrainingOutput(BertForPreTrainingOutput):

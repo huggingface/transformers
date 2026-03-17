@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...activations import ACT2FN
@@ -35,6 +37,7 @@ from ..llava.modeling_llava import (
 
 
 @auto_docstring(checkpoint="KamilaMila/FastVLM-7B")
+@strict(accept_kwargs=True)
 class FastVlmConfig(LlavaConfig):
     r"""
     Example:
@@ -54,39 +57,21 @@ class FastVlmConfig(LlavaConfig):
 
     model_type = "fast_vlm"
 
-    def __init__(
-        self,
-        vision_config=None,
-        text_config=None,
-        image_token_id=151646,
-        projector_hidden_act="gelu",
-        vision_feature_select_strategy="full",
-        vision_feature_layer=-1,
-        multimodal_projector_bias=True,
-        tie_word_embeddings=False,
-        **kwargs,
-    ):
-        self.image_token_id = image_token_id
-        self.projector_hidden_act = projector_hidden_act
+    vision_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    image_token_index: int = 151646
+    projector_hidden_act: str = "gelu"
+    vision_feature_select_strategy: str = "full"
+    vision_feature_layer: int | list[int] = -1
+    multimodal_projector_bias: bool = True
+    tie_word_embeddings: bool = False
 
-        if vision_feature_select_strategy != "full":
-            raise ValueError(
-                f"Unexpected select feature strategy: {vision_feature_select_strategy}. Only 'full' is supported in FastVLM."
-            )
-
-        if vision_feature_layer != -1:
-            raise ValueError(
-                f"Unexpected vision feature layer: {vision_feature_layer}. Only -1 is supported in FastVLM."
-            )
-
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
-
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "timm_wrapper")
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        elif vision_config is None:
-            vision_config = CONFIG_MAPPING["timm_wrapper"](
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "timm_wrapper")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = CONFIG_MAPPING["timm_wrapper"](
                 architecture="fastvit_mci3",
                 do_pooling=True,
                 global_pool="avg",
@@ -95,13 +80,11 @@ class FastVlmConfig(LlavaConfig):
                 model_args={"inference_mode": True},
             )
 
-        self.vision_config = vision_config
-
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "qwen2")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["qwen2"](
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["qwen2"](
                 hidden_size=3584,
                 vocab_size=152128,
                 intermediate_size=18944,
@@ -109,18 +92,25 @@ class FastVlmConfig(LlavaConfig):
                 num_key_value_heads=4,
                 num_hidden_layers=28,
             )
-
-        self.text_config = text_config
-        self.multimodal_projector_bias = multimodal_projector_bias
-        self.tie_word_embeddings = tie_word_embeddings
-
         # The default value is `False` but this config is used with many model types
         # Attr `tie_word_embeddings` was saved in text config for those models, so we
         # need an ugly workaround and forward-pass the attr from text config
-        if not tie_word_embeddings and self.text_config.tie_word_embeddings:
+        if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
             self.tie_word_embeddings = self.text_config.tie_word_embeddings
 
-        PreTrainedConfig.__init__(**kwargs)
+        PreTrainedConfig.__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.vision_feature_select_strategy != "full":
+            raise ValueError(
+                f"Unexpected select feature strategy: {self.vision_feature_select_strategy}. Only 'full' is supported in FastVLM."
+            )
+
+        if self.vision_feature_layer != -1:
+            raise ValueError(
+                f"Unexpected vision feature layer: {self.vision_feature_layer}. Only -1 is supported in FastVLM."
+            )
 
 
 class FastVlmMultiModalProjector(LlavaMultiModalProjector):
@@ -146,20 +136,18 @@ class FastVlmModelOutputWithPast(LlavaModelOutputWithPast):
 
 
 class FastVlmModel(LlavaModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: FastVlmConfig):
         super().__init__(config)
 
-    @can_return_tuple
     @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -193,7 +181,7 @@ class FastVlmModel(LlavaModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | FastVlmModelOutputWithPast:
@@ -250,8 +238,6 @@ class FastVlmCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     """
 )
 class FastVlmForConditionalGeneration(LlavaForConditionalGeneration):
-    _checkpoint_conversion_mapping = {}
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -262,7 +248,7 @@ class FastVlmForConditionalGeneration(LlavaForConditionalGeneration):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,

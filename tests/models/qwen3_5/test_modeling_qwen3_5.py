@@ -430,15 +430,18 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 model.base_model.rope_deltas = None
 
             input_ids = curr_input_dict["input_ids"][:1]
+            mm_token_type_ids = curr_input_dict["mm_token_type_ids"][:1]
             pixel_values = curr_input_dict["pixel_values"][:one_img_length]
             image_grid_thw = curr_input_dict["image_grid_thw"][:1]
             input_ids = torch.cat([input_ids, input_ids], dim=0)
+            mm_token_type_ids = torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0)
 
             with self.assertRaises(ValueError):
                 _ = model(
                     input_ids=input_ids,
                     pixel_values=pixel_values,
                     image_grid_thw=image_grid_thw,
+                    mm_token_type_ids=mm_token_type_ids,
                 )
 
             if hasattr(model.base_model, "rope_deltas"):
@@ -450,6 +453,7 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
             )
 
     def test_image_forward(self):
@@ -490,12 +494,16 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 input_ids[b, image_start + 1] = self.model_tester.image_token_id
                 input_ids[b, image_start + 2] = self.model_tester.vision_end_token_id
 
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.model_tester.image_token_id] = 1
+
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             outputs = model(
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
             )
             self.assertIsNotNone(outputs)
 
@@ -571,12 +579,16 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                     input_ids[b, frame_token_start:frame_token_end] = self.model_tester.video_token_id
                     input_ids[b, frame_token_end] = self.model_tester.vision_end_token_id
 
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.model_tester.video_token_id] = 2
+
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             outputs = model(
                 input_ids=input_ids,
                 pixel_values_videos=pixel_values_videos,
                 video_grid_thw=video_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
             )
             self.assertIsNotNone(outputs)
 

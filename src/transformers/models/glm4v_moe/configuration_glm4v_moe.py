@@ -17,12 +17,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5V")
+@strict(accept_kwargs=True)
 class Glm4vMoeTextConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
@@ -66,74 +69,45 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }
+
+    vocab_size: int = 151424
+    hidden_size: int = 4096
+    intermediate_size: int = 10944
+    num_hidden_layers: int = 46
+    num_attention_heads: int = 96
+    num_key_value_heads: int = 8
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 65536
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = True
+    attention_dropout: float | int = 0.0
+    moe_intermediate_size: int = 1408
+    num_experts_per_tok: int = 8
+    n_shared_experts: int = 1
+    n_routed_experts: int = 128
+    routed_scaling_factor: float = 1.0
+    n_group: int = 1
+    topk_group: int = 1
+    first_k_dense_replace: int = 1
+    norm_topk_prob: bool = True
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
+    pad_token_id: int | None = None
     base_config_key = "text_config"
+    ignore_keys_at_rope_validation = {"mrope_section"}
+    router_aux_loss_coef: float = 0.0001
 
-    def __init__(
-        self,
-        vocab_size: int | None = 151424,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 10944,
-        num_hidden_layers: int | None = 46,
-        num_attention_heads: int | None = 96,
-        num_key_value_heads: int | None = 8,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 65536,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-5,
-        use_cache: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = True,
-        attention_dropout: float | None = 0.0,
-        moe_intermediate_size: int | None = 1408,
-        num_experts_per_tok: int | None = 8,
-        n_shared_experts: int | None = 1,
-        n_routed_experts: int | None = 128,
-        routed_scaling_factor: float | None = 1.0,
-        n_group: int | None = 1,
-        topk_group: int | None = 1,
-        first_k_dense_replace: int | None = 1,
-        norm_topk_prob: bool | None = True,
-        pad_token_id: int | None = None,
-        eos_token_id: int | None = None,
-        bos_token_id: int | None = None,
-        router_aux_loss_coef: float | None = 0.0001,
-        **kwargs,
-    ):
-        self.pad_token_id = pad_token_id
-        self.eos_token_id = eos_token_id
-        self.bos_token_id = bos_token_id
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.rope_parameters = rope_parameters
+    def __post_init__(self, **kwargs):
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
-
-        # MoE arguments
-        self.moe_intermediate_size = moe_intermediate_size
-        self.num_experts_per_tok = num_experts_per_tok
-        self.n_group = n_group
-        self.topk_group = topk_group
-        self.n_shared_experts = n_shared_experts
-        self.n_routed_experts = n_routed_experts
-        self.routed_scaling_factor = routed_scaling_factor
-        self.first_k_dense_replace = first_k_dense_replace
-        self.norm_topk_prob = norm_topk_prob
-        self.router_aux_loss_coef = router_aux_loss_coef
-        super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
+@strict(accept_kwargs=True)
 class Glm4vMoeVisionConfig(PreTrainedConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 4096):
@@ -157,45 +131,25 @@ class Glm4vMoeVisionConfig(PreTrainedConfig):
     model_type = "glm4v_moe_vision"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        depth=24,
-        hidden_size=1536,
-        hidden_act="silu",
-        attention_bias=False,
-        attention_dropout=0.0,
-        num_heads=12,
-        in_channels=3,
-        image_size=336,
-        patch_size=14,
-        rms_norm_eps=1e-05,
-        spatial_merge_size=2,
-        temporal_patch_size=2,
-        out_hidden_size=4096,
-        intermediate_size=13696,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.depth = depth
-        self.hidden_size = hidden_size
-        self.hidden_act = hidden_act
-        self.num_heads = num_heads
-        self.in_channels = in_channels
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.spatial_merge_size = spatial_merge_size
-        self.temporal_patch_size = temporal_patch_size
-        self.out_hidden_size = out_hidden_size
-        self.intermediate_size = intermediate_size
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
+    depth: int = 24
+    hidden_size: int = 1536
+    hidden_act: str = "silu"
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
+    num_heads: int = 12
+    in_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] = 336
+    patch_size: int | list[int] | tuple[int, int] = 14
+    rms_norm_eps: float = 1e-05
+    spatial_merge_size: int = 2
+    temporal_patch_size: int | list[int] | tuple[int, int] = 2
+    out_hidden_size: int = 4096
+    intermediate_size: int = 13696
+    initializer_range: float = 0.02
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5V")
+@strict(accept_kwargs=True)
 class Glm4vMoeConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 151339):
@@ -224,38 +178,29 @@ class Glm4vMoeConfig(PreTrainedConfig):
     sub_configs = {"vision_config": Glm4vMoeVisionConfig, "text_config": Glm4vMoeTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        image_token_id=151363,
-        video_token_id=151364,
-        image_start_token_id=151339,
-        image_end_token_id=151340,
-        video_start_token_id=151341,
-        video_end_token_id=151342,
-        tie_word_embeddings=False,
-        **kwargs,
-    ):
-        if isinstance(vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
 
-        if isinstance(text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**text_config)
-        elif text_config is None:
+    image_token_id: int = 151363
+    video_token_id: int = 151364
+    image_start_token_id: int = 151339
+    image_end_token_id: int = 151340
+    video_start_token_id: int = 151341
+    video_end_token_id: int = 151342
+    tie_word_embeddings: bool = False
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"](**kwargs)
+
+        if isinstance(self.text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**self.text_config)
+        elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"](**kwargs)
 
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.video_start_token_id = video_start_token_id
-        self.video_end_token_id = video_end_token_id
-        self.image_start_token_id = image_start_token_id
-        self.image_end_token_id = image_end_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Glm4vMoeConfig", "Glm4vMoeVisionConfig", "Glm4vMoeTextConfig"]
