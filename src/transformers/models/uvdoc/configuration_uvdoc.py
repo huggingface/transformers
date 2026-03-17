@@ -88,10 +88,6 @@ class UVDocConfig(PreTrainedConfig):
         self.upsample_size = upsample_size
         self.upsample_mode = upsample_mode
 
-        # For image feature extraction pipeline compatibility: single class "image"
-        self.id2label = {0: "image"}
-        self.num_labels = 1
-
         super().__init__(**kwargs)
 
 

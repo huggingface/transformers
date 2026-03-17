@@ -99,19 +99,12 @@ class UVDocConfig(PreTrainedConfig):
         self.upsample_size = upsample_size
         self.upsample_mode = upsample_mode
 
-        # For image feature extraction pipeline compatibility: single class "image"
-        self.id2label = {0: "image"}
-        self.num_labels = 1
-
         super().__init__(**kwargs)
 
 
 @auto_docstring
 class UVDocImageProcessorFast(BaseImageProcessorFast):
-    image_mean = [0, 0, 0]
-    image_std = [1, 1, 1]
     do_rescale = True
-    do_normalize = True
 
     def _preprocess(
         self,
@@ -142,7 +135,7 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            # BGR to RGB conversion
+            # RGB to BGR conversion
             stacked_images = stacked_images[:, [2, 1, 0], :, :]
             processed_images_grouped[shape] = stacked_images
 
@@ -166,12 +159,7 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
             image = image * scale
             image = image.flip(dims=[-1]).to(dtype=torch.uint8, non_blocking=True, copy=False)
 
-            results.append(
-                {
-                    "images": image,
-                    "labels": torch.zeros(1, dtype=torch.long, device=image.device),  # Single class: image
-                }
-            )
+            results.append({"images": image,})
 
         return results
 

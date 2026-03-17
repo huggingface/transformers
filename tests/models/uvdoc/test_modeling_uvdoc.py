@@ -235,5 +235,3 @@ class UVDocModelIntegrationTest(unittest.TestCase):
             dtype=torch.uint8,
         )
         torch.testing.assert_close(results[0]["images"][:3, :3, 0], expected_images, rtol=2e-4, atol=2e-4)
-        self.assertEqual(results[0]["labels"].shape, (1,))
-        self.assertTrue((results[0]["labels"] == 0).all())

@@ -33,10 +33,7 @@ from ...utils.generic import TensorType
 
 @auto_docstring
 class UVDocImageProcessorFast(BaseImageProcessorFast):
-    image_mean = [0, 0, 0]
-    image_std = [1, 1, 1]
     do_rescale = True
-    do_normalize = True
 
     def _preprocess(
         self,
@@ -67,7 +64,7 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            # BGR to RGB conversion
+            # RGB to BGR conversion
             stacked_images = stacked_images[:, [2, 1, 0], :, :]
             processed_images_grouped[shape] = stacked_images
 
@@ -94,7 +91,6 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
             results.append(
                 {
                     "images": image,
-                    "labels": torch.zeros(1, dtype=torch.long, device=image.device),  # Single class: image
                 }
             )
 
