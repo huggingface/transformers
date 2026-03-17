@@ -13,4 +13,5 @@
 # limitations under the License.
 from .auto import AutoHfQuantizer, AutoQuantizationConfig, register_quantization_config, register_quantizer
 from .base import HfQuantizer
+from .quantizer_gguf import GGUFQuantizer
 from .quantizers_utils import get_module_from_name

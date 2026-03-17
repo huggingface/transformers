@@ -496,214 +496,6 @@ class Force16BytesAlignment(ConversionOps):
         return Force16BytesAlignment()
 
 
-class GGUFDequantize(ConversionOps):
-    """
-    First op in every GgufDeserializer WeightConverter. Calls gguf.dequantize() on each
-    GGUFQuantizedTensor in input_dict and moves the result to the target device/dtype.
-    Subsequent ops in the chain receive ordinary torch.Tensor objects.
-
-    Key-renaming behaviour:
-    - Single source → single target (1:1 mapping): renames to the target pattern so
-      that WeightConverter's prefix/suffix logic can find the output key in the HF name.
-    - Multiple sources (many:1, e.g. Qwen2MoE gate+up): keeps source keys so a
-      subsequent op like ``Concatenate`` can still iterate over them by name.
-    """
-
-    @torch.no_grad()
-    def convert(
-        self,
-        input_dict: dict[str, list],
-        source_patterns: list[str],
-        target_patterns: list[str],
-        device=None,
-        dtype=None,
-        **kwargs,
-    ) -> dict[str, list[torch.Tensor]]:
-        import numpy as np
-        from gguf import dequantize
-
-        # For single-source → single-target, rename the key to the target pattern.
-        # This ensures that when GGUFDequantize is the only op, the WeightConverter
-        # rename logic (which looks for the output key inside the full HF name) works.
-        rename_to_target = len(input_dict) == 1 and len(target_patterns) == 1
-
-        result = {}
-        for key, tensors in input_dict.items():
-            tensor_list = tensors if isinstance(tensors, list) else [tensors]
-            dequantized = []
-            for t in tensor_list:
-                if isinstance(t, GGUFQuantizedTensor):
-                    w = torch.from_numpy(np.copy(dequantize(t.data, t.tensor_type)))
-                    if device is not None or dtype is not None:
-                        w = w.to(device=device, dtype=dtype)
-                    dequantized.append(w)
-                else:
-                    dequantized.append(t)
-            output_key = target_patterns[0] if rename_to_target else key
-            result[output_key] = dequantized
-        return result
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        raise NotImplementedError("GGUFDequantize is one-way")
-
-
-class Unsqueeze(ConversionOps):
-    """Unsqueeze a tensor along ``dim``."""
-
-    def __init__(self, dim: int = 0):
-        self.dim = dim
-
-    @torch.no_grad()
-    def convert(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
-    ) -> dict[str, torch.Tensor]:
-        target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
-        tensors = next(iter(input_dict.values()))
-        tensor = tensors[0] if isinstance(tensors, list) else tensors
-        return {target_pattern: tensor.unsqueeze(self.dim)}
-
-    def get_target_pattern(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
-    ) -> str:
-        if len(input_dict) != 1:
-            raise ValueError("Undefined Operation encountered!")
-        if len(target_patterns) > 1:
-            if len(source_patterns) == 1:
-                return source_patterns[0]
-            else:
-                raise ValueError("Undefined Operation encountered!")
-        else:
-            return target_patterns[0]
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return Squeeze(self.dim)
-
-
-class Squeeze(ConversionOps):
-    """Squeeze a tensor along ``dim``. Inverse of :class:`Unsqueeze`."""
-
-    def __init__(self, dim: int = 0):
-        self.dim = dim
-
-    @torch.no_grad()
-    def convert(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
-    ) -> dict[str, torch.Tensor]:
-        target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
-        tensors = next(iter(input_dict.values()))
-        tensor = tensors[0] if isinstance(tensors, list) else tensors
-        return {target_pattern: tensor.squeeze(self.dim)}
-
-    def get_target_pattern(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
-    ) -> str:
-        if len(input_dict) != 1:
-            raise ValueError("Undefined Operation encountered!")
-        if len(target_patterns) > 1:
-            if len(source_patterns) == 1:
-                return source_patterns[0]
-            else:
-                raise ValueError("Undefined Operation encountered!")
-        else:
-            return target_patterns[0]
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return Unsqueeze(self.dim)
-
-
-class SubtractOne(ConversionOps):
-    """Subtract 1 from a tensor (used for GGUF norm weight de-offset)."""
-
-    @torch.no_grad()
-    def convert(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
-    ) -> dict[str, torch.Tensor]:
-        target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
-        tensors = next(iter(input_dict.values()))
-        tensor = tensors[0] if isinstance(tensors, list) else tensors
-        return {target_pattern: tensor - 1}
-
-    def get_target_pattern(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
-    ) -> str:
-        if len(input_dict) != 1:
-            raise ValueError("Undefined Operation encountered!")
-        if len(target_patterns) > 1:
-            if len(source_patterns) == 1:
-                return source_patterns[0]
-            else:
-                raise ValueError("Undefined Operation encountered!")
-        else:
-            return target_patterns[0]
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return AddOne()
-
-
-class AddOne(ConversionOps):
-    """Add 1 to a tensor. Inverse of :class:`SubtractOne`."""
-
-    @torch.no_grad()
-    def convert(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
-    ) -> dict[str, torch.Tensor]:
-        target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
-        tensors = next(iter(input_dict.values()))
-        tensor = tensors[0] if isinstance(tensors, list) else tensors
-        return {target_pattern: tensor + 1}
-
-    def get_target_pattern(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
-    ) -> str:
-        if len(input_dict) != 1:
-            raise ValueError("Undefined Operation encountered!")
-        if len(target_patterns) > 1:
-            if len(source_patterns) == 1:
-                return source_patterns[0]
-            else:
-                raise ValueError("Undefined Operation encountered!")
-        else:
-            return target_patterns[0]
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return SubtractOne()
-
-
-class LogNegate(ConversionOps):
-    """Apply ``log(-tensor)`` (used for GGUF Mamba SSM-A de-transform)."""
-
-    @torch.no_grad()
-    def convert(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
-    ) -> dict[str, torch.Tensor]:
-        target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
-        tensors = next(iter(input_dict.values()))
-        tensor = tensors[0] if isinstance(tensors, list) else tensors
-        return {target_pattern: torch.log(-tensor)}
-
-    def get_target_pattern(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
-    ) -> str:
-        if len(input_dict) != 1:
-            raise ValueError("Undefined Operation encountered!")
-        if len(target_patterns) > 1:
-            if len(source_patterns) == 1:
-                return source_patterns[0]
-            else:
-                raise ValueError("Undefined Operation encountered!")
-        else:
-            return target_patterns[0]
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        raise NotImplementedError("LogNegate is not easily reversible")
-
-
 def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     """
     Process a target pattern for reverse mapping (when targets become sources).
@@ -1025,6 +817,31 @@ def spawn_materialize(
         # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
         # memory during Conversion
         return _job
+
+
+def spawn_gguf_materialize(
+    thread_pool: ThreadPoolExecutor | None,
+    tensor: "GGUFQuantizedTensor",
+    device=None,
+    dtype=None,
+) -> "Future | Callable":
+    """Dequantize a GGUFQuantizedTensor and move to target device/dtype.
+
+    Mirrors ``spawn_materialize`` but handles raw GGUF data instead of
+    safetensors slices. Called by ``GGUFQuantizer.spawn_materialize``."""
+
+    def _job():
+        import numpy as np
+        from gguf import dequantize
+
+        w = torch.from_numpy(np.copy(dequantize(tensor.data, tensor.tensor_type)))
+        if device is not None or dtype is not None:
+            w = w.to(device=device, dtype=dtype)
+        return w
+
+    if thread_pool is not None:
+        return thread_pool.submit(_job)
+    return _job
 
 
 def spawn_tp_materialize(
@@ -1384,7 +1201,6 @@ def convert_and_load_state_dict_in_model(
             if (
                 hf_quantizer
                 and hf_quantizer.pre_quantized
-                and not isinstance(tensor, GGUFQuantizedTensor)
                 and (
                     original_key != renamed_key
                     or not (
@@ -1431,27 +1247,8 @@ def convert_and_load_state_dict_in_model(
 
             if future_or_tensor is None:
                 param_device = get_device(device_map, renamed_key, valid_torch_device=True)
-                if isinstance(tensor, GGUFQuantizedTensor):
-                    # Dequantize and move to target device/dtype inside the callable so
-                    # WeightConverter.convert() receives a regular torch.Tensor.
-                    # GGUFDequantize in the ops chain acts as a pass-through for already-dequantized tensors.
-                    _gguf_tensor = tensor
-                    _gguf_device = param_device
-                    _gguf_dtype = _dtype
-
-                    def _gguf_callable(_t=_gguf_tensor, _d=_gguf_device, _dt=_gguf_dtype):
-                        import numpy as np
-                        from gguf import dequantize
-
-                        w = torch.from_numpy(np.copy(dequantize(_t.data, _t.tensor_type)))
-                        if _d is not None or _dt is not None:
-                            w = w.to(device=_d, dtype=_dt)
-                        return w
-
-                    if thread_pool is not None:
-                        future_or_tensor = thread_pool.submit(_gguf_callable)
-                    else:
-                        future_or_tensor = _gguf_callable
+                if hf_quantizer is not None:
+                    future_or_tensor = hf_quantizer.spawn_materialize(thread_pool, tensor, param_device, _dtype)
                 else:
                     future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
 

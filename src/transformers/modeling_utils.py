@@ -4061,9 +4061,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         is_quantized = hf_quantizer is not None
         _gguf_weight_mapping = []  # populated below for GGUF checkpoints
+        _gguf_quantizer = None    # populated below for GGUF checkpoints
 
         if gguf_file:
             from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
+            from .quantizers.quantizer_gguf import GGUFQuantizer
 
             # we need a dummy model to get the state_dict - for this reason, we keep the state_dict as if it was
             # passed directly as a kwarg from now on
@@ -4072,6 +4074,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             gguf_parsed = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True, model_to_load=dummy_model)
             state_dict = gguf_parsed["tensors"]  # {gguf_name: GGUFQuantizedTensor}
             _gguf_weight_mapping = gguf_parsed.get("weight_mapping", [])
+            _gguf_quantizer = GGUFQuantizer()
 
         # Find the correct dtype based on current state
         config, dtype = _get_dtype(
@@ -4099,6 +4102,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # instantiated model, as the flags can be modified by instances sometimes)
         dtype_plan = model._get_dtype_plan(dtype)
 
+        # Determine the effective quantizer: GGUF quantizer takes precedence for materialization
+        effective_quantizer = _gguf_quantizer if gguf_file else hf_quantizer
+
         # Obtain the weight conversion mapping for this model if any are registered
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
         # For GGUF: prepend GgufDeserializer converters so they run before any model-specific conversions
@@ -4122,7 +4128,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             offload_buffers=offload_buffers,
             dtype=dtype,
             dtype_plan=dtype_plan,
-            hf_quantizer=hf_quantizer,
+            hf_quantizer=effective_quantizer,
             device_mesh=device_mesh,
             weights_only=weights_only,
             weight_mapping=weight_conversions,
