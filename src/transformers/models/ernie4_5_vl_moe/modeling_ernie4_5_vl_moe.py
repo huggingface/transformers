@@ -1084,7 +1084,6 @@ class Ernie4_5_VLMoeVariableResolutionResamplerModel(nn.Module):
 @auto_docstring
 class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
     base_model_prefix = "model"
-    _checkpoint_conversion_mapping = {"^norm": "language_model.norm"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: Ernie4_5_VLMoeConfig
@@ -1566,7 +1565,6 @@ def load_balancing_loss_func(
 
 
 class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {"^model.norm": "model.language_model.norm"}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False

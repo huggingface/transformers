@@ -494,7 +494,6 @@ class VideoLlama3ModelOutputWithPast(ModelOutput):
 
 
 class VideoLlama3Model(Qwen2VLModel):
-    _checkpoint_conversion_mapping = {}
     _can_compile_fullgraph = False
 
     def __init__(self, config: VideoLlama3Config):
@@ -685,7 +684,6 @@ class VideoLlama3CausalLMOutputWithPast(ModelOutput):
 
 
 class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
-    _checkpoint_conversion_mapping = {}
     _can_compile_fullgraph = False
 
     def __init__(self, config: VideoLlama3Config):
