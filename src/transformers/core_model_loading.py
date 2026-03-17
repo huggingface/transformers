@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import functools
 import math
 import os
 import re
@@ -805,9 +806,28 @@ class WeightConverter(WeightTransform):
 GLOBAL_WORKERS = min(4, os.cpu_count() or 4)
 
 
+@functools.lru_cache(maxsize=1)
+def _is_strix_halo() -> bool:
+    """Detect AMD Strix Halo APU (gfx1151) where mmap causes OOM due to a driver bug."""
+    if not torch.cuda.is_available():
+        return False
+    try:
+        for i in range(torch.cuda.device_count()):
+            props = torch.cuda.get_device_properties(i)
+            if hasattr(props, "gcnArchName") and "gfx1151" in props.gcnArchName:
+                return True
+    except Exception:
+        logger.debug("Failed to detect GPU architecture for Strix Halo check", exc_info=True)
+    return False
+
+
 def _materialize_copy(tensor: torch.Tensor, device=None, dtype=None) -> torch.Tensor:
     # This slicing is what actually loads the tensor from the safetensors slice object
     tensor = tensor[...]
+    # On AMD Strix Halo APUs, safetensors mmap triggers OOM due to a driver issue with
+    # unified memory. Force a CPU copy to release the mmap reference. See GH-44756.
+    if _is_strix_halo() and tensor.device.type == "cpu":
+        tensor = tensor.to(device="cpu", copy=True)
     if dtype is not None or device is not None:
         tensor = tensor.to(device=device, dtype=dtype)
     return tensor
