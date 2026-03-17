@@ -15,15 +15,13 @@
 from dataclasses import dataclass
 
 import torch
-import torch.nn as nn
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import ImageInput
-from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import auto_docstring, logging
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2Config
 from ..got_ocr2.modeling_got_ocr2 import (
     GotOcr2ForConditionalGeneration,
@@ -38,26 +36,10 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(
-    checkpoint="PaddlePaddle/PP-Chart2Table_safetensors",
-    custom_args=r"""
-    output_channels (`int`, *optional*, defaults to 1024):
-        Dimensionality of the output channels from the vision encoder. This is the final channel count
-        after the vision downsample layers, which is then projected to the text model hidden size.
-    vision_hidden_channels (`int`, *optional*, defaults to 512):
-        Dimensionality of the intermediate hidden channels in the vision encoder. This is the channel
-        count between the first and second downsample layers.
-    """,
+    checkpoint="PaddlePaddle/PP-Chart2Table_safetensors"
 )
 class PPChart2TableConfig(GotOcr2Config):
-    def __init__(
-        self,
-        output_channels: int = 1024,
-        vision_hidden_channels: int = 512,
-        **super_kwargs,
-    ):
-        self.output_channels = output_channels
-        self.vision_hidden_channels = vision_hidden_channels
-        super().__init__()
+    pass
 
 
 @auto_docstring
@@ -104,7 +86,7 @@ class PPChart2TableProcessor(ProcessorMixin):
         num_patches = height // self.image_processor.patch_size // self.image_processor.merge_size
 
         input_ids = {"input_ids": None}
-        if text is None:
+        if text is None or text == "":
             query = "Chart to table"
             prompt = (
                 self.message_start_token
@@ -150,36 +132,7 @@ class PPChart2TablePreTrainedModel(GotOcr2PreTrainedModel):
 
 @auto_docstring
 class PPChart2TableModel(GotOcr2Model):
-    def __init__(self, config: PPChart2TableConfig):
-        super().__init__(config)
-        self.vision_downsample1 = nn.Conv2d(
-            config.vision_config.output_channels,
-            config.vision_hidden_channels,
-            kernel_size=3,
-            stride=2,
-            padding=1,
-            bias=False,
-        )
-        self.vision_downsample2 = nn.Conv2d(
-            config.vision_hidden_channels, config.output_channels, kernel_size=3, stride=2, padding=1, bias=False
-        )
-        self.multi_modal_projector = nn.Linear(config.output_channels, config.text_config.hidden_size)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        image_output = self.vision_tower(pixel_values)
-        last_hidden_state = image_output.last_hidden_state
-        last_hidden_state = self.vision_downsample1(last_hidden_state)
-        last_hidden_state = self.vision_downsample2(last_hidden_state)
-        image_output.pooler_output = self.multi_modal_projector(last_hidden_state.flatten(2).transpose(2, 1))
-
-        return image_output
+    pass
 
 
 @auto_docstring(

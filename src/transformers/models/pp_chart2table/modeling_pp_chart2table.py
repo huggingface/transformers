@@ -496,6 +496,27 @@ class PPChart2TablePreTrainedModel(PreTrainedModel):
                 init.zeros_(module.pos_embed)
 
 
+class PPChart2TableMultiModalProjector(nn.Module):
+    def __init__(self, config: PPChart2TableConfig):
+        super().__init__()
+        vision_output_channels = config.vision_config.output_channels
+        language_hidden_size = config.text_config.hidden_size
+        self.conv_upsampler1 = nn.Conv2d(
+            vision_output_channels, vision_output_channels * 2, kernel_size=3, stride=2, padding=1, bias=False
+        )
+        self.conv_upsampler2 = nn.Conv2d(
+            vision_output_channels * 2, language_hidden_size, kernel_size=3, stride=2, padding=1, bias=False
+        )
+        self.multimodal_projector = nn.Linear(language_hidden_size, language_hidden_size)
+
+    def forward(self, vision_embeddings: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.conv_upsampler1(vision_embeddings)
+        hidden_state = self.conv_upsampler2(hidden_state)
+        hidden_state = hidden_state.flatten(2).permute(0, 2, 1)
+        hidden_state = self.multimodal_projector(hidden_state)
+        return hidden_state
+
+
 @auto_docstring
 class PPChart2TableModel(PPChart2TablePreTrainedModel):
     _checkpoint_conversion_mapping = {
@@ -505,19 +526,9 @@ class PPChart2TableModel(PPChart2TablePreTrainedModel):
     def __init__(self, config: PPChart2TableConfig):
         super().__init__(config)
         self.vision_tower = PPChart2TableVisionEncoder(config.vision_config)
-        self.multi_modal_projector = nn.Linear(config.output_channels, config.text_config.hidden_size)
+
+        self.multi_modal_projector = PPChart2TableMultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
-        self.vision_downsample1 = nn.Conv2d(
-            config.vision_config.output_channels,
-            config.vision_hidden_channels,
-            kernel_size=3,
-            stride=2,
-            padding=1,
-            bias=False,
-        )
-        self.vision_downsample2 = nn.Conv2d(
-            config.vision_hidden_channels, config.output_channels, kernel_size=3, stride=2, padding=1, bias=False
-        )
         self.post_init()
 
     def get_input_embeddings(self):
@@ -535,13 +546,11 @@ class PPChart2TableModel(PPChart2TablePreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        image_output = self.vision_tower(pixel_values)
-        last_hidden_state = image_output.last_hidden_state
-        last_hidden_state = self.vision_downsample1(last_hidden_state)
-        last_hidden_state = self.vision_downsample2(last_hidden_state)
-        image_output.pooler_output = self.multi_modal_projector(last_hidden_state.flatten(2).transpose(2, 1))
+        image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
+        last_hidden_state = image_outputs.last_hidden_state
+        image_outputs.pooler_output = self.multi_modal_projector(last_hidden_state)
 
-        return image_output
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor

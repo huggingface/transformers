@@ -255,7 +255,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
             else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
         ("plbart", "PLBartTokenizer" if is_tokenizers_available() else None),
-        ("pp_chart2table", "TokenizersBackend" if is_tokenizers_available() else None),
         ("prophetnet", "ProphetNetTokenizer"),
         ("qdqbert", "BertTokenizer" if is_tokenizers_available() else None),
         ("qwen2", "Qwen2Tokenizer" if is_tokenizers_available() else None),

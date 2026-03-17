@@ -71,15 +71,14 @@ from transformers import AutoModelForImageTextToText, AutoProcessor
 model_path = "PaddlePaddle/PP-Chart2Table_safetensors"
 model = AutoModelForImageTextToText.from_pretrained(
     model_path, 
-    dtype="float32",
     device_map="auto",
 )
-processor = AutoProcessor.from_pretrained(model_path, use_fast=True).to(model.device)
+processor = AutoProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", stream=True).raw)
-inputs = processor(images=image)
+inputs = processor(images=image).to(model.device)
 
-generated_ids = model.generate(**inputs, use_cache=True, do_sample=False, max_new_tokens=256)
+generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=256)
 generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
 result = processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 print(result)
@@ -128,13 +127,12 @@ from transformers import AutoModelForImageTextToText, AutoProcessor
 model_path = "PaddlePaddle/PP-Chart2Table_safetensors"
 model = AutoModelForImageTextToText.from_pretrained(
     model_path, 
-    dtype="float32",
     device_map="auto",
 )
-processor = AutoProcessor.from_pretrained(model_path).to(model.device)
+processor = AutoProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", stream=True).raw)
-inputs = processor(images=[image, image])
+inputs = processor(images=[image, image]).to(model.device)
 
 generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=256)
 generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
@@ -156,14 +154,6 @@ print(result)
 ## PPChart2TableConfig
 
 [[autodoc]] PPChart2TableConfig
-
-## PPChart2TableVisionPreTrainedModel
-
-[[autodoc]] PPChart2TableVisionPreTrainedModel
-
-## PPChart2TablePreTrainedModel
-
-[[autodoc]] PPChart2TablePreTrainedModel
 
 ## PPChart2TableImageProcessorFast
 

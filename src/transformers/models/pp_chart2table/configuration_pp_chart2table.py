@@ -84,17 +84,7 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
         self.mlp_dim = mlp_dim
 
 
-@auto_docstring(
-    checkpoint="PaddlePaddle/PP-Chart2Table_safetensors",
-    custom_args=r"""
-    output_channels (`int`, *optional*, defaults to 1024):
-        Dimensionality of the output channels from the vision encoder. This is the final channel count
-        after the vision downsample layers, which is then projected to the text model hidden size.
-    vision_hidden_channels (`int`, *optional*, defaults to 512):
-        Dimensionality of the intermediate hidden channels in the vision encoder. This is the channel
-        count between the first and second downsample layers.
-    """,
-)
+@auto_docstring(checkpoint="PaddlePaddle/PP-Chart2Table_safetensors")
 class PPChart2TableConfig(PreTrainedConfig):
     r"""
     Example:
@@ -125,12 +115,8 @@ class PPChart2TableConfig(PreTrainedConfig):
         image_token_index: int | None = 151859,
         image_seq_length: int | None = 576,
         tie_word_embeddings: bool | None = True,
-        output_channels: int = 1024,
-        vision_hidden_channels: int = 512,
         **kwargs,
     ):
-        self.output_channels = output_channels
-        self.vision_hidden_channels = vision_hidden_channels
         self.image_token_index = image_token_index
         self.image_seq_length = image_seq_length
 

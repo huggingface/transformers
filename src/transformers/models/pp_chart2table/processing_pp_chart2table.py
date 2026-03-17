@@ -59,7 +59,7 @@ class PPChart2TableProcessor(ProcessorMixin):
         num_patches = height // self.image_processor.patch_size // self.image_processor.merge_size
 
         input_ids = {"input_ids": None}
-        if text is None:
+        if text is None or text == "":
             query = "Chart to table"
             prompt = (
                 self.message_start_token
