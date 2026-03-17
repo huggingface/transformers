@@ -161,14 +161,14 @@ def _build_checkpoint_conversion_mapping():
         ],
         "sam3_tracker": [
             WeightRenaming(
-                source_patterns=r"detector_model.vision_encoder.backbone.", target_patterns="vision_encoder.backbone"
+                source_patterns=r"detector_model.vision_encoder.backbone.", target_patterns="vision_encoder.backbone."
             ),
             WeightRenaming(source_patterns=r"tracker_neck.", target_patterns="vision_encoder.neck."),
         ],
         "t5gemma2_encoder": [
-            WeightRenaming(r"(?<!decoder)(?<!text_model)\.embed_tokens\.", "text_model.embed_tokens."),
-            WeightRenaming(r"(?<!decoder)(?<!text_model)\.norm\.", "text_model.norm."),
-            WeightRenaming(r"(?<!vision_model.encoder)(?<!decoder)(?<!text_model)\.layers.", "text_model.layers."),
+            WeightRenaming(r"(?<!decoder)(?<!text_model)\.embed_tokens\.", ".text_model.embed_tokens."),
+            WeightRenaming(r"(?<!decoder)(?<!text_model)\.norm\.", ".text_model.norm."),
+            WeightRenaming(r"(?<!vision_model.encoder)(?<!decoder)(?<!text_model)\.layers.", ".text_model.layers."),
         ],
         "gpt_oss": [
             # NOTE: These converters are only applied if the model is being loaded from pre-dequantized checkpoint.
@@ -520,6 +520,9 @@ def get_model_conversion_mapping(
     For a given `model`, obtain the weight conversion mapping if any are registered either as a simple renaming
     `_checkpoint_conversion_mapping` class argument, or in the general WeightConverter mapping.
     """
+    # Lazy import to avoid circular import issues
+    from .modeling_utils import PreTrainedModel
+
     # note: this function is used in PEFT, so changing the API requires coordination
     weight_conversions = []
 
@@ -540,10 +543,10 @@ def get_model_conversion_mapping(
         weight_conversions.extend(conversion)
 
     # Recurse over submodules and collect all conversions
-    for submodule in model.children():
+    for submodule in model.modules():
         if (
             submodule is not model
-            and isinstance(model, PreTrainedModel)
+            and isinstance(submodule, PreTrainedModel)
             and submodule.config.__class__ != model.config.__class__
         ):
             conversion = extract_weight_conversions_for_model(submodule)
