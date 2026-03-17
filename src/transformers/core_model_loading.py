@@ -736,8 +736,6 @@ class WeightConverter(WeightTransform):
         config=None,
         hf_quantizer=None,
         loading_info: LoadStateDictInfo | None = None,
-        device=None,
-        dtype=None,
     ):
         # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
         # attribute during the whole process
@@ -754,8 +752,6 @@ class WeightConverter(WeightTransform):
                     model=model,
                     config=config,
                     missing_keys=loading_info.missing_keys if loading_info else None,
-                    device=device,
-                    dtype=dtype,
                 )
 
         # Tensors are returned from ops with the target patterns, we need to expand them to full name.
