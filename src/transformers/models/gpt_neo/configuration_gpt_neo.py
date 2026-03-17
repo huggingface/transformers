@@ -13,14 +13,14 @@
 # limitations under the License.
 """GPT Neo model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="EleutherAI/gpt-neo-1.3B")
+@strict(accept_kwargs=True)
 class GPTNeoConfig(PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 256):
@@ -49,54 +49,35 @@ class GPTNeoConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
-    def __init__(
-        self,
-        vocab_size=50257,
-        max_position_embeddings=2048,
-        hidden_size=2048,
-        num_layers=24,
-        attention_types=[[["global", "local"], 12]],
-        num_heads=16,
-        intermediate_size=None,
-        window_size=256,
-        activation_function="gelu_new",
-        resid_dropout=0.0,
-        embed_dropout=0.0,
-        attention_dropout=0.0,
-        classifier_dropout=0.1,
-        layer_norm_epsilon=1e-5,
-        initializer_range=0.02,
-        use_cache=True,
-        bos_token_id=50256,
-        eos_token_id=50256,
-        pad_token_id=None,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.num_heads = num_heads
-        self.intermediate_size = intermediate_size
-        self.window_size = window_size
-        self.activation_function = activation_function
-        self.resid_dropout = resid_dropout
-        self.embed_dropout = embed_dropout
-        self.attention_dropout = attention_dropout
-        self.classifier_dropout = classifier_dropout
-        self.layer_norm_epsilon = layer_norm_epsilon
-        self.initializer_range = initializer_range
-        self.use_cache = use_cache
+    vocab_size: int = 50257
+    max_position_embeddings: int = 2048
+    hidden_size: int = 2048
+    num_layers: int = 24
+    attention_types: list | tuple | None = None
+    num_heads: int = 16
+    intermediate_size: int | None = None
+    window_size: int = 256
+    activation_function: str = "gelu_new"
+    resid_dropout: float | int = 0.0
+    embed_dropout: float | int = 0.0
+    attention_dropout: float | int = 0.0
+    classifier_dropout: float | int = 0.1
+    layer_norm_epsilon: float = 1e-5
+    initializer_range: float = 0.02
+    use_cache: bool = True
+    bos_token_id: int | None = 50256
+    eos_token_id: int | None = 50256
+    pad_token_id: int | None = None
+    tie_word_embeddings: bool = True
 
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.tie_word_embeddings = tie_word_embeddings
+    def __post_init__(self, **kwargs):
+        if self.attention_types is None:
+            self.attention_types = [[["global", "local"], 12]]
+        self.attention_layers = self.expand_attention_types_params(self.attention_types)
+        super().__post_init__(**kwargs)
 
-        self.attention_types = attention_types
-        self.attention_layers = self.expand_attention_types_params(attention_types)
-
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if len(self.attention_layers) != self.num_layers:
             raise ValueError(
                 "Configuration for convolutional module is incorrect. "
@@ -106,8 +87,6 @@ class GPTNeoConfig(PreTrainedConfig):
                 "`config.attention_layers` is prepared using `config.attention_types`. "
                 "Please verify the value of `config.attention_types` argument."
             )
-
-        super().__init__(**kwargs)
 
     @staticmethod
     def expand_attention_types_params(attention_types):

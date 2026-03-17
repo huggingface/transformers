@@ -12,8 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..mistral.configuration_mistral import MistralConfig
@@ -25,7 +28,8 @@ class VoxtralRealtimeTextConfig(MistralConfig):
 
 
 @auto_docstring(checkpoint="mistralai/Voxtral-Mini-4B-Realtime-2602")
-class VoxtralRealtimeEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+@strict(accept_kwargs=True)
+class VoxtralRealtimeEncoderConfig(PreTrainedConfig):
     r"""
     Example:
 
@@ -50,49 +54,32 @@ class VoxtralRealtimeEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin)
         "encoder_attention_heads": "num_attention_heads",
         "encoder_ffn_dim": "intermediate_size",
         "encoder_layerdrop": "layerdrop",
+        "num_key_value_heads": "num_attention_heads",
     }
 
-    def __init__(
-        self,
-        vocab_size=131072,
-        hidden_size=1280,
-        intermediate_size=5120,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        activation_function="gelu",
-        num_mel_bins=128,
-        initializer_range=0.02,
-        attention_dropout=0.0,
-        hidden_act="silu",
-        max_position_embeddings=1500,
-        rms_norm_eps=1e-05,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        sliding_window=750,
-        head_dim=64,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
+    vocab_size: int = 131072
+    hidden_size: int = 1280
+    intermediate_size: int = 5120
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    activation_function: str = "gelu"
+    num_mel_bins: int = 128
+    initializer_range: float = 0.02
+    attention_dropout: float | int = 0.0
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 1500
+    rms_norm_eps: float = 1e-05
+    rope_parameters: RopeParameters | dict | None = None
+    sliding_window: int = 750
+    head_dim: int = 64
 
-        self.num_attention_heads = num_attention_heads
-        self.activation_function = activation_function
-        self.num_mel_bins = num_mel_bins
-        self.initializer_range = initializer_range
-        self.num_key_value_heads = num_attention_heads
-        self.rms_norm_eps = rms_norm_eps
-        self.max_position_embeddings = max_position_embeddings
-        self.rope_parameters = rope_parameters
-        self.hidden_act = hidden_act
-        self.sliding_window = sliding_window
-        self.head_dim = head_dim if head_dim is not None else hidden_size // num_attention_heads
-        self.attention_dropout = attention_dropout
-
-        super().__init__(**kwargs)
+    def __post_init__(self, **kwargs):
+        self.head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="mistralai/Voxtral-Mini-4B-Realtime-2602")
+@strict(accept_kwargs=True)
 class VoxtralRealtimeConfig(PreTrainedConfig):
     r"""
     audio_length_per_tok (`int`, *optional*, defaults to 8):
@@ -134,39 +121,30 @@ class VoxtralRealtimeConfig(PreTrainedConfig):
         "sliding_window": 8192,
     }
 
-    def __init__(
-        self,
-        audio_config=None,
-        text_config=None,
-        projector_hidden_act="gelu",
-        audio_length_per_tok=8,
-        default_num_delay_tokens=6,
-        downsample_factor=4,
-        **kwargs,
-    ):
-        if isinstance(audio_config, dict):
-            audio_config["model_type"] = audio_config.get("model_type", "voxtral_realtime_encoder")
-            audio_config = CONFIG_MAPPING[audio_config["model_type"]](**audio_config)
-        elif audio_config is None:
-            audio_config = CONFIG_MAPPING["voxtral_realtime_encoder"]()
-        self.audio_config = audio_config
+    audio_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    projector_hidden_act: str = "gelu"
+    audio_length_per_tok: int = 8
+    default_num_delay_tokens: int = 6
+    downsample_factor: int = 4
 
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "voxtral_realtime_text")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](
-                **{**self._default_text_config_kwargs, **text_config}
+    def __post_init__(self, **kwargs):
+        if isinstance(self.audio_config, dict):
+            self.audio_config["model_type"] = self.audio_config.get("model_type", "voxtral_realtime_encoder")
+            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
+        elif self.audio_config is None:
+            self.audio_config = CONFIG_MAPPING["voxtral_realtime_encoder"]()
+
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "voxtral_realtime_text")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](
+                **{**self._default_text_config_kwargs, **self.text_config}
             )
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["voxtral_realtime_text"](**self._default_text_config_kwargs)
-        self.text_config = text_config
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["voxtral_realtime_text"](**self._default_text_config_kwargs)
 
-        self.hidden_size = text_config.hidden_size
-        self.projector_hidden_act = projector_hidden_act
-        self.audio_length_per_tok = audio_length_per_tok
-        self.default_num_delay_tokens = default_num_delay_tokens
-        self.downsample_factor = downsample_factor
-
-        super().__init__(**kwargs)
+        self.hidden_size = self.text_config.hidden_size
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["VoxtralRealtimeEncoderConfig", "VoxtralRealtimeConfig", "VoxtralRealtimeTextConfig"]

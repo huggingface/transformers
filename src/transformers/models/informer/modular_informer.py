@@ -107,7 +107,7 @@ class InformerProbSparseAttention(nn.Module):
         self,
         embed_dim: int,
         num_heads: int,
-        dropout: float = 0.0,
+        dropout: float | int = 0.0,
         is_decoder: bool = False,
         sampling_factor: int = 5,
         bias: bool = True,
