@@ -452,6 +452,9 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns="norm2", target_patterns="post_mlp_layernorm"),
         ],
     }
+    # The legacy mapping is added to the esm model here since the extra weight renaming do not apply to the esm model.
+    mapping["esm"] += mapping["legacy"].copy()
+
     mapping["legacy"] += [
         WeightRenaming(
             source_patterns=".weight_g$",

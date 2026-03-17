@@ -103,54 +103,6 @@ def average_product_correct(x):
     return normalized
 
 
-# class RotaryEmbedding(torch.nn.Module):
-#     """
-#     Rotary position embeddings based on those in
-#     [RoFormer](https://huggingface.co/docs/transformers/model_doc/roformer). Query and keys are transformed by rotation
-#     matrices which depend on their relative positions.
-#     """
-
-#     inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-#     def __init__(self, dim: int):
-#         super().__init__()
-#         self.dim = dim
-#         # Generate and save the inverse frequency buffer (non trainable)
-#         inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
-#         self.register_buffer("inv_freq", inv_freq)
-
-#     def _update_cos_sin_tables(self, x, seq_dimension=2, seq_len=None, position_ids=None):
-#         if seq_len is None:
-#             seq_len = x.shape[seq_dimension]
-
-#         if position_ids is None:
-#             t = torch.arange(x.shape[seq_dimension], device=x.device).type_as(self.inv_freq)
-#         else:
-#             t = position_ids.squeeze()
-#             if t.dim() != 1:
-#                 raise ValueError(
-#                     f"position_ids must be 1-D after squeezing, got shape {position_ids.shape}. "
-#                     "Custom position_ids are intended for use with DataCollatorWithFlattening (batch_size=1)."
-#                 )
-#         freqs = torch.outer(t, self.inv_freq)
-#         emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
-
-#         cos = emb.cos()[None, None, :, :]
-#         sin = emb.sin()[None, None, :, :]
-
-#         return cos, sin
-
-#     def forward(
-#         self, q: torch.Tensor, k: torch.Tensor, seq_len: int | None = None, position_ids: torch.Tensor | None = None
-#     ) -> tuple[torch.Tensor, torch.Tensor]:
-#         cos, sin = self._update_cos_sin_tables(k, seq_dimension=-2, seq_len=seq_len, position_ids=position_ids)
-
-#         return (
-#             apply_rotary_pos_emb(q, cos, sin).to(dtype=q.dtype),
-#             apply_rotary_pos_emb(k, cos, sin).to(dtype=k.dtype),
-#         )
-
-
 class EsmRotaryEmbedding(nn.Module):
     """
     Rotary position embeddings.
@@ -159,95 +111,15 @@ class EsmRotaryEmbedding(nn.Module):
 
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    # def __init__(self, config: EsmConfig, device=None):
-    #     super().__init__()
-    #     self.max_seq_len_cached = config.max_position_embeddings
-    #     self.original_max_seq_len = config.max_position_embeddings
-
-    #     self.config = config
-
-    #     self.layer_types = list(set(config.layer_types))
-    #     self.rope_type = {}
-    #     for layer_type in self.layer_types:
-    #         rope_params = self.config.rope_parameters[layer_type]
-    #         if rope_params is None:
-    #             continue
-
-    #         self.rope_type[layer_type] = rope_params["rope_type"]
-    #         rope_init_fn: Callable = self.compute_default_rope_parameters
-    #         if self.rope_type[layer_type] != "default":
-    #             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-    #         curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
-    #         self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
-    #         self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
-    #         setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
-
     def __init__(self, config: EsmConfig, device=None):
         super().__init__()
-        # self.max_seq_len_cached = config.max_position_embeddings
-        # self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-
-        # self.layer_types = list(set(config.layer_types))
         self.rope_type = {}
-        # for layer_type in self.layer_types:
-        #     rope_params = self.config.rope_parameters[layer_type]
-        #     if rope_params is None:
-        #         continue
 
-        #     self.rope_type[layer_type] = rope_params["rope_type"]
-        #     rope_init_fn: Callable = self.compute_default_rope_parameters
-        #     if self.rope_type[layer_type] != "default":
-        #         rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-        #     curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
-        #     self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
-        #     self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
-        #     setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
-
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        # if self.rope_type[layer_type] != "default":
-        #     rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-        curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device)
+        curr_inv_freq, curr_attention_scaling = self.compute_default_rope_parameters(self.config, device)
         self.register_buffer("inv_freq", curr_inv_freq)
-        # self.register_buffer(f"original_inv_freq", curr_inv_freq.clone(), persistent=False)
         setattr(self, "attention_scaling", curr_attention_scaling)
-
-    # @staticmethod
-    # def compute_default_rope_parameters(
-    #     config: EsmConfig | None = None,
-    #     device: Optional["torch.device"] = None,
-    #     seq_len: int | None = None,
-    #     layer_type: str | None = None,
-    # ) -> tuple["torch.Tensor", float]:
-    #     """
-    #     Computes the inverse frequencies according to the original RoPE implementation
-    #     Args:
-    #         config ([`~transformers.PreTrainedConfig`]):
-    #             The model configuration.
-    #         device (`torch.device`):
-    #             The device to use for initialization of the inverse frequencies.
-    #         seq_len (`int`, *optional*):
-    #             The current sequence length. Unused for this type of RoPE.
-    #         layer_type (`str`, *optional*):
-    #             The current layer type if the model has different RoPE parameters per type.
-    #             Should not be used unless `config.layer_types is not None`
-
-    #     Returns:
-    #         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-    #         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-    #     """
-    #     # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
-    #     base = config.rope_parameters[layer_type]["rope_theta"]
-    #     dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-    #     attention_factor = 1.0  # Unused in this type of RoPE
-
-    #     # Compute the inverse frequencies
-    #     inv_freq = 1.0 / (
-    #         base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-    #     )
-    #     return inv_freq, attention_factor
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -269,7 +141,6 @@ class EsmRotaryEmbedding(nn.Module):
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
         base = config.rope_theta
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
@@ -485,7 +356,6 @@ class EsmSelfAttention(nn.Module):
             config, "position_embedding_type", "absolute"
         )
         self.scaling = 1.0  # For BC we apply scaling before RoPE
-
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
         self.is_causal = self.is_decoder and not is_cross_attention
@@ -515,11 +385,6 @@ class EsmSelfAttention(nn.Module):
         # but not when rotary embeddings get involved. Therefore, we scale the query here to match the original
         # ESM code and fix rotary embeddings.
         query_layer = query_layer * self.attention_head_size**-0.5
-
-        # if self.position_embedding_type == "rotary":
-        #     query_layer, key_layer = self.rotary_embeddings(
-        #         query_layer, key_layer, seq_len, kwargs.get("position_ids")
-        #     )
 
         if self.position_embedding_type == "rotary":
             cos, sin = position_embeddings
@@ -751,7 +616,6 @@ class EsmPreTrainedModel(PreTrainedModel):
         elif isinstance(module, EsmRotaryEmbedding):
             curr_inv_freq, _ = module.compute_default_rope_parameters(module.config)
             init.copy_(getattr(module, "inv_freq"), curr_inv_freq)
-            # init.copy_(getattr(module, "original_inv_freq"), curr_inv_freq)
 
     def get_output_embeddings(self):
         # NOTE: get_output_embeddings() must return None to prevent accidental weight tying.
