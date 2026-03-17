@@ -163,17 +163,24 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
             tensor_type=return_tensors,
         )
 
-    def post_process_document_rectification(self, prediction, original_images, scale=255.0):
+    def post_process_document_rectification(
+        self,
+        prediction: torch.Tensor,
+        original_images: torch.Tensor,
+        scale: float = 255.0,
+    ) -> list[dict[str, torch.Tensor]]:
         """
         Post-process document rectification predictions to convert them into rectified images.
 
         Args:
-            prediction: Predicted 2D Bezier mesh coordinates
-            original_images: Original input images
+            prediction: Predicted 2D Bezier mesh coordinates, shape (B, 2, H, W)
+            original_images: Original input images, shape (B, C, H, W)
             scale: Scaling factor for output images (default: 255.0)
 
         Returns:
-            List of dictionaries containing rectified images
+            List of dictionaries containing rectified images. Each dictionary has:
+                - "images": Rectified image tensor of shape (H, W, 3) with dtype torch.uint8
+                          and BGR channel order (suitable for OpenCV visualization)
         """
         # Get original image dimensions
         original_height, original_width = original_images.shape[2:]
@@ -203,7 +210,7 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
             # Remove batch dimension and rearrange channels: (H, W, C)
             image = image.squeeze().permute(1, 2, 0)
 
-            # Scale and convert to uint8
+            # Scale and convert to uint8 with BGR channel
             image = image * scale
             image = image.flip(dims=[-1]).to(dtype=torch.uint8, non_blocking=True, copy=False)
 
