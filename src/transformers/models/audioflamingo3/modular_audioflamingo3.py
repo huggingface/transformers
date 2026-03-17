@@ -175,7 +175,7 @@ class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
         )
         audio_embeds = self.multi_modal_projector(audio_output.last_hidden_state)
 
-        # Mask according to avg pooling (which is after attention blocks)
+        # Mask according to the audio tower output lengths, accounting for both conv downsampling and final avg pooling
         input_lengths = input_features_mask.sum(-1).to(torch.long)
         _, post_lengths = self.audio_tower._get_feat_extract_output_lengths(input_lengths)
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]

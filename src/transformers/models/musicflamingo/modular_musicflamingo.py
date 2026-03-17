@@ -49,13 +49,6 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
             The beginning-of-audio token index used to mark the start of audio spans.
     audio_eos_token_id (`int`, *optional*, defaults to 151671):
         The end-of-audio token index used to mark the end of audio spans.
-    head_dim (`int`, *optional*, defaults to 256):
-        Rotary embedding dimension used per axis in [`MusicFlamingoRotaryEmbedding`]. Since the rotary embedding is
-        applied on two axes (batch and time), the rotated hidden size is `2 * head_dim`, which must be less than
-        or equal to `hidden_size`.
-    rope_parameters (`dict`, *optional*):
-        RoPE parameters for [`MusicFlamingoRotaryEmbedding`]. Supports the standard keys `"rope_type"` (defaults to
-        `"default"`) and `"rope_theta"`.
 
     Example:
 
@@ -226,7 +219,6 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
             audio_inputs = self.feature_extractor(flat_chunks, **audio_kwargs)
             padding_mask = audio_inputs.pop("attention_mask")
             audio_inputs["input_features_mask"] = padding_mask
-            audio_inputs["windows_per_sample"] = torch.tensor(per_sample_windows, dtype=torch.long)
             frame_offsets = torch.arange(frames_per_window, dtype=torch.float32) * time_step
             audio_inputs["rote_timestamps"] = (
                 torch.as_tensor(chunk_start_times, dtype=torch.float32).unsqueeze(1) + frame_offsets
@@ -259,15 +251,16 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
     def model_input_names(self) -> list[str]:
         tok_names = self.tokenizer.model_input_names
         fea_names = self.feature_extractor.model_input_names
-        return list(
-            dict.fromkeys(tok_names + fea_names + ["input_features_mask", "windows_per_sample", "rote_timestamps"])
-        )
+        return list(dict.fromkeys(tok_names + fea_names + ["input_features_mask", "rote_timestamps"]))
 
     def apply_transcription_request(self, *args, **kwargs):
         raise NotImplementedError("This method is not supported for MusicFlamingo.")
 
+    def decode(self, *args, **kwargs):
+        raise NotImplementedError("MusicFlamingo does not need to overwrite this method.")
+
     def batch_decode(self, *args, **kwargs):
-        raise NotImplementedError("This method is not supported for MusicFlamingo.")
+        raise NotImplementedError("MusicFlamingo does not need to overwrite this method.")
 
     def _strip_assistant_prefix_and_quotes(self, *args, **kwargs):
         raise NotImplementedError("This method is not supported for MusicFlamingo.")
@@ -282,21 +275,6 @@ def rotate_half(x):
 
 @autocast("cuda", enabled=False)
 def apply_rotary_time_emb(hidden_states, cos, sin):
-    """Applies rotary time embeddings to the input tensor.
-
-    See (Goel et al., 2024) for more details: https://arxiv.org/abs/2410.12109
-
-    Args:
-        hidden_states (`torch.Tensor`):
-            The input tensor.
-        cos (`torch.Tensor`):
-            The cosine part of the rotary embedding.
-        sin (`torch.Tensor`):
-            The sine part of the rotary embedding.
-
-    Returns:
-        `torch.Tensor`: The tensor with rotary time embeddings applied.
-    """
     original_dtype = hidden_states.dtype
     hidden_states = hidden_states.to(torch.float64)
     cos = cos.to(hidden_states)
@@ -333,9 +311,7 @@ class MusicFlamingoRotaryEmbedding(LlamaRotaryEmbedding):
         return position_angles.to(dtype=inv_freq.dtype)
 
     @autocast("cuda", enabled=False)
-    def forward(
-        self, timestamps: Tensor, seq_len: int, window_positions: Tensor | None = None
-    ) -> tuple[Tensor, Tensor]:
+    def forward(self, timestamps: Tensor, seq_len: int) -> tuple[Tensor, Tensor]:
         """Compute 2D axial rotary embeddings for batch and time dimensions.
 
         Args:
@@ -347,12 +323,8 @@ class MusicFlamingoRotaryEmbedding(LlamaRotaryEmbedding):
             computed in float64 for numerical precision.
         """
 
-        # Compute frequencies for the window axis. Resetting window positions per sample
-        # keeps single-sample and batched inference equivalent.
-        if window_positions is None:
-            batch_positions = torch.arange(timestamps.shape[0], device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        else:
-            batch_positions = window_positions.to(device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        # Compute frequencies for the window axis
+        batch_positions = torch.arange(timestamps.shape[0], device=self.inv_freq.device, dtype=self.inv_freq.dtype)
         batch_positions = batch_positions / self.max_seq_len_cached
         batch_freqs = batch_positions.unsqueeze(-1) * self.inv_freq
         batch_freqs = torch.repeat_interleave(batch_freqs, 2, dim=-1)
@@ -396,45 +368,34 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         self,
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor,
-        windows_per_sample: torch.Tensor | None = None,
         rote_timestamps: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padded feature indices.
-        windows_per_sample (`torch.Tensor` of shape `(batch_size,)`, *optional*):
-            Number of 30-second audio windows contributed by each original sample before window flattening.
         rote_timestamps (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
             Timestamps in seconds for each encoder output position, used to compute rotary time embeddings.
         """
-        encoder_output = self.audio_tower(
+        audio_output = self.audio_tower(
             input_features,
             input_features_mask=input_features_mask,
             return_dict=True,
             **kwargs,
         )
-        hidden_states = encoder_output.last_hidden_state
+        hidden_states = audio_output.last_hidden_state
         if rote_timestamps is not None:
-            windows_per_sample_list = self._windows_per_sample_to_list(
-                windows_per_sample, expected_num_windows=rote_timestamps.shape[0], input_name="rote_timestamps"
-            )
-            window_positions = None
-            if windows_per_sample_list is not None:
-                window_positions = torch.cat(
-                    [torch.arange(num_windows, device=hidden_states.device) for num_windows in windows_per_sample_list]
-                )
-            cos, sin = self.pos_emb(
-                rote_timestamps.to(hidden_states.device),
-                seq_len=hidden_states.shape[-2],
-                window_positions=window_positions,
-            )
+            cos, sin = self.pos_emb(rote_timestamps.to(hidden_states.device), seq_len=hidden_states.shape[-2])
             hidden_states = apply_rotary_time_emb(hidden_states, cos, sin)
+
         audio_embeds = self.multi_modal_projector(hidden_states)
-        encoder_output.pooler_output = self._flatten_audio_embeds(
-            audio_embeds, input_features_mask, windows_per_sample
-        )
-        return encoder_output
+
+        # Mask according to the audio tower output lengths, accounting for both conv downsampling and final avg pooling
+        _, post_lengths = self.audio_tower._get_feat_extract_output_lengths(input_features_mask.sum(-1).to(torch.long))
+        valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
+        audio_output.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
+
+        return audio_output
 
     @can_return_tuple
     @auto_docstring
@@ -443,7 +404,6 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         input_ids: torch.LongTensor | None = None,
         input_features: torch.FloatTensor | None = None,
         input_features_mask: torch.Tensor | None = None,
-        windows_per_sample: torch.Tensor | None = None,
         rote_timestamps: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -461,8 +421,6 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        windows_per_sample (`torch.Tensor` of shape `(batch_size,)`, *optional*):
-            Number of 30-second audio windows contributed by each original sample before window flattening.
         rote_timestamps (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
             Timestamps in seconds for each encoder output position, used to compute rotary time embeddings.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -475,51 +433,40 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         ```python
         >>> from transformers import MusicFlamingoForConditionalGeneration, AutoProcessor
 
-        >>> model_id = "nvidia/music-flamingo-hf"
+        >>> model_id = "nvidia/music-flamingo-2601-hf"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = MusicFlamingoForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
-        >>> conversations = [
-        >>>     [
-        >>>         {
-        >>>             "role": "user",
-        >>>             "content": [
-        >>>                 {"type": "text", "text": "Transcribe the input speech."},
-        >>>                 {
-        >>>                     "type": "audio",
-        >>>                     "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav",
-        >>>                 },
-        >>>             ],
-        >>>         }
-        >>>     ],
-        >>>     [
-        >>>         {
-        >>>             "role": "user",
-        >>>             "content": [
-        >>>                 {
-        >>>                     "type": "text",
-        >>>                     "text": "This track feels really peaceful and introspective. What elements make it feel so calming and meditative?",
-        >>>                 },
-        >>>                 {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/FPSbCAANfbJLVSwD.mp3"},
-        >>>             ],
-        >>>         }
-        >>>     ],
+        >>> conversation = [
+        >>>     {
+        >>>         "role": "user",
+        >>>         "content": [
+        >>>             {
+        >>>                 "type": "text",
+        >>>                 "text": "Describe this track in full detail - tell me the genre, tempo, and key, then dive into the instruments, production style, and overall mood it creates.",
+        >>>             },
+        >>>             {
+        >>>                 "type": "audio",
+        >>>                 "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_1.mp3",
+        >>>             },
+        >>>         ],
+        >>>     }
         >>> ]
 
         >>> inputs = processor.apply_chat_template(
-        >>>     conversations,
+        >>>     conversation,
         >>>     tokenize=True,
         >>>     add_generation_prompt=True,
         >>>     return_dict=True,
-        >>> ).to(model.device)
+        >>> ).to(model.device, model.dtype)
 
-        >>> outputs = model.generate(**inputs, max_new_tokens=500)
+        >>> outputs = model.generate(**inputs, max_new_tokens=100)
 
         >>> decoded_outputs = processor.batch_decode(
-        >>>     outputs[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True
+        >>>     outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True
         >>> )
         >>> print(decoded_outputs)
-        ["The spoken content of the audio is...", "The track's calming and meditative feel can be attributed to..."]
+        ["This track is an uplifting Eurodance‑style Trance‑Pop anthem..."]
         ```"""
 
         if inputs_embeds is None:
@@ -529,7 +476,6 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
             audio_embeds = self.get_audio_features(
                 input_features,
                 input_features_mask,
-                windows_per_sample=windows_per_sample,
                 rote_timestamps=rote_timestamps,
                 return_dict=True,
             ).pooler_output
@@ -556,18 +502,15 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
     def prepare_inputs_for_generation(self, *args, is_first_iteration=False, **kwargs):
         input_features = kwargs.pop("input_features", None)
         input_features_mask = kwargs.pop("input_features_mask", None)
-        windows_per_sample = kwargs.pop("windows_per_sample", None)
         rote_timestamps = kwargs.pop("rote_timestamps", None)
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
-        if is_first_iteration or not model_inputs.get("use_cache", False):
+        if is_first_iteration:
             if input_features is not None:
                 model_inputs["input_features"] = input_features
             if input_features_mask is not None:
                 model_inputs["input_features_mask"] = input_features_mask
-            if windows_per_sample is not None:
-                model_inputs["windows_per_sample"] = windows_per_sample
             if rote_timestamps is not None:
                 model_inputs["rote_timestamps"] = rote_timestamps
 

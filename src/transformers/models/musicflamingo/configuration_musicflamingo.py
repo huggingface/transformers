@@ -31,13 +31,6 @@ class MusicFlamingoConfig(PretrainedConfig):
             The beginning-of-audio token index used to mark the start of audio spans.
     audio_eos_token_id (`int`, *optional*, defaults to 151671):
         The end-of-audio token index used to mark the end of audio spans.
-    head_dim (`int`, *optional*, defaults to 256):
-        Rotary embedding dimension used per axis in [`MusicFlamingoRotaryEmbedding`]. Since the rotary embedding is
-        applied on two axes (batch and time), the rotated hidden size is `2 * head_dim`, which must be less than
-        or equal to `hidden_size`.
-    rope_parameters (`dict`, *optional*):
-        RoPE parameters for [`MusicFlamingoRotaryEmbedding`]. Supports the standard keys `"rope_type"` (defaults to
-        `"default"`) and `"rope_theta"`.
 
     Example:
 

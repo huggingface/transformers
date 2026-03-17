@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-*This model was released on 2025-11-03 and added to Hugging Face Transformers on 2026-01-08.*
+*This model was released on 2025-11-03 and added to Hugging Face Transformers on 2026-03-17.*
 
 # Music Flamingo
 
