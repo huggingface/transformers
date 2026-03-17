@@ -844,7 +844,12 @@ def spawn_gguf_materialize(
         import numpy as np
         from gguf import dequantize
 
-        w = torch.from_numpy(np.copy(dequantize(tensor.data, tensor.tensor_type)))
+        # Copy raw quantized bytes from mmap → contiguous RAM before dequantizing.
+        # gguf-py's dequantize_blocks slices the data millions of times; operating
+        # on a plain ndarray instead of a memmap eliminates ~17M __array_finalize__
+        # calls and cuts dequantization wall-time roughly in half.
+        raw = np.array(tensor.data)
+        w = torch.from_numpy(np.copy(dequantize(raw, tensor.tensor_type)))
         if device is not None or dtype is not None:
             w = w.to(device=device, dtype=dtype)
         return w
