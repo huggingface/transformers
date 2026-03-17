@@ -35,7 +35,7 @@ from ...utils import (
     logging,
     torch_int,
 )
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_owlv2 import Owlv2Config, Owlv2TextConfig, Owlv2VisionConfig
 
@@ -576,10 +576,6 @@ class Owlv2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": Owlv2EncoderLayer,
-        "attentions": Owlv2Attention,
-    }
     _no_split_modules = ["Owlv2EncoderLayer"]
     _can_record_outputs = {
         "hidden_states": Owlv2EncoderLayer,

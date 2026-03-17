@@ -35,7 +35,7 @@ from ...utils import (
     logging,
     torch_int,
 )
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_owlvit import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
 
@@ -563,10 +563,6 @@ class OwlViTPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": OwlViTEncoderLayer,
-        "attentions": OwlViTAttention,
-    }
     _no_split_modules = ["OwlViTEncoderLayer"]
     _can_record_outputs = {
         "hidden_states": OwlViTEncoderLayer,

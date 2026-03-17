@@ -147,7 +147,7 @@ class OwlViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = OwlViTVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=OwlViTVisionConfig, has_text_modality=False, hidden_size=32
+            self, config_class=OwlViTVisionConfig, has_text_modality=False, hidden_size=37
         )
 
     def test_config(self):
@@ -294,52 +294,13 @@ class OwlViTTextModelTester:
         return config, inputs_dict
 
 
-class OWLVITModelTesterMixin(ModelTesterMixin):
-    """
-    COPIED FROM CLIP
-    Subclass of ModelTesterMixin with methods specific to testing CLIP models.
-    The SDPA equivalence test is overridden here because CLIP models may have test/vision/text+vision inputs,
-    different output logits, and are not supposed to be used or tested with padding_side="left".
-    """
-
-    def test_sdpa_can_dispatch_composite_models(self):
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                # Load the model with SDPA (it is the default, but we explicit it for clarity)
-                model_sdpa = model_class.from_pretrained(tmpdirname, attn_implementation="sdpa")
-                model_sdpa = model_sdpa.eval().to(torch_device)
-
-                # Load model with eager attention
-                model_eager = model_class.from_pretrained(
-                    tmpdirname,
-                    attn_implementation="eager",
-                )
-                model_eager = model_eager.eval().to(torch_device)
-
-            if hasattr(model_sdpa, "vision_model"):
-                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == "sdpa")
-                self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
-
-            if hasattr(model_sdpa, "text_model"):
-                self.assertTrue(model_sdpa.text_model.config._attn_implementation == "sdpa")
-                self.assertTrue(model_eager.text_model.config._attn_implementation == "eager")
-
-            self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-            self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-
 @require_torch
 class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (OwlViTTextModel,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = OwlViTTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=OwlViTTextConfig, hidden_size=32)
+        self.config_tester = ConfigTester(self, config_class=OwlViTTextConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
