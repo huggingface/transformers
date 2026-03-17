@@ -13,14 +13,16 @@
 # limitations under the License.
 """Mpt configuration"""
 
+from typing import Literal
+
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="mosaicml/mpt-7b")
+@strict(accept_kwargs=True)
 class MptAttentionConfig(PreTrainedConfig):
     """
     attn_type (`str`, *optional*, defaults to `"multihead_attention"`):
@@ -52,39 +54,20 @@ class MptAttentionConfig(PreTrainedConfig):
 
     base_config_key = "attn_config"
 
-    def __init__(
-        self,
-        attn_type="multihead_attention",
-        attn_pdrop=0,
-        attn_impl="torch",
-        clip_qkv=None,
-        softmax_scale=None,
-        prefix_lm=False,
-        qk_ln=False,
-        attn_uses_sequence_id=False,
-        alibi=True,
-        alibi_bias_max=8,
-        **kwargs,
-    ):
-        super().__init__()
-        self.attn_type = attn_type
-        self.attn_pdrop = attn_pdrop
-        self.attn_impl = attn_impl
-        self.clip_qkv = clip_qkv
-        self.softmax_scale = softmax_scale
-        self.prefix_lm = prefix_lm
-        self.attn_uses_sequence_id = attn_uses_sequence_id
-        self.alibi = alibi
-        self.qk_ln = qk_ln
-        self.alibi_bias_max = alibi_bias_max
-
-        if attn_type not in ["multihead_attention", "multiquery_attention"]:
-            raise ValueError(
-                f"`attn_type` has to be either `multihead_attention` or `multiquery_attention`. Received: {attn_type}"
-            )
+    attn_type: Literal["multihead_attention", "multiquery_attention"] = "multihead_attention"
+    attn_pdrop: int = 0
+    attn_impl: str = "torch"
+    clip_qkv: float | None = None
+    softmax_scale: float | None = None
+    prefix_lm: bool = False
+    qk_ln: bool = False
+    attn_uses_sequence_id: bool = False
+    alibi: bool = True
+    alibi_bias_max: int = 8
 
 
 @auto_docstring(checkpoint="mosaicml/mpt-7b")
+@strict(accept_kwargs=True)
 class MptConfig(PreTrainedConfig):
     """
     expansion_ratio (`int`, *optional*, defaults to 4):
@@ -133,60 +116,35 @@ class MptConfig(PreTrainedConfig):
         "num_hidden_layers": "n_layers",
     }
 
-    def __init__(
-        self,
-        d_model: int = 2048,
-        n_heads: int = 16,
-        n_layers: int = 24,
-        expansion_ratio: int = 4,
-        max_seq_len: int = 2048,
-        vocab_size: int = 50368,
-        resid_pdrop: float = 0.0,
-        layer_norm_epsilon: float = 1e-5,
-        emb_pdrop: float = 0.0,
-        learned_pos_emb: bool = True,
-        attn_config: MptAttentionConfig = None,
-        init_device: str = "cpu",
-        logit_scale: float | str | None = None,
-        no_bias: bool = True,
-        embedding_fraction: float = 1.0,
-        norm_type: str = "low_precision_layernorm",
-        use_cache: bool = False,
-        initializer_range=0.02,
-        tie_word_embeddings=True,
-        pad_token_id=None,
-        bos_token_id=None,
-        eos_token_id=None,
-        **kwargs,
-    ):
-        if attn_config is None:
+    d_model: int = 2048
+    n_heads: int = 16
+    n_layers: int = 24
+    expansion_ratio: int = 4
+    max_seq_len: int = 2048
+    vocab_size: int = 50368
+    resid_pdrop: float = 0.0
+    layer_norm_epsilon: float = 1e-5
+    emb_pdrop: float = 0.0
+    learned_pos_emb: bool = True
+    attn_config: dict | MptAttentionConfig | None = None
+    init_device: str = "cpu"
+    logit_scale: float | str | None = None
+    no_bias: bool = True
+    embedding_fraction: float = 1.0
+    norm_type: str = "low_precision_layernorm"
+    use_cache: bool = False
+    initializer_range: float = 0.02
+    tie_word_embeddings: bool = True
+    pad_token_id: int | None = None
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.attn_config is None:
             self.attn_config = MptAttentionConfig()
-        elif isinstance(attn_config, dict):
-            self.attn_config = MptAttentionConfig(**attn_config)
-        else:
-            self.attn_config = attn_config
-        self.d_model = d_model
-        self.n_heads = n_heads
-        self.n_layers = n_layers
-        self.expansion_ratio = expansion_ratio
-        self.max_seq_len = max_seq_len
-        self.vocab_size = vocab_size
-        self.resid_pdrop = resid_pdrop
-        self.emb_pdrop = emb_pdrop
-        self.learned_pos_emb = learned_pos_emb
-        self.init_device = init_device
-        self.logit_scale = logit_scale
-        self.no_bias = no_bias
-        self.embedding_fraction = embedding_fraction
-        self.norm_type = norm_type
-        self.layer_norm_epsilon = layer_norm_epsilon
-        self.use_cache = use_cache
-        self.initializer_range = initializer_range
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        super().__init__(**kwargs)
+        elif isinstance(self.attn_config, dict):
+            self.attn_config = MptAttentionConfig(**self.attn_config)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["MptConfig"]

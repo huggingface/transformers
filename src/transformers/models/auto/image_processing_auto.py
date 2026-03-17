@@ -166,6 +166,7 @@ else:
             ("perceiver", ("PerceiverImageProcessor", "PerceiverImageProcessorFast")),
             ("perception_lm", (None, "PerceptionLMImageProcessorFast")),
             ("phi4_multimodal", (None, "Phi4MultimodalImageProcessorFast")),
+            ("pi0", (None, "PI0ImageProcessorFast")),
             ("pix2struct", ("Pix2StructImageProcessor", "Pix2StructImageProcessorFast")),
             ("pixio", ("BitImageProcessor", "BitImageProcessorFast")),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),

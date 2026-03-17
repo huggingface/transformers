@@ -18,15 +18,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-@auto_docstring(
-    checkpoint="PaddlePaddle/PP-OCRv5-server-det",
-    custom_args=r"""
+@auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5-server-det")
+@strict(accept_kwargs=True)
+class PPOCRV5ServerDetConfig(PreTrainedConfig):
+    r"""
     interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
         The interpolation mode used for upsampling or downsampling feature maps in the neck network.
     neck_out_channels (`int`, *optional*, defaults to 256):
@@ -43,31 +46,26 @@ from ..auto import AutoConfig
         A list of scaling factors used for spatial resolution adjustments in the feature maps.
     kernel_list (`list[int]`, *optional*, defaults to `[3, 2, 2]`):
         The list of kernel sizes for convolutional layers in the head network for multi-scale feature extraction.
-    """,
-)
-class PPOCRV5ServerDetConfig(PreTrainedConfig):
+    """
+
     sub_configs = {"backbone_config": AutoConfig}
     model_type = "pp_ocrv5_server_det"
 
-    def __init__(
-        self,
-        interpolate_mode: str = "nearest",
-        backbone_config=None,
-        neck_out_channels: int = 256,
-        reduce_factor: int = 2,
-        intraclass_block_number: int = 4,
-        intraclass_block_config: dict | None = None,
-        scale_factor: int = 2,
-        scale_factor_list: list | None = None,
-        hidden_act: str = "relu",
-        kernel_list: list | None = None,
-        **kwargs,
-    ):
-        self.interpolate_mode = interpolate_mode
+    interpolate_mode: str = "nearest"
+    backbone_config: dict | PreTrainedConfig | None = None
+    neck_out_channels: int = 256
+    reduce_factor: int = 2
+    intraclass_block_number: int = 4
+    intraclass_block_config: dict | None = None
+    scale_factor: int = 2
+    scale_factor_list: list | None = None
+    hidden_act: str = "relu"
+    kernel_list: list | None = None
+    id2label: dict[int, str] | dict[str, str] | None = None
 
-        # ---- backbone ----
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+    def __post_init__(self, **kwargs):
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_config_type="hgnet_v2",
             default_config_kwargs={
                 "arch": "L",
@@ -80,25 +78,10 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
             },
             **kwargs,
         )
-        self.backbone_config = backbone_config
-
-        # ---- neck ----
-        self.neck_out_channels = neck_out_channels
-        self.reduce_factor = reduce_factor
-        self.scale_factor_list = scale_factor_list
-        self.intraclass_block_number = intraclass_block_number
-        self.intraclass_block_config = intraclass_block_config
-
-        # ---- head ----
-        self.scale_factor = scale_factor
-        self.hidden_act = hidden_act
-        self.kernel_list = kernel_list
 
         # For object detection pipeline compatibility: single class "text"
-        self.id2label = {0: "text"}
-        self.num_labels = 1
-
-        super().__init__(**kwargs)
+        self.id2label = {0: "text"} if self.id2label is None else self.id2label
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["PPOCRV5ServerDetConfig"]

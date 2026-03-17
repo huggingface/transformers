@@ -13,14 +13,14 @@
 # limitations under the License.
 """TimeSformer model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/timesformer-base-finetuned-k600")
+@strict(accept_kwargs=True)
 class TimesformerConfig(PreTrainedConfig):
     r"""
     num_frames (`int`, *optional*, defaults to 8):
@@ -45,46 +45,22 @@ class TimesformerConfig(PreTrainedConfig):
 
     model_type = "timesformer"
 
-    def __init__(
-        self,
-        image_size=224,
-        patch_size=16,
-        num_channels=3,
-        num_frames=8,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-6,
-        qkv_bias=True,
-        attention_type="divided_space_time",
-        drop_path_rate=0,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_frames = num_frames
-
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.qkv_bias = qkv_bias
-
-        self.attention_type = attention_type
-        self.drop_path_rate = drop_path_rate
+    image_size: int | list[int] | tuple[int, int] = 224
+    patch_size: int | list[int] | tuple[int, int] = 16
+    num_channels: int = 3
+    num_frames: int = 8
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-6
+    qkv_bias: bool = True
+    attention_type: str = "divided_space_time"
+    drop_path_rate: int = 0
 
 
 __all__ = ["TimesformerConfig"]
