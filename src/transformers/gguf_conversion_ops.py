@@ -30,6 +30,17 @@ if TYPE_CHECKING:
     import torch
 
 
+def _single_input_target(input_dict, source_patterns, target_patterns):
+    """Return the output key for a single-input conversion op."""
+    if len(input_dict) != 1:
+        raise ValueError("Undefined Operation encountered!")
+    if len(target_patterns) > 1:
+        if len(source_patterns) == 1:
+            return source_patterns[0]
+        raise ValueError("Undefined Operation encountered!")
+    return target_patterns[0]
+
+
 class GGUFDequantize(ConversionOps):
     """
     First op in every GGUF WeightConverter chain.
@@ -79,19 +90,10 @@ class Unsqueeze(ConversionOps):
         target_patterns: list[str],
         **kwargs,
     ) -> dict[str, "torch.Tensor"]:
-        target_pattern = self._get_target(input_dict, source_patterns, target_patterns)
+        target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         return {target_pattern: tensor.unsqueeze(self.dim)}
-
-    def _get_target(self, input_dict, source_patterns, target_patterns):
-        if len(input_dict) != 1:
-            raise ValueError("Undefined Operation encountered!")
-        if len(target_patterns) > 1:
-            if len(source_patterns) == 1:
-                return source_patterns[0]
-            raise ValueError("Undefined Operation encountered!")
-        return target_patterns[0]
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -111,19 +113,10 @@ class Squeeze(ConversionOps):
         target_patterns: list[str],
         **kwargs,
     ) -> dict[str, "torch.Tensor"]:
-        target_pattern = self._get_target(input_dict, source_patterns, target_patterns)
+        target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         return {target_pattern: tensor.squeeze(self.dim)}
-
-    def _get_target(self, input_dict, source_patterns, target_patterns):
-        if len(input_dict) != 1:
-            raise ValueError("Undefined Operation encountered!")
-        if len(target_patterns) > 1:
-            if len(source_patterns) == 1:
-                return source_patterns[0]
-            raise ValueError("Undefined Operation encountered!")
-        return target_patterns[0]
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -140,19 +133,10 @@ class SubtractOne(ConversionOps):
         target_patterns: list[str],
         **kwargs,
     ) -> dict[str, "torch.Tensor"]:
-        target_pattern = self._get_target(input_dict, source_patterns, target_patterns)
+        target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         return {target_pattern: tensor - 1}
-
-    def _get_target(self, input_dict, source_patterns, target_patterns):
-        if len(input_dict) != 1:
-            raise ValueError("Undefined Operation encountered!")
-        if len(target_patterns) > 1:
-            if len(source_patterns) == 1:
-                return source_patterns[0]
-            raise ValueError("Undefined Operation encountered!")
-        return target_patterns[0]
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -169,19 +153,10 @@ class AddOne(ConversionOps):
         target_patterns: list[str],
         **kwargs,
     ) -> dict[str, "torch.Tensor"]:
-        target_pattern = self._get_target(input_dict, source_patterns, target_patterns)
+        target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         return {target_pattern: tensor + 1}
-
-    def _get_target(self, input_dict, source_patterns, target_patterns):
-        if len(input_dict) != 1:
-            raise ValueError("Undefined Operation encountered!")
-        if len(target_patterns) > 1:
-            if len(source_patterns) == 1:
-                return source_patterns[0]
-            raise ValueError("Undefined Operation encountered!")
-        return target_patterns[0]
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -200,19 +175,10 @@ class LogNegate(ConversionOps):
     ) -> dict[str, "torch.Tensor"]:
         import torch
 
-        target_pattern = self._get_target(input_dict, source_patterns, target_patterns)
+        target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         return {target_pattern: torch.log(-tensor)}
-
-    def _get_target(self, input_dict, source_patterns, target_patterns):
-        if len(input_dict) != 1:
-            raise ValueError("Undefined Operation encountered!")
-        if len(target_patterns) > 1:
-            if len(source_patterns) == 1:
-                return source_patterns[0]
-            raise ValueError("Undefined Operation encountered!")
-        return target_patterns[0]
 
     @property
     def reverse_op(self) -> ConversionOps:

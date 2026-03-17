@@ -39,9 +39,6 @@ from .utils.import_utils import is_gguf_available
 from .utils.logging import get_logger
 
 
-if is_torch_available():
-    import torch
-
 logger = get_logger(__name__)
 
 
