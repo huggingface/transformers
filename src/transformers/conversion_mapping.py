@@ -113,7 +113,6 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"vlm.model(?!\.(language_model|visual))",
                 target_patterns="vlm.model.language_model",
             ),
-            WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
         ],
         "gemma3n_text": [
             WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
