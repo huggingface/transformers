@@ -34,6 +34,7 @@ The export pipeline has four stages, each with its own set of patches/fixes:
 
 import copy
 import functools
+import operator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
@@ -411,6 +412,25 @@ def patch_torch_ops():
 # To add a new fix: define _fix_* and append to _FX_NODE_FIXES.
 
 
+_COMPARISON_OPS = frozenset({operator.le, operator.lt, operator.ge, operator.gt, operator.eq, operator.ne})
+
+
+def _fix_dead_comparison(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
+    """Erase dead comparison nodes (operator.le/lt/ge/gt/eq/ne with no users).
+
+    torch.export emits symbolic-dim guards like ``%le_3 = operator.le(sym_size, int_oo)``
+    that are always-true and have no users, but PyTorch's DCE does not eliminate them
+    because they are Python callables rather than aten ops.  Left in the graph, the ONNX
+    translator tries to lower ``int_oo`` (≈4.7e21) to a C long and overflows.
+    """
+    if node.target not in _COMPARISON_OPS:
+        return False
+    if len(node.users) > 0:
+        return False
+    gm.graph.erase_node(node)
+    return True
+
+
 def _fix_alias(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
     """Replace alias(x) -> x to break the alias -> detach_ -> index_put_ chain."""
     if node.target is not torch.ops.aten.alias.default:
@@ -508,6 +528,7 @@ def _fix_sort_stable(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
 _FX_NODE_FIXES = [
     _fix_alias,
     _fix_assertion,
+    _fix_dead_comparison,
     _fix_detach_inplace,
     _fix_fill_diagonal_inplace,
     _fix_index_put_inplace,

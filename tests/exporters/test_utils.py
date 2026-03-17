@@ -137,7 +137,7 @@ def _disable_loss(config, inputs_dict):
 
 def _run_onnx_program(onnx_program, inputs) -> dict:
     """Run an ONNX program and return outputs as a ``{name: tensor}`` dict."""
-    onnx_inputs = {k: v for k, v in inputs.items() if not isinstance(v, (bool, int, float, str))}
+    onnx_inputs = get_leaf_tensors(inputs)
     onnx_outputs = onnx_program(**onnx_inputs)
     onnx_names = (re.sub(r"^output\.", "", node.name) for node in onnx_program.model_proto.graph.output)
     return dict(zip(onnx_names, onnx_outputs))
