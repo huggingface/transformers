@@ -17,8 +17,17 @@ import re
 from typing import NamedTuple
 
 import numpy as np
-from tqdm.auto import tqdm
 
+from .core_model_loading import (
+    Concatenate,
+    ConversionOps,
+    GGUFDequantize,  # noqa: F401 – re-exported for convenience
+    GGUFQuantizedTensor,
+    SubtractOne,
+    Transpose,
+    Unsqueeze,
+    WeightConverter,
+)
 from .integrations import (
     GGUF_CONFIG_DEFAULTS_MAPPING,
     GGUF_CONFIG_MAPPING,
@@ -314,6 +323,270 @@ TENSOR_PROCESSORS = {
     "lfm2": Lfm2TensorProcessor,
 }
 
+# ---------------------------------------------------------------------------
+# GGUF-specific ConversionOps (used by build_gguf_deserializers)
+# ---------------------------------------------------------------------------
+
+
+class ReversePermuteAttnQ(ConversionOps):
+    """Reverse Q-projection GGUF permutation. Needs config.num_attention_heads."""
+
+    def __init__(self, num_heads: int):
+        self.num_heads = num_heads
+
+    @torch.no_grad()
+    def convert(
+        self, input_dict: dict, source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict:
+        target_pattern = self._get_target(input_dict, source_patterns, target_patterns)
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+        return {target_pattern: self._reverse_permute(tensor, self.num_heads, self.num_heads)}
+
+    def _reverse_permute(self, w: "torch.Tensor", n_head: int, num_kv_heads: int) -> "torch.Tensor":
+        if n_head != num_kv_heads:
+            n_head = num_kv_heads
+        dim = w.shape[0] // n_head // 2
+        return w.reshape(n_head, dim, 2, *w.shape[1:]).swapaxes(2, 1).reshape(w.shape)
+
+    def _get_target(self, input_dict, source_patterns, target_patterns):
+        if len(input_dict) != 1:
+            raise ValueError("ReversePermuteAttnQ: expected exactly one input tensor")
+        return target_patterns[0] if len(target_patterns) == 1 else source_patterns[0]
+
+    @property
+    def reverse_op(self):
+        raise NotImplementedError("ReversePermuteAttnQ is one-way")
+
+
+class ReversePermuteAttnK(ConversionOps):
+    """Reverse K-projection GGUF permutation. Needs config.num_attention_heads and num_key_value_heads."""
+
+    def __init__(self, num_heads: int, num_kv_heads: int):
+        self.num_heads = num_heads
+        self.num_kv_heads = num_kv_heads
+
+    @torch.no_grad()
+    def convert(
+        self, input_dict: dict, source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict:
+        target_pattern = self._get_target(input_dict, source_patterns, target_patterns)
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+        return {target_pattern: self._reverse_permute(tensor, self.num_heads, self.num_kv_heads)}
+
+    def _reverse_permute(self, w: "torch.Tensor", n_head: int, num_kv_heads: int) -> "torch.Tensor":
+        if n_head != num_kv_heads:
+            n_head = num_kv_heads
+        dim = w.shape[0] // n_head // 2
+        return w.reshape(n_head, dim, 2, *w.shape[1:]).swapaxes(2, 1).reshape(w.shape)
+
+    def _get_target(self, input_dict, source_patterns, target_patterns):
+        if len(input_dict) != 1:
+            raise ValueError("ReversePermuteAttnK: expected exactly one input tensor")
+        return target_patterns[0] if len(target_patterns) == 1 else source_patterns[0]
+
+    @property
+    def reverse_op(self):
+        raise NotImplementedError("ReversePermuteAttnK is one-way")
+
+
+class BloomReshapeQKVWeight(ConversionOps):
+    """Reverse Bloom QKV weight reshape."""
+
+    def __init__(self, n_head: int, n_embed: int):
+        self.n_head = n_head
+        self.n_embed = n_embed
+
+    @torch.no_grad()
+    def convert(
+        self, input_dict: dict, source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict:
+        target_pattern = target_patterns[0] if len(target_patterns) == 1 else source_patterns[0]
+        tensors = next(iter(input_dict.values()))
+        w = tensors[0] if isinstance(tensors, list) else tensors
+        n_head, n_embed = self.n_head, self.n_embed
+        q, k, v = torch.chunk(w, 3, dim=0)
+        q = q.reshape(n_head, n_embed // n_head, n_embed)
+        k = k.reshape(n_head, n_embed // n_head, n_embed)
+        v = v.reshape(n_head, n_embed // n_head, n_embed)
+        qkv = torch.stack([q, k, v], dim=1)
+        return {target_pattern: qkv.reshape(n_head * 3 * (n_embed // n_head), n_embed)}
+
+    @property
+    def reverse_op(self):
+        raise NotImplementedError("BloomReshapeQKVWeight is one-way")
+
+
+class BloomReshapeQKVBias(ConversionOps):
+    """Reverse Bloom QKV bias reshape."""
+
+    def __init__(self, n_head: int, n_embed: int):
+        self.n_head = n_head
+        self.n_embed = n_embed
+
+    @torch.no_grad()
+    def convert(
+        self, input_dict: dict, source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict:
+        target_pattern = target_patterns[0] if len(target_patterns) == 1 else source_patterns[0]
+        tensors = next(iter(input_dict.values()))
+        w = tensors[0] if isinstance(tensors, list) else tensors
+        n_head, n_embed = self.n_head, self.n_embed
+        q, k, v = torch.chunk(w, 3)
+        q = q.reshape(n_head, n_embed // n_head)
+        k = k.reshape(n_head, n_embed // n_head)
+        v = v.reshape(n_head, n_embed // n_head)
+        return {target_pattern: torch.stack([q, k, v], dim=1).flatten()}
+
+    @property
+    def reverse_op(self):
+        raise NotImplementedError("BloomReshapeQKVBias is one-way")
+
+
+# Architectures whose tensors need extra ops after GGUFDequantize
+_GGUF_ARCH_EXTRA_OPS_NORM_WEIGHT = frozenset(["nemotron", "gemma2", "gemma3"])
+_GGUF_ARCH_TRANSPOSE = frozenset(["gpt2"])
+_GGUF_GPT2_TRANSPOSE_PATTERNS = {"attn_qkv.weight", "ffn_down.weight", "ffn_up.weight", "attn_output.weight"}
+
+
+def build_gguf_deserializers(
+    tensor_key_mapping: dict[str, str],
+    architecture: str,
+    config: dict,
+) -> list[WeightConverter]:
+    """
+    Build one WeightConverter per GGUF tensor (or per MoE tensor group).
+    Each converter encodes: GGUF name → HF name, with
+    operations = [GGUFDequantize(), *optional_arch_ops].
+
+    Args:
+        tensor_key_mapping: {gguf_name: hf_name} from get_gguf_hf_weights_map
+        architecture: GGUF architecture string (e.g. "llama", "bloom", ...)
+        config: parsed HF config dict
+
+    Returns:
+        list of WeightConverter instances, one per distinct HF target tensor
+    """
+    from .core_model_loading import GGUFDequantize as _Dq
+
+    num_heads = config.get("num_attention_heads")
+    num_kv_heads = config.get("num_key_value_heads")
+    n_head_bloom = config.get("n_head")
+    hidden_size_bloom = config.get("hidden_size")
+
+    # Group gguf_names by their hf target (for many-to-one converters like Qwen2MoE gate+up)
+    hf_to_gguf: dict[str, list[str]] = {}
+    for gguf_name, hf_name in tensor_key_mapping.items():
+        hf_to_gguf.setdefault(hf_name, []).append(gguf_name)
+
+    converters: list[WeightConverter] = []
+
+    for hf_name, gguf_names in hf_to_gguf.items():
+        # Determine extra ops for this tensor
+        extra_ops = _get_extra_ops(gguf_names, hf_name, architecture, config, num_heads, num_kv_heads, n_head_bloom, hidden_size_bloom)
+
+        if len(gguf_names) == 1:
+            # Simple 1-to-1 mapping
+            converters.append(
+                WeightConverter(
+                    source_patterns=gguf_names,
+                    target_patterns=[hf_name],
+                    operations=[_Dq(), *extra_ops],
+                )
+            )
+        else:
+            # Many-to-one: multiple GGUF tensors → one HF tensor (e.g. Qwen2MoE gate+up)
+            # Sort so that gate comes before up for correct concatenation order
+            gguf_names_sorted = _sort_moe_sources(gguf_names)
+            converters.append(
+                WeightConverter(
+                    source_patterns=gguf_names_sorted,
+                    target_patterns=[hf_name],
+                    operations=[_Dq(), *extra_ops],
+                )
+            )
+
+    return converters
+
+
+def _get_extra_ops(
+    gguf_names: list[str],
+    hf_name: str,
+    architecture: str,
+    config: dict,
+    num_heads,
+    num_kv_heads,
+    n_head_bloom,
+    hidden_size_bloom,
+) -> list:
+    """Return the list of extra ConversionOps (after GGUFDequantize) for a given tensor."""
+    extra_ops = []
+
+    # Use first gguf_name for pattern matching (for 1:1, there's only one; for many:1, we check hf_name)
+    gguf_name = gguf_names[0]
+
+    # Llama/mistral: attention permutation
+    if architecture in ("llama", "mistral", "phi3", "cohere") and num_heads is not None and num_kv_heads is not None:
+        if ".attn_q." in gguf_name:
+            extra_ops.append(ReversePermuteAttnQ(num_heads))
+        elif ".attn_k." in gguf_name:
+            extra_ops.append(ReversePermuteAttnK(num_heads, num_kv_heads))
+
+    # Bloom: QKV reshape
+    elif architecture == "bloom" and n_head_bloom is not None and hidden_size_bloom is not None:
+        if "attn_qkv" in gguf_name:
+            if ".weight" in gguf_name:
+                extra_ops.append(BloomReshapeQKVWeight(n_head_bloom, hidden_size_bloom))
+            elif ".bias" in gguf_name:
+                extra_ops.append(BloomReshapeQKVBias(n_head_bloom, hidden_size_bloom))
+
+    # GPT2: transpose selected weights
+    elif architecture == "gpt2":
+        if any(pat in gguf_name for pat in _GGUF_GPT2_TRANSPOSE_PATTERNS):
+            extra_ops.append(Transpose())
+
+    # Mamba: conv1d unsqueeze + SSM-A log-negate
+    elif architecture == "mamba":
+        if "ssm_conv1d.weight" in gguf_name:
+            extra_ops.append(Unsqueeze(1))
+        elif "ssm_a" in gguf_name:
+            from .core_model_loading import LogNegate
+
+            extra_ops.append(LogNegate())
+
+    # LFM2: shortconv unsqueeze
+    elif architecture == "lfm2":
+        if "shortconv.conv.weight" in gguf_name:
+            extra_ops.append(Unsqueeze(1))
+
+    # Norm weight de-offset for nemotron / gemma2 / gemma3
+    if architecture in _GGUF_ARCH_EXTRA_OPS_NORM_WEIGHT and "norm.weight" in gguf_name:
+        extra_ops.append(SubtractOne())
+
+    # Qwen2MoE / Qwen3MoE: gate+up → Concatenate; shared expert gate → Unsqueeze
+    if architecture in ("qwen2moe", "qwen3moe"):
+        if len(gguf_names) > 1:
+            # Many-to-one: gate + up → concatenate along dim=1
+            extra_ops.append(Concatenate(dim=1))
+        elif "ffn_gate_inp_shexp" in gguf_name:
+            extra_ops.append(Unsqueeze(0))
+
+    return extra_ops
+
+
+def _sort_moe_sources(gguf_names: list[str]) -> list[str]:
+    """Sort MoE source tensors so gate comes before up (preserving expected concat order)."""
+
+    def _rank(name):
+        if "gate" in name:
+            return 0
+        elif "up" in name:
+            return 1
+        return 2
+
+    return sorted(gguf_names, key=_rank)
+
 
 def read_field(reader, field):
     if field not in reader.fields:
@@ -420,7 +693,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
             and only loads the metadata in memory.
     """
     if is_gguf_available() and is_torch_available():
-        from gguf import GGUFReader, dequantize
+        from gguf import GGUFReader
     else:
         logger.error(
             "Loading a GGUF checkpoint in PyTorch, requires both PyTorch and GGUF>=0.10.0 to be installed. Please see "
@@ -551,35 +824,23 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
             )
 
     if return_tensors:
-        parsed_parameters["tensors"] = {}
-
         config = parsed_parameters.get("config", {})
 
+        # Build name mapping using the existing TensorProcessor for naming (preprocess_name / fallback mapping)
         ProcessorClass = TENSOR_PROCESSORS.get(architecture, TensorProcessor)
         processor = ProcessorClass(config=config)
-
         tensor_key_mapping = get_gguf_hf_weights_map(model_to_load, processor)
 
-        for tensor in tqdm(reader.tensors, desc="Converting and de-quantizing GGUF tensors..."):
-            name = tensor.name
-            weights = dequantize(tensor.data, tensor.tensor_type)
+        # Build raw (undequantized) state dict keyed by GGUF tensor name
+        parsed_parameters["tensors"] = {
+            tensor.name: GGUFQuantizedTensor(tensor.data, tensor.tensor_type)
+            for tensor in reader.tensors
+        }
 
-            result = processor.process(
-                weights=weights,
-                name=name,
-                tensor_key_mapping=tensor_key_mapping,
-                parsed_parameters=parsed_parameters,
-            )
-
-            weights = result.weights
-            name = result.name
-
-            if name not in tensor_key_mapping:
-                continue
-
-            name = tensor_key_mapping[name]
-
-            parsed_parameters["tensors"][name] = torch.from_numpy(np.copy(weights))
+        # Build GgufDeserializer WeightConverters that encode GGUF name → HF name + dequant + arch ops
+        parsed_parameters["weight_mapping"] = build_gguf_deserializers(
+            tensor_key_mapping, architecture, config
+        )
 
     if len(reader_keys) > 0:
         logger.info(f"Some keys of the GGUF file were not considered: {reader_keys}")

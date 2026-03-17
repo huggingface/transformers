@@ -260,7 +260,7 @@ def get_state_dict_dtype(state_dict):
     Returns the first found floating dtype in `state_dict` if there is one, otherwise returns the first dtype.
     """
     for t in state_dict.values():
-        if t.is_floating_point():
+        if hasattr(t, "is_floating_point") and t.is_floating_point():
             return t.dtype
 
     # if no floating dtype was found return whatever the first dtype is
@@ -4060,6 +4060,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         )
 
         is_quantized = hf_quantizer is not None
+        _gguf_weight_mapping = []  # populated below for GGUF checkpoints
 
         if gguf_file:
             from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
@@ -4068,9 +4069,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # passed directly as a kwarg from now on
             with torch.device("meta"):
                 dummy_model = cls(config)
-            state_dict = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True, model_to_load=dummy_model)[
-                "tensors"
-            ]
+            gguf_parsed = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True, model_to_load=dummy_model)
+            state_dict = gguf_parsed["tensors"]  # {gguf_name: GGUFQuantizedTensor}
+            _gguf_weight_mapping = gguf_parsed.get("weight_mapping", [])
 
         # Find the correct dtype based on current state
         config, dtype = _get_dtype(
@@ -4100,6 +4101,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Obtain the weight conversion mapping for this model if any are registered
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
+        # For GGUF: prepend GgufDeserializer converters so they run before any model-specific conversions
+        if gguf_file and _gguf_weight_mapping:
+            weight_conversions = list(_gguf_weight_mapping) + list(weight_conversions)
 
         if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
             model = distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size)
