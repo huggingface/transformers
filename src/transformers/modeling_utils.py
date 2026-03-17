@@ -807,7 +807,7 @@ def _get_dtype(
         dtype = torch.get_default_dtype()
 
     if hf_quantizer is not None:
-        hf_quantizer.update_dtype(dtype)
+        dtype = hf_quantizer.update_dtype(dtype)
 
     # Get the main dtype
     if isinstance(dtype, dict):
@@ -2222,7 +2222,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # NOTE: new models need to use existing names for layers if possible, so this list doesn't grow infinitely
         if modality in ["image", "video"]:
             possible_module_names = ["vision_tower", "visual", "vision_model", "vision_encoder", "image_tower"]
-        if modality == "audio":
+        elif modality == "audio":
             possible_module_names = ["audio_tower", "audio_encoder"]
         elif modality is None:
             possible_module_names = ["text_encoder", "encoder"]

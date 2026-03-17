@@ -13,20 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from typing import Any, Literal, Optional
+from typing import Any, Optional
 
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
-    RopeParameters,
     dynamic_rope_update,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -60,6 +60,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/gemma-3-4b-it")
+@strict(accept_kwargs=True)
 class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
     r"""
     final_logit_softcapping (`float`, *optional*):
@@ -97,61 +98,16 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
     }
     default_theta = {"global": 1_000_000.0, "local": 10_000.0}
 
-    def __init__(
-        self,
-        vocab_size: int | None = 262_208,
-        hidden_size: int | None = 2304,
-        intermediate_size: int | None = 9216,
-        num_hidden_layers: int | None = 26,
-        num_attention_heads: int | None = 8,
-        num_key_value_heads: int | None = 4,
-        head_dim: int | None = 256,
-        hidden_activation: str | None = "gelu_pytorch_tanh",
-        max_position_embeddings: int | None = 131_072,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-6,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = 0,
-        eos_token_id: int | None = 1,
-        bos_token_id: int | None = 2,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        query_pre_attn_scalar: int | None = 256,
-        sliding_window: int | None = 4096,
-        layer_types: list[str] | None = None,
-        final_logit_softcapping: float | None = None,
-        attn_logit_softcapping: float | None = None,
-        rope_parameters: dict[Literal["full_attention", "sliding_attention"], RopeParameters] | None = None,
-        use_bidirectional_attention: bool | None = False,
-        tie_word_embeddings: bool | None = True,
-        **kwargs,
-    ):
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.head_dim = head_dim
-        self.num_key_value_heads = num_key_value_heads
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.hidden_activation = hidden_activation
-        self.query_pre_attn_scalar = query_pre_attn_scalar
-        self.sliding_window = sliding_window
-        self.final_logit_softcapping = final_logit_softcapping
-        self.attn_logit_softcapping = attn_logit_softcapping
-        self.layer_types = layer_types
+    vocab_size: int = 262_208
+    max_position_embeddings: int = 131_072
+    layer_types: list[str] | None = None
+    final_logit_softcapping: float | None = None
+    attn_logit_softcapping: float | None = None
+    rope_parameters: dict | None = None
+    use_bidirectional_attention: bool | None = False
 
-        self.use_bidirectional_attention = use_bidirectional_attention
-        if use_bidirectional_attention:
+    def __post_init__(self, **kwargs):
+        if self.use_bidirectional_attention:
             self.sliding_window = (self.sliding_window // 2) + 1  # due to fa we set exclusive bounds
 
         # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
@@ -162,12 +118,10 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
                 "sliding_attention" if bool((i + 1) % self._sliding_window_pattern) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        self.rope_parameters = rope_parameters
-        PreTrainedConfig.__init__(**kwargs)
+        PreTrainedConfig.__post_init__(**kwargs)
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
+    def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
 
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
@@ -194,11 +148,11 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
 
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.standardize_rope_params()
-        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
 
 
 @auto_docstring(checkpoint="google/gemma-3-4b-it")
+@strict(accept_kwargs=True)
 class Gemma3Config(PreTrainedConfig):
     r"""
     mm_tokens_per_image (`int`, *optional*, defaults to 256):
@@ -240,40 +194,29 @@ class Gemma3Config(PreTrainedConfig):
         "vision_config": SiglipVisionConfig,
     }
 
-    def __init__(
-        self,
-        text_config: Gemma3TextConfig | dict[str, Any] | None = None,
-        vision_config: SiglipVisionConfig | dict[str, Any] | None = None,
-        mm_tokens_per_image: int | None = 256,
-        boi_token_index: int | None = 255_999,
-        eoi_token_index: int | None = 256_000,
-        image_token_index: int | None = 262_144,
-        initializer_range: float | None = 0.02,
-        tie_word_embeddings: bool | None = True,
-        **kwargs,
-    ):
-        if text_config is None:
-            text_config = Gemma3TextConfig()
-            logger.info("text_config is None, using default Gemma3TextConfig text config.")
-        elif isinstance(text_config, dict):
-            text_config = Gemma3TextConfig(**text_config)
+    text_config: Gemma3TextConfig | dict[str, Any] | None = None
+    vision_config: SiglipVisionConfig | dict[str, Any] | None = None
+    mm_tokens_per_image: int | None = 256
+    boi_token_index: int | None = 255_999
+    eoi_token_index: int | None = 256_000
+    image_token_index: int | None = 262_144
+    initializer_range: float | None = 0.02
+    tie_word_embeddings: bool | None = True
 
-        if isinstance(vision_config, dict):
-            vision_config = SiglipVisionConfig(**vision_config)
-        elif vision_config is None:
-            vision_config = SiglipVisionConfig()
+    def __post_init__(self, **kwargs):
+        if self.text_config is None:
+            self.text_config = Gemma3TextConfig()
+            logger.info("text_config is None, using default Gemma3TextConfig text config.")
+        elif isinstance(self.text_config, dict):
+            self.text_config = Gemma3TextConfig(**self.text_config)
+
+        if isinstance(self.vision_config, dict):
+            self.vision_config = SiglipVisionConfig(**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = SiglipVisionConfig()
             logger.info("vision_config is None, using default SiglipVisionConfig vision config.")
 
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.mm_tokens_per_image = mm_tokens_per_image
-        self.boi_token_index = boi_token_index
-        self.eoi_token_index = eoi_token_index
-        self.image_token_index = image_token_index
-        self.initializer_range = initializer_range
-        self.tie_word_embeddings = tie_word_embeddings
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 class Gemma3ModelOutputWithPast(PaligemmaModelOutputWithPast):
@@ -961,12 +904,6 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
 
 class Gemma3ForSequenceClassification(Gemma3PreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^vision_tower": "model.vision_tower",
-        "^multi_modal_projector": "model.multi_modal_projector",
-    }
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels

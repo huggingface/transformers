@@ -12,11 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="zju-community/efficientloftr")
+@strict(accept_kwargs=True)
 class EfficientLoFTRConfig(PreTrainedConfig):
     r"""
     stage_num_blocks (`List`, *optional*, defaults to [1, 2, 4, 14]):
@@ -69,38 +73,36 @@ class EfficientLoFTRConfig(PreTrainedConfig):
 
     model_type = "efficientloftr"
 
-    def __init__(
-        self,
-        stage_num_blocks: list[int] | None = None,
-        out_features: list[int] | None = None,
-        stage_stride: list[int] | None = None,
-        hidden_size: int = 256,
-        activation_function: str = "relu",
-        q_aggregation_kernel_size: int = 4,
-        kv_aggregation_kernel_size: int = 4,
-        q_aggregation_stride: int = 4,
-        kv_aggregation_stride: int = 4,
-        num_attention_layers: int = 4,
-        num_attention_heads: int = 8,
-        attention_dropout: float = 0.0,
-        attention_bias: bool = False,
-        mlp_activation_function: str = "leaky_relu",
-        coarse_matching_skip_softmax: bool = False,
-        coarse_matching_threshold: float = 0.2,
-        coarse_matching_temperature: float = 0.1,
-        coarse_matching_border_removal: int = 2,
-        fine_kernel_size: int = 8,
-        batch_norm_eps: float = 1e-5,
-        rope_parameters: dict | None = None,
-        fine_matching_slice_dim: int = 8,
-        fine_matching_regress_temperature: float = 10.0,
-        initializer_range: float = 0.02,
-        **kwargs,
-    ):
+    stage_num_blocks: list[int] | None = None
+    out_features: list[int] | None = None
+    stage_stride: list[int] | None = None
+    hidden_size: int = 256
+    activation_function: str = "relu"
+    q_aggregation_kernel_size: int = 4
+    kv_aggregation_kernel_size: int = 4
+    q_aggregation_stride: int = 4
+    kv_aggregation_stride: int = 4
+    num_attention_layers: int = 4
+    num_attention_heads: int = 8
+    attention_dropout: float | int = 0.0
+    attention_bias: bool = False
+    mlp_activation_function: str = "leaky_relu"
+    coarse_matching_skip_softmax: bool = False
+    coarse_matching_threshold: float = 0.2
+    coarse_matching_temperature: float = 0.1
+    coarse_matching_border_removal: int = 2
+    fine_kernel_size: int = 8
+    batch_norm_eps: float = 1e-5
+    rope_parameters: dict | None = None
+    fine_matching_slice_dim: int = 8
+    fine_matching_regress_temperature: float = 10.0
+    initializer_range: float = 0.02
+
+    def __post_init__(self, **kwargs):
         # Stage level of RepVGG
-        self.stage_num_blocks = stage_num_blocks if stage_num_blocks is not None else [1, 2, 4, 14]
-        self.stage_stride = stage_stride if stage_stride is not None else [2, 1, 2, 2]
-        self.out_features = out_features if out_features is not None else [64, 64, 128, 256]
+        self.stage_num_blocks = self.stage_num_blocks if self.stage_num_blocks is not None else [1, 2, 4, 14]
+        self.stage_stride = self.stage_stride if self.stage_stride is not None else [2, 1, 2, 2]
+        self.out_features = self.out_features if self.out_features is not None else [64, 64, 128, 256]
         self.stage_in_channels = [1] + self.out_features[:-1]
 
         # Block level of RepVGG
@@ -115,41 +117,18 @@ class EfficientLoFTRConfig(PreTrainedConfig):
             for stage_idx in range(len(self.stage_num_blocks))
         ]
 
-        # Fine matching level of EfficientLoFTR
+        self.num_key_value_heads = self.num_attention_heads
         self.fine_fusion_dims = list(reversed(self.out_features))[:-1]
+        self.intermediate_size = self.hidden_size * 2
+        kwargs.setdefault("partial_rotary_factor", 4.0)  # assign default for BC
+        super().__post_init__(**kwargs)
 
-        self.hidden_size = hidden_size
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if self.hidden_size != self.out_features[-1]:
             raise ValueError(
                 f"hidden_size should be equal to the last value in out_features. hidden_size = {self.hidden_size}, out_features = {self.out_features[-1]}"
             )
-
-        self.activation_function = activation_function
-        self.q_aggregation_kernel_size = q_aggregation_kernel_size
-        self.kv_aggregation_kernel_size = kv_aggregation_kernel_size
-        self.q_aggregation_stride = q_aggregation_stride
-        self.kv_aggregation_stride = kv_aggregation_stride
-        self.num_attention_layers = num_attention_layers
-        self.num_attention_heads = num_attention_heads
-        self.attention_dropout = attention_dropout
-        self.attention_bias = attention_bias
-        self.intermediate_size = self.hidden_size * 2
-        self.mlp_activation_function = mlp_activation_function
-        self.coarse_matching_skip_softmax = coarse_matching_skip_softmax
-        self.coarse_matching_threshold = coarse_matching_threshold
-        self.coarse_matching_temperature = coarse_matching_temperature
-        self.coarse_matching_border_removal = coarse_matching_border_removal
-        self.fine_kernel_size = fine_kernel_size
-        self.batch_norm_eps = batch_norm_eps
-        self.fine_matching_slice_dim = fine_matching_slice_dim
-        self.fine_matching_regress_temperature = fine_matching_regress_temperature
-
-        self.num_key_value_heads = num_attention_heads
-        self.initializer_range = initializer_range
-        self.rope_parameters = rope_parameters
-        kwargs.setdefault("partial_rotary_factor", 4.0)  # assign default for BC
-
-        super().__init__(**kwargs)
 
 
 __all__ = ["EfficientLoFTRConfig"]

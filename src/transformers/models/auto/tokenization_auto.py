@@ -656,7 +656,7 @@ class AutoTokenizer:
                 config = AutoConfig.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                 )
-            except Exception:
+            except (ValueError, OSError):
                 config = PreTrainedConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         config_model_type = config.model_type

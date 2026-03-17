@@ -13,6 +13,10 @@
 # limitations under the License.
 """OmDet-Turbo model configuration"""
 
+from typing import Literal
+
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
@@ -23,6 +27,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="omlab/omdet-turbo-swin-tiny-hf")
+@strict(accept_kwargs=True)
 class OmDetTurboConfig(PreTrainedConfig):
     r"""
     apply_layernorm_after_vision_backbone (`bool`, *optional*, defaults to `True`):
@@ -102,126 +107,78 @@ class OmDetTurboConfig(PreTrainedConfig):
         "num_attention_heads": "encoder_attention_heads",
     }
 
-    def __init__(
-        self,
-        text_config=None,
-        backbone_config=None,
-        apply_layernorm_after_vision_backbone=True,
-        image_size=640,
-        disable_custom_kernels=False,
-        layer_norm_eps=1e-5,
-        batch_norm_eps=1e-5,
-        init_std=0.02,
-        text_projection_in_dim=512,
-        text_projection_out_dim=512,
-        task_encoder_hidden_dim=1024,
-        class_embed_dim=512,
-        class_distance_type="cosine",
-        num_queries=900,
-        csp_activation="silu",
-        conv_norm_activation="gelu",
-        encoder_feedforward_activation="relu",
-        encoder_feedforward_dropout=0.0,
-        encoder_dropout=0.0,
-        hidden_expansion=1,
-        vision_features_channels=[256, 256, 256],
-        encoder_hidden_dim=256,
-        encoder_in_channels=[192, 384, 768],
-        encoder_projection_indices=[2],
-        encoder_attention_heads=8,
-        encoder_dim_feedforward=2048,
-        encoder_layers=1,
-        positional_encoding_temperature=10000,
-        num_feature_levels=3,
-        decoder_hidden_dim=256,
-        decoder_num_heads=8,
-        decoder_num_layers=6,
-        decoder_activation="relu",
-        decoder_dim_feedforward=2048,
-        decoder_num_points=4,
-        decoder_dropout=0.0,
-        eval_size=None,
-        learn_initial_query=False,
-        cache_size=100,
-        is_encoder_decoder=True,
-        **kwargs,
-    ):
+    text_config: dict | PreTrainedConfig | None = None
+    backbone_config: dict | PreTrainedConfig | None = None
+    apply_layernorm_after_vision_backbone: bool = True
+    image_size: int | list[int] | tuple[int, int] = 640
+    disable_custom_kernels: bool = False
+    layer_norm_eps: float = 1e-5
+    batch_norm_eps: float = 1e-5
+    init_std: float = 0.02
+    text_projection_in_dim: int = 512
+    text_projection_out_dim: int = 512
+    task_encoder_hidden_dim: int = 1024
+    class_embed_dim: int = 512
+    class_distance_type: Literal["cosine", "dot"] = "cosine"
+    num_queries: int = 900
+    csp_activation: str = "silu"
+    conv_norm_activation: str = "gelu"
+    encoder_feedforward_activation: str = "relu"
+    encoder_feedforward_dropout: float | int = 0.0
+    encoder_dropout: float | int = 0.0
+    hidden_expansion: int = 1
+    encoder_hidden_dim: int = 256
+    vision_features_channels: list[int] | tuple[int, ...] = (256, 256, 256)
+    encoder_in_channels: list[int] | tuple[int, ...] = (192, 384, 768)
+    encoder_projection_indices: list[int] | tuple[int, ...] = (2,)
+    encoder_attention_heads: int = 8
+    encoder_dim_feedforward: int = 2048
+    encoder_layers: int = 1
+    positional_encoding_temperature: int = 10000
+    num_feature_levels: int = 3
+    decoder_hidden_dim: int = 256
+    decoder_num_heads: int = 8
+    decoder_num_layers: int = 6
+    decoder_activation: str = "relu"
+    decoder_dim_feedforward: int = 2048
+    decoder_num_points: int = 4
+    decoder_dropout: float | int = 0.0
+    eval_size: int | None = None
+    learn_initial_query: int = False
+    cache_size: int = 100
+    is_encoder_decoder: bool = True
+
+    def __post_init__(self, **kwargs):
         # Init timm backbone with hardcoded values for BC
         timm_default_kwargs = {
             "out_indices": [1, 2, 3],
-            "img_size": image_size,
+            "img_size": self.image_size,
             "always_partition": True,
         }
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_backbone="swin_tiny_patch4_window7_224",
             default_config_type="swin",
-            default_config_kwargs={"image_size": image_size, "out_indices": [2, 3, 4]},
+            default_config_kwargs={"image_size": self.image_size, "out_indices": [2, 3, 4]},
             timm_default_kwargs=timm_default_kwargs,
             **kwargs,
         )
 
         # Extract timm.create_model kwargs; TimmBackbone doesn't forward arbitrary config attrs to timm
-        timm_kwargs = {}
-        if getattr(backbone_config, "model_type", None) == "timm_backbone":
+        self.timm_kwargs = {}
+        if getattr(self.backbone_config, "model_type", None) == "timm_backbone":
             for attr in ("img_size", "always_partition"):
-                if hasattr(backbone_config, attr):
-                    timm_kwargs[attr] = getattr(backbone_config, attr)
+                if hasattr(self.backbone_config, attr):
+                    self.timm_kwargs[attr] = getattr(self.backbone_config, attr)
 
-        if text_config is None:
+        if self.text_config is None:
             logger.info("`text_config` is `None`. Initializing the config with the default `clip_text_model`")
-            text_config = CONFIG_MAPPING["clip_text_model"]()
-        elif isinstance(text_config, dict):
-            text_model_type = text_config.get("model_type")
-            text_config = CONFIG_MAPPING[text_model_type](**text_config)
+            self.text_config = CONFIG_MAPPING["clip_text_model"]()
+        elif isinstance(self.text_config, dict):
+            text_model_type = self.text_config.get("model_type")
+            self.text_config = CONFIG_MAPPING[text_model_type](**self.text_config)
 
-        if class_distance_type not in ["cosine", "dot"]:
-            raise ValueError(
-                f"Invalid `class_distance_type`. It should be either `cosine` or `dot`, but got {class_distance_type}."
-            )
-
-        self.text_config = text_config
-        self.backbone_config = backbone_config
-        self.apply_layernorm_after_vision_backbone = apply_layernorm_after_vision_backbone
-        self.image_size = image_size
-        self.disable_custom_kernels = disable_custom_kernels
-        self.layer_norm_eps = layer_norm_eps
-        self.batch_norm_eps = batch_norm_eps
-        self.init_std = init_std
-        self.text_projection_in_dim = text_projection_in_dim
-        self.text_projection_out_dim = text_projection_out_dim
-        self.task_encoder_hidden_dim = task_encoder_hidden_dim
-        self.class_embed_dim = class_embed_dim
-        self.class_distance_type = class_distance_type
-        self.num_queries = num_queries
-        self.csp_activation = csp_activation
-        self.conv_norm_activation = conv_norm_activation
-        self.encoder_feedforward_activation = encoder_feedforward_activation
-        self.encoder_feedforward_dropout = encoder_feedforward_dropout
-        self.encoder_dropout = encoder_dropout
-        self.hidden_expansion = hidden_expansion
-        self.vision_features_channels = vision_features_channels
-        self.encoder_hidden_dim = encoder_hidden_dim
-        self.encoder_in_channels = encoder_in_channels
-        self.encoder_projection_indices = encoder_projection_indices
-        self.encoder_attention_heads = encoder_attention_heads
-        self.encoder_dim_feedforward = encoder_dim_feedforward
-        self.encoder_layers = encoder_layers
-        self.positional_encoding_temperature = positional_encoding_temperature
-        self.num_feature_levels = num_feature_levels
-        self.decoder_hidden_dim = decoder_hidden_dim
-        self.decoder_num_heads = decoder_num_heads
-        self.decoder_num_layers = decoder_num_layers
-        self.decoder_activation = decoder_activation
-        self.decoder_dim_feedforward = decoder_dim_feedforward
-        self.decoder_num_points = decoder_num_points
-        self.decoder_dropout = decoder_dropout
-        self.eval_size = eval_size
-        self.learn_initial_query = learn_initial_query
-        self.cache_size = cache_size
-        self.timm_kwargs = timm_kwargs
-
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        super().__post_init__(**kwargs)
 
     def to_dict(self):
         output = super().to_dict()

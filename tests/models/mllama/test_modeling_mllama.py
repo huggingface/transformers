@@ -61,7 +61,6 @@ class MllamaText2TextModelTester:
         seq_length=7,
         is_training=True,
         text_config={
-            "model_type": "mllama",
             "vocab_size": 99,
             "hidden_size": 32,
             "num_hidden_layers": 2,
@@ -143,7 +142,6 @@ class MllamaVisionText2TextModelTester:
         seq_length=7,
         is_training=True,
         text_config={
-            "model_type": "mllama",
             "vocab_size": 99,
             "hidden_size": 32,
             "num_hidden_layers": 2,
