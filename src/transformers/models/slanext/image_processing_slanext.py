@@ -20,23 +20,88 @@
 
 
 import numpy as np
-import torch
 
-from ...image_processing_utils import BaseImageProcessor
-from ...image_transforms import normalize, pad
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_transforms import normalize, pad, to_channel_dimension_format
+from ...image_utils import (
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
+    ChannelDimension,
+    ImageInput,
+    make_flat_list_of_images,
+    to_numpy_array,
+    valid_images,
+)
+from ...processing_utils import ImagesKwargs
 from ...utils import auto_docstring
+from ...utils.generic import TensorType
 
 
 @auto_docstring(custom_intro="ImageProcessor for the SLANeXt model.")
 class SLANeXtImageProcessor(BaseImageProcessor):
-    def __init__(self):
-        self.target_long_edge = 512
-        self.target_pad_size = 512
+    r"""
+    Constructs a SLANeXt image processor.
+
+    Args:
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the image's long edge to the specified `size`. Can be overridden by the `do_resize`
+            parameter in the `preprocess` method.
+        size (`dict[str, int]`, *optional*, defaults to `{"height": 512, "width": 512}`):
+            Size of the image after resizing. The image is resized such that the long edge matches
+            `max(size["height"], size["width"])` while preserving the aspect ratio. Can be overridden by the `size`
+            parameter in the `preprocess` method.
+        do_normalize (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
+            method.
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
+            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
+            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
+        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
+            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
+            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess`
+            method.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Whether to pad the image to a square of size `max(size["height"], size["width"])` after resizing. Padding
+            is applied to the bottom and right edges with zeros. Can be overridden by the `do_pad` parameter in the
+            `preprocess` method.
+    """
+
+    model_input_names = ["pixel_values"]
+    valid_kwargs = ImagesKwargs
+
+    def __init__(
+        self,
+        do_resize: bool = True,
+        size: dict[str, int] | None = None,
+        do_normalize: bool = True,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_pad: bool = True,
+        **kwargs,
+    ) -> None:
+        super().__init__(**kwargs)
+        size = size if size is not None else {"height": 512, "width": 512}
+        size = get_size_dict(size)
+
+        self.do_resize = do_resize
+        self.size = size
+        self.do_normalize = do_normalize
+        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
+        self.do_pad = do_pad
+
         self.init_decoder()
 
-    def _tablerec_resize(self, img: np.ndarray, target_size: tuple[int, int]) -> np.ndarray:
+    def resize(
+        self,
+        image: np.ndarray,
+        size: dict[str, int],
+        **kwargs,
+    ):
         """
-        Resize image to match cv2.resize with INTER_LINEAR as closely as possible.
+        Resize an image while preserving the aspect ratio, using a custom bilinear interpolation that closely
+        matches OpenCV's `cv2.resize` with `INTER_LINEAR`. The image is scaled so that its long edge matches
+        `max(size["height"], size["width"])`.
 
         This implementation uses OpenCV's approach with vectorized operations:
         1. Float32 precision for all floating-point calculations
@@ -45,24 +110,27 @@ class SLANeXtImageProcessor(BaseImageProcessor):
         4. Proper boundary handling
 
         Args:
-            img (`np.ndarray`):
-                Input image in HWC format (height, width, channels).
-            target_size (`tuple[int, int]`):
-                Target size as (width, height) to match cv2.resize convention.
+            image (`np.ndarray`):
+                Image to resize, in HWC format (height, width, channels).
+            size (`dict[str, int]`):
+                Dictionary in the format `{"height": int, "width": int}` specifying the target size. The image's
+                long edge will be resized to `max(size["height"], size["width"])` while maintaining the aspect ratio.
 
         Returns:
-            `np.ndarray`: Resized image in HWC format.
+            `np.ndarray`: The resized image in HWC format.
         """
-        height, width = img.shape[:2]
-        target_width, target_height = target_size
+        height, width = image.shape[:2]
+        scale = max(size["height"], size["width"]) / max(height, width)
+        target_height = round(height * scale)
+        target_width = round(width * scale)
 
         # Ensure uint8 format
-        if img.dtype != np.uint8:
-            img = np.clip(img, 0, 255).astype(np.uint8)
+        if image.dtype != np.uint8:
+            image = np.clip(image, 0, 255).astype(np.uint8)
 
         # Handle grayscale images
-        if len(img.shape) == 2:
-            img = img[:, :, np.newaxis]
+        if len(image.shape) == 2:
+            image = image[:, :, np.newaxis]
             squeeze_output = True
         else:
             squeeze_output = False
@@ -119,14 +187,14 @@ class SLANeXtImageProcessor(BaseImageProcessor):
         ax_inv = INTER_RESIZE_COEF_SCALE - ax_grid
 
         # Perform vectorized bilinear interpolation for each channel
-        output = np.zeros((target_height, target_width, img.shape[2]), dtype=np.uint8)
+        output = np.zeros((target_height, target_width, image.shape[2]), dtype=np.uint8)
 
-        for channel_idx in range(img.shape[2]):
+        for channel_idx in range(image.shape[2]):
             # Get 4 corner pixels using advanced indexing
-            p00 = img[sy_grid, sx_grid, channel_idx].astype(np.int32)  # (target_h, target_w)
-            p10 = img[sy_grid, sx_grid + 1, channel_idx].astype(np.int32)
-            p01 = img[sy_grid + 1, sx_grid, channel_idx].astype(np.int32)
-            p11 = img[sy_grid + 1, sx_grid + 1, channel_idx].astype(np.int32)
+            p00 = image[sy_grid, sx_grid, channel_idx].astype(np.int32)  # (target_h, target_w)
+            p10 = image[sy_grid, sx_grid + 1, channel_idx].astype(np.int32)
+            p01 = image[sy_grid + 1, sx_grid, channel_idx].astype(np.int32)
+            p11 = image[sy_grid + 1, sx_grid + 1, channel_idx].astype(np.int32)
 
             # Vectorized bilinear interpolation
             val = ay_inv * (ax_inv * p00 + ax_grid * p10) + ay_grid * (ax_inv * p01 + ax_grid * p11)
@@ -142,26 +210,148 @@ class SLANeXtImageProcessor(BaseImageProcessor):
 
         return output
 
-    def preprocess(self, img):
-        img = np.array(img)
-        height, width = img.shape[:2]
-        scale = self.target_long_edge / max(height, width)
-        height_resize = round(height * scale)
-        width_resize = round(width * scale)
-        img = self._tablerec_resize(img, [width_resize, height_resize])
-        img = img / 255.0
-        img = normalize(image=img, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        height, width = img.shape[:2]
-        pad_right = max(0, self.target_pad_size - width)
-        pad_bottom = max(0, self.target_pad_size - height)
-        img = pad(image=img, padding=((0, pad_bottom), (0, pad_right)))
-        img = img.transpose((2, 0, 1))
-        img = np.expand_dims(img, axis=0)
-        img = torch.tensor(img).float()
+    def pad(
+        self,
+        image: np.ndarray,
+        size: dict[str, int],
+        **kwargs,
+    ):
+        """
+        Pad an image to a square of size `max(size["height"], size["width"])`. Padding is applied to the bottom and
+        right edges with zeros.
 
-        return img
+        Args:
+            image (`np.ndarray`):
+                Image to pad.
+            size (`dict[str, int]`):
+                Dictionary in the format `{"height": int, "width": int}` specifying the target padded size. The
+                image will be padded to a square of `max(size["height"], size["width"])`.
 
-    def init_decoder(self, merge_no_span_structure=True):
+        Returns:
+            `np.ndarray`: The padded image.
+        """
+        target_pad_size = max(size["height"], size["width"])
+        pad_bottom = max(0, target_pad_size - image.shape[0])
+        pad_right = max(0, target_pad_size - image.shape[1])
+        return pad(image=image, padding=((0, pad_bottom), (0, pad_right)))
+
+    def normalize(
+        self,
+        image: np.ndarray,
+        image_mean: float | list[float],
+        image_std: float | list[float],
+        **kwargs,
+    ):
+        """
+        Normalize an image. The image is first rescaled to [0, 1] by dividing by 255.0, then normalized using the
+        specified `image_mean` and `image_std`: `image = (image - mean) / std`.
+
+        Args:
+            image (`np.ndarray`):
+                Image to normalize.
+            image_mean (`float` or `list[float]`):
+                Mean to use for normalization. Can be a single value or a list of values, one for each channel.
+            image_std (`float` or `list[float]`):
+                Standard deviation to use for normalization. Can be a single value or a list of values, one for each
+                channel.
+
+        Returns:
+            `np.ndarray`: The normalized image.
+        """
+        image = image.astype(np.float32) / 255.0
+        return normalize(image=image, mean=image_mean, std=image_std)
+
+    def preprocess(
+        self,
+        image: ImageInput,
+        do_resize: bool = True,
+        size: dict[str, int] | None = None,
+        do_normalize: bool = True,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_pad: bool = True,
+        return_tensors: str | TensorType | None = None,
+        data_format: ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
+    ):
+        """
+        Preprocess an image or batch of images for the SLANeXt model.
+
+        Args:
+            image (`ImageInput`):
+                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255.
+            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
+                Whether to resize the image.
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
+                Size of the image after resizing. The image is resized such that the long edge matches
+                `max(size["height"], size["width"])` while preserving the aspect ratio.
+            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
+                Whether to normalize the image.
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
+                Image mean to use for normalization.
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
+                Image standard deviation to use for normalization.
+            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
+                Whether to pad the image to a square after resizing.
+            return_tensors (`str` or `TensorType`, *optional*):
+                The type of tensors to return. Can be one of:
+                    - `None`: Return a list of `np.ndarray`.
+                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
+                The channel dimension format for the output image. Can be one of:
+                    - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                    - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
+              width).
+        """
+        do_resize = do_resize if do_resize is not None else self.do_resize
+        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        image_mean = image_mean if image_mean is not None else self.image_mean
+        image_std = image_std if image_std is not None else self.image_std
+        do_pad = do_pad if do_pad is not None else self.do_pad
+
+        size = size if size is not None else self.size
+        size = get_size_dict(size)
+
+        image = make_flat_list_of_images(image)
+        if not valid_images(image):
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
+        image = to_numpy_array(image[0])
+
+        if do_resize:
+            image = self.resize(image=image, size=size)
+
+        if do_normalize:
+            image = self.normalize(image=image, image_mean=image_mean, image_std=image_std)
+
+        if do_pad:
+            image = self.pad(image=image, size=size)
+
+        image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+        image = np.expand_dims(image, axis=0)
+
+        return BatchFeature(data={"pixel_values": image}, tensor_type=return_tensors)
+
+    def init_decoder(self):
+        """
+        Initialize the decoder vocabulary for table structure recognition.
+
+        Builds a character dictionary mapping HTML table structure tokens (e.g., `<thead>`, `<tr>`, `<td>`, colspan/
+        rowspan attributes) to integer indices. The dictionary includes special `"sos"` (start-of-sequence) and
+        `"eos"` (end-of-sequence) tokens. Merged `<td></td>` tokens are used in place of standalone `<td>` tokens
+        when applicable.
+        """
         dict_character = [
             "<thead>",
             "</thead>",
@@ -177,31 +367,59 @@ class SLANeXtImageProcessor(BaseImageProcessor):
         dict_character += [f' colspan="{i + 2}"' for i in range(19)]
         dict_character += [f' rowspan="{i + 2}"' for i in range(19)]
 
-        if merge_no_span_structure:
-            if "<td></td>" not in dict_character:
-                dict_character.append("<td></td>")
-            if "<td>" in dict_character:
-                dict_character.remove("<td>")
+        if "<td></td>" not in dict_character:
+            dict_character.append("<td></td>")
+        if "<td>" in dict_character:
+            dict_character.remove("<td>")
 
         dict_character = ["sos"] + dict_character + ["eos"]
         self.dict = {char: i for i, char in enumerate(dict_character)}
         self.character = dict_character
         self.td_token = ["<td>", "<td", "<td></td>"]
 
-    def get_beg_end_flag_idx(self, beg_or_end):
+    def get_begin_end_flag_idx(self, beg_or_end):
+        """
+        Get the index of the begin-of-sequence (`"sos"`) or end-of-sequence (`"eos"`) token in the decoder
+        vocabulary.
+
+        Args:
+            beg_or_end (`str`):
+                Either `"beg"` for the start-of-sequence token or `"end"` for the end-of-sequence token.
+
+        Returns:
+            `np.ndarray`: The index of the requested special token in the character dictionary.
+        """
         if beg_or_end == "beg":
             idx = np.array(self.dict["sos"])
         elif beg_or_end == "end":
             idx = np.array(self.dict["eos"])
         else:
-            assert False, "unsupported type %s in get_beg_end_flag_idx" % beg_or_end
+            assert False, "unsupported type %s in get_begin_end_flag_idx" % beg_or_end
         return idx
 
     def post_process_table_recognition(self, outputs):
+        """
+        Post-process the raw model outputs to decode the predicted table structure into an HTML token sequence.
+
+        Converts the model's predicted probability distributions over the structure vocabulary into a sequence of
+        HTML tokens representing the table structure. The decoded tokens are wrapped with `<html>`, `<body>`, and
+        `<table>` tags to form a complete HTML table structure.
+
+        Args:
+            outputs ([`BaseModelOutputWithNoAttention`]):
+                Raw outputs from the SLANeXt model. The `last_hidden_state` field contains the predicted probability
+                distributions over the structure vocabulary at each decoding step, with shape
+                `(batch_size, max_text_length, num_classes)`.
+
+        Returns:
+            `dict`: A dictionary containing:
+                - **structure** (`list[str]`): The predicted HTML table structure as a list of tokens, wrapped with
+                  `<html>`, `<body>`, and `<table>` tags.
+                - **structure_score** (`float`): The mean confidence score across all predicted tokens.
+        """
         self.pred = outputs.last_hidden_state.detach().cpu()
-        structure_probs = np.array([list(self.pred[0])])
-        """convert text-label into text-index."""
-        ignored_tokens = [self.get_beg_end_flag_idx("beg"), self.get_beg_end_flag_idx("end")]
+        structure_probs = self.pred[0:1].numpy()
+        ignored_tokens = [self.get_begin_end_flag_idx("beg"), self.get_begin_end_flag_idx("end")]
         end_idx = self.dict["eos"]
 
         structure_idx = structure_probs.argmax(axis=2)
@@ -224,12 +442,8 @@ class SLANeXtImageProcessor(BaseImageProcessor):
             structure_str_list.append(structure_list)
             structure_score = np.mean(score_list)
 
-        structure_str_list = [
-            ["<html>", "<body>", "<table>"] + structure + ["</table>", "</body>", "</html>"]
-            for structure in structure_str_list
-        ]
-
-        return [{"structure": structure, "structure_score": structure_score} for structure in structure_str_list][0]
+        structure = ["<html>", "<body>", "<table>"] + structure_str_list[0] + ["</table>", "</body>", "</html>"]
+        return {"structure": structure, "structure_score": structure_score}
 
 
 __all__ = ["SLANeXtImageProcessor"]

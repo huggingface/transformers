@@ -19,11 +19,10 @@
 # limitations under the License.
 
 
-import collections.abc
+import collections
 import math
 from dataclasses import dataclass
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -31,32 +30,13 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithNoAttention
+from ...modeling_outputs import BaseModelOutputWithNoAttention, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_slanext import SLANeXtConfig, SLANeXtVisionConfig
-
-
-class SLANeXtMlp(nn.Module):
-    def __init__(self, config, in_features, hidden_features=None, out_features=None, drop=0.0):
-        super().__init__()
-        out_features = out_features or in_features
-        hidden_features = hidden_features or in_features
-        self.fc1 = nn.Linear(in_features, hidden_features)
-        self.activation = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(hidden_features, out_features)
-        self.drop = nn.Dropout(drop)
-
-    def forward(self, hidden_state):
-        hidden_state = self.fc1(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        hidden_state = self.drop(hidden_state)
-        hidden_state = self.fc2(hidden_state)
-        hidden_state = self.drop(hidden_state)
-        return hidden_state
 
 
 class SLANeXtVisionAttention(nn.Module):
@@ -547,34 +527,6 @@ class SLANeXtAttentionGRUCell(nn.Module):
         return (cur_hidden, cur_hidden), alpha
 
 
-class SLANeXtHWAttention(nn.Module):
-    def __init__(
-        self,
-        head_dim=32,
-        qk_scale=None,
-        attn_drop=0.0,
-    ):
-        super().__init__()
-
-        self.head_dim = head_dim
-        self.scale = qk_scale or self.head_dim**-0.5
-        self.attn_drop = nn.Dropout(attn_drop)
-
-    def forward(self, hidden_states):
-        batch_size, seq_len, total_channels = hidden_states.shape
-        channels_per_head = total_channels // 3
-        qkv = hidden_states.reshape(batch_size, seq_len, 3, channels_per_head // self.head_dim, self.head_dim).permute(
-            2, 0, 3, 1, 4
-        )
-        query, key, value = qkv.unbind(0)
-        attn = torch.matmul(query, key.transpose(2, 3)) * self.scale
-        attn = F.softmax(attn, -1)
-        attn = self.attn_drop(attn)
-        hidden_states = torch.matmul(attn, value)
-        hidden_states = hidden_states.permute(0, 2, 1, 3).reshape(batch_size, seq_len, channels_per_head)
-        return hidden_states
-
-
 class SLANeXtSLAHead(nn.Module):
     def __init__(
         self,
@@ -606,8 +558,6 @@ class SLANeXtSLAHead(nn.Module):
             nn.Linear(self.hidden_size, self.hidden_size),
             nn.Linear(hidden_size, out_channels),
         )
-
-        dpr = np.linspace(0, 0.1, 2)
 
         self.loc_generator = nn.Sequential(
             nn.Linear(self.hidden_size, self.hidden_size),
