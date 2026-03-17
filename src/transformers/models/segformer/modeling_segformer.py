@@ -324,7 +324,7 @@ class SegformerEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        drop_path_decays = drop_path_schedule(config, num_layers=sum(config.depths))
+        drop_path_decays = drop_path_schedule(config.drop_path_rate, sum(config.depths))
         self.stages = nn.ModuleList(
             [SegformerStage(config, stage_idx, drop_path_decays) for stage_idx in range(config.num_encoder_blocks)]
         )

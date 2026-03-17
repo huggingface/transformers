@@ -693,7 +693,7 @@ class SwinEncoder(SwinPreTrainedModel):
         super().__init__(config)
         self.num_layers = len(config.depths)
         self.config = config
-        dpr = drop_path_schedule(config, num_layers=sum(config.depths))
+        dpr = drop_path_schedule(config.drop_path_rate, sum(config.depths))
         self.layers = nn.ModuleList(
             [
                 SwinStage(

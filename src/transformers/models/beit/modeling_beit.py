@@ -435,7 +435,10 @@ class BeitEncoder(nn.Module):
         if self.has_relative_position_bias:
             self.relative_position_bias = BeitRelativePositionBias(config)
 
-        self.layer = nn.ModuleList([BeitLayer(config, drop_path_rate=r) for r in drop_path_schedule(config)])
+        self.layer = nn.ModuleList([
+            BeitLayer(config, drop_path_rate=r)
+            for r in drop_path_schedule(config.drop_path_rate, config.num_hidden_layers)
+        ])
         self.gradient_checkpointing = False
 
     def forward(

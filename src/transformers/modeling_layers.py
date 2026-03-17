@@ -118,41 +118,35 @@ class DropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-def drop_path_schedule(config, num_layers: int | None = None) -> list[float]:
-    """Return a linearly-spaced list of stochastic depth rates (0 → ``config.drop_path_rate``).
+def drop_path_schedule(drop_path_rate: float, num_layers: int) -> list[float]:
+    """Return a linearly-spaced list of stochastic depth rates (0 → ``drop_path_rate``).
 
     Follows the stochastic-depth decay rule from `Deep Networks with Stochastic Depth
     <https://arxiv.org/abs/1603.09382>`_: rates increase linearly from 0 at the first
-    layer to ``config.drop_path_rate`` at the last.
+    layer to ``drop_path_rate`` at the last.
 
     Returns a plain Python list so it can be sliced, extended, or combined freely —
     useful for multi-stage architectures where each stage takes a contiguous slice.
 
     Args:
-        config: model config; ``config.drop_path_rate`` is used as the maximum rate.
-            When ``num_layers`` is ``None``, ``config.num_hidden_layers`` is used as
-            the schedule length.
-        num_layers: total number of layers to schedule over.  Pass this for
-            hierarchical encoders whose total depth is not stored in
-            ``config.num_hidden_layers`` (e.g. ``sum(config.depths)``).
+        drop_path_rate: maximum stochastic depth rate at the last layer.
+        num_layers: total number of layers to schedule over.
 
     Example::
 
         # Single-stage encoder:
         self.layer = nn.ModuleList([
-            MyLayer(config, drop_path_rate=r) for r in drop_path_schedule(config)
+            MyLayer(config, drop_path_rate=r)
+            for r in drop_path_schedule(config.drop_path_rate, config.num_hidden_layers)
         ])
 
         # Multi-stage encoder (e.g. SegFormer/Swin):
-        schedule = drop_path_schedule(config, num_layers=sum(config.depths))
+        schedule = drop_path_schedule(config.drop_path_rate, sum(config.depths))
         cur = 0
         for i, depth in enumerate(config.depths):
             stage = [MyLayer(config, drop_path_rate=r) for r in schedule[cur : cur + depth]]
             cur += depth
     """
-    if num_layers is None:
-        num_layers = config.num_hidden_layers
-    drop_path_rate = getattr(config, "drop_path_rate", 0.0)
     # Pure-Python linspace avoids creating a tensor, which would fail on meta devices.
     return [drop_path_rate * i / max(num_layers - 1, 1) for i in range(num_layers)]
 
