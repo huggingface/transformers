@@ -19,6 +19,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms.v2.functional as tvF
+from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config, load_backbone
 from ...configuration_utils import PreTrainedConfig
@@ -51,33 +52,33 @@ from ..resnet.modeling_resnet import ResNetConvLayer
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(
-    checkpoint="PaddlePaddle/PP-OCRv5_server_rec_safetensors",
-    custom_args=r"""
+@auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5_server_rec_safetensors")
+@strict(accept_kwargs=True)
+class PPOCRV5ServerRecConfig(PreTrainedConfig):
+    r"""
     head_out_channels (`int`, *optional*, defaults to 18385):
         The number of output channels from the PPOCRV5ServerRecHead, responsible for final classification.
-    """,
-)
-class PPOCRV5ServerRecConfig(PreTrainedConfig):
+    """
+
     model_type = "pp_ocrv5_server_rec"
     sub_configs = {"backbone_config": AutoConfig}
 
-    def __init__(
-        self,
-        backbone_config=None,
-        hidden_act: str = "silu",
-        hidden_size: int = 120,
-        mlp_ratio: float = 2.0,
-        depth: int = 2,
-        head_out_channels: int = 18385,
-        conv_kernel_size: list = [1, 3],
-        qkv_bias: bool = True,
-        num_attention_heads: int = 8,
-        attention_dropout: float = 0.0,
-        **kwargs,
-    ):
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+    hidden_act: str = "silu"
+    backbone_config: dict | PreTrainedConfig | None = None
+    hidden_size: int = 120
+    mlp_ratio: float = 2.0
+    depth: int = 2
+    head_out_channels: int = 18385
+    conv_kernel_size: list | None = None
+    qkv_bias: bool = True
+    num_attention_heads: int = 8
+    attention_dropout: float = 0.0
+
+    def __post_init__(self, **kwargs):
+        if self.conv_kernel_size is None:
+            self.conv_kernel_size = [1, 3]
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_config_type="hgnet_v2",
             default_config_kwargs={
                 "arch": "L",
@@ -92,19 +93,7 @@ class PPOCRV5ServerRecConfig(PreTrainedConfig):
             },
             **kwargs,
         )
-        self.backbone_config = backbone_config
-
-        self.hidden_act = hidden_act
-        self.hidden_size = hidden_size
-        self.mlp_ratio = mlp_ratio
-        self.depth = depth
-        self.head_out_channels = head_out_channels
-        self.conv_kernel_size = conv_kernel_size
-        self.qkv_bias = qkv_bias
-        self.num_attention_heads = num_attention_heads
-        self.attention_dropout = attention_dropout
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 class PPOCRV5ServerRecImageProcessorKwargs(ImagesKwargs, total=False):
