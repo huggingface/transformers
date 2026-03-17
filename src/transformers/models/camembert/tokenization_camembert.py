@@ -120,7 +120,11 @@ class CamembertTokenizer(TokenizersBackend):
                 id_to_token = {i: token for token, i in vocab.items()}
                 sorted_ids = sorted(id_to_token.keys())
                 self._vocab = [(id_to_token[i], 0.0) for i in sorted_ids]
-                unk_id = vocab.get(str(unk_token)); unk_index = sorted_ids.index(unk_id) if unk_id is not None and unk_id in sorted_ids else 0
+                unk_id = vocab.get(str(unk_token))
+                if unk_id is not None and unk_id in sorted_ids:
+                    unk_index = sorted_ids.index(unk_id)
+                else:
+                    unk_index = 0
             else:
                 self._vocab = vocab
                 unk_index = next((i for i, (tok, _) in enumerate(self._vocab) if tok == str(unk_token)), 0)
