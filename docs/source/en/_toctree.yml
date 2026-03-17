@@ -1232,6 +1232,8 @@
         title: MGP-STR
       - local: model_doc/mistral3
         title: Mistral3
+      - local: model_doc/mistral4
+        title: Mistral4
       - local: model_doc/mllama
         title: mllama
       - local: model_doc/mm-grounding-dino
