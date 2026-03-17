@@ -641,8 +641,6 @@ class Florence2PreTrainedModel(PreTrainedModel):
     """
 )
 class Florence2Model(Florence2PreTrainedModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Florence2Config):
         super().__init__(config)
         self.vision_tower = Florence2VisionBackbone(config=config.vision_config)
@@ -791,7 +789,6 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     """
 )
 class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {
         "lm_head.weight": "model.language_model.shared.weight",
     }

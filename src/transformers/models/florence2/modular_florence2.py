@@ -1426,8 +1426,6 @@ class Florence2PreTrainedModel(LlavaPreTrainedModel):
     """
 )
 class Florence2Model(LlavaModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Florence2Config):
         super().__init__(config)
         self.vision_tower = Florence2VisionBackbone(config=config.vision_config)
@@ -1526,7 +1524,6 @@ class Florence2Model(LlavaModel):
     """
 )
 class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {
         "lm_head.weight": "model.language_model.shared.weight",
     }

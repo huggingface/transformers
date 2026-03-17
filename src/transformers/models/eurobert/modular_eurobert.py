@@ -17,6 +17,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ...configuration_utils import strict
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, MaskedLMOutput, SequenceClassifierOutput, TokenClassifierOutput
 from ...modeling_rope_utils import RopeParameters
@@ -28,6 +29,7 @@ from ..llama.modeling_llama import LlamaAttention, LlamaModel, LlamaPreTrainedMo
 
 
 @auto_docstring(checkpoint="EuroBERT/EuroBERT-210m")
+@strict(accept_kwargs=True)
 class EuroBertConfig(LlamaConfig):
     r"""
     mask_token_id (`int`, *optional*, defaults to 128002):
@@ -72,7 +74,6 @@ class EuroBertConfig(LlamaConfig):
     mlp_bias: bool = False
     head_dim: int | None = None
     classifier_pooling: str = "late"
-    is_causal: bool = False
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
