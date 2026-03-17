@@ -31,7 +31,7 @@ from transformers.utils.import_utils import (
     is_uvicorn_available,
 )
 
-from .serving.protocol import set_torch_seed
+from .serving.utils import set_torch_seed
 
 
 serve_dependencies_available = (
@@ -44,10 +44,8 @@ logger = logging.get_logger(__name__)
 class Serve:
     def __init__(
         self,
-        # TODO: maybe rename it to model ? 
-        force_model: Annotated[
-            str | None, typer.Argument(help="Model to preload and use for all requests.")
-        ] = None,
+        # TODO: maybe rename it to model ?
+        force_model: Annotated[str | None, typer.Argument(help="Model to preload and use for all requests.")] = None,
         # Model options
         device: Annotated[str, typer.Option(help="Device for inference; defaults to 'auto'.")] = "auto",
         dtype: Annotated[str | None, typer.Option(help="Override model dtype. 'auto' derives from weights.")] = "auto",
@@ -58,6 +56,10 @@ class Serve:
             str | None, typer.Option(help="Quantization method: 'bnb-4bit' or 'bnb-8bit'.")
         ] = None,
         trust_remote_code: Annotated[bool, typer.Option(help="Trust remote code when loading.")] = False,
+        # TODO: auto-detect processor from GGUF base_model metadata so this flag isn't needed
+        processor: Annotated[
+            str | None, typer.Option(help="Processor/tokenizer model ID. Needed for GGUF models.")
+        ] = None,
         model_timeout: Annotated[
             int, typer.Option(help="Seconds before idle model is unloaded. Ignored when model is set.")
         ] = 300,
@@ -72,9 +74,7 @@ class Serve:
         ] = False,
     ) -> None:
         if not serve_dependencies_available:
-            raise ImportError(
-                "Missing dependencies for serving. Install with `pip install transformers[serving]`"
-            )
+            raise ImportError("Missing dependencies for serving. Install with `pip install transformers[serving]`")
 
         import uvicorn
 
@@ -102,6 +102,7 @@ class Serve:
             quantization=quantization,
             model_timeout=model_timeout,
             force_model=force_model,
+            processor_id=processor,
         )
 
         chat_handler = ChatCompletionHandler(
