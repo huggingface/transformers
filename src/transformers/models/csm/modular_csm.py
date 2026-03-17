@@ -250,16 +250,10 @@ class CsmCodebooksHead(nn.Module):
         self.num_codebooks = num_codebooks
         self.weight = nn.Parameter(torch.empty(self.num_codebooks - 1, hidden_size, vocab_size))
 
-    def forward(self, hidden_states, past_key_values=None):
-        if past_key_values is None:
-            seq_length = hidden_states.shape[1]
-            codebook_weight = self.weight[torch.arange(seq_length)]
-        else:
-            # -1 it's for the concatenated backbone last hidden state
-            codebook_idxs = (
-                torch.arange(hidden_states.shape[1] - 1, device=self.weight.device) + past_key_values.get_seq_length()
-            )
-            codebook_weight = self.weight[codebook_idxs]
+    def forward(self, hidden_states, codebook_indices=None):
+        # -1 because of the concatenated backbone last hidden state
+        codebook_indices = codebook_indices - 1
+        codebook_weight = self.weight[codebook_indices]
 
         hidden_states = [
             nn.functional.linear(hidden_states[:, codebook_idx, :], codebook_weight[codebook_idx].T)
@@ -334,6 +328,11 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        seq_len = inputs_embeds.shape[1] if inputs_embeds is not None else input_ids.shape[1]
+        device = inputs_embeds.device if inputs_embeds is not None else input_ids.device
+        codebook_indices = torch.arange(seq_len, device=device) + past_seen_tokens
+
         outputs = self.model(
             input_ids=input_ids,
             backbone_last_hidden_state=backbone_last_hidden_state,
@@ -356,7 +355,7 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
         else:
             slice_indices = logits_to_keep
 
-        logits = self.codebooks_head(hidden_states[:, slice_indices, :], past_key_values)
+        logits = self.codebooks_head(hidden_states[:, slice_indices, :], codebook_indices[slice_indices])
         logits = logits.contiguous()
 
         loss = None
