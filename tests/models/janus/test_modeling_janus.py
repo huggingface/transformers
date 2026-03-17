@@ -200,6 +200,20 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pip
     )
     _is_composite = True
 
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        """
+        Override to ensure vision_config.projection_dim stays in sync with text_config.hidden_size.
+        The aligner projects vision features to text embedding dimension, so they must match.
+        """
+        from tests.test_modeling_common import ModelTesterMixin
+
+        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
+        # Sync projection_dim with text hidden_size since aligner output must match text embeddings
+        if hasattr(config, "vision_config") and hasattr(config, "text_config"):
+            config.vision_config.projection_dim = config.text_config.hidden_size
+        return config
+
     def setUp(self):
         self.model_tester = JanusVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=JanusConfig, has_text_modality=False)
