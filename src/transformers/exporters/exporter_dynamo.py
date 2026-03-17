@@ -69,22 +69,20 @@ class DynamoExporter(HfExporter):
         super().validate_environment(*args, **kwargs)
 
     def export(self, model: "PreTrainedModel", sample_inputs: dict[str, Any]) -> "ExportedProgram":
-        """Export a model using `torch.export.export`."""
-        inputs = copy.deepcopy(sample_inputs)
-        model, inputs = prepare_for_export(model, inputs)
+        model, sample_inputs = prepare_for_export(model, sample_inputs)
 
         dynamic_shapes = self.export_config.dynamic_shapes
         if self.export_config.dynamic and dynamic_shapes is None:
-            dynamic_shapes = get_auto_dynamic_shapes(inputs)
+            dynamic_shapes = get_auto_dynamic_shapes(sample_inputs)
 
         register_cache_pytrees_for_model(model)
-        with patch_model(model, inputs):
+        with patch_model(model, sample_inputs):
             exported_program: ExportedProgram = torch.export.export(
                 model,
                 args=(),
-                kwargs=inputs,
                 dynamic_shapes=dynamic_shapes,
                 strict=self.export_config.strict,
+                kwargs=copy.deepcopy(sample_inputs),
                 prefer_deferred_runtime_asserts_over_guards=self.export_config.prefer_deferred_runtime_asserts_over_guards,
             )
 
@@ -312,6 +310,7 @@ def get_auto_dynamic_shapes(inputs: Any) -> Any:
       matching the ``TreeSpec(list, …)`` that torch.export produces for these types.
     - Lists / tuples → same container type, recursed element-wise.
     - Plain dicts → recursed dict of specs.
+    - Everything else → None.
     """
     if isinstance(inputs, torch.Tensor):
         return _auto_dynamic_shape(inputs)
@@ -319,12 +318,9 @@ def get_auto_dynamic_shapes(inputs: Any) -> Any:
         return None
     if hasattr(inputs, "__dict__"):
         leaves, _ = _pytree_flatten(inputs)
-        return [_auto_dynamic_shape(t) for t in leaves]
-    if isinstance(inputs, (list, tuple)):
+        return get_auto_dynamic_shapes(leaves)
+    if type(inputs) in (list, tuple, set, frozenset):
         return type(inputs)(get_auto_dynamic_shapes(v) for v in inputs)
-    if isinstance(inputs, dict):
+    if type(inputs) is dict:
         return {k: get_auto_dynamic_shapes(v) for k, v in inputs.items()}
-    raise ValueError(
-        f"Unsupported input type '{type(inputs)}'. "
-        "Only torch.Tensor, Cache, ModelOutput, int, float, bool, str, dict, list, and tuple are supported."
-    )
+    return None

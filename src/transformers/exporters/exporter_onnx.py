@@ -41,7 +41,7 @@ from ..utils import logging
 from ..utils.export_config import OnnxConfig
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
 from .exporter_dynamo import DynamoExporter
-from .utils import get_leaf_tensors, prepare_for_export
+from .utils import _LEAF_SKIP_TYPES, get_leaf_tensors
 
 
 if is_torch_available():
@@ -77,21 +77,17 @@ class OnnxExporter(DynamoExporter):
     required_packages = ["torch", "onnx", "onnxscript"]
 
     def export(self, model: "PreTrainedModel", sample_inputs: dict[str, Any]) -> "ONNXProgram":
-        """Export a model to ONNX using Dynamo."""
-        inputs = copy.deepcopy(sample_inputs)
-        model, inputs = prepare_for_export(model, inputs)
-
         with patch_model(model), patch_torch_ops():
-            inputs_names, outputs_names = get_inputs_outputs_names(model, inputs)
-            exported_program: ExportedProgram = super().export(model, inputs)
+            exported_program: ExportedProgram = super().export(model, sample_inputs)
+            inputs_names, outputs_names = get_inputs_outputs_names(model, sample_inputs)
             patch_fx_graph(exported_program.graph_module)
             onnx_program: ONNXProgram = torch.onnx.export(
                 exported_program,
                 args=(),
-                kwargs=inputs,
                 f=self.export_config.f,
                 input_names=inputs_names,
                 output_names=outputs_names,
+                kwargs=copy.deepcopy(sample_inputs),
                 custom_translation_table=_ONNX_TRANSLATION_TABLE,
                 opset_version=self.export_config.opset_version,
                 external_data=self.export_config.external_data,
@@ -116,7 +112,7 @@ def patch_model(model):
     @functools.wraps(original_forward)
     def patched_forward(*args, **kwargs):
         outputs = original_forward(*args, **kwargs)
-        return get_leaf_tensors(_dedup_output_tensors(outputs), default="output")
+        return get_leaf_tensors(duplicate_leaf_tensors(outputs), default="output")
 
     try:
         model.forward = patched_forward
@@ -125,7 +121,7 @@ def patch_model(model):
         model.forward = original_forward
 
 
-def _dedup_output_tensors(obj: Any, seen: dict | None = None) -> Any:
+def duplicate_leaf_tensors(obj: Any, seen: dict | None = None) -> Any:
     """Clone tensors that appear more than once in an output structure.
 
     When a model returns the same tensor under two output names (e.g. ``last_hidden_state``
@@ -135,7 +131,7 @@ def _dedup_output_tensors(obj: Any, seen: dict | None = None) -> Any:
     """
     if seen is None:
         seen = {}
-    if isinstance(obj, type):  # class objects: not tensors, can't be reconstructed generically
+    if isinstance(obj, _LEAF_SKIP_TYPES):
         return obj
     if isinstance(obj, torch.Tensor):
         if id(obj) in seen:
@@ -143,9 +139,9 @@ def _dedup_output_tensors(obj: Any, seen: dict | None = None) -> Any:
         seen[id(obj)] = True
         return obj
     if isinstance(obj, dict):
-        return type(obj)({k: _dedup_output_tensors(v, seen) for k, v in obj.items()})
+        return type(obj)({k: duplicate_leaf_tensors(v, seen) for k, v in obj.items()})
     if isinstance(obj, (list, tuple)):
-        items = [_dedup_output_tensors(v, seen) for v in obj]
+        items = [duplicate_leaf_tensors(v, seen) for v in obj]
         try:
             return type(obj)(items)
         except TypeError:
@@ -153,7 +149,7 @@ def _dedup_output_tensors(obj: Any, seen: dict | None = None) -> Any:
     if hasattr(obj, "__dict__"):
         cls = type(obj)
         instance = cls.__new__(cls)
-        instance.__dict__.update({k: _dedup_output_tensors(v, seen) for k, v in vars(obj).items()})
+        instance.__dict__.update({k: duplicate_leaf_tensors(v, seen) for k, v in vars(obj).items()})
         return instance
     return obj
 

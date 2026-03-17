@@ -13,7 +13,8 @@
 # limitations under the License.
 """PyTorch Informer model."""
 
-import numpy as np
+import math
+
 import torch
 from torch import nn
 
@@ -190,10 +191,10 @@ class InformerProbSparseAttention(nn.Module):
         value_states = value_states.reshape(*proj_shape)
 
         key_states_time_length = key_states.size(1)  # L_K
-        log_key_states_time_length = np.ceil(np.log1p(key_states_time_length)).astype("int").item()  # log_L_K
+        log_key_states_time_length = math.ceil(math.log1p(int(key_states_time_length)))  # log_L_K
 
         query_states_time_length = query_states.size(1)  # L_Q
-        log_query_states_time_length = np.ceil(np.log1p(query_states_time_length)).astype("int").item()  # log_L_Q
+        log_query_states_time_length = math.ceil(math.log1p(int(query_states_time_length)))  # log_L_Q
 
         u_part = min(self.factor * query_states_time_length * log_key_states_time_length, key_states_time_length)
         u = min(self.factor * log_query_states_time_length, query_states_time_length)
