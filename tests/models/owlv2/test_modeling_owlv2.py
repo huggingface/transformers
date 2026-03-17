@@ -149,7 +149,7 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Owlv2VisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Owlv2VisionConfig, has_text_modality=False, hidden_size=32
+            self, config_class=Owlv2VisionConfig, has_text_modality=False, hidden_size=37
         )
 
     def test_config(self):
@@ -304,7 +304,7 @@ class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Owlv2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Owlv2TextConfig, hidden_size=32)
+        self.config_tester = ConfigTester(self, config_class=Owlv2TextConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -543,7 +543,7 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_attention_outputs = False
 
-    additional_model_inputs = ["input_ids", "attention_mask"]
+    additional_model_inputs = ["pixel_values", "attention_mask"]
 
     def setUp(self):
         self.model_tester = Owlv2ForObjectDetectionTester(self)

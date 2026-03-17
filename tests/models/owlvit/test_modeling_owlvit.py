@@ -536,7 +536,7 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_attention_outputs = False
 
-    additional_model_inputs = ["input_ids", "attention_mask"]
+    additional_model_inputs = ["pixel_values", "attention_mask"]
 
     def setUp(self):
         self.model_tester = OwlViTForObjectDetectionTester(self)
