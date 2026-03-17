@@ -436,9 +436,9 @@ class OwlViTAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        queries = self.q_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
-        keys = self.k_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
-        values = self.v_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -446,9 +446,9 @@ class OwlViTAttention(nn.Module):
 
         attn_output, attn_weights = attention_interface(
             self,
-            queries,
-            keys,
-            values,
+            query_states,
+            key_states,
+            value_states,
             attention_mask,
             scaling=self.scale,
             dropout=0.0 if not self.training else self.dropout,
@@ -739,13 +739,11 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
 class OwlViTVisionTransformer(OwlViTPreTrainedModel):
     def __init__(self, config: OwlViTVisionConfig):
         super().__init__(config)
-        self.config = config
-        embed_dim = config.hidden_size
 
         self.embeddings = OwlViTVisionEmbeddings(config)
-        self.pre_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.pre_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.encoder = OwlViTEncoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1206,7 +1204,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             num_patches_width = self.num_patches_width
 
         # Get image embeddings
-        last_hidden_state = outputs.vision_model_output.last_hidden_state
+        last_hidden_state = outputs.vision_model_output[0]
         image_embeds = self.owlvit.vision_model.post_layernorm(last_hidden_state)
 
         # Resize class token
@@ -1224,7 +1222,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             image_embeds.shape[-1],
         )
         image_embeds = image_embeds.reshape(new_size)
-        text_embeds = outputs.text_embeds
+        text_embeds = outputs[-4]
 
         return (text_embeds, image_embeds, outputs)
 
@@ -1248,7 +1246,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             num_patches_width = self.num_patches_width
 
         # Apply post_layernorm to last_hidden_state, return non-projected output
-        last_hidden_state = vision_outputs.last_hidden_state
+        last_hidden_state = vision_outputs[0]
         image_embeds = self.owlvit.vision_model.post_layernorm(last_hidden_state)
 
         # Resize class token
@@ -1402,8 +1400,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     @auto_docstring
     def forward(
         self,
+        input_ids: torch.Tensor,
         pixel_values: torch.FloatTensor,
-        input_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
