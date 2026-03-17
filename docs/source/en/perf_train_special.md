@@ -15,52 +15,40 @@ rendered properly in your Markdown viewer.
 
 # Apple Silicon
 
-Apple Silicon (M-series) chips have a unified memory architecture where the CPU and GPU share the same memory pool. Shared memory eliminates the data transfer overhead of GPUs, making it practical to train large models locally. Transformers uses the [Metal Performance Shaders (MPS)](https://pytorch.org/docs/stable/notes/mps.html) backend to use this architecture.
+Apple Silicon (M-series) chips have a unified memory architecture where the CPU and GPU share the same memory pool. Shared memory eliminates the data transfer overhead of GPUs, making it practical to train large models locally. Transformers uses the [Metal Performance Shaders (MPS)](https://pytorch.org/docs/stable/notes/mps.html) backend to accelerate training on this hardware.
 
 This requires macOS 12.3 or later and PyTorch built with MPS support.
 
 > [!WARNING]
 > MPS doesn't support all PyTorch operations yet. Set `PYTORCH_ENABLE_MPS_FALLBACK=1` to fall back to CPU kernels for unsupported operations. Open an issue in the [PyTorch](https://github.com/pytorch/pytorch/issues) repository for any other unexpected behavior.
 
-## Device selection
+## Model loading and device selection
 
-[`Trainer`] detects MPS automatically with [torch.backends.mps.is_available](https://docs.pytorch.org/docs/main/notes/mps.html) and sets the device to `mps` without any configuration changes.
+MPS requires the entire model to fit in unified memory, so `device_map="auto"` can't offload layers to the CPU like CUDA. In this case, try using a smaller model.
+
+[`Trainer`] detects MPS automatically with `torch.backends.mps.is_available` and sets the device to `mps` without any configuration changes.
 
 ```python
+from transformers import TrainingArguments
+
 training_args = TrainingArguments(
     output_dir="./outputs",
-    # No extra flags needed — MPS is used automatically on Apple Silicon
+    # No extra flags needed
 )
 ```
 
 ## Mixed precision
 
-MPS supports both bf16 and fp16 mixed precision. bf16 requires macOS 14.0 or later. It is not supported on earlier versions.
+MPS supports both bf16 and fp16 mixed precision (bf16 requires macOS 14.0 or later).
 
 ```python
+from transformers import TrainingArguments
+
 training_args = TrainingArguments(
     output_dir="./outputs",
     bf16=True,  # requires macOS 14.0+
 )
 ```
-
-## Model loading and device mapping
-
-`device_map="auto"` treats MPS as a sole compute device without CPU offload. CUDA can spill layers to CPU RAM, but MPS requires the entire model to fit in unified memory.
-
-If your model doesn't fit in unified memory, `device_map="auto"` won't work with MPS. Try a smaller model or lower precision instead.
-
-## Metal quantization
-
-Transformers includes an MPS-specific quantizer that uses Apple's Metal kernels for accelerated quantized inference. The Metal quantizer doesn't support training (`is_trainable = False`), so it won't reduce memory during a training run. It is useful for running inference on a quantized checkpoint after training.
-
-To use it, install the `kernels` package:
-
-```bash
-pip install kernels
-```
-
-The Metal quantizer sets `device_map='mps'` automatically if you don't specify one. On-the-fly quantization with the Metal backend doesn't support CPU or disk offloading.
 
 ## Next steps
 
