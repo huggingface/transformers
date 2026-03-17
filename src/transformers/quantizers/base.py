@@ -127,6 +127,16 @@ class HfQuantizer(ABC):
         """adjust max_memory argument for infer_auto_device_map() if extra memory is needed for quantization"""
         return max_memory
 
+    def spawn_materialize(self, thread_pool, tensor, device=None, dtype=None):
+        """Override to customize tensor materialization (e.g. for GGUF dequantization).
+
+        The default implementation delegates to the standard ``spawn_materialize``
+        helper in ``core_model_loading``.
+        """
+        from ..core_model_loading import spawn_materialize as _default
+
+        return _default(thread_pool, tensor, device, dtype)
+
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         """
         Check whether a given param needs to be quantized.
