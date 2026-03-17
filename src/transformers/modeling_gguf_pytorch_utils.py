@@ -336,84 +336,76 @@ TENSOR_PROCESSORS = {
 
 # (substring_in_gguf_name, op_factory(config)) pairs per architecture.
 # The first matching pattern wins for a given tensor name.
+_ROPE_ATTN_OPS = [
+    (".attn_q.", ReversePermuteAttnQ()),
+    (".attn_k.", ReversePermuteAttnK()),
+]
+
+_NORM_SUBTRACT_ONE_OPS = [
+    ("norm.weight", SubtractOne()),
+]
+
+_QWEN_MOE_SHEXP_OPS = [
+    ("ffn_gate_inp_shexp", Unsqueeze(0)),
+]
+
 _GGUF_ARCH_SINGLE_OPS: dict[str, list[tuple[str, object]]] = {
-    "llama": [
-        (".attn_q.weight", lambda cfg: ReversePermuteAttnQ(cfg["num_attention_heads"])),
-        (".attn_k.weight", lambda cfg: ReversePermuteAttnK(cfg["num_attention_heads"], cfg["num_key_value_heads"])),
-    ],
-    "mistral": [
-        (".attn_q.weight", lambda cfg: ReversePermuteAttnQ(cfg["num_attention_heads"])),
-        (".attn_k.weight", lambda cfg: ReversePermuteAttnK(cfg["num_attention_heads"], cfg["num_key_value_heads"])),
-    ],
-    "phi3": [
-        (".attn_q.weight", lambda cfg: ReversePermuteAttnQ(cfg["num_attention_heads"])),
-        (".attn_k.weight", lambda cfg: ReversePermuteAttnK(cfg["num_attention_heads"], cfg["num_key_value_heads"])),
-    ],
-    "cohere": [
-        (".attn_q.weight", lambda cfg: ReversePermuteAttnQ(cfg["num_attention_heads"])),
-        (".attn_k.weight", lambda cfg: ReversePermuteAttnK(cfg["num_attention_heads"], cfg["num_key_value_heads"])),
-    ],
+    "llama":    _ROPE_ATTN_OPS,
+    "mistral":  _ROPE_ATTN_OPS,
+    "phi3":     _ROPE_ATTN_OPS,
+    "cohere":   _ROPE_ATTN_OPS,
     "bloom": [
-        (".attn_qkv.weight", lambda cfg: BloomReshapeQKVWeight(cfg["n_head"], cfg["hidden_size"])),
-        (".attn_qkv.bias", lambda cfg: BloomReshapeQKVBias(cfg["n_head"], cfg["hidden_size"])),
+        ("attn_qkv.weight", BloomReshapeQKVWeight()),
+        ("attn_qkv.bias",   BloomReshapeQKVBias()),
     ],
     "gpt2": [
-        (".attn_qkv.weight", lambda _: Transpose()),
-        (".ffn_down.weight", lambda _: Transpose()),
-        (".ffn_up.weight", lambda _: Transpose()),
-        (".attn_output.weight", lambda _: Transpose()),
+        ("attn_qkv.weight",    Transpose()),
+        ("ffn_down.weight",    Transpose()),
+        ("ffn_up.weight",      Transpose()),
+        ("attn_output.weight", Transpose()),
     ],
     "mamba": [
-        (".ssm_conv1d.weight", lambda _: Unsqueeze(1)),
-        (".ssm_a", lambda _: LogNegate()),
+        ("ssm_conv1d.weight", Unsqueeze(1)),
+        ("ssm_a",             LogNegate()),
     ],
-    "nemotron": [
-        (".norm.weight", lambda _: SubtractOne()),
-    ],
-    "gemma2": [
-        (".norm.weight", lambda _: SubtractOne()),
-    ],
-    "gemma3": [
-        (".norm.weight", lambda _: SubtractOne()),
-    ],
+    "nemotron":   _NORM_SUBTRACT_ONE_OPS,
+    "gemma2":     _NORM_SUBTRACT_ONE_OPS,
+    "gemma3_text": _NORM_SUBTRACT_ONE_OPS,
     "lfm2": [
-        (".shortconv.conv.weight", lambda _: Unsqueeze(1)),
+        ("shortconv.conv.weight", Unsqueeze(1)),
     ],
-    "qwen2moe": [
-        ("ffn_gate_inp_shexp", lambda _: Unsqueeze(0)),
-    ],
-    "qwen3moe": [
-        ("ffn_gate_inp_shexp", lambda _: Unsqueeze(0)),
-    ],
+    "qwen2_moe": _QWEN_MOE_SHEXP_OPS,
+    "qwen3_moe": _QWEN_MOE_SHEXP_OPS,
 }
 
-# Architectures that merge multiple GGUF tensors into one HF tensor via Concatenate.
+# Model types that merge multiple GGUF tensors into one HF tensor via Concatenate.
 _GGUF_ARCH_MERGE_OP: dict[str, object] = {
-    "qwen2moe": Concatenate(dim=1),
-    "qwen3moe": Concatenate(dim=1),
+    "qwen2_moe": Concatenate(dim=1),
+    "qwen3_moe": Concatenate(dim=1),
 }
 
 
 def build_gguf_deserializers(
     tensor_key_mapping: dict[str, str],
-    architecture: str,
-    config: dict,
+    model_type: str,
 ) -> list[WeightConverter]:
     """
     Build one WeightConverter per GGUF tensor (or per MoE tensor group).
     Each converter encodes: GGUF name → HF name, with
     operations = [GGUFDequantize(), *optional_arch_ops].
 
+    Config-dependent ops (e.g. ReversePermuteAttnQ) read the model config at
+    convert time via the ``config`` kwarg passed by ``convert_and_load_state_dict_in_model``.
+
     Args:
         tensor_key_mapping: {gguf_name: hf_name} from get_gguf_hf_weights_map
-        architecture: GGUF architecture string (e.g. "llama", "bloom", ...)
-        config: parsed HF config dict
+        model_type: HF model type string (e.g. "llama", "bloom", "qwen2_moe", ...)
 
     Returns:
         list of WeightConverter instances, one per distinct HF target tensor
     """
-    single_ops = _GGUF_ARCH_SINGLE_OPS.get(architecture, [])
-    merge_op = _GGUF_ARCH_MERGE_OP.get(architecture)
+    single_ops = _GGUF_ARCH_SINGLE_OPS.get(model_type, [])
+    merge_op = _GGUF_ARCH_MERGE_OP.get(model_type)
 
     # Group gguf_names by their hf target (for many-to-one converters like Qwen2MoE gate+up)
     hf_to_gguf: dict[str, list[str]] = {}
@@ -428,13 +420,9 @@ def build_gguf_deserializers(
 
         # Find the first matching extra op for this tensor name
         extra_ops = []
-        for pattern, op_factory in single_ops:
+        for pattern, op in single_ops:
             if pattern in representative:
-                try:
-                    extra_ops = [op_factory(config)]
-                except (KeyError, TypeError):
-                    # If config keys are missing, skip the op gracefully
-                    pass
+                extra_ops = [op]
                 break
 
         if len(gguf_names) > 1 and merge_op is not None:
@@ -717,7 +705,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
 
         # Build GgufDeserializer WeightConverters that encode GGUF name → HF name + dequant + arch ops
         parsed_parameters["weight_mapping"] = build_gguf_deserializers(
-            tensor_key_mapping, architecture, config
+            tensor_key_mapping, config.get("model_type", architecture)
         )
 
     if len(reader_keys) > 0:
