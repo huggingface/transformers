@@ -446,6 +446,11 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         hidden_states = self.linear_out(hidden_states)
         return hidden_states
 
+    def _setup_cache(self, batch, device, dtype):
+        # recurrent_states always computed in full precision
+        self.rg_lru.recurrent_states = torch.zeros((batch, self.lru_width), device=device, dtype=torch.float32)
+        self.conv1d_state = torch.zeros((batch, self.hidden_size, self.conv1d_width - 1), device=device, dtype=dtype)
+
 
 TEMPORAL_BLOCK_CLASSES = {"recurrent": RecurrentGemmaRecurrentBlock, "attention": RecurrentGemmaSdpaAttention}
 
@@ -565,6 +570,16 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
             init.zeros_(module.weight)
         elif isinstance(module, RecurrentGemmaModel):
             init.constant_(module.normalizer, module.config.hidden_size**0.5)
+        elif isinstance(module, RecurrentGemmaRotaryEmbedding):
+            buffer_value, _ = module.compute_default_rope_parameters(module.config)
+            init.copy_(module.inv_freq, buffer_value)
+            init.copy_(module.original_inv_freq, buffer_value)
+
+    def _setup_cache(self, config, batch, device, dtype):
+        layers = getattr(self, "model", self).layers
+        for layer in layers:
+            if hasattr(layer.temporal_block, "_setup_cache"):
+                layer.temporal_block._setup_cache(batch, device, dtype)
 
 
 @auto_docstring
@@ -621,6 +636,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         hidden_states = inputs_embeds
 
         if use_cache and past_key_values is None:
+            self._setup_cache(self.config, hidden_states.shape[0], hidden_states.device, hidden_states.dtype)
             past_key_values = DynamicCache(config=self.config)
 
         if position_ids is None:

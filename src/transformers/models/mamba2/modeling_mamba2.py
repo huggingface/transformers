@@ -167,14 +167,15 @@ class Mamba2Cache:
             self.conv_states[layer_idx] = self.conv_states[layer_idx].roll(shifts=-1, dims=-1)
             self.conv_states[layer_idx][:, :, -1] = new_conv_state[:, 0, :].to(self.conv_states.device)
 
-        # If last layer is updated, set the flag
-        if layer_idx == self.conv_states.shape[0] - 1:
-            self.has_previous_state = True
-
         return self.conv_states[layer_idx]
 
     def update_ssm_state(self, layer_idx: int, new_ssm_state: torch.Tensor):
         self.ssm_states[layer_idx] = new_ssm_state.to(self.ssm_states.device)
+
+        # If last layer is updated, set the flag
+        if layer_idx == self.conv_states.shape[0] - 1:
+            self.has_previous_state = True
+
         return self.ssm_states[layer_idx]
 
     def reset(self):
