@@ -876,7 +876,7 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
 
     def _generate_from_messages(self, messages, images, num_tokens=None):
         prompt = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
-        processor_output = self.processor(text=prompt, images=images, return_tensors="pt")
+        processor_output = self.processor(text=prompt, images=images or None, return_tensors="pt")
         input_ids = processor_output["input_ids"].to(self.device)
         attention_mask = processor_output.get("attention_mask")
         if attention_mask is None:
@@ -1100,7 +1100,8 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
             pad_id = getattr(self.processor, "pad_token_id", 0)
 
         per_sample_outputs = [
-            self.processor(text=prompt, images=imgs, return_tensors="pt") for prompt, imgs in zip(prompts, images_list)
+            self.processor(text=prompt, images=imgs or None, return_tensors="pt")
+            for prompt, imgs in zip(prompts, images_list)
         ]
         batch_outputs = self.processor(text=prompts, images=images_list, return_tensors="pt")
         batch_input_ids = batch_outputs["input_ids"]

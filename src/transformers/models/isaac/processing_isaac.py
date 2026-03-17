@@ -21,21 +21,14 @@
 from typing import Any
 
 from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ProcessorMixin
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import is_torch_available, is_vision_available
+from ...utils.import_utils import is_torch_available
 
 
 if is_torch_available():
     import torch
-if is_vision_available():
-    from PIL.Image import Image
-else:
-    Image = None
-
-
-MM_TOKEN_TYPE_TEXT = 0
-MM_TOKEN_TYPE_IMAGE = 1
 
 
 @auto_docstring
@@ -85,34 +78,28 @@ class IsaacProcessor(ProcessorMixin):
     def _build_batch(
         self,
         text: str | list[str],
-        images: Image | list[Image] | None = None,
+        images: ImageInput | None = None,
     ) -> dict[str, torch.Tensor | None]:
         texts = [text] if isinstance(text, str) else text
         if images is None:
-            pairs = ((text_value, None) for text_value in texts)
-        elif isinstance(images, list) and len(images) == len(texts):
-            if not images:
-                images_list = []
-            elif isinstance(images[0], list):
-                images_list = images
-            else:
-                images_list = [[image] for image in images]
-            pairs = zip(texts, images_list, strict=True)
+            batched_images = [[] for _ in texts]
         else:
-            pairs = (
-                (
-                    text_value,
-                    None
-                    if text_value.count(self.vision_token) == 0
-                    else images
-                    if isinstance(images, list)
-                    else [images],
+            fetched_images = self.image_processor.fetch_images(images)
+            batched_images = make_nested_list_of_images(fetched_images)
+            if len(batched_images) != len(texts):
+                num_images_in_text = [text_value.count(self.vision_token) for text_value in texts]
+                num_images_in_images = [len(sample_images) for sample_images in batched_images]
+                add_message = ""
+                if sum(num_images_in_text) == sum(num_images_in_images):
+                    add_message = " Make sure to pass your images as a nested list, where each sub-list holds images for one text sample."
+
+                raise ValueError(
+                    f"Received inconsistently sized batches of images ({len(batched_images)}) and text ({len(texts)}).{add_message}"
                 )
-                for text_value in texts
-            )
+
+        pairs = zip(texts, batched_images, strict=True)
 
         sample_input_ids: list[torch.Tensor] = []
-        sample_mm_token_type_ids: list[torch.Tensor] = []
         sample_position_ids: list[torch.Tensor] = []
         sample_vision_patches: list[list[torch.Tensor]] = []
         sample_vision_grids: list[torch.Tensor] = []
@@ -122,7 +109,7 @@ class IsaacProcessor(ProcessorMixin):
         for text_value, sample_images in pairs:
             segments = text_value.split(self.vision_token)
             num_images = len(segments) - 1
-            num_provided_images = len(sample_images) if sample_images is not None else 0
+            num_provided_images = len(sample_images)
             if num_images != num_provided_images:
                 raise ValueError(
                     f"IsaacProcessor expects one image per image token, got {num_images} tokens and {num_provided_images} images in sample with text {text_value} "
@@ -162,7 +149,7 @@ class IsaacProcessor(ProcessorMixin):
             start = max(0, total - self.max_sequence_length)
             end = total
             base_device: torch.device | None = None
-            input_ids_chunks, mm_token_type_chunks, position_chunks = [], [], []
+            input_ids_chunks, position_chunks = [], []
             vision_patches, vision_grids, vision_offsets, vision_lengths = [], [], [], []
             global_offset = 0
             position_offset = 0
@@ -188,11 +175,6 @@ class IsaacProcessor(ProcessorMixin):
                         slice_index = segment_local_indices + position_offset
                         zero_axis = torch.zeros_like(slice_index)
                         position_chunks.append(torch.stack((slice_index, zero_axis, zero_axis), -1))
-                        mm_token_type_chunks.append(
-                            torch.full(
-                                (segment_kept_length,), MM_TOKEN_TYPE_TEXT, device=base_device, dtype=torch.long
-                            )
-                        )
                         input_ids_chunks.append(item["tokens"].to(base_device)[segment_local_start:segment_local_end])
                         position_offset += segment_length
                     else:
@@ -202,11 +184,6 @@ class IsaacProcessor(ProcessorMixin):
                         rem = segment_local_indices % hw
                         position_chunks.append(
                             torch.stack((slice_index, rem // grid_width_tokens, rem % grid_width_tokens), -1)
-                        )
-                        mm_token_type_chunks.append(
-                            torch.full(
-                                (segment_kept_length,), MM_TOKEN_TYPE_IMAGE, device=base_device, dtype=torch.long
-                            )
                         )
                         input_ids_chunks.append(
                             torch.full(
@@ -230,11 +207,6 @@ class IsaacProcessor(ProcessorMixin):
             sample_input_ids.append(
                 torch.cat(input_ids_chunks, 0)
                 if input_ids_chunks
-                else torch.zeros((0,), device=base_device, dtype=torch.long)
-            )
-            sample_mm_token_type_ids.append(
-                torch.cat(mm_token_type_chunks, 0)
-                if mm_token_type_chunks
                 else torch.zeros((0,), device=base_device, dtype=torch.long)
             )
             sample_position_ids.append(
@@ -262,7 +234,6 @@ class IsaacProcessor(ProcessorMixin):
 
         input_ids = torch.full((batch_size, max_len), self.text_pad_token_id, device=base_device, dtype=torch.long)
         attention_mask = torch.zeros((batch_size, max_len), device=base_device, dtype=torch.long)
-        mm_token_type_ids = torch.full((batch_size, max_len), MM_TOKEN_TYPE_TEXT, device=base_device, dtype=torch.long)
         position_ids = torch.zeros((batch_size, max_len, 3), device=base_device, dtype=torch.long)
 
         for batch_idx, length in enumerate(lengths):
@@ -270,8 +241,9 @@ class IsaacProcessor(ProcessorMixin):
                 continue
             input_ids[batch_idx, -length:] = sample_input_ids[batch_idx]
             attention_mask[batch_idx, -length:] = 1
-            mm_token_type_ids[batch_idx, -length:] = sample_mm_token_type_ids[batch_idx]
             position_ids[batch_idx, -length:] = sample_position_ids[batch_idx]
+
+        mm_token_type_ids = input_ids.eq(self.image_pad_token_id).to(dtype=torch.long)
 
         image_counts = [len(patches) for patches in sample_vision_patches]
         max_images = max(image_counts, default=0)
@@ -329,7 +301,7 @@ class IsaacProcessor(ProcessorMixin):
     def __call__(
         self,
         text: str | list[str],
-        images: Image | list[Image] | None = None,
+        images: ImageInput | None = None,
         return_tensors: str | TensorType | None = TensorType.PYTORCH,
         **kwargs,
     ) -> BatchFeature:
