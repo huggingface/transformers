@@ -697,5 +697,4 @@ __all__ = [
     "SegformerLayer",
     "SegformerModel",
     "SegformerPreTrainedModel",
-    "SegformerStage",
 ]
