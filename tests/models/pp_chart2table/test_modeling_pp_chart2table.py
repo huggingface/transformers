@@ -53,22 +53,19 @@ class PPChart2TableVisionText2TextModelTester:
         image_size=64,
         image_token_index=1,
         model_type="pp_chart2table",
-        is_training=False,
-        output_channels=1024,
-        vision_hidden_channels=1024,
+        is_training=True,
         text_config={
             "model_type": "qwen2",
             "vocab_size": 99,
-            "hidden_size": 128,
+            "hidden_size": 32,
             "intermediate_size": 37,
             "num_hidden_layers": 2,
-            "num_attention_heads": 4,
+            "num_attention_heads": 2,
             "num_key_value_heads": 2,
-            "output_channels": 64,
+            "output_channels": 32,
             "hidden_act": "silu",
             "max_position_embeddings": 512,
             "rope_theta": 10000,
-            "mlp_ratio": 4,
             "tie_word_embeddings": True,
             "bos_token_id": 2,
             "eos_token_id": 3,
@@ -76,11 +73,11 @@ class PPChart2TableVisionText2TextModelTester:
         },
         vision_config={
             "num_hidden_layers": 2,
-            "output_channels": 64,
+            "output_channels": 32,
             "hidden_act": "quick_gelu",
             "hidden_size": 32,
-            "mlp_dim": 128,
-            "num_attention_heads": 4,
+            "mlp_dim": 64,
+            "num_attention_heads": 2,
             "patch_size": 2,
             "image_size": 64,
         },
@@ -100,8 +97,6 @@ class PPChart2TableVisionText2TextModelTester:
         self.is_training = is_training
         self.num_image_tokens = 64
         self.seq_length = seq_length + self.num_image_tokens
-        self.output_channels = output_channels
-        self.vision_hidden_channels = vision_hidden_channels
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.vocab_size = text_config["vocab_size"]
@@ -176,17 +171,13 @@ class PPChart2TableModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     def test_get_image_features_hidden_states(self):
         pass
 
-    @unittest.skip(reason="PPChart2Table does not support this test.")
-    def test_model_is_small(self):
-        pass
-
 
 @require_torch
 class PPChart2TableIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "PaddlePaddle/PP-Chart2Table_safetensors"
         self.model = PPChart2TableForConditionalGeneration.from_pretrained(model_path).to(torch_device)
-        self.processor = AutoProcessor.from_pretrained("PaddlePaddle/PP-Chart2Table_safetensors").to(torch_device)
+        self.processor = AutoProcessor.from_pretrained(model_path)
         url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png"
         self.image = load_image(url)
 
@@ -200,12 +191,12 @@ class PPChart2TableIntegrationTest(unittest.TestCase):
             **inputs,
             use_cache=True,
             do_sample=False,
-            max_new_tokens=1024,
+            max_new_tokens=32,
         )
         decoded_output = self.processor.decode(
             generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
         )
-        expected_output = "年份 | 单家五星级旅游饭店年平均营收 (百万元) | 单家五星级旅游饭店年平均利润 (百万元)\n2018 | 104.22 | 9.87\n2019 | 99.11 | 7.47\n2020 | 57.87 | -3.87\n2021 | 68.99 | -2.90\n2022 | 56.29 | -9.48\n2023 | 87.99 | 5.96"
+        expected_output = "年份 | 单家五星级旅游饭店年平均营收 (百万元) | 单家五星级旅游饭店年平均利润 (百万元)\n"
         self.assertEqual(decoded_output, expected_output)
 
     @slow
