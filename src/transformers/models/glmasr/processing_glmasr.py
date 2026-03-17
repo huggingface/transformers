@@ -291,18 +291,22 @@ class GlmAsrProcessor(ProcessorMixin):
             **kwargs,
         )
 
-    def batch_decode(self, *args, strip_prefix=False, **kwargs):
+    def decode(self, *args, strip_prefix=False, **kwargs):
         """
-        Forward arguments to [`~PreTrainedTokenizer.batch_decode`] and optionally remove the assistant framing the model
+        Forward arguments to [`~PreTrainedTokenizer.decode`] and optionally remove the assistant framing the model
         was trained to produce.
 
         AF3 transcription requests respond with sentences such as `"The spoken content of the audio is \"...\"."`.
         Setting `strip_prefix=True` trims the fixed prefix for just the transcription text.
         """
-        decoded = self.tokenizer.batch_decode(*args, **kwargs)
+        decoded = self.tokenizer.decode(*args, **kwargs)
         if strip_prefix:
             decoded = [self._strip_assistant_prefix_and_quotes(text) for text in decoded]
         return decoded
+
+    def batch_decode(self, *args, **kwargs):
+        """BC as previous examples used batch_decode"""
+        return self.decode(*args, **kwargs)
 
     def _strip_assistant_prefix_and_quotes(self, text: str) -> str:
         """

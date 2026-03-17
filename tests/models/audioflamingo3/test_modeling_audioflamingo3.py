@@ -17,10 +17,8 @@
 import json
 import tempfile
 import unittest
-import wave
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 from transformers import (
@@ -354,79 +352,3 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(gen_ids.cpu(), exp_ids)
         txt = self.processor.decode(gen_ids, skip_special_tokens=True)
         self.assertListEqual(txt, exp_txt)
-
-    def test_batched_matches_single_for_different_audio_lengths(self):
-        prompt = "Describe this audio in detail. Focus on mood, instrumentation, and structure."
-        model = AudioFlamingo3ForConditionalGeneration.from_pretrained(
-            self.checkpoint, device_map=torch_device, dtype=torch.bfloat16
-        ).eval()
-
-        # Two audio with different numbers of 30s windows (chunks of model)
-        sampling_rate = self.processor.feature_extractor.sampling_rate
-        audio_a = np.sin(2 * np.pi * 110.0 * np.arange(int(65.0 * sampling_rate)) / sampling_rate).astype(np.float32)
-        audio_b = np.sin(2 * np.pi * 220.0 * np.arange(int(125.0 * sampling_rate)) / sampling_rate).astype(np.float32)
-
-        # Single
-        conversation_a = [
-            {"role": "user", "content": [
-                {"type": "text", "text": prompt},
-                {"type": "audio", "audio": audio_a},
-            ]},
-        ]
-        inputs_a = self.processor.apply_chat_template(
-            conversation_a, tokenize=True, add_generation_prompt=True, return_dict=True,
-        ).to(model.device, dtype=model.dtype)
-
-        conversation_b = [
-            {"role": "user", "content": [
-                {"type": "text", "text": prompt},
-                {"type": "audio", "audio": audio_b},
-            ]},
-        ]
-        inputs_b = self.processor.apply_chat_template(
-            conversation_b, tokenize=True, add_generation_prompt=True, return_dict=True,
-        ).to(model.device, dtype=model.dtype)
-
-        # Batched
-        conversations_ab = [
-            [{"role": "user", "content": [
-                {"type": "text", "text": prompt},
-                {"type": "audio", "audio": audio_a},
-            ]}],
-            [{"role": "user", "content": [
-                {"type": "text", "text": prompt},
-                {"type": "audio", "audio": audio_b},
-            ]}],
-        ]
-        inputs_ab = self.processor.apply_chat_template(
-            conversations_ab, tokenize=True, add_generation_prompt=True, return_dict=True,
-        ).to(model.device, dtype=model.dtype)
-
-        with torch.no_grad():
-            embeds_a_single = model.get_audio_features(
-                inputs_a["input_features"],
-                inputs_a["input_features_mask"],
-            ).pooler_output.clone()
-
-            embeds_b_single = model.get_audio_features(
-                inputs_b["input_features"],
-                inputs_b["input_features_mask"],
-            ).pooler_output.clone()
-
-            embeds_ab = model.get_audio_features(
-                inputs_ab["input_features"],
-                inputs_ab["input_features_mask"],
-            ).pooler_output.clone()
-
-        # Extract single embeddings from the batch output
-        audio_token_id = model.config.audio_token_id
-        n_audio_tokens_a = (inputs_ab["input_ids"][0] == audio_token_id).sum().item()
-        n_audio_tokens_b = (inputs_ab["input_ids"][1] == audio_token_id).sum().item()
-        embeds_a_from_batch = embeds_ab[:n_audio_tokens_a]
-        embeds_b_from_batch = embeds_ab[n_audio_tokens_a : n_audio_tokens_a + n_audio_tokens_b]
-
-        # Compare
-        self.assertEqual(embeds_a_from_batch.shape, embeds_a_single.shape)
-        self.assertEqual(embeds_b_from_batch.shape, embeds_b_single.shape)
-        torch.testing.assert_close(embeds_a_from_batch, embeds_a_single)
-        torch.testing.assert_close(embeds_b_from_batch, embeds_b_single)

@@ -293,9 +293,9 @@ class AudioFlamingo3Processor(ProcessorMixin):
         if strip_prefix:
             decoded = [self._strip_assistant_prefix_and_quotes(text) for text in decoded]
         return decoded
-    
+
     def batch_decode(self, *args, **kwargs):
-        """ BC as previous examples showed batch_decode"""
+        """BC as previous examples used batch_decode"""
         return self.decode(*args, **kwargs)
 
     def _strip_assistant_prefix_and_quotes(self, text: str) -> str:
