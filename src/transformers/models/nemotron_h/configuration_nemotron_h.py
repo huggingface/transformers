@@ -175,7 +175,7 @@ class NemotronHConfig(PreTrainedConfig):
         # Backward compatibility: convert mtp_hybrid_override_pattern to mtp_layers_block_type
         # Always pop mtp_hybrid_override_pattern from kwargs to prevent it from being set as an attribute
         if self.mtp_layers_block_type is None:
-            self.mtp_layers_block_type == ["attention", "moe"]
+            self.mtp_layers_block_type = ["attention", "moe"]
 
         if "mtp_hybrid_override_pattern" in kwargs:
             pattern = kwargs.pop("mtp_hybrid_override_pattern")
