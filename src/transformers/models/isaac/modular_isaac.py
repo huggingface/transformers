@@ -139,7 +139,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
     MAX_PIXELS = 60_000_000  # 60‑megapixel ceiling ≈ 8200 × 7300 px
 
     resample = PILImageResampling.BILINEAR
-    model_input_names = ["vision_patches", "vision_token_grids", "vision_position_dims", "vision_segment_lengths"]
+    model_input_names = ["vision_patches", "vision_token_grids", "vision_position_ids", "vision_segment_lengths"]
     valid_kwargs = IsaacImageProcessorFastKwargs
     unused_kwargs = ["size", "do_center_crop", "crop_size", "pad_size", "do_pad"]
 
@@ -236,29 +236,33 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
             virtual_height = height_tokens // pixel_shuffle_scale
             virtual_width = width_tokens // pixel_shuffle_scale
 
-            position_dims = (
-                torch.tensor(
-                    [1, virtual_height, virtual_width],
-                    dtype=torch.long,
-                    device=patches.device,
-                )
-                .unsqueeze(0)
-                .repeat(batch_size, 1)
-            )
             segment_lengths = torch.full(
                 (batch_size,),
                 virtual_height * virtual_width,
                 dtype=torch.long,
                 device=patches.device,
             )
+            image_token_positions = torch.arange(segment_lengths[0], device=patches.device, dtype=torch.long)
+            image_position_ids = (
+                torch.stack(
+                    (
+                        image_token_positions.new_zeros(image_token_positions.shape),
+                        image_token_positions.div(virtual_width, rounding_mode="floor"),
+                        image_token_positions.remainder(virtual_width),
+                    ),
+                    dim=-1,
+                )
+                .unsqueeze(0)
+                .expand(batch_size, -1, -1)
+            )
             grouped_outputs[shape] = (
                 patches.reshape(batch_size, -1, patch_dim),
                 token_grid,
-                position_dims,
+                image_position_ids,
                 segment_lengths,
             )
 
-        keys = ("vision_patches", "vision_token_grids", "vision_position_dims", "vision_segment_lengths")
+        keys = ("vision_patches", "vision_token_grids", "vision_position_ids", "vision_segment_lengths")
         tensors: dict[str, torch.Tensor] = {}
 
         for i, key in enumerate(keys):
@@ -764,13 +768,13 @@ class IsaacProcessor(ProcessorMixin):
 
                 if index < num_images:
                     patches = sample_image_features["vision_patches"][index]
-                    dims = sample_image_features["vision_position_dims"][index]
+                    image_position_ids = sample_image_features["vision_position_ids"][index]
                     segment_length = int(sample_image_features["vision_segment_lengths"][index].item())
                     items.append(
                         {
                             "type": "image",
                             "segment_length": segment_length,
-                            "dims": dims,
+                            "position_ids": image_position_ids,
                             "patches": patches,
                             "grid": sample_image_features["vision_token_grids"][index],
                         }
@@ -809,14 +813,11 @@ class IsaacProcessor(ProcessorMixin):
                         input_ids_chunks.append(item["tokens"].to(base_device)[segment_local_start:segment_local_end])
                         position_offset += segment_length
                     else:
-                        dims = item["dims"].to(device=base_device)
-                        num_pos_slices, grid_height_tokens, grid_width_tokens = dims.unbind(0)
-                        hw = grid_height_tokens * grid_width_tokens
-                        slice_index = (segment_local_indices // hw) + position_offset
-                        rem = segment_local_indices % hw
-                        position_chunks.append(
-                            torch.stack((slice_index, rem // grid_width_tokens, rem % grid_width_tokens), -1)
+                        image_position_ids = (
+                            item["position_ids"].to(base_device)[segment_local_start:segment_local_end].clone()
                         )
+                        image_position_ids[:, 0] += position_offset
+                        position_chunks.append(image_position_ids)
                         input_ids_chunks.append(
                             torch.full(
                                 (segment_kept_length,), self.image_pad_token_id, device=base_device, dtype=torch.long
@@ -827,9 +828,11 @@ class IsaacProcessor(ProcessorMixin):
                         vision_grids.append(item["grid"].to(device=base_device))
                         vision_offsets.append(segment_local_start)
                         vision_lengths.append(segment_kept_length)
-                        position_offset += int(num_pos_slices.item())
+                        position_offset += int(item["position_ids"][-1, 0].item()) + 1
                 else:
-                    position_offset += segment_length if item["type"] == "text" else int(item["dims"][0].item())
+                    position_offset += (
+                        segment_length if item["type"] == "text" else int(item["position_ids"][-1, 0].item()) + 1
+                    )
 
                 global_offset += segment_length
 

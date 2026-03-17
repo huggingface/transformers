@@ -136,13 +136,13 @@ class IsaacProcessor(ProcessorMixin):
 
                 if index < num_images:
                     patches = sample_image_features["vision_patches"][index]
-                    dims = sample_image_features["vision_position_dims"][index]
+                    image_position_ids = sample_image_features["vision_position_ids"][index]
                     segment_length = int(sample_image_features["vision_segment_lengths"][index].item())
                     items.append(
                         {
                             "type": "image",
                             "segment_length": segment_length,
-                            "dims": dims,
+                            "position_ids": image_position_ids,
                             "patches": patches,
                             "grid": sample_image_features["vision_token_grids"][index],
                         }
@@ -181,14 +181,11 @@ class IsaacProcessor(ProcessorMixin):
                         input_ids_chunks.append(item["tokens"].to(base_device)[segment_local_start:segment_local_end])
                         position_offset += segment_length
                     else:
-                        dims = item["dims"].to(device=base_device)
-                        num_pos_slices, grid_height_tokens, grid_width_tokens = dims.unbind(0)
-                        hw = grid_height_tokens * grid_width_tokens
-                        slice_index = (segment_local_indices // hw) + position_offset
-                        rem = segment_local_indices % hw
-                        position_chunks.append(
-                            torch.stack((slice_index, rem // grid_width_tokens, rem % grid_width_tokens), -1)
+                        image_position_ids = (
+                            item["position_ids"].to(base_device)[segment_local_start:segment_local_end].clone()
                         )
+                        image_position_ids[:, 0] += position_offset
+                        position_chunks.append(image_position_ids)
                         input_ids_chunks.append(
                             torch.full(
                                 (segment_kept_length,), self.image_pad_token_id, device=base_device, dtype=torch.long
@@ -199,9 +196,11 @@ class IsaacProcessor(ProcessorMixin):
                         vision_grids.append(item["grid"].to(device=base_device))
                         vision_offsets.append(segment_local_start)
                         vision_lengths.append(segment_kept_length)
-                        position_offset += int(num_pos_slices.item())
+                        position_offset += int(item["position_ids"][-1, 0].item()) + 1
                 else:
-                    position_offset += segment_length if item["type"] == "text" else int(item["dims"][0].item())
+                    position_offset += (
+                        segment_length if item["type"] == "text" else int(item["position_ids"][-1, 0].item()) + 1
+                    )
 
                 global_offset += segment_length
 
