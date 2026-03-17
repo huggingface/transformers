@@ -161,6 +161,8 @@
     - local: hpo_train
       title: Hyperparameter search
     title: Customization
+  - local: peft
+    title: Parameter-efficient fine-tuning
   - isExpanded: false
     sections:
     - local: accelerator_selection
@@ -193,8 +195,6 @@
     - local: model_memory_anatomy
       title: Model training anatomy
     title: Hardware
-  - local: peft
-    title: PEFT
   title: Training
 - isExpanded: false
   sections:
