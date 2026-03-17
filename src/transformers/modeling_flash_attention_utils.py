@@ -62,6 +62,7 @@ def is_flash_attn_available():
 FLASH_ATTN_KERNEL_FALLBACK = {
     "flash_attention_2": "kernels-community/flash-attn2",
     "flash_attention_3": "kernels-community/vllm-flash-attn3",
+    "flash_attention_4": "kernels-staging/flash-attn4",
 }
 
 

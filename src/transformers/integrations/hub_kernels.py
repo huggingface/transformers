@@ -420,10 +420,11 @@ def get_kernel(
         )
 
     repo_parent = kernel_name.split("/")[0]
-    # all `kernels-community` repos are trusted by default!
-    if repo_parent != "kernels-community" and not allow_all_kernels:
+    # all repos related to the `kernels` project are trusted by default!
+    trusted_projects = ["kernels-community", "kernels-staging"]
+    if repo_parent not in trusted_projects and not allow_all_kernels:
         raise ValueError(
-            "You need to specify `allow_all_kernels=True` to use kernels outside of the `kernels-community` repository"
+            f"You need to specify `allow_all_kernels=True` to use kernels outside of the `{trusted_projects}` repositories."
         )
 
     user_agent = {"framework": "transformers", "version": __version__, "repo_id": kernel_name}
@@ -460,7 +461,7 @@ def use_kernelized_func(module_names: list[Callable] | Callable):
     return decorator
 
 
-# Whether to allow hub kernels coming from untrusted repos, i.e. repos outside `kernels-community`
+# Whether to allow hub kernels coming from untrusted repos, i.e. repos outside the `kernels` project
 ALLOW_ALL_KERNELS = False
 
 
