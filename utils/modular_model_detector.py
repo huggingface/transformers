@@ -99,7 +99,6 @@ python utils/modular_model_detector.py --build
 
 import argparse
 import ast
-import json
 import logging
 import os
 import re
@@ -107,12 +106,12 @@ from datetime import datetime
 from functools import cache, cmp_to_key
 from pathlib import Path
 
+import faiss
 import numpy as np
 import torch
-from huggingface_hub import HfApi, snapshot_download
+from datasets import Dataset, load_from_disk
 from huggingface_hub import logging as huggingface_hub_logging
-from safetensors.numpy import load_file as safetensors_load
-from safetensors.numpy import save_file as safetensors_save
+from huggingface_hub import snapshot_download
 from tqdm import tqdm
 
 import transformers
@@ -136,9 +135,7 @@ os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 
 MODELS_ROOT = Path("src/transformers/models")
-EMBEDDINGS_PATH = "embeddings.safetensors"
-INDEX_MAP_PATH = "code_index_map.json"
-TOKENS_PATH = "code_index_tokens.json"
+DATASET_DIR = "code_index_dataset"
 HUB_DATASET_DEFAULT = "hf-internal-testing/transformers_code_embeddings"
 
 EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-4B"
@@ -320,49 +317,46 @@ class CodeSimilarityAnalyzer:
             if hasattr(self.model, "parameters") and len(list(self.model.parameters())) > 0
             else torch.float32
         )
-        self.index_dir: Path | None = None
+        self.dataset: Dataset | None = None
 
     # ---------- HUB IO ----------
 
-    def _resolve_index_path(self, filename: str) -> Path:
-        if self.index_dir is None:
-            return Path(filename)
-        return self.index_dir / filename
+    def _attach_faiss_index(self) -> None:
+        """Attach an in-memory FAISS IndexFlatIP to the dataset's embedding column."""
+        assert self.dataset is not None
+        dim = len(self.dataset[0]["embedding"])
+        index = faiss.IndexFlatIP(dim)
+        self.dataset.add_faiss_index(column="embedding", custom_index=index)
 
     def ensure_local_index(self) -> None:
-        """Ensure index files are available locally, preferring Hub cache snapshots."""
-        if self.index_dir is not None and all(
-            (self.index_dir / fname).exists() for fname in (EMBEDDINGS_PATH, INDEX_MAP_PATH, TOKENS_PATH)
-        ):
+        """Ensure the dataset index is loaded into memory, downloading from Hub if needed."""
+        if self.dataset is not None:
             return
 
-        workspace_dir = Path.cwd()
-        if all((workspace_dir / fname).exists() for fname in (EMBEDDINGS_PATH, INDEX_MAP_PATH, TOKENS_PATH)):
-            self.index_dir = workspace_dir
-            return
+        local_path = Path.cwd() / DATASET_DIR
+        if local_path.exists():
+            logging.info(f"loading dataset from local path: {local_path}")
+            self.dataset = load_from_disk(str(local_path))
+        else:
+            logging.info(f"downloading index from hub: {self.hub_dataset}")
+            snapshot_path = snapshot_download(repo_id=self.hub_dataset, repo_type="dataset")
+            dataset_path = Path(snapshot_path) / DATASET_DIR
+            if not dataset_path.exists():
+                # Fallback: snapshot root contains the dataset files directly
+                dataset_path = Path(snapshot_path)
+            self.dataset = load_from_disk(str(dataset_path))
 
-        logging.info(f"downloading index from hub cache: {self.hub_dataset}")
-        snapshot_path = snapshot_download(repo_id=self.hub_dataset, repo_type="dataset")
-        snapshot_dir = Path(snapshot_path)
-        missing = [
-            fname for fname in (EMBEDDINGS_PATH, INDEX_MAP_PATH, TOKENS_PATH) if not (snapshot_dir / fname).exists()
-        ]
-        if missing:
-            raise FileNotFoundError("Missing expected files in Hub snapshot: " + ", ".join(missing))
-        self.index_dir = snapshot_dir
+        self._attach_faiss_index()
 
     def push_index_to_hub(self) -> None:
-        """Upload index files to the Hub dataset repository."""
-        api = HfApi()
-        api.create_repo(repo_id=self.hub_dataset, repo_type="dataset", exist_ok=True)
-        for fname in (EMBEDDINGS_PATH, INDEX_MAP_PATH, TOKENS_PATH):
-            logging.info(f"pushing {fname} -> {self.hub_dataset}")
-            api.upload_file(
-                path_or_fileobj=fname,
-                path_in_repo=os.path.basename(fname),
-                repo_id=self.hub_dataset,
-                repo_type="dataset",
-            )
+        """Upload the dataset to the Hub dataset repository."""
+        if self.dataset is None:
+            self.ensure_local_index()
+        logging.info(f"pushing dataset to hub: {self.hub_dataset}")
+        # Drop attached FAISS index before pushing (not allowed with attached indexes)
+        if "embedding" in self.dataset.list_indexes():
+            self.dataset.drop_index("embedding")
+        self.dataset.push_to_hub(self.hub_dataset)
 
     # ---------- parsing & encoding ----------
 
@@ -448,14 +442,12 @@ class CodeSimilarityAnalyzer:
             else torch.no_grad()
         ):
             output = self.model(**encoded)
-            if hasattr(output, "last_hidden_state"):
-                embeddings = output.last_hidden_state
-                mask = encoded["attention_mask"].unsqueeze(-1)
-                embeddings = (embeddings * mask).sum(dim=1) / mask.sum(dim=1).clamp_min(1e-9)
-            elif hasattr(output, "pooler_output"):
-                embeddings = output.pooler_output
-            else:
-                embeddings = output[0].mean(dim=1)
+            hidden = output.last_hidden_state
+            # Last token pooling: take the hidden state of the last non-padding token.
+            attention_mask = encoded["attention_mask"]
+            last_token_idx = attention_mask.sum(dim=1) - 1  # (batch,)
+            batch_size = hidden.shape[0]
+            embeddings = hidden[torch.arange(batch_size, device=hidden.device), last_token_idx]
         embeddings = torch.nn.functional.normalize(embeddings.float(), p=2, dim=1)
         return embeddings.cpu().numpy().astype("float32")
 
@@ -486,9 +478,9 @@ class CodeSimilarityAnalyzer:
         files = list(self.models_root.rglob("modeling_*.py"))
         logging.info(f"parsing {len(files)} files")
 
-        identifiers = []
-        sanitized_sources = []
-        tokens_map = {}
+        identifiers: list[str] = []
+        sanitized_sources: list[str] = []
+        tokens_list: list[list[str]] = []
 
         for file_path in tqdm(files, desc="Parsing modeling files", unit="file"):
             model_hint = self._infer_model_from_relative_path(file_path)
@@ -501,49 +493,44 @@ class CodeSimilarityAnalyzer:
             for identifier in definitions_sanitized.keys():
                 identifiers.append(identifier)
                 sanitized_sources.append(definitions_sanitized[identifier])
-                tokens_map[identifier] = definitions_tokens[identifier]
+                tokens_list.append(definitions_tokens[identifier])
 
         logging.info(
             f"encoding {len(sanitized_sources)} definitions with {EMBEDDING_MODEL} (device={self.device.type}, batch={BATCH_SIZE}, max_length={MAX_LENGTH})"
         )
         embeddings = self.encode(sanitized_sources)
 
-        logging.info("Saving index files...")
-        with tqdm(total=3, desc="Saving index", unit="file") as pbar:
-            safetensors_save({"embeddings": embeddings}, EMBEDDINGS_PATH)
-            pbar.update(1)
-            with open(INDEX_MAP_PATH, "w", encoding="utf-8") as file:
-                json.dump({int(i): identifiers[i] for i in range(len(identifiers))}, file)
-            pbar.update(1)
-            with open(TOKENS_PATH, "w", encoding="utf-8") as file:
-                json.dump(tokens_map, file)
-            pbar.update(1)
-
-        self.index_dir = Path.cwd()
+        logging.info("Building dataset...")
+        self.dataset = Dataset.from_dict(
+            {
+                "identifier": identifiers,
+                "embedding": embeddings.tolist(),
+                "tokens": tokens_list,
+            }
+        )
+        logging.info(f"Saving dataset to {DATASET_DIR}...")
+        self.dataset.save_to_disk(DATASET_DIR)
+        self._attach_faiss_index()
 
     def _topk_embedding(
         self,
         query_embedding_row: np.ndarray,
-        base_embeddings: np.ndarray,
-        identifier_map: dict[int, str],
         self_model_normalized: str,
         self_name: str,
         k: int,
         dates: dict[str, str] | None = None,
     ) -> list[tuple[str, float]]:
-        similarities = query_embedding_row @ base_embeddings.T
-        buffer_size = min(k + 200, len(similarities))
-        indices = np.argpartition(-similarities, buffer_size)[:buffer_size]
-        indices = indices[np.argsort(-similarities[indices])]
+        assert self.dataset is not None
+        buffer_size = min(k + 200, len(self.dataset))
+        scores_arr, examples = self.dataset.get_nearest_examples("embedding", query_embedding_row, k=buffer_size)
         output = []
-        for match_id in indices:
-            identifier = identifier_map[int(match_id)]
+        for score, identifier in zip(scores_arr, examples["identifier"]):
             parent_relative_path, match_name = identifier.split(":", 1)
             parent_model = Path(parent_relative_path).parts[0]
-            # Skip if BOTH same name AND same model
+            # Skip if same model
             if self_model_normalized and _normalize(parent_model) == self_model_normalized:
                 continue
-            output.append((identifier, float(similarities[match_id])))
+            output.append((identifier, float(score)))
         # Sort by score (descending), then by release date (ascending, oldest first) for tie-breaking
         if dates:
 
@@ -560,8 +547,6 @@ class CodeSimilarityAnalyzer:
     def _topk_jaccard(
         self,
         query_tokens: set[str],
-        identifiers: list[str],
-        tokens_map: dict[str, list[str]],
         self_model_normalized: str,
         self_name: str,
         k: int,
@@ -571,8 +556,6 @@ class CodeSimilarityAnalyzer:
 
         Args:
             query_tokens (`set[str]`): Set of tokens from the query definition.
-            identifiers (`list[str]`): List of all definition identifiers in the index.
-            tokens_map (`dict[str, list[str]]`): Mapping of identifiers to their token lists.
             self_model_normalized (`str`): Normalized name of the query model to exclude.
             self_name (`str`): Name of the query definition to exclude.
             k (`int`): Number of top results to return.
@@ -580,14 +563,15 @@ class CodeSimilarityAnalyzer:
         Returns:
             `list[tuple[str, float]]`: List of (identifier, score) tuples.
         """
+        assert self.dataset is not None
         scores = []
-        for identifier in identifiers:
+        for identifier, token_list in zip(self.dataset["identifier"], self.dataset["tokens"]):
             parent_relative_path, match_name = identifier.split(":", 1)
             parent_model = Path(parent_relative_path).parts[0]
             # Skip only if same model
             if self_model_normalized and _normalize(parent_model) == self_model_normalized:
                 continue
-            tokens = set(tokens_map.get(identifier, []))
+            tokens = set(token_list)
             if not tokens or not query_tokens:
                 continue
             score = len(query_tokens & tokens) / len(query_tokens | tokens)
@@ -596,17 +580,16 @@ class CodeSimilarityAnalyzer:
         scores.sort(key=lambda x: x[1], reverse=True)
         return scores[:k]
 
-    def _build_model_symbol_index(
-        self, identifier_map: dict[int, str]
-    ) -> tuple[dict[tuple[str, str], int], dict[tuple[str, str], int]]:
+    def _build_model_symbol_index(self) -> tuple[dict[tuple[str, str], int], dict[tuple[str, str], int]]:
         """Build two lookups for fast parent expansion:
-        - by_name:   (model_id, symbol_name)   -> embedding index  e.g. ("llama", "LlamaMLP")
-        - by_suffix: (model_id, symbol_suffix)  -> embedding index  e.g. ("llama", "MLP")
+        - by_name:   (model_id, symbol_name)   -> dataset row index  e.g. ("llama", "LlamaMLP")
+        - by_suffix: (model_id, symbol_suffix)  -> dataset row index  e.g. ("llama", "MLP")
           where suffix = symbol_name with leading CamelCase model prefix stripped.
         """
+        assert self.dataset is not None
         by_name: dict[tuple[str, str], int] = {}
         by_suffix: dict[tuple[str, str], int] = {}
-        for idx, identifier in identifier_map.items():
+        for idx, identifier in enumerate(self.dataset["identifier"]):
             parts = identifier.split(":", 1)
             if len(parts) != 2:
                 continue
@@ -642,13 +625,8 @@ class CodeSimilarityAnalyzer:
         if allow_hub_fallback:
             self.ensure_local_index()
 
-        base = safetensors_load(str(self._resolve_index_path(EMBEDDINGS_PATH)))
-        base_embeddings = base["embeddings"]
-        with open(self._resolve_index_path(INDEX_MAP_PATH), "r", encoding="utf-8") as file:
-            identifier_map = {int(key): value for key, value in json.load(file).items()}
-        identifiers = [identifier_map[i] for i in range(len(identifier_map))]
-        with open(self._resolve_index_path(TOKENS_PATH), "r", encoding="utf-8") as file:
-            tokens_map = json.load(file)
+        if self.dataset is None:
+            raise RuntimeError("Dataset not loaded. Call ensure_local_index() or pass allow_hub_fallback=True.")
 
         self_model = self._infer_query_model_name(modeling_file)
         definitions_raw, definitions_sanitized, _, definitions_kind = self._extract_definitions(
@@ -665,15 +643,13 @@ class CodeSimilarityAnalyzer:
         query_embeddings = self.encode(query_sources_sanitized)
 
         inheritance_map = _build_modular_inheritance_map()
-        model_symbol_by_name, model_symbol_by_suffix = self._build_model_symbol_index(identifier_map)
+        model_symbol_by_name, model_symbol_by_suffix = self._build_model_symbol_index()
 
         output = {}
         for i, query_identifier in enumerate(query_identifiers):
             query_name = query_identifier.split(":")[-1]
             embedding_top = self._topk_embedding(
                 query_embeddings[i],
-                base_embeddings,
-                identifier_map,
                 self_model_normalized,
                 query_name,
                 top_k_per_item,
@@ -705,9 +681,10 @@ class CodeSimilarityAnalyzer:
                         parent_idx = model_symbol_by_name.get((parent_model, match_name))
                     if parent_idx is None:
                         continue
-                    parent_identifier = identifier_map[parent_idx]
+                    parent_identifier = self.dataset[parent_idx]["identifier"]
                     if parent_identifier not in already_included:
-                        parent_score = float(query_embeddings[i] @ base_embeddings[parent_idx])
+                        parent_embedding = np.array(self.dataset[parent_idx]["embedding"], dtype="float32")
+                        parent_score = float(query_embeddings[i] @ parent_embedding)
                         additions.append((parent_identifier, parent_score))
                         already_included.add(parent_identifier)
             if additions:
@@ -718,7 +695,7 @@ class CodeSimilarityAnalyzer:
             entry = {"kind": kind, "embedding": embedding_top}
             if use_jaccard:
                 jaccard_top = self._topk_jaccard(
-                    query_tokens_list[i], identifiers, tokens_map, self_model_normalized, query_name, top_k_per_item
+                    query_tokens_list[i], self_model_normalized, query_name, top_k_per_item
                 )
                 jaccard_set = {identifier for identifier, _ in jaccard_top}
                 intersection = set(embedding_set & jaccard_set)
