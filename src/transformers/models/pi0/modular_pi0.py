@@ -19,6 +19,7 @@ from collections.abc import Callable
 import numpy as np
 import torch
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
@@ -30,12 +31,12 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
-from ...siglip.image_processor_siglip import SiglipImageProcessorFast
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..paligemma.processing_paligemma import PaligemmaProcessor
+from ..siglip.image_processing_siglip_fast import SiglipImageProcessorFast
 
 
 logger = logging.get_logger(__name__)
@@ -171,6 +172,7 @@ class PI0Processor(PaligemmaProcessor):
 
 
 @auto_docstring(checkpoint="lerobot/pi0_base")
+@strict(accept_kwargs=True)
 class PI0Config(PreTrainedConfig):
     r"""
     vlm_config (`dict`, *optional*):
@@ -214,30 +216,26 @@ class PI0Config(PreTrainedConfig):
     model_type = "pi0"
     sub_configs = {"vlm_config": AutoConfig, "dit_config": AutoConfig}
 
-    def __init__(
-        self,
-        vlm_config=None,
-        dit_config=None,
-        image_token_id=257152,
-        vlm_projection_dim=2048,
-        chunk_size=50,
-        max_state_dim=32,
-        max_action_dim=32,
-        num_inference_steps=10,
-        time_sampling_beta_alpha=1.5,
-        time_sampling_beta_beta=1.0,
-        time_sampling_scale=0.999,
-        time_sampling_offset=0.001,
-        min_period=4e-3,
-        max_period=4.0,
-        loss_reduction="mean",
-        **kwargs,
-    ):
-        if isinstance(vlm_config, dict):
-            vlm_model_type = vlm_config.get("model_type", "paligemma")
-            vlm_config = CONFIG_MAPPING[vlm_model_type](**vlm_config)
-        elif vlm_config is None:
-            vlm_config = CONFIG_MAPPING["paligemma"](
+    vlm_config: dict | PreTrainedConfig | None = None
+    dit_config: dict | PreTrainedConfig | None = None
+    chunk_size: int = 50
+    max_state_dim: int = 32
+    max_action_dim: int = 32
+    num_inference_steps: int = 10
+    time_sampling_beta_alpha: float = 1.5
+    time_sampling_beta_beta: float = 1.0
+    time_sampling_scale: float = 0.999
+    time_sampling_offset: float = 0.001
+    min_period: float = 4e-3
+    max_period: float = 4.0
+    loss_reduction: str = "mean"
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vlm_config, dict):
+            vlm_model_type = self.vlm_config.get("model_type", "paligemma")
+            self.vlm_config = CONFIG_MAPPING[vlm_model_type](**self.vlm_config)
+        elif self.vlm_config is None:
+            self.vlm_config = CONFIG_MAPPING["paligemma"](
                 text_config={
                     "model_type": "gemma",
                     "hidden_size": 2048,
@@ -258,47 +256,34 @@ class PI0Config(PreTrainedConfig):
                     "vocab_size": 257152,
                     "vision_use_head": False,
                 },
-                projection_dim=vlm_projection_dim,
-                image_token_id=image_token_id,
+                projection_dim=2048,
+                image_token_id=257152,
             )
 
-        if isinstance(dit_config, dict):
-            dit_model_type = dit_config.get("model_type", "gemma")
-            dit_config = CONFIG_MAPPING[dit_model_type](**dit_config)
-        elif dit_config is None:
-            dit_config = CONFIG_MAPPING["gemma"](
+        if isinstance(self.dit_config, dict):
+            dit_model_type = self.dit_config.get("model_type", "gemma")
+            self.dit_config = CONFIG_MAPPING[dit_model_type](**self.dit_config)
+        elif self.dit_config is None:
+            self.dit_config = CONFIG_MAPPING["gemma"](
                 hidden_size=1024,
                 num_hidden_layers=18,
                 intermediate_size=4096,
                 num_attention_heads=8,
                 num_key_value_heads=1,
                 head_dim=256,
-                vocab_size=vlm_config.text_config.vocab_size,
+                vocab_size=self.vlm_config.text_config.vocab_size,
             )
-
-        self.dit_config = dit_config
-        self.vlm_config = vlm_config
 
         # Force bidirectional attention
         self.dit_config.is_causal = False
         self.dit_config.use_bidirectional_attention = True
         self.vlm_config.text_config.use_bidirectional_attention = True
+        super().__post_init__(**kwargs)
 
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if self.dit_config.hidden_size % 2 != 0:
             raise ValueError(f"DiT hidden dim=({self.config.dit_config.hidden_size}) must be divisible by 2")
-
-        self.chunk_size = chunk_size
-        self.max_state_dim = max_state_dim
-        self.max_action_dim = max_action_dim
-        self.num_inference_steps = num_inference_steps
-        self.time_sampling_beta_alpha = time_sampling_beta_alpha
-        self.time_sampling_beta_beta = time_sampling_beta_beta
-        self.time_sampling_scale = time_sampling_scale
-        self.time_sampling_offset = time_sampling_offset
-        self.min_period = min_period
-        self.max_period = max_period
-        self.loss_reduction = loss_reduction
-        super().__init__(**kwargs)
 
 
 def blockwise_bidirectional_mask(block_boundaries: torch.Tensor) -> Callable:

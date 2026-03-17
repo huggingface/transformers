@@ -13,14 +13,14 @@
 # limitations under the License.
 """TimesFM model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/timesfm-2.0-500m-pytorch")
+@strict(accept_kwargs=True)
 class TimesFmConfig(PreTrainedConfig):
     r"""
     patch_length (`int`, *optional*, defaults to 32):
@@ -53,49 +53,24 @@ class TimesFmConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = []
     is_encoder_decoder = False
 
-    def __init__(
-        self,
-        patch_length: int = 32,
-        context_length: int = 512,
-        horizon_length: int = 128,
-        freq_size: int = 3,
-        num_hidden_layers: int = 50,
-        hidden_size: int = 1280,
-        intermediate_size: int = 1280,
-        head_dim: int = 80,
-        num_attention_heads: int = 16,
-        tolerance: float = 1e-6,
-        rms_norm_eps: float = 1e-6,
-        quantiles: list[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        pad_val: float = 1123581321.0,
-        attention_dropout: float = 0.0,
-        use_positional_embedding: bool = False,
-        initializer_range: float = 0.02,
-        min_timescale: int = 1,
-        max_timescale: int = 10_000,
-        **kwargs,
-    ):
-        self.patch_length = patch_length
-        self.context_length = context_length
-        self.horizon_length = horizon_length
-        self.quantiles = quantiles
-        self.pad_val = pad_val
-        self.freq_size = freq_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.head_dim = head_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.tolerance = tolerance
-        self.rms_norm_eps = rms_norm_eps
-        self.attention_dropout = attention_dropout
-        self.use_positional_embedding = use_positional_embedding
-        self.initializer_range = initializer_range
-        self.min_timescale = min_timescale
-        self.max_timescale = max_timescale
-
-        kwargs["is_encoder_decoder"] = self.is_encoder_decoder
-        super().__init__(**kwargs)
+    patch_length: int = 32
+    context_length: int = 512
+    horizon_length: int = 128
+    freq_size: int = 3
+    num_hidden_layers: int = 50
+    hidden_size: int = 1280
+    intermediate_size: int = 1280
+    head_dim: int = 80
+    num_attention_heads: int = 16
+    tolerance: float = 1e-6
+    rms_norm_eps: float = 1e-6
+    quantiles: list[float] | tuple[float, ...] = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
+    pad_val: float = 1123581321.0
+    attention_dropout: float | int = 0.0
+    use_positional_embedding: bool = False
+    initializer_range: float = 0.02
+    min_timescale: int = 1
+    max_timescale: int = 10_000
 
 
 __all__ = ["TimesFmConfig"]

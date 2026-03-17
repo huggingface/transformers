@@ -289,6 +289,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("ministral3", "Ministral3Config"),
         ("mistral", "MistralConfig"),
         ("mistral3", "Mistral3Config"),
+        ("mistral4", "Mistral4Config"),
         ("mixtral", "MixtralConfig"),
         ("mlcd", "MLCDVisionConfig"),  # Keep this to make some original hub repositories (from `DeepGlint-AI`) works
         ("mlcd_vision_model", "MLCDVisionConfig"),
@@ -801,6 +802,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("ministral3", "Ministral3"),
         ("mistral", "Mistral"),
         ("mistral3", "Mistral3"),
+        ("mistral4", "Mistral4"),
         ("mixtral", "Mixtral"),
         ("mlcd", "MLCD"),  # Keep this to make some original hub repositories (from `DeepGlint-AI`) works
         ("mlcd_vision_model", "MLCD"),
