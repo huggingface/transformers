@@ -47,9 +47,6 @@ class UVDocImageProcessingTester:
         size=None,
         do_rescale=True,
         rescale_factor=1 / 255,
-        do_normalize=True,
-        image_mean=[0.485, 0.456, 0.406],
-        image_std=[0.229, 0.224, 0.225],
     ):
         size = size if size is not None else {"height": 512, "width": 512}
         self.parent = parent
@@ -62,19 +59,13 @@ class UVDocImageProcessingTester:
         self.size = size
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
 
     def prepare_image_processor_dict(self):
         return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
             "do_resize": self.do_resize,
             "size": self.size,
-            "keep_aspect_ratio": False,
-            "do_pad": False,
+            "do_rescale": self.do_rescale,
+            "rescale_factor": self.rescale_factor,
         }
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):

@@ -32,7 +32,65 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_uvdoc import UVDocConfig
 
 
+class UVDocConvLayer(nn.Module):
+    """Convolutional layer with batch normalization and activation."""
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 3,
+        stride: int = 1,
+        padding: int = 0,
+        padding_mode: str | None = None,
+        bias: bool = False,
+        dilation: int | None = None,
+        activation: str = "relu",
+    ):
+        super().__init__()
+
+        if dilation is None and padding_mode is None:
+            self.conv = nn.Conv2d(
+                in_channels,
+                out_channels,
+                bias=bias,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+            )
+        elif padding_mode is not None:
+            self.conv = nn.Conv2d(
+                in_channels,
+                out_channels,
+                bias=bias,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                padding_mode=padding_mode,
+            )
+        else:
+            self.conv = nn.Conv2d(
+                in_channels,
+                out_channels,
+                bias=bias,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+            )
+        self.norm = nn.BatchNorm2d(out_channels)
+        self.act_fn = ACT2FN[activation] if activation is not None else nn.Identity()
+
+    def forward(self, hidden_state):
+        hidden_state = self.conv(hidden_state)
+        hidden_state = self.norm(hidden_state)
+        hidden_state = self.act_fn(hidden_state)
+        return hidden_state
+
+
 class UVDocResidualBlockWithDilation(nn.Module):
+    """Residual block with optional downsampling and dilation support."""
+
     def __init__(
         self,
         in_channels: int,
@@ -98,6 +156,8 @@ class UVDocResidualBlockWithDilation(nn.Module):
 
 
 class UVDocResNetStage(nn.Module):
+    """A ResNet stage containing multiple residual blocks."""
+
     def __init__(self, config, in_channels, feature_map_multipliers, block_count, block_stride):
         super().__init__()
         out_channels = config.num_filter * feature_map_multipliers
@@ -125,6 +185,8 @@ class UVDocResNetStage(nn.Module):
 
 
 class UVDocResNetStraight(nn.Module):
+    """ResNet backbone with multiple stages for feature extraction."""
+
     def __init__(self, config):
         super().__init__()
         self.in_channels = config.num_filter * config.feature_map_multipliers[0]
@@ -150,6 +212,8 @@ class UVDocResNetStraight(nn.Module):
 
 
 class UVDocResNetHead(nn.Module):
+    """Initial processing head with downsample and upsample convolutions."""
+
     def __init__(self, config):
         super().__init__()
         in_channels = config.in_channels
@@ -180,61 +244,9 @@ class UVDocResNetHead(nn.Module):
         return hidden_state
 
 
-class UVDocConvLayer(nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int = 3,
-        stride: int = 1,
-        padding: int = 0,
-        padding_mode: str | None = None,
-        bias: bool = False,
-        dilation: int | None = None,
-        activation: str = "relu",
-    ):
-        super().__init__()
-
-        if dilation is None and padding_mode is None:
-            self.conv = nn.Conv2d(
-                in_channels,
-                out_channels,
-                bias=bias,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=padding,
-            )
-        elif padding_mode is not None:
-            self.conv = nn.Conv2d(
-                in_channels,
-                out_channels,
-                bias=bias,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=padding,
-                padding_mode=padding_mode,
-            )
-        else:
-            self.conv = nn.Conv2d(
-                in_channels,
-                out_channels,
-                bias=bias,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=padding,
-                dilation=dilation,
-            )
-        self.norm = nn.BatchNorm2d(out_channels)
-        self.act_fn = ACT2FN[activation] if activation is not None else nn.Identity()
-
-    def forward(self, hidden_state):
-        hidden_state = self.conv(hidden_state)
-        hidden_state = self.norm(hidden_state)
-        hidden_state = self.act_fn(hidden_state)
-        return hidden_state
-
-
 class UVDocBridgeBlock(nn.Module):
+    """Bridge module with dilated convolutions for long-range dependencies."""
+
     def __init__(self, config, dilation_value):
         super().__init__()
         in_channels = config.num_filter * config.feature_map_multipliers[2]
@@ -250,6 +262,8 @@ class UVDocBridgeBlock(nn.Module):
 
 
 class UVDocPointPositions2D(nn.Module):
+    """Module for predicting 2D point positions for document rectification."""
+
     def __init__(self, config):
         super().__init__()
 

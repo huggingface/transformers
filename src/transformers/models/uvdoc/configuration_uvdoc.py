@@ -26,39 +26,26 @@ from ...utils import auto_docstring
     checkpoint="PaddlePaddle/UVDoc_safetensors",
     custom_args=r"""
     num_filter (`int`, *optional*, defaults to 32):
-        The number of convolutional filters (output channels) in the initial convolutional layers of the model,
-        controlling the depth of feature maps extracted from input document images. Larger values increase
-        model capacity but also computational cost.
+        Number of convolutional filters in the initial convolutional layers.
     in_channels (`int`, *optional*, defaults to 3):
-        The number of input channels of the model. Defaults to 3 for RGB document images; set to 1 for grayscale
-        document images.
+        Number of input channels. Defaults to 3 for RGB images; set to 1 for grayscale images.
     kernel_size (`int`, *optional*, defaults to 5):
-        The size of convolutional kernels used in the backbone network, typically an odd integer to ensure
-        symmetric padding and preserve spatial dimensions of feature maps.
+        Kernel size for convolutional layers in the backbone network.
     block_stride_values (`List[int]`, *optional*, defaults to `[1, 2, 2]`):
-        The strides for downsampling operations in the backbone network, corresponding to the scale factor between
-        consecutive stages of the model. Smaller strides reduce the spatial dimension of feature maps while retaining
+        Strides for downsampling operations in the backbone network.
     feature_map_multipliers (`List[int]`, *optional*, defaults to `[1, 2, 4]`):
-        The scaling factors for feature map dimensions in multi-scale feature fusion modules, used to align
-        feature maps of different resolutions for document structure restoration.
+        Scaling factors for feature map dimensions in multi-scale feature fusion modules.
     block_counts_per_stage (`List[int]`, *optional*, defaults to `[3, 4, 6]`):
-        The number of residual blocks in each stage of the model backbone, determining the depth of the network.
-        More blocks enhance feature extraction capability but increase inference time.
+        Number of residual blocks in each stage of the model backbone.
     dilation_values (`List[List[int]]`, *optional*, defaults to `None`):
-        A nested list of dilation rates for dilated convolutional layers in bridge modules.
-        Each inner list contains dilation rates for a single bridge block.
-        Dilated convolution expands the receptive field without increasing kernel size,
-        critical for capturing long-range geometric dependencies in distorted documents.
+        Dilation rates for dilated convolutional layers in bridge modules. Each inner list contains dilation rates
+        for a single bridge block.
     padding_mode (`str`, *optional*, defaults to `"reflect"`):
-        The padding mode for convolutional layers, used to handle boundary pixels of document images. Supported
-        modes include `"reflect"` (recommended for document rectification to avoid edge artifacts), `"constant"`,
-        and `"replicate"`.
+        Padding mode for convolutional layers. Supported modes are `"reflect"`, `"constant"`, and `"replicate"`.
     upsample_size (`List[int]`, *optional*, defaults to `[712, 488]`):
-        The target spatial size (width, height) of the upsampled output image, matching the desired resolution
-        of the rectified document. Adjust based on your input document size and task requirements.
+        Target spatial size (width, height) of the upsampled output image.
     upsample_mode (`str`, *optional*, defaults to `"bilinear"`):
-        The interpolation mode for upsampling layers to restore the original image resolution. Supported modes
-        include `"bilinear"` (smooth upsampling, recommended for document images), `"nearest"`, and `"bicubic"`.
+        Interpolation mode for upsampling layers. Supported modes are `"bilinear"`, `"nearest"`, and `"bicubic"`.
     """,
 )
 class UVDocConfig(PreTrainedConfig):

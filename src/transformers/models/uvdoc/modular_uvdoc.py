@@ -37,39 +37,26 @@ from ...utils.output_capturing import capture_outputs
     checkpoint="PaddlePaddle/UVDoc_safetensors",
     custom_args=r"""
     num_filter (`int`, *optional*, defaults to 32):
-        The number of convolutional filters (output channels) in the initial convolutional layers of the model,
-        controlling the depth of feature maps extracted from input document images. Larger values increase
-        model capacity but also computational cost.
+        Number of convolutional filters in the initial convolutional layers.
     in_channels (`int`, *optional*, defaults to 3):
-        The number of input channels of the model. Defaults to 3 for RGB document images; set to 1 for grayscale
-        document images.
+        Number of input channels. Defaults to 3 for RGB images; set to 1 for grayscale images.
     kernel_size (`int`, *optional*, defaults to 5):
-        The size of convolutional kernels used in the backbone network, typically an odd integer to ensure
-        symmetric padding and preserve spatial dimensions of feature maps.
+        Kernel size for convolutional layers in the backbone network.
     block_stride_values (`List[int]`, *optional*, defaults to `[1, 2, 2]`):
-        The strides for downsampling operations in the backbone network, corresponding to the scale factor between
-        consecutive stages of the model. Smaller strides reduce the spatial dimension of feature maps while retaining
+        Strides for downsampling operations in the backbone network.
     feature_map_multipliers (`List[int]`, *optional*, defaults to `[1, 2, 4]`):
-        The scaling factors for feature map dimensions in multi-scale feature fusion modules, used to align
-        feature maps of different resolutions for document structure restoration.
+        Scaling factors for feature map dimensions in multi-scale feature fusion modules.
     block_counts_per_stage (`List[int]`, *optional*, defaults to `[3, 4, 6]`):
-        The number of residual blocks in each stage of the model backbone, determining the depth of the network.
-        More blocks enhance feature extraction capability but increase inference time.
+        Number of residual blocks in each stage of the model backbone.
     dilation_values (`List[List[int]]`, *optional*, defaults to `None`):
-        A nested list of dilation rates for dilated convolutional layers in bridge modules.
-        Each inner list contains dilation rates for a single bridge block.
-        Dilated convolution expands the receptive field without increasing kernel size,
-        critical for capturing long-range geometric dependencies in distorted documents.
+        Dilation rates for dilated convolutional layers in bridge modules. Each inner list contains dilation rates
+        for a single bridge block.
     padding_mode (`str`, *optional*, defaults to `"reflect"`):
-        The padding mode for convolutional layers, used to handle boundary pixels of document images. Supported
-        modes include `"reflect"` (recommended for document rectification to avoid edge artifacts), `"constant"`,
-        and `"replicate"`.
+        Padding mode for convolutional layers. Supported modes are `"reflect"`, `"constant"`, and `"replicate"`.
     upsample_size (`List[int]`, *optional*, defaults to `[712, 488]`):
-        The target spatial size (width, height) of the upsampled output image, matching the desired resolution
-        of the rectified document. Adjust based on your input document size and task requirements.
+        Target spatial size (width, height) of the upsampled output image.
     upsample_mode (`str`, *optional*, defaults to `"bilinear"`):
-        The interpolation mode for upsampling layers to restore the original image resolution. Supported modes
-        include `"bilinear"` (smooth upsampling, recommended for document images), `"nearest"`, and `"bicubic"`.
+        Interpolation mode for upsampling layers. Supported modes are `"bilinear"`, `"nearest"`, and `"bicubic"`.
     """,
 )
 class UVDocConfig(PreTrainedConfig):
@@ -147,11 +134,9 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
             tensor_type=return_tensors,
         )
 
-    def post_process_document_rectification(self, images, scale=None):
-        if isinstance(scale, (str, float, int)):
-            scale = torch.tensor(float(scale), device=images.device)
-        else:
-            scale = torch.tensor(255.0, device=images.device)
+    def post_process_document_rectification(self, images, scale=255.0):
+        
+        scale = torch.tensor(float(scale), device=images.device)
 
         results = []
         for image in images:
@@ -165,7 +150,65 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
         return results
 
 
+class UVDocConvLayer(nn.Module):
+    """Convolutional layer with batch normalization and activation."""
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 3,
+        stride: int = 1,
+        padding: int = 0,
+        padding_mode: str | None = None,
+        bias: bool = False,
+        dilation: int | None = None,
+        activation: str = "relu",
+    ):
+        super().__init__()
+
+        if dilation is None and padding_mode is None:
+            self.conv = nn.Conv2d(
+                in_channels,
+                out_channels,
+                bias=bias,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+            )
+        elif padding_mode is not None:
+            self.conv = nn.Conv2d(
+                in_channels,
+                out_channels,
+                bias=bias,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                padding_mode=padding_mode,
+            )
+        else:
+            self.conv = nn.Conv2d(
+                in_channels,
+                out_channels,
+                bias=bias,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+            )
+        self.norm = nn.BatchNorm2d(out_channels)
+        self.act_fn = ACT2FN[activation] if activation is not None else nn.Identity()
+
+    def forward(self, hidden_state):
+        hidden_state = self.conv(hidden_state)
+        hidden_state = self.norm(hidden_state)
+        hidden_state = self.act_fn(hidden_state)
+        return hidden_state
+    
+
 class UVDocResidualBlockWithDilation(nn.Module):
+    """Residual block with optional downsampling and dilation support."""
+
     def __init__(
         self,
         in_channels: int,
@@ -231,6 +274,8 @@ class UVDocResidualBlockWithDilation(nn.Module):
 
 
 class UVDocResNetStage(nn.Module):
+    """A ResNet stage containing multiple residual blocks."""
+
     def __init__(self, config, in_channels, feature_map_multipliers, block_count, block_stride):
         super().__init__()
         out_channels = config.num_filter * feature_map_multipliers
@@ -258,6 +303,8 @@ class UVDocResNetStage(nn.Module):
 
 
 class UVDocResNetStraight(nn.Module):
+    """ResNet backbone with multiple stages for feature extraction."""
+
     def __init__(self, config):
         super().__init__()
         self.in_channels = config.num_filter * config.feature_map_multipliers[0]
@@ -283,6 +330,8 @@ class UVDocResNetStraight(nn.Module):
 
 
 class UVDocResNetHead(nn.Module):
+    """Initial processing head with downsample and upsample convolutions."""
+
     def __init__(self, config):
         super().__init__()
         in_channels = config.in_channels
@@ -313,61 +362,9 @@ class UVDocResNetHead(nn.Module):
         return hidden_state
 
 
-class UVDocConvLayer(nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int = 3,
-        stride: int = 1,
-        padding: int = 0,
-        padding_mode: str | None = None,
-        bias: bool = False,
-        dilation: int | None = None,
-        activation: str = "relu",
-    ):
-        super().__init__()
-
-        if dilation is None and padding_mode is None:
-            self.conv = nn.Conv2d(
-                in_channels,
-                out_channels,
-                bias=bias,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=padding,
-            )
-        elif padding_mode is not None:
-            self.conv = nn.Conv2d(
-                in_channels,
-                out_channels,
-                bias=bias,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=padding,
-                padding_mode=padding_mode,
-            )
-        else:
-            self.conv = nn.Conv2d(
-                in_channels,
-                out_channels,
-                bias=bias,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=padding,
-                dilation=dilation,
-            )
-        self.norm = nn.BatchNorm2d(out_channels)
-        self.act_fn = ACT2FN[activation] if activation is not None else nn.Identity()
-
-    def forward(self, hidden_state):
-        hidden_state = self.conv(hidden_state)
-        hidden_state = self.norm(hidden_state)
-        hidden_state = self.act_fn(hidden_state)
-        return hidden_state
-
-
 class UVDocBridgeBlock(nn.Module):
+    """Bridge module with dilated convolutions for long-range dependencies."""
+
     def __init__(self, config, dilation_value):
         super().__init__()
         in_channels = config.num_filter * config.feature_map_multipliers[2]
@@ -383,6 +380,8 @@ class UVDocBridgeBlock(nn.Module):
 
 
 class UVDocPointPositions2D(nn.Module):
+    """Module for predicting 2D point positions for document rectification."""
+
     def __init__(self, config):
         super().__init__()
 
@@ -394,7 +393,7 @@ class UVDocPointPositions2D(nn.Module):
             padding=config.kernel_size // 2,
             padding_mode=config.padding_mode,
             activation="prelu",
-        )
+        ) 
 
         self.conv_up = nn.Conv2d(
             config.num_filter * config.feature_map_multipliers[0],

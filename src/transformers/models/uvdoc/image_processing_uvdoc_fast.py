@@ -75,11 +75,8 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
             tensor_type=return_tensors,
         )
 
-    def post_process_document_rectification(self, images, scale=None):
-        if isinstance(scale, (str, float, int)):
-            scale = torch.tensor(float(scale), device=images.device)
-        else:
-            scale = torch.tensor(255.0, device=images.device)
+    def post_process_document_rectification(self, images, scale=255.0):
+        scale = torch.tensor(float(scale), device=images.device)
 
         results = []
         for image in images:
