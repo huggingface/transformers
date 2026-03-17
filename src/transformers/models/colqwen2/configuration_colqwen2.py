@@ -43,7 +43,6 @@ class ColQwen2Config(PreTrainedConfig):
     vlm_config: dict | PreTrainedConfig | None = None
     embedding_dim: int = 128
     initializer_range: float = 0.02
-    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if self.vlm_config is None:

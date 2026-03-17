@@ -72,6 +72,9 @@ class ColModernVBertConfig(PreTrainedConfig):
         if not hasattr(self.vlm_config, "vocab_size"):
             self.vlm_config.vocab_size = self.vlm_config.get_text_config().vocab_size
 
+        # Move `tie_word_embeddings` under `vlm_config` for BC
+        if self.vlm_config.text_config.tie_word_embeddings and not self.vlm_config.tie_word_embeddings:
+            self.vlm_config.tie_word_embeddings = self.vlm_config.text_config.tie_word_embeddings
         super().__post_init__(**kwargs)
 
     def get_text_config(self, *args, **kwargs) -> PreTrainedConfig:
