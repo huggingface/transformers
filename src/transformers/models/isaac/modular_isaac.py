@@ -743,6 +743,12 @@ class IsaacProcessor(ProcessorMixin):
                     f"IsaacProcessor expects one image per image token, got {num_images} tokens and {num_provided_images} images in sample with text {text_value} "
                 )
 
+            sample_image_features = (
+                self.image_processor(images=sample_images, return_tensors=TensorType.PYTORCH)
+                if sample_images
+                else None
+            )
+
             items: list[dict[str, Any]] = []
             total = 0
             for index, segment in enumerate(segments):
@@ -757,17 +763,16 @@ class IsaacProcessor(ProcessorMixin):
                     total += segment_length
 
                 if index < num_images:
-                    feature = self.image_processor(images=sample_images[index], return_tensors=TensorType.PYTORCH)
-                    patches = feature["vision_patches"][0]
-                    dims = tuple(feature["vision_position_dims"][0].to(torch.long).tolist())
-                    segment_length = int(feature["vision_segment_lengths"][0].item())
+                    patches = sample_image_features["vision_patches"][index]
+                    dims = sample_image_features["vision_position_dims"][index]
+                    segment_length = int(sample_image_features["vision_segment_lengths"][index].item())
                     items.append(
                         {
                             "type": "image",
                             "segment_length": segment_length,
                             "dims": dims,
                             "patches": patches,
-                            "grid": tuple(feature["vision_token_grids"][0].to(torch.long).tolist()),
+                            "grid": sample_image_features["vision_token_grids"][index],
                         }
                     )
                     total += segment_length
@@ -804,7 +809,8 @@ class IsaacProcessor(ProcessorMixin):
                         input_ids_chunks.append(item["tokens"].to(base_device)[segment_local_start:segment_local_end])
                         position_offset += segment_length
                     else:
-                        num_pos_slices, grid_height_tokens, grid_width_tokens = item["dims"]
+                        dims = item["dims"].to(device=base_device)
+                        num_pos_slices, grid_height_tokens, grid_width_tokens = dims.unbind(0)
                         hw = grid_height_tokens * grid_width_tokens
                         slice_index = (segment_local_indices // hw) + position_offset
                         rem = segment_local_indices % hw
@@ -818,12 +824,12 @@ class IsaacProcessor(ProcessorMixin):
                         )
 
                         vision_patches.append(item["patches"].to(base_device))
-                        vision_grids.append(item["grid"])
+                        vision_grids.append(item["grid"].to(device=base_device))
                         vision_offsets.append(segment_local_start)
                         vision_lengths.append(segment_kept_length)
-                        position_offset += int(num_pos_slices)
+                        position_offset += int(num_pos_slices.item())
                 else:
-                    position_offset += segment_length if item["type"] == "text" else int(item["dims"][0])
+                    position_offset += segment_length if item["type"] == "text" else int(item["dims"][0].item())
 
                 global_offset += segment_length
 
@@ -842,7 +848,7 @@ class IsaacProcessor(ProcessorMixin):
             )
             sample_vision_patches.append(vision_patches)
             if vision_patches:
-                sample_vision_grids.append(torch.tensor(vision_grids, device=base_device, dtype=torch.long))
+                sample_vision_grids.append(torch.stack(vision_grids))
                 sample_vision_offsets.append(torch.tensor(vision_offsets, device=base_device, dtype=torch.long))
                 sample_vision_lengths.append(torch.tensor(vision_lengths, device=base_device, dtype=torch.long))
             else:
