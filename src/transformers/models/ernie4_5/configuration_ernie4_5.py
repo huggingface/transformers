@@ -13,12 +13,15 @@
 # limitations under the License.
 """Ernie 4.5 model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-0.3B-PT")
+@strict(accept_kwargs=True)
 class Ernie4_5Config(PreTrainedConfig):
     r"""
     use_bias (`bool`, *optional*, defaults to `False`):
@@ -58,53 +61,31 @@ class Ernie4_5Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 103424,
-        hidden_size: int | None = 1024,
-        intermediate_size: int | None = 3072,
-        num_hidden_layers: int | None = 18,
-        num_attention_heads: int | None = 16,
-        num_key_value_heads: int | None = 2,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 131072,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-05,
-        use_cache: int | None = True,
-        pad_token_id: int | None = 0,
-        bos_token_id: int | None = 1,
-        eos_token_id: int | None = 2,
-        tie_word_embeddings: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        use_bias: bool | None = False,
-        head_dim: int | None = 128,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vocab_size: int = 103424
+    hidden_size: int = 1024
+    intermediate_size: int = 3072
+    num_hidden_layers: int = 18
+    num_attention_heads: int = 16
+    num_key_value_heads: int | None = 2
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 131072
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-05
+    use_cache: int | None = True
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    tie_word_embeddings: bool = True
+    rope_parameters: RopeParameters | dict | None = None
+    use_bias: bool | None = False
+    head_dim: int | None = 128
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.use_bias = use_bias
-        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        self.rope_parameters = rope_parameters
-
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        super().__init__(**kwargs)
+        self.head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Ernie4_5Config"]

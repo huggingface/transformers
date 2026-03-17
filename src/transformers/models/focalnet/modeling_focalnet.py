@@ -636,7 +636,7 @@ class FocalNetModel(FocalNetPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -742,7 +742,7 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
         >>> list(reconstructed_pixel_values.shape)
         [1, 3, 192, 192]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.focalnet(
             pixel_values,
@@ -823,7 +823,7 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.focalnet(
             pixel_values,
@@ -898,7 +898,7 @@ class FocalNetBackbone(BackboneMixin, FocalNetPreTrainedModel):
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
