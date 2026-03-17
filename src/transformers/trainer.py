@@ -2048,7 +2048,6 @@ class Trainer:
         ignore_keys_for_eval: list[str] | None,
         start_time: float,
         learning_rate: float | None = None,
-        force_evaluate: bool = False,
     ) -> None:
         """Log metrics, run evaluation, and save checkpoints if the current training state requires it."""
         if self.control.should_log and self.state.global_step > self._globalstep_last_logged:
@@ -2078,7 +2077,7 @@ class Trainer:
             self.log(logs, start_time)
 
         metrics = None
-        if self.control.should_evaluate or force_evaluate:
+        if self.control.should_evaluate:
             metrics = self._evaluate(trial, ignore_keys_for_eval)
             is_new_best_metric = self._determine_best_metric(metrics=metrics, trial=trial)
 
