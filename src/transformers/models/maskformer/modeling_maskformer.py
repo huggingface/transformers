@@ -46,7 +46,7 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoBackbone
-from .configuration_maskformer import MaskFormerConfig, MaskFormerDetrConfig
+from .configuration_maskformer import MaskFormerConfig
 from .configuration_maskformer_swin import MaskFormerSwinConfig
 
 
@@ -324,7 +324,7 @@ class MaskFormerDetrSelfAttention(nn.Module):
 
     def __init__(
         self,
-        config: MaskFormerDetrConfig,
+        config: MaskFormerConfig,
         hidden_size: int,
         num_attention_heads: int,
         dropout: float = 0.0,
@@ -391,7 +391,7 @@ class MaskFormerDetrCrossAttention(nn.Module):
 
     def __init__(
         self,
-        config: MaskFormerDetrConfig,
+        config: MaskFormerConfig,
         hidden_size: int,
         num_attention_heads: int,
         dropout: float = 0.0,
@@ -462,7 +462,7 @@ class MaskFormerDetrCrossAttention(nn.Module):
 
 
 class MaskFormerDetrMLP(nn.Module):
-    def __init__(self, config: MaskFormerDetrConfig, hidden_size: int, intermediate_size: int):
+    def __init__(self, config: MaskFormerConfig, hidden_size: int, intermediate_size: int):
         super().__init__()
         self.fc1 = nn.Linear(hidden_size, intermediate_size)
         self.fc2 = nn.Linear(intermediate_size, hidden_size)
@@ -479,7 +479,7 @@ class MaskFormerDetrMLP(nn.Module):
 
 
 class MaskFormerDetrDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: MaskFormerDetrConfig):
+    def __init__(self, config: MaskFormerConfig):
         super().__init__()
         self.hidden_size = config.d_model
 
@@ -727,7 +727,7 @@ class MaskFormerDetrMHAttentionMap(nn.Module):
 
 @auto_docstring
 class MaskFormerDetrPreTrainedModel(PreTrainedModel):
-    config: MaskFormerDetrConfig
+    config: MaskFormerConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
@@ -781,7 +781,7 @@ class DetrDecoder(MaskFormerDetrPreTrainedModel):
     which apply self-attention to the queries and cross-attention to the encoder's outputs.
 
     Args:
-        config (`MaskFormerDetrConfig`): Model configuration object.
+        config (`MaskFormerConfig`): Model configuration object.
     """
 
     _can_record_outputs = {
@@ -790,7 +790,7 @@ class DetrDecoder(MaskFormerDetrPreTrainedModel):
         "cross_attentions": MaskFormerDetrCrossAttention,
     }
 
-    def __init__(self, config: MaskFormerDetrConfig):
+    def __init__(self, config: MaskFormerConfig):
         super().__init__(config)
         self.dropout = config.dropout
 
