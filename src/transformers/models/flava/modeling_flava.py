@@ -537,7 +537,7 @@ class FlavaIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    # Copied from transformers.models.vit.modeling_vit.ViTMLP.forward
+    # Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTMLP.forward
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
@@ -551,7 +551,7 @@ class FlavaOutput(nn.Module):
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    # Copied from transformers.models.vit.modeling_vit.ViTMLP.forward
+    # Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTMLP.forward
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)

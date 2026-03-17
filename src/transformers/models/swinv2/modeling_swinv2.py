@@ -166,7 +166,7 @@ def window_reverse(windows, window_size, height, width):
     return windows
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinEmbeddings with Swin->Swinv2
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinEmbeddings with Swin->Swinv2
 class Swinv2Embeddings(nn.Module):
     """
     Construct the patch and position embeddings. Optionally, also the mask token.
@@ -493,7 +493,7 @@ class Swinv2SelfAttention(nn.Module):
         return relative_coords_table, relative_position_index
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->Swinv2
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->Swinv2
 class Swinv2SelfOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -533,7 +533,7 @@ class Swinv2Attention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->Swinv2
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->Swinv2
 class Swinv2Intermediate(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -549,7 +549,7 @@ class Swinv2Intermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinOutput with Swin->Swinv2
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinOutput with Swin->Swinv2
 class Swinv2Output(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -872,7 +872,7 @@ class Swinv2PreTrainedModel(PreTrainedModel):
 
 
 @auto_docstring
-# Copied from transformers.models.swin.modeling_swin.SwinModel with SWIN->SWINV2,Swin->Swinv2
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinModel with SWIN->SWINV2,Swin->Swinv2
 class Swinv2Model(Swinv2PreTrainedModel):
     def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
         r"""
@@ -969,7 +969,7 @@ class Swinv2Model(Swinv2PreTrainedModel):
         </Tip>
     """
 )
-# Copied from transformers.models.swin.modeling_swin.SwinForMaskedImageModeling with swin->swinv2, base-simmim-window6-192->tiny-patch4-window8-256,SWIN->SWINV2,Swin->Swinv2,192->256
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinForMaskedImageModeling with swin->swinv2, base-simmim-window6-192->tiny-patch4-window8-256,SWIN->SWINV2,Swin->Swinv2,192->256
 class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1088,7 +1088,7 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
     </Tip>
     """
 )
-# Copied from transformers.models.swin.modeling_swin.SwinForImageClassification with SWIN->SWINV2,Swin->Swinv2,swin->swinv2
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinForImageClassification with SWIN->SWINV2,Swin->Swinv2,swin->swinv2
 class Swinv2ForImageClassification(Swinv2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

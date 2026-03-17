@@ -36,10 +36,12 @@ if TYPE_CHECKING:
 
 _MODEL_TO_CONVERSION_PATTERN = {
     # ViT-style vision models (old HuggingFace checkpoint format → new modular format)
+    "audio-spectrogram-transformer": "vit",
     "deit": "vit",
     "pixio": "vit",
     "vit_mae": "vit",
     "vit_msn": "vit",
+    "vivit": "vit",
     # Mixtral-style MoE
     "mixtral": "mixtral",
     "minimax": "mixtral",

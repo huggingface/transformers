@@ -29,7 +29,7 @@ from .configuration_glpn import GLPNConfig
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.segformer.modeling_segformer.SegformerOverlapPatchEmbeddings
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerOverlapPatchEmbeddings
 class GLPNOverlapPatchEmbeddings(nn.Module):
     """Construct the overlapping patch embeddings."""
 
@@ -55,7 +55,7 @@ class GLPNOverlapPatchEmbeddings(nn.Module):
         return embeddings, height, width
 
 
-# Copied from transformers.models.segformer.modeling_segformer.SegformerEfficientSelfAttention
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerEfficientSelfAttention
 class GLPNEfficientSelfAttention(nn.Module):
     """SegFormer's efficient self-attention mechanism. Employs the sequence reduction process introduced in the [PvT
     paper](https://huggingface.co/papers/2102.12122)."""
@@ -145,7 +145,7 @@ class GLPNEfficientSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.segformer.modeling_segformer.SegformerSelfOutput
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerSelfOutput
 class GLPNSelfOutput(nn.Module):
     def __init__(self, config, hidden_size):
         super().__init__()
@@ -158,7 +158,7 @@ class GLPNSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.segformer.modeling_segformer.SegformerAttention with Segformer->GLPN
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerAttention with Segformer->GLPN
 class GLPNAttention(nn.Module):
     def __init__(self, config, hidden_size, num_attention_heads, sequence_reduction_ratio):
         super().__init__()
@@ -193,7 +193,7 @@ class GLPNDWConv(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.segformer.modeling_segformer.SegformerMixFFN with Segformer->GLPN
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerMixFFN with Segformer->GLPN
 class GLPNMixFFN(nn.Module):
     def __init__(self, config, in_features, hidden_features=None, out_features=None):
         super().__init__()
@@ -217,7 +217,7 @@ class GLPNMixFFN(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.segformer.modeling_segformer.SegformerLayer with Segformer->GLPN
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerLayer with Segformer->GLPN
 class GLPNLayer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
 
@@ -360,7 +360,7 @@ class GLPNPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class GLPNModel(GLPNPreTrainedModel):
-    # Copied from transformers.models.segformer.modeling_segformer.SegformerModel.__init__ with Segformer->GLPN
+    # Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerModel.__init__ with Segformer->GLPN
     def __init__(self, config):
         super().__init__(config)
         self.config = config
@@ -372,7 +372,7 @@ class GLPNModel(GLPNPreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    # Copied from transformers.models.segformer.modeling_segformer.SegformerModel.forward
+    # Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerModel.forward
     def forward(
         self,
         pixel_values: torch.FloatTensor,

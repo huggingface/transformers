@@ -266,7 +266,7 @@ class VideoMAESelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VideoMAE
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VideoMAE
 class VideoMAESelfOutput(nn.Module):
     """
     The residual connection is defined in VideoMAELayer instead of here (as is the case with other models), due to the
@@ -284,7 +284,7 @@ class VideoMAESelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VideoMAE
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VideoMAE
 class VideoMAEAttention(nn.Module):
     def __init__(self, config: VideoMAEConfig):
         super().__init__()
@@ -301,7 +301,7 @@ class VideoMAEAttention(nn.Module):
         return output
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTMLP ViT->VideoMAE
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTMLP ViT->VideoMAE
 class VideoMAEIntermediate(nn.Module):
     def __init__(self, config: VideoMAEConfig):
         super().__init__()
@@ -317,7 +317,7 @@ class VideoMAEIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTMLP ViT->VideoMAE
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTMLP ViT->VideoMAE
 class VideoMAEOutput(nn.Module):
     def __init__(self, config: VideoMAEConfig):
         super().__init__()
@@ -331,7 +331,7 @@ class VideoMAEOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->VideoMAE,VIT->VIDEOMAE
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->VideoMAE,VIT->VIDEOMAE
 class VideoMAELayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -366,7 +366,7 @@ class VideoMAELayer(GradientCheckpointingLayer):
         return layer_output
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->VideoMAE
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->VideoMAE
 class VideoMAEEncoder(nn.Module):
     def __init__(self, config: VideoMAEConfig):
         super().__init__()

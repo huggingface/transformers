@@ -328,9 +328,12 @@ def _test_eager_matches_sdpa_inference(
                         seqlen = inputs_dict.get("decoder_input_ids", processed_inputs[model.main_input_name]).shape[
                             -1
                         ]
-                    elif model.main_input_name == "pixel_values" and hasattr(self.model_tester, "seq_length"):
-                        # For vision models, pixel_values.shape[-1] is image width, not sequence length.
-                        # Use model_tester.seq_length (num_patches + 1 for ViT) instead.
+                    elif model.main_input_name in ("pixel_values", "input_values") and hasattr(
+                        self.model_tester, "seq_length"
+                    ):
+                        # For models where the main input's last dimension is not the token sequence length
+                        # (e.g. pixel_values.shape[-1] is image width, input_values.shape[-1] is num_mel_bins).
+                        # Use model_tester.seq_length (num_patches + 1/2 for ViT/DeiT/AST) instead.
                         seqlen = self.model_tester.seq_length
                     else:
                         seqlen = processed_inputs[model.main_input_name].shape[-1]

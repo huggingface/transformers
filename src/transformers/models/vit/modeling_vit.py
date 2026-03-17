@@ -310,6 +310,21 @@ class ViTEncoder(nn.Module):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
+class ViTPooler(nn.Module):
+    def __init__(self, config: ViTConfig):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.pooler_output_size)
+        self.activation = ACT2FN[config.pooler_act]
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
+
+
 @auto_docstring
 class ViTPreTrainedModel(PreTrainedModel):
     config: ViTConfig
@@ -329,7 +344,7 @@ class ViTPreTrainedModel(PreTrainedModel):
     }
 
     @torch.no_grad()
-    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm):
+    def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
@@ -404,21 +419,6 @@ class ViTModel(ViTPreTrainedModel):
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         return BaseModelOutputWithPooling(last_hidden_state=sequence_output, pooler_output=pooled_output)
-
-
-class ViTPooler(nn.Module):
-    def __init__(self, config: ViTConfig):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.pooler_output_size)
-        self.activation = ACT2FN[config.pooler_act]
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output
 
 
 @auto_docstring(

@@ -331,7 +331,7 @@ class Swin2SRSelfAttention(nn.Module):
         return relative_coords_table, relative_position_index
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->Swin2SR
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->Swin2SR
 class Swin2SRSelfOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -372,7 +372,7 @@ class Swin2SRAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->Swin2SR
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->Swin2SR
 class Swin2SRIntermediate(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -388,7 +388,7 @@ class Swin2SRIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinOutput with Swin->Swin2SR
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinOutput with Swin->Swin2SR
 class Swin2SROutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()

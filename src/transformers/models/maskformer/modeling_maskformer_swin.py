@@ -278,7 +278,7 @@ class MaskFormerSwinPatchMerging(nn.Module):
         return input_feature
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinSelfAttention with Swin->MaskFormerSwin
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinSelfAttention with Swin->MaskFormerSwin
 class MaskFormerSwinSelfAttention(nn.Module):
     def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
@@ -372,7 +372,7 @@ class MaskFormerSwinSelfAttention(nn.Module):
         return relative_position_index
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->MaskFormerSwin
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->MaskFormerSwin
 class MaskFormerSwinSelfOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -386,7 +386,7 @@ class MaskFormerSwinSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinAttention with Swin->MaskFormerSwin
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinAttention with Swin->MaskFormerSwin
 class MaskFormerSwinAttention(nn.Module):
     def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
@@ -405,7 +405,7 @@ class MaskFormerSwinAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->MaskFormerSwin
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->MaskFormerSwin
 class MaskFormerSwinIntermediate(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -421,7 +421,7 @@ class MaskFormerSwinIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinOutput with Swin->MaskFormerSwin
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinOutput with Swin->MaskFormerSwin
 class MaskFormerSwinOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -543,7 +543,7 @@ class MaskFormerSwinLayer(nn.Module):
 
 
 class MaskFormerSwinStage(GradientCheckpointingLayer):
-    # Copied from transformers.models.swin.modeling_swin.SwinStage.__init__ with Swin->MaskFormerSwin
+    # Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinStage.__init__ with Swin->MaskFormerSwin
     def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
         super().__init__()
         self.config = config
@@ -596,7 +596,7 @@ class MaskFormerSwinStage(GradientCheckpointingLayer):
 
 
 class MaskFormerSwinEncoder(nn.Module):
-    # Copied from transformers.models.swin.modeling_swin.SwinEncoder.__init__ with Swin->MaskFormerSwin
+    # Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinEncoder.__init__ with Swin->MaskFormerSwin
     def __init__(self, config, grid_size):
         super().__init__()
         self.num_layers = len(config.depths)
