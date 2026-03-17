@@ -1755,7 +1755,7 @@ class ContinuousBatchingConfig:
         self, fallback_compile_config: CompileConfig | None, is_flash_attn: bool, decode_fast_path_available: bool
     ) -> tuple[CompileConfig | None, CompileConfig | None]:
         """Processes the compile configs for varlen and decode paths. Returns (varlen_config, decode_config) with either
-        potentially None.
+        potentially None, and modifies them in place.
         Args:
             fallback_compile_config: The compile_config from generation_config to use as fallback
             decode_fast_path_available: Whether the fast decode path (block table) is available
@@ -1795,4 +1795,7 @@ class ContinuousBatchingConfig:
             logger_.info(f"Varlen path will be compiled with {varlen_config.to_dict()}")
         if decode_config is not None:
             logger_.info(f"Decode path will be compiled with {decode_config.to_dict()}")
+        # Modify in place and return
+        self.varlen_compile_config = varlen_config
+        self.decode_compile_config = decode_config
         return varlen_config, decode_config
