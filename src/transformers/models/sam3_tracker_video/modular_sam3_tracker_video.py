@@ -202,7 +202,7 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     prompt_encoder_config: dict | PreTrainedConfig | None = None
     mask_decoder_config: dict | PreTrainedConfig | None = None
-    initializer_range: int = 0.02
+    initializer_range: float = 0.02
     num_maskmem: int = 7
     sigmoid_scale_for_mem_enc: float = 20.0
     sigmoid_bias_for_mem_enc: float = -10.0
@@ -393,11 +393,6 @@ class Sam3TrackerVideoMaskDecoder(Sam2VideoMaskDecoder):
 
 
 class Sam3TrackerVideoModel(Sam2VideoModel):
-    _checkpoint_conversion_mapping = {
-        r"tracker_model.(.+)": r"\1",  # the regex allows to remove the prefix, and add it back in revert mode
-        "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
-        "tracker_neck.": "vision_encoder.neck.",
-    }
     _keys_to_ignore_on_load_unexpected = [r"^detector_model."]
 
     def __init__(self, config: Sam3TrackerVideoConfig, remove_vision_encoder: bool = False):

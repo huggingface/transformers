@@ -87,8 +87,6 @@ class Lfm2VlModelOutputWithPast(LlavaModelOutputWithPast):
 
 
 class Lfm2VlModel(LlavaModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Lfm2VlConfig):
         super().__init__(config)
 
@@ -228,8 +226,6 @@ class Lfm2VlModel(LlavaModel):
 
 
 class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
-    _checkpoint_conversion_mapping = {}
-
     @auto_docstring
     def get_image_features(
         self,

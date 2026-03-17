@@ -38,7 +38,13 @@ from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWit
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    logging,
+    torch_compilable_check,
+)
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_ernie4_5_vl_moe import Ernie4_5_VLMoeConfig, Ernie4_5_VLMoeTextConfig, Ernie4_5_VLMoeVisionConfig
@@ -1078,7 +1084,6 @@ class Ernie4_5_VLMoeVariableResolutionResamplerModel(nn.Module):
 @auto_docstring
 class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
     base_model_prefix = "model"
-    _checkpoint_conversion_mapping = {"^norm": "language_model.norm"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: Ernie4_5_VLMoeConfig
@@ -1560,7 +1565,6 @@ def load_balancing_loss_func(
 
 
 class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {"^model.norm": "model.language_model.norm"}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False

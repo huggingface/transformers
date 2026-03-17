@@ -329,6 +329,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_vision_objects) if not name.startswith("_")
     ]
 else:
+    _import_structure["image_processing_backends"] = ["PilBackend", "TorchvisionBackend"]
     _import_structure["image_processing_base"] = ["ImageProcessingMixin"]
     _import_structure["image_processing_utils"] = ["BaseImageProcessor"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
@@ -343,7 +344,6 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_torchvision_objects) if not name.startswith("_")
     ]
 else:
-    _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
     _import_structure["video_processing_utils"] = ["BaseVideoProcessor"]
 
 # PyTorch-backed objects
@@ -600,9 +600,10 @@ if TYPE_CHECKING:
     from .generation import WatermarkLogitsProcessor as WatermarkLogitsProcessor
     from .generation import WhisperTimeStampLogitsProcessor as WhisperTimeStampLogitsProcessor
     from .hf_argparser import HfArgumentParser as HfArgumentParser
+    from .image_processing_backends import PilBackend as PilBackend
+    from .image_processing_backends import TorchvisionBackend as TorchvisionBackend
     from .image_processing_base import ImageProcessingMixin as ImageProcessingMixin
     from .image_processing_utils import BaseImageProcessor as BaseImageProcessor
-    from .image_processing_utils_fast import BaseImageProcessorFast as BaseImageProcessorFast
     from .image_utils import ImageFeatureExtractionMixin as ImageFeatureExtractionMixin
 
     # Integrations

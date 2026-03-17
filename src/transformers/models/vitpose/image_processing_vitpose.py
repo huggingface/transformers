@@ -15,32 +15,38 @@
 
 import itertools
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import to_channel_dimension_format
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     ChannelDimension,
     ImageInput,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
+    PILImageResampling,
+    SizeDict,
 )
-from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, is_scipy_available, is_torch_available, is_vision_available, logging
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import (
+    TensorType,
+    auto_docstring,
+    is_scipy_available,
+    is_torch_available,
+    is_torchvision_available,
+    logging,
+    requires_backends,
+)
 
 
 if is_torch_available():
     import torch
 
-if is_vision_available():
-    import PIL
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 if is_scipy_available():
     from scipy.linalg import inv
@@ -109,24 +115,67 @@ def box_to_center_and_scale(
     return center, scale
 
 
-def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
+def get_warp_matrix(theta: float, size_input: np.ndarray, size_dst: np.ndarray, size_target: np.ndarray):
     """
-    Converts bounding boxes from the COCO format to the Pascal VOC format.
+    Calculate the transformation matrix under the constraint of unbiased. Paper ref: Huang et al. The Devil is in the
+    Details: Delving into Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
 
-    In other words, converts from (top_left_x, top_left_y, width, height) format
-    to (top_left_x, top_left_y, bottom_right_x, bottom_right_y).
+    Source: https://github.com/open-mmlab/mmpose/blob/master/mmpose/core/post_processing/post_transforms.py
 
     Args:
-        bboxes (`np.ndarray` of shape `(batch_size, 4)):
-            Bounding boxes in COCO format.
+        theta (`float`):
+            Rotation angle in degrees.
+        size_input (`np.ndarray`):
+            Size of input image [width, height].
+        size_dst (`np.ndarray`):
+            Size of output image [width, height].
+        size_target (`np.ndarray`):
+            Size of ROI in input plane [w, h].
 
     Returns:
-        `np.ndarray` of shape `(batch_size, 4) in Pascal VOC format.
+        `np.ndarray`: A matrix for transformation.
     """
-    bboxes[:, 2] = bboxes[:, 2] + bboxes[:, 0] - 1
-    bboxes[:, 3] = bboxes[:, 3] + bboxes[:, 1] - 1
+    theta = np.deg2rad(theta)
+    matrix = np.zeros((2, 3), dtype=np.float32)
+    scale_x = size_dst[0] / size_target[0]
+    scale_y = size_dst[1] / size_target[1]
+    matrix[0, 0] = math.cos(theta) * scale_x
+    matrix[0, 1] = -math.sin(theta) * scale_x
+    matrix[0, 2] = scale_x * (
+        -0.5 * size_input[0] * math.cos(theta) + 0.5 * size_input[1] * math.sin(theta) + 0.5 * size_target[0]
+    )
+    matrix[1, 0] = math.sin(theta) * scale_y
+    matrix[1, 1] = math.cos(theta) * scale_y
+    matrix[1, 2] = scale_y * (
+        -0.5 * size_input[0] * math.sin(theta) - 0.5 * size_input[1] * math.cos(theta) + 0.5 * size_target[1]
+    )
+    return matrix
 
-    return bboxes
+
+def scipy_warp_affine(src, M, size):
+    """
+    This function implements cv2.warpAffine function using affine_transform in scipy. See https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.affine_transform.html and https://docs.opencv.org/4.x/d4/d61/tutorial_warp_affine.html for more details.
+
+    Note: the original implementation of cv2.warpAffine uses cv2.INTER_LINEAR.
+    """
+    channels = [src[..., i] for i in range(src.shape[-1])]
+
+    # Convert to a 3x3 matrix used by SciPy
+    M_scipy = np.vstack([M, [0, 0, 1]])
+    # If you have a matrix for the 'push' transformation, use its inverse (numpy.linalg.inv) in this function.
+    M_inv = inv(M_scipy)
+    M_inv[0, 0], M_inv[0, 1], M_inv[1, 0], M_inv[1, 1], M_inv[0, 2], M_inv[1, 2] = (
+        M_inv[1, 1],
+        M_inv[1, 0],
+        M_inv[0, 1],
+        M_inv[0, 0],
+        M_inv[1, 2],
+        M_inv[0, 2],
+    )
+
+    new_src = [affine_transform(channel, M_inv, output_shape=size, order=1) for channel in channels]
+    new_src = np.stack(new_src, axis=-1)
+    return new_src
 
 
 def get_keypoint_predictions(heatmaps: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -198,8 +247,6 @@ def post_dark_unbiased_data_processing(coords: np.ndarray, batch_heatmaps: np.nd
     batch_heatmaps = np.log(batch_heatmaps)
 
     batch_heatmaps_pad = np.pad(batch_heatmaps, ((0, 0), (0, 0), (1, 1), (1, 1)), mode="edge").flatten()
-
-    # calculate indices for coordinates
     index = coords[..., 0] + 1 + (coords[..., 1] + 1) * (width + 2)
     index += (width + 2) * (height + 2) * np.arange(0, batch_size * num_keypoints).reshape(-1, num_keypoints)
     index = index.astype(int).reshape(-1, 1)
@@ -210,8 +257,6 @@ def post_dark_unbiased_data_processing(coords: np.ndarray, batch_heatmaps: np.nd
     ix1_y1_ = batch_heatmaps_pad[index - width - 3]
     ix1_ = batch_heatmaps_pad[index - 1]
     iy1_ = batch_heatmaps_pad[index - 2 - width]
-
-    # calculate refined coordinates using Newton's method
     dx = 0.5 * (ix1 - ix1_)
     dy = 0.5 * (iy1 - iy1_)
     derivative = np.concatenate([dx, dy], axis=1)
@@ -274,291 +319,138 @@ def transform_preds(coords: np.ndarray, center: np.ndarray, scale: np.ndarray, o
     return target_coords
 
 
-def get_warp_matrix(theta: float, size_input: np.ndarray, size_dst: np.ndarray, size_target: np.ndarray):
+def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
     """
-    Calculate the transformation matrix under the constraint of unbiased. Paper ref: Huang et al. The Devil is in the
-    Details: Delving into Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
+    Converts bounding boxes from the COCO format to the Pascal VOC format.
 
-    Source: https://github.com/open-mmlab/mmpose/blob/master/mmpose/core/post_processing/post_transforms.py
+    In other words, converts from (top_left_x, top_left_y, width, height) format
+    to (top_left_x, top_left_y, bottom_right_x, bottom_right_y).
 
     Args:
-        theta (`float`):
-            Rotation angle in degrees.
-        size_input (`np.ndarray`):
-            Size of input image [width, height].
-        size_dst (`np.ndarray`):
-            Size of output image [width, height].
-        size_target (`np.ndarray`):
-            Size of ROI in input plane [w, h].
+        bboxes (`np.ndarray` of shape `(batch_size, 4)):
+            Bounding boxes in COCO format.
 
     Returns:
-        `np.ndarray`: A matrix for transformation.
+        `np.ndarray` of shape `(batch_size, 4) in Pascal VOC format.
     """
-    theta = np.deg2rad(theta)
-    matrix = np.zeros((2, 3), dtype=np.float32)
-    scale_x = size_dst[0] / size_target[0]
-    scale_y = size_dst[1] / size_target[1]
-    matrix[0, 0] = math.cos(theta) * scale_x
-    matrix[0, 1] = -math.sin(theta) * scale_x
-    matrix[0, 2] = scale_x * (
-        -0.5 * size_input[0] * math.cos(theta) + 0.5 * size_input[1] * math.sin(theta) + 0.5 * size_target[0]
-    )
-    matrix[1, 0] = math.sin(theta) * scale_y
-    matrix[1, 1] = math.cos(theta) * scale_y
-    matrix[1, 2] = scale_y * (
-        -0.5 * size_input[0] * math.sin(theta) - 0.5 * size_input[1] * math.cos(theta) + 0.5 * size_target[1]
-    )
-    return matrix
+    bboxes[:, 2] = bboxes[:, 2] + bboxes[:, 0] - 1
+    bboxes[:, 3] = bboxes[:, 3] + bboxes[:, 1] - 1
+
+    return bboxes
 
 
-def scipy_warp_affine(src, M, size):
-    """
-    This function implements cv2.warpAffine function using affine_transform in scipy. See https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.affine_transform.html and https://docs.opencv.org/4.x/d4/d61/tutorial_warp_affine.html for more details.
-
-    Note: the original implementation of cv2.warpAffine uses cv2.INTER_LINEAR.
-    """
-    channels = [src[..., i] for i in range(src.shape[-1])]
-
-    # Convert to a 3x3 matrix used by SciPy
-    M_scipy = np.vstack([M, [0, 0, 1]])
-    # If you have a matrix for the ‘push’ transformation, use its inverse (numpy.linalg.inv) in this function.
-    M_inv = inv(M_scipy)
-    M_inv[0, 0], M_inv[0, 1], M_inv[1, 0], M_inv[1, 1], M_inv[0, 2], M_inv[1, 2] = (
-        M_inv[1, 1],
-        M_inv[1, 0],
-        M_inv[0, 1],
-        M_inv[0, 0],
-        M_inv[1, 2],
-        M_inv[0, 2],
-    )
-
-    new_src = [affine_transform(channel, M_inv, output_shape=size, order=1) for channel in channels]
-    new_src = np.stack(new_src, axis=-1)
-    return new_src
-
-
-class VitPoseImageProcessor(BaseImageProcessor):
-    r"""
-    Constructs a VitPose image processor.
-
-    Args:
-        do_affine_transform (`bool`, *optional*, defaults to `True`):
-            Whether to apply an affine transformation to the input images.
-        size (`dict[str, int]` *optional*, defaults to `{"height": 256, "width": 192}`):
-            Resolution of the image after `affine_transform` is applied. Only has an effect if `do_affine_transform` is set to `True`. Can
-            be overridden by `size` in the `preprocess` method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether or not to apply the scaling factor (to make pixel values floats between 0. and 1.).
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
-            method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether or not to normalize the input with mean and standard deviation.
-        image_mean (`list[int]`, defaults to `[0.485, 0.456, 0.406]`, *optional*):
-            The sequence of means for each channel, to be used when normalizing images.
-        image_std (`list[int]`, defaults to `[0.229, 0.224, 0.225]`, *optional*):
-            The sequence of standard deviations for each channel, to be used when normalizing images.
-    """
+@auto_docstring
+class VitPoseImageProcessor(TorchvisionBackend):
+    """Torchvision backend for VitPose with affine transform."""
 
     valid_kwargs = VitPoseImageProcessorKwargs
     model_input_names = ["pixel_values"]
 
-    def __init__(
-        self,
-        do_affine_transform: bool = True,
-        size: dict[str, int] | None = None,
-        do_rescale: bool = True,
-        rescale_factor: int | float = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        **kwargs,
-    ):
+    image_mean = IMAGENET_DEFAULT_MEAN
+    image_std = IMAGENET_DEFAULT_STD
+    size = {"height": 256, "width": 192}
+    do_rescale = True
+    do_normalize = True
+    do_affine_transform = True
+    normalize_factor = 200.0
+
+    def __init__(self, **kwargs: Unpack[VitPoseImageProcessorKwargs]):
         super().__init__(**kwargs)
-        self.do_affine_transform = do_affine_transform
-        self.size = size if size is not None else {"height": 256, "width": 192}
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
-        self.normalize_factor = 200.0
 
-    def affine_transform(
-        self,
-        image: np.ndarray,
-        center: tuple[float],
-        scale: tuple[float],
-        rotation: float,
-        size: dict[str, int],
-        data_format: ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
-    ) -> np.ndarray:
-        """
-        Apply an affine transformation to an image.
-
-        Args:
-            image (`np.ndarray`):
-                Image to transform.
-            center (`tuple[float]`):
-                Center of the bounding box (x, y).
-            scale (`tuple[float]`):
-                Scale of the bounding box with respect to height/width.
-            rotation (`float`):
-                Rotation angle in degrees.
-            size (`dict[str, int]`):
-                Size of the destination image.
-            data_format (`ChannelDimension`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format of the output image.
-            input_data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the input image.
-        """
-
-        data_format = input_data_format if data_format is None else data_format
-
-        size = (size["width"], size["height"])
-
-        # one uses a pixel standard deviation of 200 pixels
-        transformation = get_warp_matrix(rotation, center * 2.0, np.array(size) - 1.0, scale * 200.0)
-
-        # input image requires channels last format
-        image = (
-            image
-            if input_data_format == ChannelDimension.LAST
-            else to_channel_dimension_format(image, ChannelDimension.LAST, input_data_format)
-        )
-        image = scipy_warp_affine(src=image, M=transformation, size=(size[1], size[0]))
-
-        image = to_channel_dimension_format(image, data_format, ChannelDimension.LAST)
-
-        return image
-
+    @auto_docstring
     def preprocess(
         self,
         images: ImageInput,
-        boxes: list[list[float]] | np.ndarray,
-        do_affine_transform: bool | None = None,
-        size: dict[str, int] | None = None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        return_tensors: str | TensorType | None = None,
-        data_format: str | ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
-    ) -> PIL.Image.Image:
+        boxes: list[list[list[float]]] | np.ndarray,
+        **kwargs: Unpack[VitPoseImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        boxes (`list[list[list[float]]]` or `np.ndarray`):
+            List or array of bounding boxes for each image. Each box should be a list of 4 floats representing the
+            bounding box coordinates in COCO format (top_left_x, top_left_y, width, height).
         """
-        Preprocess an image or batch of images.
+        return super().preprocess(images, boxes, **kwargs)
 
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        boxes: list[list[list[float]]] | np.ndarray | None,
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension,
+        device: Union[str, "torch.device"] | None = None,
+        **kwargs,
+    ) -> BatchFeature:
+        """Handle extra inputs beyond images."""
+        images = self._prepare_image_like_inputs(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+        # Pass boxes to backend preprocess
+        kwargs["boxes"] = boxes
+        return self._preprocess(images, **kwargs)
 
-            boxes (`list[list[list[float]]]` or `np.ndarray`):
-                List or array of bounding boxes for each image. Each box should be a list of 4 floats representing the bounding
-                box coordinates in COCO format (top_left_x, top_left_y, width, height).
+    def affine_transform(
+        self,
+        image: "torch.Tensor",
+        center: tuple[float],
+        scale: tuple[float],
+        rotation: float,
+        size: SizeDict,
+    ) -> "torch.Tensor":
+        """Apply an affine transformation to a torch tensor image."""
+        transformation = get_warp_matrix(
+            rotation, center * 2.0, np.array((size.width, size.height)) - 1.0, scale * 200.0
+        )
+        image_np = image.permute(1, 2, 0).cpu().numpy()
+        transformed_np = scipy_warp_affine(src=image_np, M=transformation, size=(size.height, size.width))
+        transformed = torch.from_numpy(transformed_np).permute(2, 0, 1).to(image.device)
+        return transformed
 
-            do_affine_transform (`bool`, *optional*, defaults to `self.do_affine_transform`):
-                Whether to apply an affine transformation to the input images.
-            size (`dict[str, int]` *optional*, defaults to `self.size`):
-                Dictionary in the format `{"height": h, "width": w}` specifying the size of the output image after
-                resizing.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between [0 - 1].
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use if `do_normalize` is set to `True`.
-            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use if `do_normalize` is set to `True`.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
-              width).
-        """
-        do_affine_transform = do_affine_transform if do_affine_transform is not None else self.do_affine_transform
-        size = size if size is not None else self.size
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-
-        images = make_flat_list_of_images(images)
-
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-
-        if isinstance(boxes, list) and len(images) != len(boxes):
-            raise ValueError(f"Batch of images and boxes mismatch : {len(images)} != {len(boxes)}")
-        elif isinstance(boxes, np.ndarray) and len(images) != boxes.shape[0]:
-            raise ValueError(f"Batch of images and boxes mismatch : {len(images)} != {boxes.shape[0]}")
-
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
-        if is_scaled_image(images[0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
-
-        # transformations (affine transformation + rescaling + normalization)
-        if self.do_affine_transform:
-            new_images = []
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size: SizeDict | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        do_affine_transform: bool = True,
+        normalize_factor: float = 200.0,
+        boxes: list | np.ndarray | None = None,
+        **kwargs,
+    ) -> BatchFeature:
+        """Custom preprocessing for VitPose."""
+        if boxes is not None and do_affine_transform:
+            transformed_images = []
             for image, image_boxes in zip(images, boxes):
                 for box in image_boxes:
                     center, scale = box_to_center_and_scale(
                         box,
-                        image_width=size["width"],
-                        image_height=size["height"],
-                        normalize_factor=self.normalize_factor,
+                        image_width=size.width,
+                        image_height=size.height,
+                        normalize_factor=normalize_factor,
                     )
-                    transformed_image = self.affine_transform(
-                        image, center, scale, rotation=0, size=size, input_data_format=input_data_format
-                    )
-                    new_images.append(transformed_image)
-            images = new_images
+                    transformed_image = self.affine_transform(image, center, scale, rotation=0, size=size)
+                    transformed_images.append(transformed_image)
+            images = transformed_images
 
-        # For batch processing, the number of boxes must be consistent across all images in the batch.
-        # When using a list input, the number of boxes can vary dynamically per image.
-        # The image processor creates pixel_values of shape (batch_size*num_persons, num_channels, height, width)
-
-        all_images = []
-        for image in images:
-            if do_rescale:
-                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-
-            if do_normalize:
-                image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
-                )
-
-            all_images.append(image)
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-            for image in all_images
-        ]
-
-        data = {"pixel_values": images}
-        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
-
-        return encoded_inputs
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            stacked_images = self._rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     def keypoints_from_heatmaps(
         self,
@@ -567,39 +459,12 @@ class VitPoseImageProcessor(BaseImageProcessor):
         scale: np.ndarray,
         kernel: int = 11,
     ):
-        """
-        Get final keypoint predictions from heatmaps and transform them back to
-        the image.
-
-        Args:
-            heatmaps (`np.ndarray` of shape `(batch_size, num_keypoints, height, width])`):
-                Model predicted heatmaps.
-            center (`np.ndarray` of shape `(batch_size, 2)`):
-                Center of the bounding box (x, y).
-            scale (`np.ndarray` of shape `(batch_size, 2)`):
-                Scale of the bounding box wrt original images of width and height.
-            kernel (int, *optional*, defaults to 11):
-                Gaussian kernel size (K) for modulation, which should match the heatmap gaussian sigma when training.
-                K=17 for sigma=3 and k=11 for sigma=2.
-
-        Returns:
-            tuple: A tuple containing keypoint predictions and scores.
-
-            - preds (`np.ndarray` of shape `(batch_size, num_keypoints, 2)`):
-                Predicted keypoint location in images.
-            - scores (`np.ndarray` of shape `(batch_size, num_keypoints, 1)`):
-                Scores (confidence) of the keypoints.
-        """
+        """Get final keypoint predictions from heatmaps and transform them back to the image."""
         batch_size, _, height, width = heatmaps.shape
-
         coords, scores = get_keypoint_predictions(heatmaps)
-
         preds = post_dark_unbiased_data_processing(coords, heatmaps, kernel=kernel)
-
-        # Transform back to the image
         for i in range(batch_size):
             preds[i] = transform_preds(preds[i], center=center[i], scale=scale[i], output_size=[height, width])
-
         return preds, scores
 
     def post_process_pose_estimation(
@@ -630,16 +495,10 @@ class VitPoseImageProcessor(BaseImageProcessor):
             `list[list[Dict]]`: A list of dictionaries, each dictionary containing the keypoints and boxes for an image
             in the batch as predicted by the model.
         """
-
-        # First compute centers and scales for each bounding box
+        requires_backends(self, "torch")
         batch_size, num_keypoints, _, _ = outputs.heatmaps.shape
-
-        if target_sizes is not None:
-            if batch_size != len(target_sizes):
-                raise ValueError(
-                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
-                )
-
+        if target_sizes is not None and batch_size != len(target_sizes):
+            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
         centers = np.zeros((batch_size, 2), dtype=np.float32)
         scales = np.zeros((batch_size, 2), dtype=np.float32)
         flattened_boxes = list(itertools.chain(*boxes))
@@ -652,28 +511,21 @@ class VitPoseImageProcessor(BaseImageProcessor):
             center, scale = box_to_center_and_scale(flattened_boxes[i], image_width=width, image_height=height)
             centers[i, :] = center
             scales[i, :] = scale
-
         preds, scores = self.keypoints_from_heatmaps(
             outputs.heatmaps.cpu().numpy(), centers, scales, kernel=kernel_size
         )
-
         all_boxes = np.zeros((batch_size, 4), dtype=np.float32)
         all_boxes[:, 0:2] = centers[:, 0:2]
         all_boxes[:, 2:4] = scales[:, 0:2]
-
         poses = torch.tensor(preds)
         scores = torch.tensor(scores)
         labels = torch.arange(0, num_keypoints)
         bboxes_xyxy = torch.tensor(coco_to_pascal_voc(all_boxes))
-
         results: list[list[dict[str, torch.Tensor]]] = []
-
         pose_bbox_pairs = zip(poses, scores, bboxes_xyxy)
-
         for image_bboxes in boxes:
             image_results: list[dict[str, torch.Tensor]] = []
             for _ in image_bboxes:
-                # Unpack the next pose and bbox_xyxy from the iterator
                 pose, score, bbox_xyxy = next(pose_bbox_pairs)
                 score = score.squeeze()
                 keypoints_labels = labels
@@ -685,7 +537,6 @@ class VitPoseImageProcessor(BaseImageProcessor):
                 pose_result = {"keypoints": pose, "scores": score, "labels": keypoints_labels, "bbox": bbox_xyxy}
                 image_results.append(pose_result)
             results.append(image_results)
-
         return results
 
 

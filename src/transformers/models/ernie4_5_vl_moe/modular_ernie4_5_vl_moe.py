@@ -27,24 +27,14 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_processing_utils_fast import (
+from ...image_processing_utils import BatchFeature
+from ...image_transforms import (
     group_images_by_shape,
     reorder_images,
 )
-from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
 from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-    ChannelDimension,
-    ImageInput,
     PILImageResampling,
     SizeDict,
-    get_image_size,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_list_of_images,
-    to_numpy_array,
 )
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -58,6 +48,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    is_torchvision_available,
     logging,
 )
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
@@ -73,7 +64,7 @@ from ..ernie4_5_moe.modeling_ernie4_5_moe import (
     Ernie4_5_MoeTopKRouter,
 )
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
-from ..glm4v.image_processing_glm4v_fast import Glm4vImageProcessorFast
+from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
 from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration
 from ..mixtral.modeling_mixtral import load_balancing_loss_func
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
@@ -86,6 +77,10 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLVisionConfig
 from ..qwen2_vl.image_processing_qwen2_vl import smart_resize
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, Qwen2VLModel, VisionMlp
+
+
+if is_torchvision_available():
+    import torchvision.transforms.v2.functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -855,7 +850,6 @@ class Ernie4_5_VLMoeVariableResolutionResamplerModel(nn.Module):
 
 
 class Ernie4_5_VLMoeModel(Qwen2VLModel):
-    _checkpoint_conversion_mapping = {"^norm": "language_model.norm"}
     config: Ernie4_5_VLMoeConfig
     _no_split_modules = ["Ernie4_5_VLMoeDecoderLayer", "Ernie4_5_VLMoeVisionBlock"]
 
@@ -1089,8 +1083,6 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
 
 
 class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, GenerationMixin):
-    _checkpoint_conversion_mapping = {"^model.norm": "model.language_model.norm"}
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -1243,191 +1235,67 @@ class Ernie4_5_VLMoeImageProcessorKwargs(Glm4vImageProcessorKwargs):
     """
 
 
-class Ernie4_5_VLMoeImageProcessor(Glm4vImageProcessor):
-    r"""
-    Constructs a Ernie 4.5 VL image processor that dynamically resizes images based on the original images.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions.
-        size (`dict[str, int]`, *optional*, defaults to `{"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 6177}`):
-            Size of the image after resizing. `shortest_edge` and `longest_edge` keys must be present.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-            Resampling filter to use when resizing the image.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
-            Mean to use if normalizing the image. This is a float or list of floats for each channel in the image.
-        image_std (`float` or `list[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats for each channel
-            in the image.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
-        patch_size (`int`, *optional*, defaults to 14):
-            The spatial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*):
-            The temporal patch size of the vision encoder. Unused in the image processor, only used for videos.
-        merge_size (`int`, *optional*, defaults to 2):
-            The merge size of the vision encoder to llm encoder.
-    """
-
-    def __init__(
-        self,
-        do_resize: bool = True,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        do_rescale: bool = True,
-        rescale_factor: int | float = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        do_convert_rgb: bool = True,
-        patch_size: int = 14,
-        temporal_patch_size: int | None = None,
-        merge_size: int = 2,
-        **kwargs,
-    ) -> None:
-        BaseImageProcessor.__init__(**kwargs)
-        if size is not None:
-            if "shortest_edge" not in size or "longest_edge" not in size:
-                raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-            size = {"shortest_edge": size["shortest_edge"], "longest_edge": size["longest_edge"]}
-        else:
-            size = {"shortest_edge": 56 * 56, "longest_edge": 6177 * 28 * 28}
-        self.size = size
-
-        self.do_resize = do_resize
-        self.resample = resample
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
-        self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
-
-        self.patch_size = patch_size
-        self.temporal_patch_size = temporal_patch_size
-        self.merge_size = merge_size
-        self.do_convert_rgb = do_convert_rgb
+class Ernie4_5_VLMoeImageProcessorPil(Glm4vImageProcessorPil):
+    size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 6177}
+    temporal_patch_size = None  # Unused
 
     def _preprocess(
         self,
-        images: ImageInput,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling = None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        patch_size: int | None = None,
-        temporal_patch_size: int | None = None,
-        merge_size: int | None = None,
-        do_convert_rgb: bool | None = None,
-        data_format: ChannelDimension | None = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        patch_size: int,
+        merge_size: int,
+        return_tensors: str | TensorType | None,
+        **kwargs,
     ):
         """
-        Preprocess an image or batch of images. Copy of the `preprocess` method from `CLIPImageProcessor`.
-
-        Args:
-            images (`ImageInput`):
-                Image or batch of images to preprocess. Expects pixel values ranging from 0 to 255. If pixel values range from 0 to 1, set `do_rescale=False`.
-            vision_info (`list[Dict]`, *optional*):
-                Optional list of dictionaries containing additional information about vision inputs.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after resizing. `shortest_edge` and `longest_edge` keys must be present.
-            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the `PILImageResampling` enums.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image.
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Scale factor to use if rescaling the image.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
-                Mean to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
-            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
-                Standard deviation to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
-            patch_size (`int`, *optional*, defaults to `self.patch_size`):
-                The spatial patch size of the vision encoder.
-            temporal_patch_size (`int`, *optional*):
-                The temporal patch size of the vision encoder. Unused in the image processor, only used for videos.
-            merge_size (`int`, *optional*, defaults to `self.merge_size`):
-                The merge size of the vision encoder to llm encoder.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            data_format (`ChannelDimension`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.   - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+        Preprocess images one by one for PIL backend.
         """
-        images = make_list_of_images(images)
-
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
-
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
-        if do_rescale and is_scaled_image(images[0]):
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
-
-        height, width = get_image_size(images[0], channel_dim=input_data_format)
-        resized_height, resized_width = height, width
         processed_images = []
+        processed_grids = []
+
         for image in images:
+            height, width = image.shape[-2:]
             if do_resize:
                 resized_height, resized_width = smart_resize(
-                    height,
-                    width,
+                    height=height,
+                    width=width,
                     factor=patch_size * merge_size,
-                    min_pixels=size["shortest_edge"],
-                    max_pixels=size["longest_edge"],
+                    min_pixels=size.shortest_edge,
+                    max_pixels=size.longest_edge,
                 )
-                image = resize(
-                    image, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
+                image = self.resize(
+                    image,
+                    size=SizeDict(height=resized_height, width=resized_width),
+                    resample=resample,
                 )
 
+            # Rescale and normalize
             if do_rescale:
-                image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
-
+                image = self.rescale(image, rescale_factor)
             if do_normalize:
-                image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
-                )
+                image = self.normalize(image, image_mean, image_std)
 
-            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-            processed_images.append(image)
+            # Ensure float32 for patch processing
+            image_array = np.asarray(image, dtype=np.float32)
+            if image_array.ndim == 3:  # (C, H, W)
+                image_array = np.expand_dims(image_array, axis=0)  # (1, C, H, W)
+            if image_array.ndim == 4:  # (B, C, H, W)
+                image_array = np.expand_dims(image_array, axis=1)  # (B, T=1, C, H, W)
 
-        patches = np.array(processed_images)
-        if data_format == ChannelDimension.LAST:
-            patches = patches.transpose([0, 3, 1, 2])
+            resized_height, resized_width = image_array.shape[-2:]
+            batch_size, grid_t, channel = image_array.shape[:3]
+            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
 
-        # Main difference to Qwen2 VL - no temporal patches
-        channel = patches.shape[1]
-        grid_t = patches.shape[0]
-        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        patches = patches.reshape(
-            [
+            patches = image_array.reshape(
+                batch_size,
                 grid_t,
                 channel,
                 grid_h // merge_size,
@@ -1436,17 +1304,35 @@ class Ernie4_5_VLMoeImageProcessor(Glm4vImageProcessor):
                 grid_w // merge_size,
                 merge_size,
                 patch_size,
-            ]
-        )
-        # [grid_t, grid_h/merge, grid_w/merge, merge, merge, channel, patch, patch]
-        patches = patches.transpose([0, 2, 5, 3, 6, 1, 4, 7])
-        flatten_patches = patches.reshape(grid_t * grid_h * grid_w, channel * patch_size * patch_size)
+            )
+            # Reorder dimensions to group grid and patch information for subsequent flattening.
+            # [batch, grid_t, grid_h/merge, grid_w/merge, merge, merge, channel, patch, patch]
+            patches = np.transpose(patches, (0, 1, 3, 6, 4, 7, 2, 5, 8))
 
-        return flatten_patches, (grid_t, grid_h, grid_w)
+            flatten_patches = patches.reshape(
+                batch_size,
+                grid_t * grid_h * grid_w,
+                channel * patch_size * patch_size,
+            )
+
+            # Remove batch dimension and append: shape is (seq_len, hidden_dim)
+            processed_images.append(flatten_patches.squeeze(0))
+            processed_grids.append([grid_t, grid_h, grid_w])
+
+        # Concatenate all images along sequence dimension: (total_seq_len, hidden_dim)
+        pixel_values = np.concatenate(processed_images, axis=0)
+        image_grid_thw = np.array(processed_grids)
+
+        return BatchFeature(
+            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
+        )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
         """
         A utility that returns number of image patches for a given image size.
+
+        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
+        without an image input.
 
         Args:
             height (`int`):
@@ -1471,7 +1357,7 @@ class Ernie4_5_VLMoeImageProcessor(Glm4vImageProcessor):
         return grid_h * grid_w
 
 
-class Ernie4_5_VLMoeImageProcessorFast(Glm4vImageProcessorFast):
+class Ernie4_5_VLMoeImageProcessor(Glm4vImageProcessor):
     size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 6177}
     temporal_patch_size = None  # Unused
 
@@ -1480,7 +1366,7 @@ class Ernie4_5_VLMoeImageProcessorFast(Glm4vImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -1502,13 +1388,13 @@ class Ernie4_5_VLMoeImageProcessorFast(Glm4vImageProcessorFast):
                     height,
                     width,
                     factor=patch_size * merge_size,
-                    min_pixels=size["shortest_edge"],
-                    max_pixels=size["longest_edge"],
+                    min_pixels=size.shortest_edge,
+                    max_pixels=size.longest_edge,
                 )
                 stacked_images = self.resize(
                     image=stacked_images,
                     size=SizeDict(height=resized_height, width=resized_width),
-                    interpolation=interpolation,
+                    resample=resample,
                 )
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
@@ -1521,7 +1407,7 @@ class Ernie4_5_VLMoeImageProcessorFast(Glm4vImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             resized_height, resized_width = stacked_images.shape[-2:]
             # Fused rescale and normalize
-            patches = self.rescale_and_normalize(
+            patches = self._rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             if patches.ndim == 4:
@@ -1679,11 +1565,10 @@ class Ernie4_5_VL_MoeImageProcessor(Ernie4_5_VLMoeImageProcessor):
         super().__init__(*args, **kwargs)
 
 
-class Ernie4_5_VL_MoeImageProcessorFast(Ernie4_5_VLMoeImageProcessorFast):
+class Ernie4_5_VL_MoeImageProcessorPil(Ernie4_5_VLMoeImageProcessorPil):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
-            "`Ernie4_5_VL_MoeImageProcessorFast` is deprecated; "
-            "please use `Ernie4_5_VLMoeImageProcessorFast` instead.",
+            "`Ernie4_5_VL_MoeImageProcessorPil` is deprecated; please use `Ernie4_5_VLMoeImageProcessorPil` instead.",
         )
         super().__init__(*args, **kwargs)
 
@@ -1699,7 +1584,7 @@ __all__ = [
     "Ernie4_5_VL_MoeVisionTransformerPretrainedModel",
     "Ernie4_5_VL_MoeVariableResolutionResamplerModel",
     "Ernie4_5_VL_MoeImageProcessor",
-    "Ernie4_5_VL_MoeImageProcessorFast",
+    "Ernie4_5_VL_MoeImageProcessorPil",
     "Ernie4_5_VLMoeConfig",
     "Ernie4_5_VLMoeTextConfig",
     "Ernie4_5_VLMoeVisionConfig",
@@ -1710,5 +1595,5 @@ __all__ = [
     "Ernie4_5_VLMoeVisionTransformerPretrainedModel",
     "Ernie4_5_VLMoeVariableResolutionResamplerModel",
     "Ernie4_5_VLMoeImageProcessor",
-    "Ernie4_5_VLMoeImageProcessorFast",
+    "Ernie4_5_VLMoeImageProcessorPil",
 ]

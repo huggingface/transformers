@@ -363,7 +363,6 @@ class IdeficsProcessor(ProcessorMixin):
             padded_input_ids = text_single
             image_count = padded_input_ids.count(self.image_token_id)
             local_max_num_images = min(image_count, max_num_images)
-
             current_images = extracted_images[:local_max_num_images]
 
             if len(current_images) > 0:

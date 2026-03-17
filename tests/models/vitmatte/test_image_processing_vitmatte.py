@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-import time
+import inspect
 import unittest
 import warnings
 
@@ -28,7 +28,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 from ...test_processing_common import url_to_local_path
@@ -37,14 +37,8 @@ from ...test_processing_common import url_to_local_path
 if is_torch_available():
     import torch
 
-
 if is_vision_available():
     from PIL import Image
-
-    from transformers import VitMatteImageProcessor
-
-    if is_torchvision_available():
-        from transformers import VitMatteImageProcessorFast
 
 
 class VitMatteImageProcessingTester:
@@ -104,9 +98,6 @@ class VitMatteImageProcessingTester:
 @require_torch
 @require_vision
 class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = VitMatteImageProcessor if is_vision_available() else None
-    fast_image_processing_class = VitMatteImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = VitMatteImageProcessingTester(self)
@@ -116,7 +107,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -135,7 +126,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Test not batched input (image processor does not support batched inputs)
         image = image_inputs[0]
         trimap = np.random.randint(0, 3, size=image.shape[:2])
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
@@ -154,7 +145,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Test not batched input (image processor does not support batched inputs)
         image = image_inputs[0]
         trimap = np.random.randint(0, 3, size=image.shape[1:])
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
@@ -174,7 +165,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertIsInstance(trimap_input, torch.Tensor)
         self.assertTrue(trimap_input.shape[1] == 1)
 
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
@@ -192,7 +183,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Test not batched input (image processor does not support batched inputs)
         image = image_inputs[0]
         trimap = np.random.randint(0, 3, size=image.size[::-1])
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
@@ -211,7 +202,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Test not batched input (image processor does not support batched inputs)
         image = image_inputs[0]
         trimap = np.random.randint(0, 3, size=image.shape[:2])
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             encoded_images = image_processor(
                 images=image,
@@ -227,42 +218,48 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 5)
 
-    def test_padding_slow(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        image = np.random.randn(3, 249, 491)
-        images = image_processing.pad_image(image)
-        assert images.shape == (3, 256, 512)
+    def test_padding(self):
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            if backend_name == "pil":
+                image = np.random.randn(3, 249, 491)
+                images = image_processing.pad_image(image)
+                assert images.shape == (3, 256, 512)
 
-        image = np.random.randn(3, 249, 512)
-        images = image_processing.pad_image(image)
-        assert images.shape == (3, 256, 512)
+                image = np.random.randn(3, 249, 512)
+                images = image_processing.pad_image(image)
+                assert images.shape == (3, 256, 512)
+            else:  # torchvision
+                image = torch.rand(3, 249, 491)
+                images = image_processing._pad_image(image)
+                assert images.shape == (3, 256, 512)
 
-    def test_padding_fast(self):
-        # extra test because name is different for fast image processor
-        image_processing = self.fast_image_processing_class(**self.image_processor_dict)
-        image = torch.rand(3, 249, 491)
-        images = image_processing._pad_image(image)
-        assert images.shape == (3, 256, 512)
-
-        image = torch.rand(3, 249, 512)
-        images = image_processing._pad_image(image)
-        assert images.shape == (3, 256, 512)
+                image = torch.rand(3, 249, 512)
+                images = image_processing._pad_image(image)
+                assert images.shape == (3, 256, 512)
 
     def test_image_processor_preprocess_arguments(self):
-        # vitmatte require additional trimap input for image_processor
-        # that is why we override original common test
+        is_tested = False
 
-        for i, image_processing_class in enumerate(self.image_processor_list):
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
-            image = self.image_processor_tester.prepare_image_inputs()[0]
-            trimap = np.random.randint(0, 3, size=image.size[::-1])
 
-            # Type validation will fail for fast processors only (for now)
-            if image_processing_class.__name__.endswith("Fast"):
-                with self.assertRaises(TypeError):
-                    image_processor(image, trimaps=trimap, extra_argument=True)
-            else:
-                # Else we just consume extra kwargs and raise a warning
+            # validation done by _valid_processor_keys attribute
+            if hasattr(image_processor, "_valid_processor_keys") and hasattr(image_processor, "preprocess"):
+                preprocess_parameter_names = inspect.getfullargspec(image_processor.preprocess).args
+                preprocess_parameter_names.remove("self")
+                preprocess_parameter_names.sort()
+                valid_processor_keys = image_processor._valid_processor_keys
+                valid_processor_keys.sort()
+                self.assertEqual(preprocess_parameter_names, valid_processor_keys)
+                is_tested = True
+
+            # validation done by @filter_out_non_signature_kwargs decorator
+            if hasattr(image_processor.preprocess, "_filter_out_non_signature_kwargs"):
+                inputs = self.image_processor_tester.prepare_image_inputs()
+                image = inputs[0]
+                trimap = np.random.randint(0, 3, size=image.size[::-1])
+
                 with warnings.catch_warnings(record=True) as raised_warnings:
                     warnings.simplefilter("always")
                     image_processor(image, trimaps=trimap, extra_argument=True)
@@ -270,90 +267,76 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 messages = " ".join([str(w.message) for w in raised_warnings])
                 self.assertGreaterEqual(len(raised_warnings), 1)
                 self.assertIn("extra_argument", messages)
+                is_tested = True
 
-    @unittest.skip(reason="Many failing cases. This test needs a more deep investigation.")
-    def test_fast_is_faster_than_slow(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping speed test")
+            # ViTMatte-specific: validation for processors requiring trimaps (no _filter_out_non_signature_kwargs)
+            if "trimaps" in inspect.signature(image_processor.preprocess).parameters:
+                inputs = self.image_processor_tester.prepare_image_inputs()
+                image = inputs[0]
+                trimap = np.random.randint(0, 3, size=image.size[::-1])
 
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping speed test as one of the image processors is not defined")
+                # Extra kwargs are rejected (TypeError for strict validation, or warning)
+                with self.assertRaises(TypeError):
+                    image_processor(image, trimaps=trimap, extra_argument=True)
+                is_tested = True
 
-        def measure_time(image_processor, images, trimaps):
-            # Warmup
-            for _ in range(5):
-                _ = image_processor(images, trimaps=trimaps, return_tensors="pt")
-            all_times = []
-            for _ in range(10):
-                start = time.time()
-                _ = image_processor(images, trimaps=trimaps, return_tensors="pt")
-                all_times.append(time.time() - start)
-            # Take the average of the fastest 3 runs
-            avg_time = sum(sorted(all_times[:3])) / 3.0
-            return avg_time
+        if not is_tested:
+            self.skipTest(reason="No validation found for `preprocess` method")
 
-        dummy_images = torch.randint(0, 255, (4, 3, 400, 800), dtype=torch.uint8)
-        dummy_trimaps = torch.randint(0, 3, (4, 400, 800), dtype=torch.uint8)
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
-
-        fast_time = measure_time(image_processor_fast, dummy_images, dummy_trimaps)
-        slow_time = measure_time(image_processor_slow, dummy_images, dummy_trimaps)
-
-        self.assertLessEqual(fast_time, slow_time)
-
-    def test_slow_fast_equivalence(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+    def test_backends_equivalence(self):
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
         dummy_trimap = np.random.randint(0, 3, size=dummy_image.size[::-1])
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
-        encoding_slow = image_processor_slow(dummy_image, trimaps=dummy_trimap, return_tensors="pt")
-        encoding_fast = image_processor_fast(dummy_image, trimaps=dummy_trimap, return_tensors="pt")
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        # Create processors for each backend
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_image, trimaps=dummy_trimap, return_tensors="pt")
 
-    def test_slow_fast_equivalence_batched(self):
+        # Compare all backends to the first one (reference backend)
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_encoding = encodings[reference_backend].pixel_values
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].pixel_values)
+
+    def test_backends_equivalence_batched(self):
         # this only checks on equal resolution, since the slow processor doesn't work otherwise
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
-
-        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
-            self.skipTest(
-                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
-            )
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
         dummy_trimaps = [np.random.randint(0, 3, size=image.shape[1:]) for image in dummy_images]
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
-        encoding_slow = image_processor_slow(dummy_images, trimaps=dummy_trimaps, return_tensors="pt")
-        encoding_fast = image_processor_fast(dummy_images, trimaps=dummy_trimaps, return_tensors="pt")
+        # Create processors for each backend
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_images, trimaps=dummy_trimaps, return_tensors="pt")
 
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        # Compare all backends to the first one (reference backend)
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_encoding = encodings[reference_backend].pixel_values
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].pixel_values)
 
     @slow
     @require_torch_accelerator
     @require_vision
     @pytest.mark.torch_compile_test
-    def test_can_compile_fast_image_processor(self):
+    def test_can_compile_torchvision_backend(self):
         # override as trimaps are needed for the image processor
-        if self.fast_image_processing_class is None:
-            self.skipTest("Skipping compilation test as fast image processor is not defined")
+        if "torchvision" not in self.image_processing_classes:
+            self.skipTest("Skipping compilation test as torchvision image processor is not defined")
 
         torch.compiler.reset()
         input_image = torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8)
         dummy_trimap = np.random.randint(0, 3, size=input_image.shape[1:])
-        image_processor = self.fast_image_processing_class(**self.image_processor_dict)
+        image_processor = self.image_processing_classes["torchvision"](**self.image_processor_dict)
         output_eager = image_processor(input_image, dummy_trimap, device=torch_device, return_tensors="pt")
 
         image_processor = torch.compile(image_processor, mode="reduce-overhead")

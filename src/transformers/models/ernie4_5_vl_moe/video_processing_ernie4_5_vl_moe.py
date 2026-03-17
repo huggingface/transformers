@@ -45,7 +45,7 @@ from ...utils import (
     safe_load_json_file,
 )
 from ...utils.hub import cached_file
-from ...utils.import_utils import is_tracing, requires
+from ...utils.import_utils import is_torchvision_available, is_tracing, requires
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import (
     VideoInput,
@@ -55,6 +55,10 @@ from ...video_utils import (
     reorder_videos,
 )
 from .image_processing_ernie4_5_vl_moe import smart_resize
+
+
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -294,7 +298,7 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
 
         return super().save_pretrained(save_directory, push_to_hub, **kwargs)
 
-    def _further_process_kwargs(
+    def _standardize_kwargs(
         self,
         size: SizeDict | None = None,
         **kwargs,
@@ -306,7 +310,7 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
         if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
-        return super()._further_process_kwargs(size=size, **kwargs)
+        return super()._standardize_kwargs(size=size, **kwargs)
 
     def sample_frames(
         self,
@@ -448,7 +452,7 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
         do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: SizeDict | None = None,
-        interpolation: PILImageResampling = PILImageResampling.BICUBIC,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255.0,
         do_normalize: bool = True,
@@ -479,7 +483,7 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
                 stacked_videos = self.resize(
                     image=stacked_videos,
                     size=SizeDict(height=resized_height, width=resized_width),
-                    interpolation=interpolation,
+                    resample=resample,
                 )
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
@@ -493,7 +497,7 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
             resized_height, resized_width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
 
             # Fused rescale and normalize
-            stacked_videos = self.rescale_and_normalize(
+            stacked_videos = self._rescale_and_normalize(
                 stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             patches = stacked_videos
@@ -577,7 +581,7 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
             draw_on_frames=draw_on_frames,
         )
 
-        kwargs = self._further_process_kwargs(**kwargs)
+        kwargs = self._standardize_kwargs(**kwargs)
         self._validate_preprocess_kwargs(**kwargs)
 
         # Pop kwargs that are not needed in _preprocess

@@ -31,7 +31,12 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    torch_compilable_check,
+)
 from ..auto import AutoModel
 from .configuration_glm46v import Glm46VConfig
 
@@ -79,7 +84,6 @@ class Glm46VModelOutputWithPast(ModelOutput):
 @auto_docstring
 class Glm46VModel(Glm46VPreTrainedModel):
     base_model_prefix = "model"
-    _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     _no_split_modules = None
@@ -512,7 +516,6 @@ class Glm46VCausalLMOutputWithPast(ModelOutput):
 
 
 class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False

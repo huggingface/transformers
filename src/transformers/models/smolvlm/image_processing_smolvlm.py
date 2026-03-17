@@ -21,36 +21,27 @@
 
 
 import math
-from collections.abc import Iterable
 
 import numpy as np
+import torch
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import PaddingMode, pad, to_channel_dimension_format, to_pil_image
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
-    ChannelDimension,
     ImageInput,
     PILImageResampling,
-    get_image_size,
-    infer_channel_dimension_format,
-    is_scaled_image,
+    SizeDict,
     make_nested_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
 )
-from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, is_vision_available, logging
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, is_torchvision_available
 
 
-if is_vision_available():
-    import PIL
-    from PIL import Image
-
-
-logger = logging.get_logger(__name__)
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 
 class SmolVLMImageProcessorKwargs(ImagesKwargs, total=False):
@@ -119,7 +110,7 @@ def _resize_output_size_scale_below_upper_bound(
             Height of the input image.
         width (`int`):
             Width of the input image.
-        max_len (`dict[str, int]`, *optional*, defaults to the maximum size of the image):
+        max_len (`Dict[str, int]`, *optional*, defaults to the maximum size of the image):
             Defines the maximum dimensions of the image.
     Returns:
         The output size of the image after resizing.
@@ -141,24 +132,21 @@ def _resize_output_size_scale_below_upper_bound(
 
 
 def get_resize_output_image_size(
-    image,
+    image: "torch.Tensor",
     resolution_max_side: int,
-    input_data_format: str | ChannelDimension | None = None,
 ) -> tuple[int, int]:
     """
     Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
     Args:
-        image (`np.ndarray`):
+        image (`torch.Tensor`):
             Image to resize.
         resolution_max_side (`int`):
             The longest edge of the image will be resized to this value. The shortest edge will be resized to keep the
             input aspect ratio.
-        input_data_format (`ChannelDimension` or `str`):
-            The channel dimension format of the input image.
     Returns:
         The output size of the image after resizing.
     """
-    height, width = get_image_size(image, channel_dim=input_data_format)
+    height, width = image.shape[-2:]
 
     # Find the output size, when rescaling the longest edge to max_len and preserving the aspect ratio
     height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=resolution_max_side)
@@ -167,242 +155,105 @@ def get_resize_output_image_size(
     return height, width
 
 
-def get_max_height_width(
-    images_list: list[list[np.ndarray]], input_data_format: str | ChannelDimension | None = None
-) -> list[int]:
+def get_max_height_width(images_list: list[list["torch.Tensor|np.ndarray"]]) -> tuple[int, int]:
     """
     Get the maximum height and width across all images in a batch.
     """
-    if input_data_format is None:
-        input_data_format = infer_channel_dimension_format(images_list[0][0], num_channels=(1, 3, 4))
-
-    max_height = max_width = float("-inf")
+    image_sizes = []
     for images in images_list:
         for image in images:
-            height, width = get_image_size(image, channel_dim=input_data_format)
-            max_height = max(height, max_height)
-            max_width = max(width, max_width)
+            image_sizes.append(image.shape[-2:])
+
+    max_height = max(size[0] for size in image_sizes)
+    max_width = max(size[1] for size in image_sizes)
     return (max_height, max_width)
 
 
-def make_pixel_mask(
-    image: np.ndarray, output_size: tuple[int, int], input_data_format: str | ChannelDimension | None = None
-) -> np.ndarray:
+def get_num_channels(images_list: list[list["torch.Tensor|np.ndarray"]]) -> int:
     """
-    Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
-    Args:
-        image (`np.ndarray`):
-            Image to make the pixel mask for.
-        output_size (`tuple[int, int]`):
-            Output size of the mask.
+    Get the number of channels across all images in a batch. Handle empty sublists like in [[], [image]].
     """
-    input_height, input_width = get_image_size(image, channel_dim=input_data_format)
-    mask = np.zeros(output_size, dtype=np.int64)
-    mask[:input_height, :input_width] = 1
-    return mask
+    for images in images_list:
+        if images:
+            return images[0].shape[0]
+
+    raise ValueError("No images found in the batch.")
 
 
-def convert_to_rgb(
-    image: np.ndarray,
-    palette: PIL.ImagePalette.ImagePalette | None = None,
-    data_format: str | ChannelDimension | None = None,
-    input_data_format: str | ChannelDimension | None = None,
-) -> ImageInput:
+def get_device_from_images(images_list: list[list["torch.Tensor"]]) -> "torch.device":
     """
-    Converts an image to RGB format.
-    Args:
-        image (`np.ndarray`):
-            The image to convert.
-        palette (list[int], *optional*):
-            The palette to use if given.
-        data_format (ChannelDimension or str, *optional*):
-            The channel dimension format for the output image. If not provided, it will be the same as the input image.
-        input_data_format (ChannelDimension or str, *optional*):
-            The channel dimension format of the input image.
+    Get the device from the first non-empty element in a nested list of images.
+    Handle empty sublists like in [[], [image]].
     """
-    if input_data_format is None:
-        input_data_format = infer_channel_dimension_format(image, num_channels=(1, 3, 4))
-
-    # For all transformations, we want to keep the same data format as the input image unless otherwise specified.
-    # The resized image from PIL will always have channels last, so find the input format first.
-    data_format = input_data_format if data_format is None else data_format
-
-    mode = "P" if palette is not None else None
-    image = to_pil_image(image, image_mode=mode, input_data_format=input_data_format)
-    if image.mode == "P" and palette is not None:
-        image.putpalette(palette)
-
-    image_rgba = image.convert("RGBA")
-    background = Image.new("RGBA", image_rgba.size, (255, 255, 255))
-    alpha_composite = Image.alpha_composite(background, image_rgba)
-    alpha_composite = alpha_composite.convert("RGB")
-
-    output_array = np.array(alpha_composite)
-    # The image is always in channels last format after converting from a PIL image
-    output_array = to_channel_dimension_format(output_array, data_format, input_channel_dim=ChannelDimension.LAST)
-    return output_array
+    for images in images_list:
+        if images:
+            return images[0].device
 
 
-# FIXME Amy: make a more general crop function that isn't just centre crop
-def _crop(
-    image: np.ndarray,
-    w1: int,
-    h1: int,
-    w2: int,
-    h2: int,
-    data_format: str | ChannelDimension | None = None,
-) -> np.ndarray:
-    if data_format is None:
-        data_format = infer_channel_dimension_format(image, num_channels=(1, 3, 4))
-
-    if data_format == ChannelDimension.FIRST:
-        image = image[:, h1:h2, w1:w2]
-    elif data_format == ChannelDimension.LAST:
-        image = image[h1:h2, w1:w2, :]
-    else:
-        raise ValueError("Invalid channel dimension format.")
-
-    return image
-
-
-class SmolVLMImageProcessor(BaseImageProcessor):
-    r"""
-    Constructs a SmolVLM image processor.
-    Args:
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB. This is useful if the input image is of a different format e.g. RGBA.
-            Only has an effect if the input image is in the PIL format.
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image. The longest edge of the image is resized to  be <= `size["longest_edge"]`, with the
-            shortest edge resized to keep the input aspect ratio.
-        size (`Dict`, *optional*, defaults to `{"longest_edge": 4 * 364}`):
-            Controls the size of the output image. This is a dictionary containing the key "longest_edge".
-            The image will be resized such that the longest edge is <= `size["longest_edge"]` and the shortest edge is resized
-            to keep the input aspect ratio.
-        resample (`Resampling`, *optional*, defaults to `Resampling.LANCZOS`):
-            Resampling filter to use when resizing the image.
-        do_image_splitting (`bool`, *optional*, defaults to `True`):
-            Whether to split the image into sub-images concatenated with the original image. They are split into patches
-            such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
-        max_image_size (`Dict`, *optional*, defaults to `{"longest_edge": 364}`):
-            Maximum resolution of the patches of images accepted by the model. This is a dictionary containing the key "longest_edge".
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image. If set to `True`, the image is rescaled to have pixel values between 0 and 1.
-        rescale_factor (`float`, *optional*, defaults to `1/255`):
-            Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. If set to `True`, the image is normalized to have a mean of `image_mean` and
-            a standard deviation of `image_std`.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
-            overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `list[float]`, *optional*, defaults to `IDEFICS_STANDARD_STD`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-            Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Whether or not to pad the images to the largest height and width in the batch and number of images per
-            sample in the batch, such that the returned tensor is of shape (batch_size, max_num_images, num_channels, max_height, max_width).
-    """
-
-    model_input_names = ["pixel_values", "pixel_attention_mask"]
+@auto_docstring
+class SmolVLMImageProcessor(TorchvisionBackend):
+    resample = PILImageResampling.LANCZOS
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    size = {"longest_edge": 4 * 364}
+    max_image_size = {"longest_edge": 364}
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
+    do_convert_rgb = True
+    do_image_splitting = True
+    do_pad = True
+    return_row_col_info = False
     valid_kwargs = SmolVLMImageProcessorKwargs
+    model_input_names = ["pixel_values", "pixel_attention_mask"]
 
-    def __init__(
-        self,
-        do_convert_rgb: bool = True,
-        do_resize: bool = True,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling = PILImageResampling.LANCZOS,
-        do_image_splitting: bool = True,
-        max_image_size: dict[str, int] | None = None,
-        do_rescale: bool = True,
-        rescale_factor: float = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        do_pad: bool = True,
-        **kwargs,
-    ) -> None:
+    def __init__(self, **kwargs: Unpack[SmolVLMImageProcessorKwargs]):
         super().__init__(**kwargs)
-        self.do_convert_rgb = do_convert_rgb
-        self.do_resize = do_resize
-        self.size = size if size is not None else {"longest_edge": 4 * 364}
-        self.resample = resample
-        self.do_image_splitting = do_image_splitting
-        self.max_image_size = max_image_size if max_image_size is not None else {"longest_edge": 364}
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-        self.do_pad = do_pad
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[SmolVLMImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
+    def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
+        """
+        Prepare a nested images structure for processing.
+        """
+        # Checks for `str` in case of URL/local path and optionally loads images
+        images = self.fetch_images(images)
+        return make_nested_list_of_images(images, expected_ndims=expected_ndims)
 
     def resize(
         self,
-        image: np.ndarray,
-        size: dict[str, int],
-        resample: PILImageResampling = PILImageResampling.LANCZOS,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
+        image: "torch.Tensor",
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
         **kwargs,
-    ) -> np.ndarray:
+    ) -> "torch.Tensor":
         """
-        Resize an image. The longest edge of the image is resized to size["longest_edge"], with the shortest edge
-        resized to keep the input aspect ratio. Can also be used with size["height"] and size["width"].
+        Resize an image. The longest edge of the image is resized to size.longest_edge, with the shortest edge
+        resized to keep the input aspect ratio. Can also be used with size.height and size.width.
         Args:
-            image (`np.ndarray`):
+            image (`torch.Tensor`):
                 Image to resize.
-            size (`dict[str, int]`):
+            size (`SizeDict`):
                 Size of the output image.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
+            resample (`PILImageResampling | tvF.InterpolationMode | int | None`, *optional*):
                 Resampling filter to use when resizing the image.
-            data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format of the output image. If not provided, it will be the same as the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format of the input image. If not provided, it will be inferred.
         """
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(image, num_channels=(1, 3, 4))
-
-        # For all transformations, we want to keep the same data format as the input image unless otherwise specified.
-        # The resized image from PIL will always have channels last, so find the input format first.
-        data_format = input_data_format if data_format is None else data_format
-
-        if "longest_edge" in size:
-            size = get_resize_output_image_size(
-                image, resolution_max_side=size["longest_edge"], input_data_format=input_data_format
-            )
-        elif "height" in size and "width" in size:
-            size = (size["height"], size["width"])
+        if size.longest_edge:
+            new_size = get_resize_output_image_size(image, resolution_max_side=size.longest_edge)
+        elif size.height and size.width:
+            new_size = (size.height, size.width)
         else:
             raise ValueError("size must be a dictionary with key 'longest_edge' or 'height' and 'width'.")
 
-        image_mode = None
-        if image.ndim == 2 or image.shape[-1] == 1:
-            image_mode = "P"
-        image = to_pil_image(image, image_mode=image_mode, input_data_format=input_data_format)
+        return super().resize(image, SizeDict(height=new_size[0], width=new_size[1]), resample=resample, **kwargs)
 
-        resized_image = image.resize((size[1], size[0]), resample=resample)
-        resized_image = np.array(resized_image)
-
-        # If the input image channel dimension was of size 1, then it is dropped when converting to a PIL image
-        # so we need to add it back if necessary.
-        resized_image = np.expand_dims(resized_image, axis=-1) if resized_image.ndim == 2 else resized_image
-        # The image is always in channels last format after converting from a PIL image
-        resized_image = to_channel_dimension_format(
-            resized_image, data_format, input_channel_dim=ChannelDimension.LAST
-        )
-        return resized_image
-
-    def split_image(
+    def split_images(
         self,
-        image,
+        images: torch.Tensor,
         max_image_size: dict[str, int],
-        resample: PILImageResampling = PILImageResampling.LANCZOS,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
     ):
         """
         Split an image into squares of side max_image_size and the original image resized to max_image_size.
@@ -413,19 +264,17 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         sub-images of the same size each (image_size, image_size). Typically, 364x364.
         3) Returns the list of the crops and the original image, in addition to the number of splits for the height and the width.
         Args:
-            image (`np.ndarray`):
+            images (`torch.Tensor`):
                 Images to split.
-            max_image_size (`dict[str, int]`):
+            max_image_size (`Dict[str, int]`):
                 Maximum size of the output image. If the image is larger than this size, it will be split into
                 patches of this size, and the original image will be concatenated with the patches, resized to max_size.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
+            resample (`PILImageResampling | tvF.InterpolationMode | int | None`, *optional*):
                 Resampling filter to use when resizing the image.
-            data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format of the output image. If not provided, it will be the same as the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format of the input image. If not provided, it will be inferred.
         """
-        height, width = get_image_size(image, channel_dim=input_data_format)
+        batch_size, num_channels, height, width = images.size()
+        height_dim, width_dim = 2, 3
+
         max_height = max_width = max_image_size["longest_edge"]
 
         frames = []
@@ -433,72 +282,50 @@ class SmolVLMImageProcessor(BaseImageProcessor):
             # Calculate the number of splits
             num_splits_h = math.ceil(height / max_height)
             num_splits_w = math.ceil(width / max_width)
-            # Calculate the optimal width and height for the sub-images
-            optimal_height = math.ceil(height / num_splits_h)
-            optimal_width = math.ceil(width / num_splits_w)
 
-            # Iterate through each row and column
-            for r in range(num_splits_h):
-                for c in range(num_splits_w):
-                    # Calculate the starting point of the crop
-                    start_x = c * optimal_width
-                    start_y = r * optimal_height
-
-                    # Calculate the ending point of the crop
-                    end_x = min(start_x + optimal_width, width)
-                    end_y = min(start_y + optimal_height, height)
-
-                    # Crop the image
-                    cropped_image = _crop(
-                        image,
-                        start_x,
-                        start_y,
-                        end_x,
-                        end_y,
-                        data_format=data_format,
-                    )
-                    frames.append(cropped_image)
+            # Split the images by height, then by width
+            frames = (
+                images.unfold(height_dim, size=max_height, step=max_height)
+                .unfold(width_dim, size=max_width, step=max_width)
+                .contiguous()
+                .view(batch_size, num_channels, -1, max_height, max_width)
+                .permute(0, 2, 1, 3, 4)
+            )  # batch_size x n_frames x num_channels x height x width
 
             # For the global image at the end, we resize it to match the max_image_size, for cpu memory efficiency
             global_image_height, global_image_width = max_height, max_width
-            if height != global_image_height or width != global_image_width:
-                image = self.resize(
-                    image,
-                    {"height": global_image_height, "width": global_image_width},
-                    resample=resample,
-                    input_data_format=data_format,
-                )
+            images = self.resize(
+                images, SizeDict(height=global_image_height, width=global_image_width), resample=resample
+            )
+
+            frames = torch.cat((frames, images.unsqueeze(1)), dim=1)
         else:
             num_splits_h, num_splits_w = 0, 0
+            frames = images.unsqueeze(1)
 
-        frames.append(image)
+        num_splits_h = [num_splits_h] * batch_size
+        num_splits_w = [num_splits_w] * batch_size
 
         return frames, num_splits_h, num_splits_w
 
     def resize_for_vision_encoder(
         self,
-        image: np.ndarray,
+        image: torch.Tensor,
         vision_encoder_max_size: int,
-        resample: PILImageResampling = PILImageResampling.LANCZOS,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
     ):
         """
         Resize images to be multiples of `vision_encoder_max_size` while preserving the aspect ratio.
         Args:
-            image (`np.ndarray`):
+            image (`torch.Tensor`):
                 Images to resize.
             vision_encoder_max_size (`int`):
                 Maximum size of the output image. If the image is larger than this size, it will be split into
                 patches of this size, and the original image will be concatenated with the patches, resized to max_size.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
+            resample (`PILImageResampling | tvF.InterpolationMode | int | None`, *optional*):
                 Resampling filter to use when resizing the image.
-            data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format of the output image. If not provided, it will be the same as the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format of the input image. If not provided, it will be inferred
         """
-        height, width = get_image_size(image, channel_dim=input_data_format)
+        height, width = image.size()[-2:]
 
         aspect_ratio = width / height
         if width >= height:
@@ -509,364 +336,166 @@ class SmolVLMImageProcessor(BaseImageProcessor):
             height = math.ceil(height / vision_encoder_max_size) * vision_encoder_max_size
             width = int(height * aspect_ratio)
             width = math.ceil(width / vision_encoder_max_size) * vision_encoder_max_size
-        new_size = {"height": height, "width": width}
-        return self.resize(
-            image, size=new_size, resample=resample, input_data_format=input_data_format, data_format=data_format
-        )
-
-    def _pad_image(
-        self,
-        image: np.ndarray,
-        output_size: tuple[int, int],
-        constant_values: float | Iterable[float] = 0,
-        data_format: ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
-    ) -> np.ndarray:
-        """
-        Pad an image with zeros to the given size.
-        """
-        input_height, input_width = get_image_size(image, channel_dim=input_data_format)
-        output_height, output_width = output_size
-
-        pad_bottom = output_height - input_height
-        pad_right = output_width - input_width
-        padding = ((0, pad_bottom), (0, pad_right))
-        padded_image = pad(
-            image,
-            padding,
-            mode=PaddingMode.CONSTANT,
-            constant_values=constant_values,
-            data_format=data_format,
-            input_data_format=input_data_format,
-        )
-        return padded_image
+        new_size = SizeDict(height=height, width=width)
+        return self.resize(image, size=new_size, resample=resample)
 
     def pad(
         self,
-        images: list[list[np.ndarray]],
-        constant_values: float | Iterable[float] = 0,
+        image: torch.Tensor,
+        padded_size: tuple[int, int],
+        fill: int = 0,
         return_pixel_mask: bool = True,
-        return_tensors: str | TensorType | None = None,
-        data_format: ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
+    ):
+        original_size = image.shape[-2:]
+        padding_bottom = padded_size[0] - original_size[0]
+        padding_right = padded_size[1] - original_size[1]
+
+        if padding_bottom < 0 or padding_right < 0:
+            raise ValueError(
+                f"Padding dimensions are negative. Please make sure that the padded size is larger than the "
+                f"original size. Got padded size: {padded_size}, original size: {original_size}."
+            )
+
+        # Only pad if necessary
+        if original_size != padded_size:
+            padding = (0, 0, padding_right, padding_bottom)
+            image = tvF.pad(image, padding, fill=fill, padding_mode="constant")
+
+        # Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
+        pixel_mask = None
+        if return_pixel_mask:
+            pixel_mask = torch.zeros_like(image[..., 0, :, :], dtype=torch.int64)
+            pixel_mask[: original_size[0], : original_size[1]] = 1
+
+        return image, pixel_mask
+
+    def _preprocess(
+        self,
+        images: list[list["torch.Tensor"]],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        do_image_splitting: bool | None,
+        max_image_size: dict[str, int] | None,
+        return_row_col_info: bool | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        **kwargs,
     ) -> BatchFeature:
         """
-        For a list of images, for each images, pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width.
-        For each sample in the batch, pads the sample with empty images to the max_number of images per sample in the batch. Optionally returns a pixel mask.
-        Args:
-            images (`list[list[np.ndarray]]`):
-                List of list of images to pad. Pads to the largest height and width in the batch.
-            constant_values (`float` or `Iterable[float]`, *optional*):
-                The value to use for the padding if `mode` is `"constant"`.
-            return_pixel_mask (`bool`, *optional*, defaults to `True`):
-                Whether to return a pixel mask.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format of the input image. If not provided, it will be inferred.
+        Process a batch of images for the model.
         """
-        pad_size = get_max_height_width(images, input_data_format=input_data_format)
 
-        batch_size = len(images)
-        max_num_images = max(len(images_) for images_ in images)
-        input_data_format = (
-            infer_channel_dimension_format(images[0][0], num_channels=(1, 3, 4))
-            if input_data_format is None
-            else input_data_format
+        grouped_images, grouped_images_index = group_images_by_shape(
+            images, is_nested=True, disable_grouping=disable_grouping
         )
-        data_format = input_data_format if data_format is None else data_format
-        # filter out empty image lists, then take first image of the first sample
-        first_image_in_list = [sample_images for sample_images in images if sample_images][0][0]
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(stacked_images, size, resample=resample)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index, is_nested=True)
 
-        if input_data_format == ChannelDimension.FIRST:
-            n_channels = first_image_in_list.shape[0]
-        elif input_data_format == ChannelDimension.LAST:
-            n_channels = first_image_in_list.shape[-1]
-        else:
-            raise ValueError("Invalid channel dimension format.")
-
-        def empty_image(size, input_data_format):
-            if input_data_format == ChannelDimension.FIRST:
-                return np.zeros((n_channels, *size), dtype=np.uint8)
-            elif input_data_format == ChannelDimension.LAST:
-                return np.zeros((*size, n_channels), dtype=np.uint8)
-
-        padded_images_list = [
-            [empty_image(pad_size, data_format) for _ in range(max_num_images)] for _ in range(batch_size)
-        ]
-        padded_masks = [[np.zeros(pad_size, dtype=np.int64) for _ in range(max_num_images)] for _ in range(batch_size)]
-
-        for batch_idx in range(batch_size):
-            for sample_idx, image in enumerate(images[batch_idx]):
-                padded_images_list[batch_idx][sample_idx] = self._pad_image(
-                    image,
-                    pad_size,
-                    constant_values=constant_values,
-                    data_format=data_format,
-                    input_data_format=input_data_format,
-                )
-                padded_masks[batch_idx][sample_idx] = make_pixel_mask(
-                    image, output_size=pad_size, input_data_format=input_data_format
-                )
-
-        padded_masks = padded_masks if return_pixel_mask else None
-        return padded_images_list, padded_masks
-
-    def preprocess(
-        self,
-        images: ImageInput,
-        do_convert_rgb: bool | None = None,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling | None = None,
-        do_image_splitting: bool | None = None,
-        do_rescale: bool | None = None,
-        max_image_size: dict[str, int] | None = None,
-        rescale_factor: float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        do_pad: bool | None = None,
-        return_tensors: str | TensorType | None = None,
-        return_row_col_info: bool = False,
-        data_format: ChannelDimension | None = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
-    ):
-        """
-        Preprocess a batch of images.
-        Args:
-            images (`ImageInput`):
-                A list of images to preprocess.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after resizing. With the longest edge resized to keep the input aspect ratio.
-            resample (`int`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
-                has an effect if `do_resize` is set to `True`.
-            do_image_splitting (`bool`, *optional*, defaults to `self.do_image_splitting`):
-                Whether to split the image into sub-images concatenated with the original image. They are split into patches
-                such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
-            max_image_size (`Dict`, *optional*, defaults to `self.max_image_size`):
-                Maximum resolution of the images. If the image is larger than this size, the image is split into patches.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image.
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
-                `True`.
-            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
-                Whether or not to pad the images to the largest height and width in the batch.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                - Unset: Return a list of `np.ndarray`.
-                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-            return_row_col_info (`bool`, *optional*, default to `False`):
-                Whether to return the number of rows and columns of the split images. This is used for the
-                `SmolVLMProcessor` to generate prompt strings based on the number of rows and columns.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        size = size if size is not None else self.size
-        resample = resample if resample is not None else self.resample
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_image_splitting = do_image_splitting if do_image_splitting is not None else self.do_image_splitting
-        max_image_size = max_image_size if max_image_size is not None else self.max_image_size
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        do_pad = do_pad if do_pad is not None else self.do_pad
-
-        images = self.fetch_images(images)
-        images_list = make_nested_list_of_images(images)
-
-        if not valid_images(images_list[0]):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
+        grouped_images, grouped_images_index = group_images_by_shape(
+            resized_images, is_nested=True, disable_grouping=disable_grouping
         )
-
-        # save the palettes for conversion to RGB
-        palettes_list = [
-            [im.getpalette() if isinstance(im, Image.Image) and im.mode == "P" else None for im in images]
-            for images in images_list
-        ]
-
-        # All transformations expect numpy arrays.
-        images_list = [[to_numpy_array(image) for image in images] for images in images_list]
-        # Search for the first image in the image list.
-        # NOTE: we can't slice the first image with images_list[0][0] if the first batch contains no images. See #36682
-        first_image_in_list = [images for images in images_list if images][0][0]
-
-        # Extra channel dimension for grayscale images
-        if input_data_format in [ChannelDimension.LAST, None]:
-            images_list = [
-                [np.expand_dims(img, axis=-1) if img.ndim == 2 else img for img in images] for images in images_list
-            ]
-        elif input_data_format == ChannelDimension.FIRST:
-            images_list = [
-                [np.expand_dims(img, axis=0) if img.ndim == 2 else img for img in images] for images in images_list
-            ]
-
-        if do_rescale and is_scaled_image(first_image_in_list):
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-
-        # We assume that all images have the same channel dimension format.
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(first_image_in_list, num_channels=(1, 3, 4))
-
-        if do_resize:
-            images_list = [
-                [
-                    self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-                    for image in images
-                ]
-                for images in images_list
-            ]
-
+        split_images_grouped = {}
         if do_image_splitting:
-            # We first resize both height and width of each image to the nearest max_image_size multiple, disregarding the aspect ratio
-            # for size=(10, max_image_size) -> rescaled_size=(max_image_size, max_image_size)
-            # for size=(11, max_image_size+1) -> rescaled_size=(max_image_size, max_image_size*2)
-            images_list = [
-                [
-                    self.resize_for_vision_encoder(
-                        image, max_image_size["longest_edge"], resample=resample, input_data_format=input_data_format
-                    )
-                    for image in images
-                ]
-                for images in images_list
-            ]
-            images_list_split_arrays = []
-            palettes_list_split_arrays = []
-            images_list_rows = []
-            images_list_cols = []
-            for images, palettes in zip(images_list, palettes_list):
-                split_image_arrays = []
-                split_palettes_arrays = []
-                image_rows = []
-                image_cols = []
-                for image, palette in zip(images, palettes):
-                    split_image_array, rows, cols = self.split_image(
-                        image,
-                        max_image_size=max_image_size,
-                        resample=resample,
-                        input_data_format=input_data_format,
-                    )
-                    split_image_arrays.extend(split_image_array)
-                    split_palettes_arrays.extend([palette] * len(split_image_array))
-                    image_rows.append(rows)
-                    image_cols.append(cols)
-                images_list_split_arrays.append(split_image_arrays)
-                palettes_list_split_arrays.append(split_palettes_arrays)
-                images_list_rows.append(image_rows)
-                images_list_cols.append(image_cols)
-            images_list = images_list_split_arrays
-            palettes_list = palettes_list_split_arrays
+            rows_grouped = {}
+            cols_grouped = {}
+            for shape, stacked_images in grouped_images.items():
+                stacked_images = self.resize_for_vision_encoder(
+                    stacked_images, max_image_size["longest_edge"], resample=resample
+                )
+                stacked_images, rows, cols = self.split_images(
+                    stacked_images, max_image_size=max_image_size, resample=resample
+                )
+                split_images_grouped[shape] = stacked_images
+                rows_grouped[shape] = rows
+                cols_grouped[shape] = cols
+            processed_images = reorder_images(split_images_grouped, grouped_images_index, is_nested=True)
+            rows = reorder_images(rows_grouped, grouped_images_index, is_nested=True)
+            cols = reorder_images(cols_grouped, grouped_images_index, is_nested=True)
+            # flattenened the doubly nested list to a nested list
+            for i, group_images in enumerate(processed_images):
+                processed_images[i] = [image for sublist in group_images for image in sublist]
         else:
-            # We square the images to max_image_size
-            images_list = [
-                [
-                    self.resize(
-                        image=image,
-                        size={"height": max_image_size["longest_edge"], "width": max_image_size["longest_edge"]},
-                        resample=resample,
-                        input_data_format=input_data_format,
-                    )
-                    for image in images
-                ]
-                for images in images_list
-            ]
-            images_list_rows = [[0] * len(images) for images in images_list]
-            images_list_cols = [[0] * len(images) for images in images_list]
-
-        if do_convert_rgb:
-            images_list = [
-                [convert_to_rgb(img, palette) for img, palette in zip(images, palettes)]
-                for images, palettes in zip(images_list, palettes_list)
-            ]
-
-        if do_rescale:
-            images_list = [
-                [self.rescale(image, rescale_factor, input_data_format=input_data_format) for image in images]
-                for images in images_list
-            ]
-
-        if do_normalize:
-            images_list = [
-                [
-                    self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                    for image in images
-                ]
-                for images in images_list
-            ]
-
-        pixel_attention_mask = None
+            for shape, stacked_images in grouped_images.items():
+                # We square the images to max_image_size
+                stacked_images = self.resize(
+                    image=stacked_images,
+                    size=SizeDict(height=max_image_size["longest_edge"], width=max_image_size["longest_edge"]),
+                    resample=resample,
+                )
+                split_images_grouped[shape] = stacked_images
+            processed_images = reorder_images(split_images_grouped, grouped_images_index, is_nested=True)
+            rows = [[0] * len(images) for images in processed_images]
+            cols = [[0] * len(images) for images in processed_images]
+        # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(
+            processed_images, is_nested=True, disable_grouping=disable_grouping
+        )
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            # Fused rescale and normalize
+            stacked_images = self._rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index, is_nested=True)
         if do_pad:
-            images_list, pixel_attention_mask = self.pad(
-                images_list, return_pixel_mask=True, return_tensors=return_tensors, input_data_format=input_data_format
+            # Get max images per batch
+            max_num_images = max(len(images_) for images_ in processed_images)
+            max_height, max_width = get_max_height_width(processed_images)
+            num_channels = get_num_channels(processed_images)
+            device = get_device_from_images(processed_images)
+
+            processed_images_padded = torch.zeros(
+                len(processed_images),
+                max_num_images,
+                *(num_channels, max_height, max_width),
+                device=device,
             )
-
-        if data_format is not None:
-            images_list = [
-                [
-                    to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-                    for image in images
-                ]
-                for images in images_list
-            ]
-
-        # Faster tensor conversion
-        data = {"pixel_values": np.array(images_list) if do_pad and return_tensors is not None else images_list}
-        if pixel_attention_mask is not None:
-            data["pixel_attention_mask"] = (
-                np.array(pixel_attention_mask) if do_pad and return_tensors is not None else pixel_attention_mask
+            pixel_attention_masks = torch.zeros(
+                len(processed_images),
+                max_num_images,
+                *(max_height, max_width),
+                device=device,
             )
+            for i, images in enumerate(processed_images):
+                for j, image in enumerate(images):
+                    processed_images_padded[i, j], pixel_attention_masks[i, j] = self.pad(
+                        image, (max_height, max_width)
+                    )
+            processed_images = processed_images_padded
 
+        if do_pad:
+            data = {"pixel_values": processed_images, "pixel_attention_mask": pixel_attention_masks}
+        elif return_tensors == "pt":
+            data = {"pixel_values": torch.stack([torch.stack(images) for images in processed_images])}
+        else:
+            data = {"pixel_values": processed_images}
+        # This is needed for generating correct text inputs in the processor - we don't pad to the max number of images
         encoding = BatchFeature(data=data, tensor_type=return_tensors)
 
-        # This is needed for generating correct text inputs in the processor - we don't pad to the max number of images
         if return_row_col_info:
-            encoding["rows"] = images_list_rows
-            encoding["cols"] = images_list_cols
+            encoding["rows"] = rows
+            encoding["cols"] = cols
 
         return encoding
+
+    def to_dict(self):
+        encoder_dict = super().to_dict()
+        encoder_dict.pop("_valid_processor_keys", None)
+        encoder_dict.pop("return_row_col_info", None)
+        return encoder_dict
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict):
         """
@@ -889,7 +518,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         num_patches = num_rows = num_cols = 0
         if do_image_splitting:
             height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=size["longest_edge"])
-            height, width = _resize_output_size_scale_below_upper_bound(height, width, max_len=4096)
+            height, width = _resize_output_size_scale_below_upper_bound(height, width, max_len=MAX_IMAGE_SIZE)
             aspect_ratio = width / height
 
             if width >= height:

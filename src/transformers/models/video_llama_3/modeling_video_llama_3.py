@@ -33,7 +33,12 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    torch_compilable_check,
+)
 from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto.modeling_auto import AutoModel
@@ -528,7 +533,6 @@ class VideoLlama3ModelOutputWithPast(ModelOutput):
 @auto_docstring
 class VideoLlama3Model(VideoLlama3PreTrainedModel):
     base_model_prefix = "model"
-    _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     _can_compile_fullgraph = False
@@ -759,7 +763,6 @@ class VideoLlama3CausalLMOutputWithPast(ModelOutput):
 
 
 class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _can_compile_fullgraph = False
 

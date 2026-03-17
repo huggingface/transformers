@@ -149,6 +149,7 @@ for result in results:
 
 [[autodoc]] PPDocLayoutV2ReadingOrder
 
-## PPDocLayoutV2ImageProcessorFast
+## PPDocLayoutV2ImageProcessor
 
-[[autodoc]] PPDocLayoutV2ImageProcessorFast
+[[autodoc]] PPDocLayoutV2ImageProcessor
+    - preprocess
