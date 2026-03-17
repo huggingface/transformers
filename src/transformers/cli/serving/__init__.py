@@ -12,6 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .app import build_app
 from .model_manager import ModelManager
-from .protocol import Modality
+from .server import build_server
+from .utils import Modality
