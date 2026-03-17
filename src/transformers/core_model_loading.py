@@ -56,6 +56,15 @@ class GGUFQuantizedTensor:
     data: Any  # np.ndarray raw quantized bytes from gguf reader
     tensor_type: Any  # gguf.GGMLQuantizationType
 
+    def is_floating_point(self) -> bool:
+        return True
+
+    @property
+    def dtype(self):
+        import torch
+
+        return torch.float32
+
 
 def build_glob_alternation(
     globs: list[WeightRenaming | WeightConverter | str],
