@@ -409,7 +409,8 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
         if input_values is not None:
             seqlen, device = model_inputs["position_ids"].shape[-1], model_inputs["position_ids"].device
-            past_seen_tokens = encoder_past_key_values.get_seq_length() if encoder_past_key_values is not None else 0
+            cache = model_inputs.get("past_key_values")
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             positions = torch.arange(seqlen, device=device) + past_seen_tokens
             start, end = current_window[0]
 
