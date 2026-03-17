@@ -37,7 +37,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DepthProImageProcessor
+    from transformers import DepthProImageProcessorPil
 
 
 class DepthProModelTester:
@@ -310,7 +310,7 @@ def prepare_img():
 class DepthProModelIntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation(self):
         model_path = "apple/DepthPro-hf"
-        image_processor = DepthProImageProcessor.from_pretrained(model_path)
+        image_processor = DepthProImageProcessorPil.from_pretrained(model_path)
         model = DepthProForDepthEstimation.from_pretrained(model_path, dtype=torch.float32).to(torch_device)
         config = model.config
 
@@ -343,7 +343,7 @@ class DepthProModelIntegrationTest(unittest.TestCase):
 
     def test_post_processing_depth_estimation(self):
         model_path = "apple/DepthPro-hf"
-        image_processor = DepthProImageProcessor.from_pretrained(model_path)
+        image_processor = DepthProImageProcessorPil.from_pretrained(model_path)
         model = DepthProForDepthEstimation.from_pretrained(model_path)
 
         image = prepare_img()

@@ -206,7 +206,11 @@ def _validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_til
     _validate_size(size)
 
 
-def build_aspect_ratio_mask(aspect_ratios: list[list[tuple[int, int]]], max_image_tiles: int) -> "torch.Tensor":
+def build_aspect_ratio_mask(
+    aspect_ratios: list[list[tuple[int, int]]],
+    max_image_tiles: int,
+    device: Optional["torch.device"] = None,
+) -> "torch.Tensor":
     """
     Builds a mask for the aspect ratios of the images.
 
@@ -216,6 +220,8 @@ def build_aspect_ratio_mask(aspect_ratios: list[list[tuple[int, int]]], max_imag
             Each aspect ratio is represented as a tuple of (width, height) in terms of number of tiles.
         max_image_tiles (`int`):
             The maximum number of tiles any image can be split into.
+        device (`torch.device`, *optional*):
+            The device to create the tensor on. Defaults to CPU.
 
     Returns:
         `torch.Tensor`: A 3D torch.Tensor of shape (batch_size, max_num_images, max_image_tiles).
@@ -224,7 +230,7 @@ def build_aspect_ratio_mask(aspect_ratios: list[list[tuple[int, int]]], max_imag
     batch_size = len(aspect_ratios)
     max_num_images = max(len(row) for row in aspect_ratios)
 
-    aspect_ratio_mask = torch.zeros((batch_size, max_num_images, max_image_tiles), dtype=torch.long)
+    aspect_ratio_mask = torch.zeros((batch_size, max_num_images, max_image_tiles), dtype=torch.long, device=device)
 
     # Set the first tile to 1 for all aspect ratios
     # because in original implementation aspect ratios are padded with (1, 1),
@@ -276,6 +282,7 @@ def pad_batches_and_tiles(
     stacked_images = torch.zeros(
         (batch_size, max_num_images, max_image_tiles, channels, tile_height, tile_width),
         dtype=torch.float32,
+        device=batch_images[0][0].device,
     )
 
     # Fill the stacked images array with the tiled images from the batch
@@ -291,7 +298,11 @@ def pad_batches_and_tiles(
     return stacked_images, all_num_tiles
 
 
-def convert_aspect_ratios_to_ids(aspect_ratios: list[list[tuple[int, int]]], max_image_tiles: int) -> "torch.Tensor":
+def convert_aspect_ratios_to_ids(
+    aspect_ratios: list[list[tuple[int, int]]],
+    max_image_tiles: int,
+    device: Optional["torch.device"] = None,
+) -> "torch.Tensor":
     """
     Convert aspect ratio tuples to unique ids.
 
@@ -303,6 +314,8 @@ def convert_aspect_ratios_to_ids(aspect_ratios: list[list[tuple[int, int]]], max
             A list of aspect ratios for each image in the batch.
         max_image_tiles (`int`):
             The maximum number of tiles any image can be split into.
+        device (`torch.device`, *optional*):
+            The device to create the tensor on. Defaults to CPU.
 
     Returns:
         `torch.Tensor`:
@@ -314,7 +327,7 @@ def convert_aspect_ratios_to_ids(aspect_ratios: list[list[tuple[int, int]]], max
     max_num_images = max(len(row) for row in aspect_ratios)
     supported_aspect_ratios = get_all_supported_aspect_ratios(max_image_tiles)
 
-    aspect_ratios_ids = torch.zeros((batch_size, max_num_images), dtype=torch.long)
+    aspect_ratios_ids = torch.zeros((batch_size, max_num_images), dtype=torch.long, device=device)
     for i, sample_aspect_ratios in enumerate(aspect_ratios):
         for j, (num_tiles_h, num_tiles_w) in enumerate(sample_aspect_ratios):
             aspect_ratios_ids[i, j] = supported_aspect_ratios.index((num_tiles_h, num_tiles_w)) + 1
@@ -508,8 +521,14 @@ class MllamaImageProcessor(TorchvisionBackend):
 
         split_images, num_tiles = pad_batches_and_tiles(split_images, max_image_tiles)
 
-        aspect_ratio_ids = convert_aspect_ratios_to_ids(aspect_ratios, max_image_tiles=max_image_tiles)
-        aspect_ratio_mask = build_aspect_ratio_mask(aspect_ratios, max_image_tiles=max_image_tiles)
+        # Use the same device as the processed image tiles so that all output tensors are consistent.
+        pixel_values_device = split_images.device
+        aspect_ratio_ids = convert_aspect_ratios_to_ids(
+            aspect_ratios, max_image_tiles=max_image_tiles, device=pixel_values_device
+        )
+        aspect_ratio_mask = build_aspect_ratio_mask(
+            aspect_ratios, max_image_tiles=max_image_tiles, device=pixel_values_device
+        )
 
         encoded_inputs = BatchFeature(
             data={

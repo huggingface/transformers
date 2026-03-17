@@ -47,7 +47,8 @@ class Swin2SRImageProcessorPil(PilBackend):
     def __init__(self, **kwargs: Unpack[Swin2SRImageProcessorKwargs]):
         # Handle legacy pad_size parameter
         pad_size = kwargs.pop("pad_size", None)
-        kwargs.setdefault("size_divisor", pad_size)
+        if pad_size is not None:
+            kwargs.setdefault("size_divisor", pad_size)
         super().__init__(**kwargs)
 
     @auto_docstring

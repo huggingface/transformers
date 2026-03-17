@@ -388,6 +388,7 @@ class VitPoseImageProcessor(TorchvisionBackend):
         kwargs["boxes"] = boxes
         return self._preprocess(images, **kwargs)
 
+    @torch.compiler.disable
     def affine_transform(
         self,
         image: "torch.Tensor",

@@ -448,7 +448,9 @@ class PilBackend(BaseImageProcessor):
 
         if image_type == ImageType.PIL:
             image = np.array(image)
-            input_data_format = ChannelDimension.LAST if input_data_format is None else input_data_format
+            # Set LAST only for multi-channel PIL images (H, W, C); for grayscale (H, W), leave as is to avoid shape errors after expand_dims.
+            if image.ndim >= 3:
+                input_data_format = ChannelDimension.LAST if input_data_format is None else input_data_format
         elif image_type == ImageType.TORCH:
             image = image.numpy()
 

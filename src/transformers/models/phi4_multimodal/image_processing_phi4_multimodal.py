@@ -123,7 +123,10 @@ class Phi4MultimodalImageProcessor(TorchvisionBackend):
             padding_width = target_width - int(orig_width * ratio_height)
             padding_height = 0
 
-        attention_mask = torch.ones((int(mask_size * target_aspect_ratio[1]), int(mask_size * target_aspect_ratio[0])))
+        attention_mask = torch.ones(
+            (int(mask_size * target_aspect_ratio[1]), int(mask_size * target_aspect_ratio[0])),
+            device=image.device,
+        )
         if padding_width >= patch_size:
             attention_mask[:, -math.floor(padding_width / patch_size) :] = 0
         if padding_height >= patch_size:
@@ -187,7 +190,7 @@ class Phi4MultimodalImageProcessor(TorchvisionBackend):
             global_image = self.resize(processed_image, size, resample=resample, antialias=False)
             height, width = processed_image.shape[-2:]
             mask_height, mask_width = attention_mask.shape[-2:]
-            global_attention_mask = torch.ones((1, mask_size, mask_size))
+            global_attention_mask = torch.ones((1, mask_size, mask_size), device=processed_image.device)
 
             hd_image_reshape = processed_image.reshape(
                 1, 3, height // size.height, size.height, width // size.width, size.width

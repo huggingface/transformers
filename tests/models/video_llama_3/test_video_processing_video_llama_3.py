@@ -165,7 +165,7 @@ class VideoLlama3VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
             self.video_processor_dict, size={"shortest_edge": 100, "longest_edge": 200}
         )
         # min_pixels and max_pixels take precedence over size, like in the image processor.
-        self.assertEqual(video_processor.size, {"shortest_edge": 400, "longest_edge": 10000})
+        self.assertEqual(video_processor.size, {"shortest_edge": 400, "longest_edge": 80000})
 
         processor_dict = self.video_processor_dict.copy()
         processor_dict.pop("min_pixels")
