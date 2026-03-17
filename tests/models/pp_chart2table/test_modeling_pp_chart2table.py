@@ -34,7 +34,6 @@ if is_torch_available():
 
     from transformers import (
         PPChart2TableForConditionalGeneration,
-        PPChart2TableModel,
     )
 
 
@@ -136,13 +135,7 @@ class PPChart2TableVisionText2TextModelTester:
 
 @require_torch
 class PPChart2TableModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            PPChart2TableForConditionalGeneration,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (PPChart2TableForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "image-text-to-text": PPChart2TableForConditionalGeneration,
@@ -157,6 +150,7 @@ class PPChart2TableModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
 
 @slow
 @require_torch

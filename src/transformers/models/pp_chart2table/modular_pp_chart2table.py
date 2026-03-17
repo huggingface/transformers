@@ -35,9 +35,7 @@ from ..got_ocr2.modeling_got_ocr2 import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(
-    checkpoint="PaddlePaddle/PP-Chart2Table_safetensors"
-)
+@auto_docstring(checkpoint="PaddlePaddle/PP-Chart2Table_safetensors")
 class PPChart2TableConfig(GotOcr2Config):
     pass
 
@@ -60,17 +58,6 @@ class PPChart2TableProcessor(ProcessorMixin):
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
-
-        self.message_start_token = tokenizer.message_start_token
-        self.message_end_token = tokenizer.message_end_token
-        self.img_start_token = tokenizer.img_start_token
-        self.img_end_token = tokenizer.img_end_token
-        self.img_pad_token = tokenizer.img_pad_token
-        self.image_token = tokenizer.image_token
-        self.system_query = "system\nYou should follow the instructions carefully and explain your answers in detail."
-
     def __call__(
         self,
         images: ImageInput = None,
@@ -88,26 +75,32 @@ class PPChart2TableProcessor(ProcessorMixin):
         input_ids = {"input_ids": None}
         if text is None or text == "":
             query = "Chart to table"
-            prompt = (
-                self.message_start_token
-                + self.system_query
-                + self.message_end_token
-                + self.message_start_token
-                + "user\n"
-                + self.img_start_token
-                + self.img_pad_token * num_patches * num_patches
-                + self.img_end_token
-                + "\n"
-                + query
-                + self.message_end_token
-                + self.message_start_token
-                + "assistant\n"
-            )
-            input_ids = torch.tensor(self.tokenizer([prompt]).input_ids)
-            input_ids = input_ids.repeat(batch_size, 1)
-            input_ids = {"input_ids": input_ids}
         else:
             raise ValueError("PPChart2Table processor does not support text inputs")
+
+        messages = [
+            {
+                "role": "system",
+                "content": "You should follow the instructions carefully and explain your answers in detail.",
+            },
+            {
+                "role": "user",
+                "image": {"num_patches": num_patches},
+                "content": query,
+            },
+        ]
+
+        # Use tokenizer's apply_chat_template instead of manually loading template
+        prompt = self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+
+        # Tokenize and prepare input ids for batch
+        input_ids = torch.tensor(self.tokenizer([prompt]).input_ids)
+        input_ids = input_ids.repeat(batch_size, 1)
+        input_ids = {"input_ids": input_ids}
 
         return BatchFeature(data={**input_ids, **image_inputs})
 
