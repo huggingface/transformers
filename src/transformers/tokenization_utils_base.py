@@ -1383,7 +1383,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         """
         return self.convert_tokens_to_ids(self.all_special_tokens)
 
-    def _set_model_specific_special_tokens(self, special_tokens: dict[str, str | AddedToken]):
+    def _set_model_specific_special_tokens(self, special_tokens: dict[str, str | AddedToken] | list[str]):
         """
         Adds new model-specific special tokens (e.g., for multimodal models).
 
@@ -1391,8 +1391,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         For example: if the model tokenizer is multimodal, we can support special image or audio tokens.
 
         Args:
-            special_tokens: Dictionary of {token_name: token_value}
+            special_tokens: Dictionary of {token_name: token_value}, or a list of token strings.
+                If a list is provided, each token is used as both the attribute name and value.
         """
+        if isinstance(special_tokens, list):
+            special_tokens = {tok: tok for tok in special_tokens}
         self.SPECIAL_TOKENS_ATTRIBUTES = self.SPECIAL_TOKENS_ATTRIBUTES + list(special_tokens.keys())
         for key, value in special_tokens.items():
             if isinstance(value, (str, AddedToken)):

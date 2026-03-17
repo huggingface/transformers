@@ -630,6 +630,22 @@ Hey how are you doing"""  # noqa: W293
         # next is failing for almost all the Fast tokenizers now.
         # self.assertEqual(token_2[0], SPECIAL_TOKEN_2)
 
+    def test_set_model_specific_special_tokens_with_list(self):
+        """_set_model_specific_special_tokens should accept a list of token strings (not only a dict)."""
+        tokenizer = self.get_tokenizer()
+        list_tokens = ["<|special_a|>", "<|special_b|>"]
+        tokenizer._set_model_specific_special_tokens(list_tokens)
+        self.assertIn("<|special_a|>", tokenizer.SPECIAL_TOKENS_ATTRIBUTES)
+        self.assertIn("<|special_b|>", tokenizer.SPECIAL_TOKENS_ATTRIBUTES)
+
+    def test_set_model_specific_special_tokens_with_dict(self):
+        """_set_model_specific_special_tokens should accept a dict of {name: token_value}."""
+        tokenizer = self.get_tokenizer()
+        dict_tokens = {"custom_a_token": "<|custom_a|>", "custom_b_token": "<|custom_b|>"}
+        tokenizer._set_model_specific_special_tokens(dict_tokens)
+        self.assertIn("custom_a_token", tokenizer.SPECIAL_TOKENS_ATTRIBUTES)
+        self.assertIn("custom_b_token", tokenizer.SPECIAL_TOKENS_ATTRIBUTES)
+
     def test_model_input_names_signature(self):
         accepted_model_main_input_names = [
             "input_ids",  # nlp models
