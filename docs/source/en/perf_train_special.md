@@ -15,17 +15,53 @@ rendered properly in your Markdown viewer.
 
 # Apple Silicon
 
-Apple Silicon (M series) features a unified memory architecture, making it possible to efficiently train large models locally and improves performance by reducing latency associated with data retrieval. You can take advantage of Apple Silicon for training with PyTorch due to its integration with [Metal Performance Shaders (MPS)](https://pytorch.org/docs/stable/notes/mps.html).
+Apple Silicon (M-series) chips have a unified memory architecture where the CPU and GPU share the same memory pool. Shared memory eliminates the data transfer overhead of GPUs, making it practical to train large models locally. Transformers uses the [Metal Performance Shaders (MPS)](https://pytorch.org/docs/stable/notes/mps.html) backend to use this architecture.
 
-The `mps` backend requires macOS 12.3 or later.
+This requires macOS 12.3 or later and PyTorch built with MPS support.
 
 > [!WARNING]
-> Some PyTorch operations are not implemented in MPS yet. To avoid an error, set the environment variable `PYTORCH_ENABLE_MPS_FALLBACK=1` to fallback on the CPU kernels. Please open an issue in the [PyTorch](https://github.com/pytorch/pytorch/issues) repository if you encounter any other issues.
+> MPS doesn't support all PyTorch operations yet. Set `PYTORCH_ENABLE_MPS_FALLBACK=1` to fall back to CPU kernels for unsupported operations. Open an issue in the [PyTorch](https://github.com/pytorch/pytorch/issues) repository for any other unexpected behavior.
 
-[`TrainingArguments`] and [`Trainer`] detects and sets the backend device to `mps` if an Apple Silicon device is available. No additional changes are required to enable training on your device.
+## Device selection
 
-The `mps` backend doesn't support [distributed training](https://pytorch.org/docs/stable/distributed.html#backends).
+[`Trainer`] detects MPS automatically with [torch.backends.mps.is_available](https://docs.pytorch.org/docs/main/notes/mps.html) and sets the device to `mps` without any configuration changes.
 
-## Resources
+```python
+training_args = TrainingArguments(
+    output_dir="./outputs",
+    # No extra flags needed — MPS is used automatically on Apple Silicon
+)
+```
 
-Learn more about the MPS backend in the [Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/) blog post.
+## Mixed precision
+
+MPS supports both bf16 and fp16 mixed precision. bf16 requires macOS 14.0 or later. It is not supported on earlier versions.
+
+```python
+training_args = TrainingArguments(
+    output_dir="./outputs",
+    bf16=True,  # requires macOS 14.0+
+)
+```
+
+## Model loading and device mapping
+
+`device_map="auto"` treats MPS as a sole compute device without CPU offload. CUDA can spill layers to CPU RAM, but MPS requires the entire model to fit in unified memory.
+
+If your model doesn't fit in unified memory, `device_map="auto"` won't work with MPS. Try a smaller model or lower precision instead.
+
+## Metal quantization
+
+Transformers includes an MPS-specific quantizer that uses Apple's Metal kernels for accelerated quantized inference. The Metal quantizer doesn't support training (`is_trainable = False`), so it won't reduce memory during a training run. It is useful for running inference on a quantized checkpoint after training.
+
+To use it, install the `kernels` package:
+
+```bash
+pip install kernels
+```
+
+The Metal quantizer sets `device_map='mps'` automatically if you don't specify one. On-the-fly quantization with the Metal backend doesn't support CPU or disk offloading.
+
+## Next steps
+
+- Read the [Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/) blog post for background on the MPS backend.
