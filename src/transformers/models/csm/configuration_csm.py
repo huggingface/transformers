@@ -13,6 +13,8 @@
 # limitations under the License.
 
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
@@ -23,6 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="sesame/csm-1b")
+@strict(accept_kwargs=True)
 class CsmDepthDecoderConfig(PreTrainedConfig):
     r"""
     backbone_hidden_size (`int`, *optional*, defaults to 2048):
@@ -49,64 +52,41 @@ class CsmDepthDecoderConfig(PreTrainedConfig):
     }
     default_theta = 500000.0
 
-    def __init__(
-        self,
-        num_codebooks: int | None = 32,
-        backbone_hidden_size: int | None = 2048,
-        vocab_size: int | None = 2051,
-        hidden_size: int | None = 1024,
-        intermediate_size: int | None = 8192,
-        num_hidden_layers: int | None = 4,
-        num_attention_heads: int | None = 8,
-        num_key_value_heads: int | None = 2,
-        hidden_act: int | None = "silu",
-        max_position_embeddings: int | None = 33,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-5,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = None,
-        eos_token_id: int | None = None,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        mlp_bias: bool | None = False,
-        head_dim: int | None = None,
-        **kwargs,
-    ):
+    num_codebooks: int | None = 32
+    backbone_hidden_size: int = 2048
+    vocab_size: int = 2051
+    hidden_size: int = 1024
+    intermediate_size: int = 8192
+    num_hidden_layers: int = 4
+    num_attention_heads: int = 8
+    num_key_value_heads: int | None = 2
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 33
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    pad_token_id: int | None = None
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int | None = 0.0
+    mlp_bias: bool = False
+    head_dim: int | None = None
+
+    def __post_init__(self, **kwargs):
         if kwargs.pop("tie_word_embeddings", False):
             raise ValueError("`tie_word_embeddings=True` is not supported for CsmDepthDecoderConfig")
 
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.num_codebooks = num_codebooks
-        self.vocab_size = vocab_size
-        self.backbone_hidden_size = backbone_hidden_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-
         # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.mlp_bias = mlp_bias
-        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        self.rope_parameters = rope_parameters
-        super().__init__(**kwargs)
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+        self.head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="sesame/csm-1b")
+@strict(accept_kwargs=True)
 class CsmConfig(PreTrainedConfig):
     r"""
     codebook_pad_token_id (`int`, *optional*, defaults to 2050):
@@ -149,92 +129,57 @@ class CsmConfig(PreTrainedConfig):
         "codebook_size": "vocab_size",
     }
 
-    def __init__(
-        self,
-        num_codebooks: int | None = 32,
-        vocab_size: int | None = 2051,
-        text_vocab_size: int | None = 128256,
-        hidden_size: int | None = 2048,
-        intermediate_size: int | None = 8192,
-        num_hidden_layers: int | None = 16,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = 8,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 2048,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-5,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = 128002,
-        codebook_pad_token_id: int | None = 2050,
-        codebook_eos_token_id: int | None = 0,
-        bos_token_id: int | None = 128000,
-        eos_token_id: int | None = None,
-        audio_token_id: int | None = 128002,
-        audio_eos_token_id: int | None = 128003,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        mlp_bias: bool | None = False,
-        head_dim: int | None = None,
-        tie_codebooks_embeddings: bool | None = True,
-        depth_decoder_config: dict | None = None,
-        codec_config: dict | None = None,
-        **kwargs,
-    ):
+    num_codebooks: int | None = 32
+    vocab_size: int = 2051
+    text_vocab_size: int = 128256
+    hidden_size: int = 2048
+    intermediate_size: int = 8192
+    num_hidden_layers: int = 16
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = 8
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 2048
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    pad_token_id: int | None = 128002
+    codebook_pad_token_id: int | None = 2050
+    codebook_eos_token_id: int | list[int] | None = 0
+    bos_token_id: int | None = 128000
+    eos_token_id: int | list[int] | None = None
+    audio_token_id: int | None = 128002
+    audio_eos_token_id: int | list[int] | None = 128003
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int | None = 0.0
+    mlp_bias: bool = False
+    head_dim: int | None = None
+    tie_codebooks_embeddings: bool | None = True
+    depth_decoder_config: dict | PreTrainedConfig | None = None
+    codec_config: dict | PreTrainedConfig | None = None
+
+    def __post_init__(self, **kwargs):
         if kwargs.pop("tie_word_embeddings", False):
             raise ValueError("`tie_word_embeddings=True` is not supported for CsmConfig")
 
-        if depth_decoder_config is None:
+        if self.depth_decoder_config is None:
             self.depth_decoder_config = CsmDepthDecoderConfig()
             logger.info("depth_decoder_config is None, using default depth decoder config.")
-        elif isinstance(depth_decoder_config, dict):
-            self.depth_decoder_config = CsmDepthDecoderConfig(**depth_decoder_config)
-        elif isinstance(depth_decoder_config, CsmDepthDecoderConfig):
-            self.depth_decoder_config = depth_decoder_config
+        elif isinstance(self.depth_decoder_config, dict):
+            self.depth_decoder_config = CsmDepthDecoderConfig(**self.depth_decoder_config)
 
-        if codec_config is None:
+        if self.codec_config is None:
             self.codec_config = AutoConfig.for_model("mimi")
             logger.info("codec_config is None, using default audio encoder config.")
-        elif isinstance(codec_config, dict):
-            self.codec_config = AutoConfig.for_model(**codec_config)
-        elif isinstance(codec_config, PreTrainedConfig):
-            self.codec_config = codec_config
+        elif isinstance(self.codec_config, dict):
+            self.codec_config = AutoConfig.for_model(**self.codec_config)
 
-        self.text_vocab_size = text_vocab_size
-        self.num_codebooks = num_codebooks
-        self.audio_token_id = audio_token_id
-        self.audio_eos_token_id = audio_eos_token_id
-        self.codebook_pad_token_id = codebook_pad_token_id
-        self.codebook_eos_token_id = codebook_eos_token_id
-        self.tie_codebooks_embeddings = tie_codebooks_embeddings
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.mlp_bias = mlp_bias
-        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        self.rope_parameters = rope_parameters
-
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
+        self.head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
         self.tie_word_embeddings = False
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = [
