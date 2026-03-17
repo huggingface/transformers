@@ -42,10 +42,6 @@ from ...utils import auto_docstring
         for a single bridge block.
     padding_mode (`str`, *optional*, defaults to `"reflect"`):
         Padding mode for convolutional layers. Supported modes are `"reflect"`, `"constant"`, and `"replicate"`.
-    upsample_size (`List[int]`, *optional*, defaults to `[712, 488]`):
-        Target spatial size (width, height) of the upsampled output image.
-    upsample_mode (`str`, *optional*, defaults to `"bilinear"`):
-        Interpolation mode for upsampling layers. Supported modes are `"bilinear"`, `"nearest"`, and `"bicubic"`.
     """,
 )
 class UVDocConfig(PreTrainedConfig):
@@ -61,8 +57,6 @@ class UVDocConfig(PreTrainedConfig):
         block_counts_per_stage: list | None = None,
         dilation_values: list | None = None,
         padding_mode: str = "reflect",
-        upsample_size: list | None = None,
-        upsample_mode: str = "bilinear",
         **kwargs,
     ):
         self.num_filter = num_filter
@@ -75,8 +69,6 @@ class UVDocConfig(PreTrainedConfig):
             dilation_values if dilation_values is not None else [[1], [2], [5], [8, 3, 2], [12, 7, 4], [18, 12, 6]]
         )
         self.padding_mode = padding_mode
-        self.upsample_size = upsample_size
-        self.upsample_mode = upsample_mode
 
         super().__init__(**kwargs)
 

@@ -27,8 +27,8 @@ from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import SizeDict
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import TensorType
 from ...utils.output_capturing import capture_outputs
 
@@ -53,10 +53,6 @@ from ...utils.output_capturing import capture_outputs
         for a single bridge block.
     padding_mode (`str`, *optional*, defaults to `"reflect"`):
         Padding mode for convolutional layers. Supported modes are `"reflect"`, `"constant"`, and `"replicate"`.
-    upsample_size (`List[int]`, *optional*, defaults to `[712, 488]`):
-        Target spatial size (width, height) of the upsampled output image.
-    upsample_mode (`str`, *optional*, defaults to `"bilinear"`):
-        Interpolation mode for upsampling layers. Supported modes are `"bilinear"`, `"nearest"`, and `"bicubic"`.
     """,
 )
 class UVDocConfig(PreTrainedConfig):
@@ -72,8 +68,6 @@ class UVDocConfig(PreTrainedConfig):
         block_counts_per_stage: list | None = None,
         dilation_values: list | None = None,
         padding_mode: str = "reflect",
-        upsample_size: list | None = None,
-        upsample_mode: str = "bilinear",
         **kwargs,
     ):
         self.num_filter = num_filter
@@ -84,15 +78,28 @@ class UVDocConfig(PreTrainedConfig):
         self.block_counts_per_stage = block_counts_per_stage if block_counts_per_stage is not None else [3, 4, 6]
         self.dilation_values = dilation_values if dilation_values is not None else [[1], [2], [5], [8, 3, 2], [12, 7, 4], [18, 12, 6]]
         self.padding_mode = padding_mode
-        self.upsample_size = upsample_size
-        self.upsample_mode = upsample_mode
 
         super().__init__(**kwargs)
+
+
+class UVDocImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    upsample_size (`List[int]`, *optional*, defaults to `[712, 488]`):
+        Target spatial size (width, height) of the upsampled output image.
+    upsample_mode (`str`, *optional*, defaults to `"bilinear"`):
+        Interpolation mode for upsampling layers. Supported modes are `"bilinear"`, `"nearest"`, and `"bicubic"`.
+    """
+
+    upsample_size: list
+    upsample_mode: str
 
 
 @auto_docstring
 class UVDocImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
+    upsample_size = [712, 488]
+    upsample_mode = "bilinear"
+    valid_kwargs = UVDocImageProcessorKwargs
 
     def _preprocess(
         self,
@@ -105,6 +112,8 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
+        upsample_size: list[float] | None,
+        upsample_mode: str,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         **kwargs,
@@ -127,25 +136,78 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
             stacked_images = stacked_images[:, [2, 1, 0], :, :]
             processed_images_grouped[shape] = stacked_images
 
-        pixel_values = reorder_images(processed_images_grouped, grouped_images_index)
+        rescale_and_normalize_images = reorder_images(processed_images_grouped, grouped_images_index)
+
+        grouped_images, grouped_images_index = group_images_by_shape(rescale_and_normalize_images, disable_grouping=disable_grouping)
+        interpolated_images_grouped = {}
+        original_images = []
+
+        # Upsample images and extract originals for post-processing
+        for shape, stacked_images in grouped_images.items():
+            # Store original images before upsampling for later use
+            original_images.append(stacked_images[0])
+
+            # Interpolate to target size
+            stacked_images = F.interpolate(
+                stacked_images,
+                size=(upsample_size[0], upsample_size[1]),
+                mode=upsample_mode,
+                align_corners=True,
+            )
+            interpolated_images_grouped[shape] = stacked_images
+
+        pixel_values = reorder_images(interpolated_images_grouped, grouped_images_index)
 
         return BatchFeature(
-            data={"pixel_values": pixel_values},
+            data={"pixel_values": pixel_values, "original_images": original_images},
             tensor_type=return_tensors,
         )
 
-    def post_process_document_rectification(self, images, scale=255.0):
-        
-        scale = torch.tensor(float(scale), device=images.device)
+    def post_process_document_rectification(self, prediction, original_images, scale=255.0):
+        """
+        Post-process document rectification predictions to convert them into rectified images.
 
+        Args:
+            prediction: Predicted 2D Bezier mesh coordinates
+            original_images: Original input images
+            scale: Scaling factor for output images (default: 255.0)
+
+        Returns:
+            List of dictionaries containing rectified images
+        """
+        # Get original image dimensions
+        original_height, original_width = original_images.shape[2:]
+
+        # Upsample predicted mesh to original image size
+        upsampled_mesh = F.interpolate(
+            prediction,
+            size=(original_height, original_width),
+            mode=self.upsample_mode,
+            align_corners=True,
+        )
+
+        # Permute mesh for grid_sample: (B, H, W, 2)
+        rearranged_mesh = upsampled_mesh.permute(0, 2, 3, 1)
+
+        # Apply spatial transformation to rectify the document
+        rectified_images = F.grid_sample(original_images, rearranged_mesh, align_corners=True)
+
+        # Convert to uint8 for visualization
+        scale = torch.tensor(float(scale), device=prediction.device)
         results = []
-        for image in images:
+
+        for image in rectified_images:
+            # Handle tuple format if present
             image = image[0] if isinstance(image, tuple) else image
+
+            # Remove batch dimension and rearrange channels: (H, W, C)
             image = image.squeeze().permute(1, 2, 0)
+
+            # Scale and convert to uint8
             image = image * scale
             image = image.flip(dims=[-1]).to(dtype=torch.uint8, non_blocking=True, copy=False)
 
-            results.append({"images": image,})
+            results.append({"images": image})
 
         return results
 
@@ -436,9 +498,6 @@ class UVDocModel(UVDocPreTrainedModel):
     def __init__(self, config: UVDocConfig):
         super().__init__(config)
 
-        self.upsample_size = config.upsample_size
-        self.upsample_mode = config.upsample_mode
-
         self.resnet_head = UVDocResNetHead(config)
         self.resnet_down = UVDocResNetStraight(config)
 
@@ -459,7 +518,7 @@ class UVDocModel(UVDocPreTrainedModel):
 
         self.out_point_positions2D = UVDocPointPositions2D(config)
         self.post_init()
-    
+
     @capture_outputs
     @auto_docstring
     def forward(
@@ -467,15 +526,8 @@ class UVDocModel(UVDocPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
-        residual = pixel_values
-        original_height, original_width = pixel_values.shape[2:]
-        hidden_state = F.interpolate(
-            pixel_values,
-            size=(self.upsample_size[0], self.upsample_size[1]),
-            mode=self.upsample_mode,
-            align_corners=True,
-        )
-        hidden_state = self.resnet_head(hidden_state)
+        
+        hidden_state = self.resnet_head(pixel_values)
         resnet_down = self.resnet_down(hidden_state)
 
         bridge_outputs = []
@@ -488,18 +540,8 @@ class UVDocModel(UVDocPreTrainedModel):
 
         out_point_positions2D = self.out_point_positions2D(bridge)
 
-        upsampled_2d_bezier_mesh = F.interpolate(
-            out_point_positions2D,
-            size=(original_height, original_width),
-            mode=self.upsample_mode,
-            align_corners=True,
-        )
-
-        rearranged_bezier_mesh = upsampled_2d_bezier_mesh.permute(0, 2, 3, 1)
-        rectified_image_output = F.grid_sample(residual, rearranged_bezier_mesh, align_corners=True)
-
         return BaseModelOutputWithNoAttention(
-            last_hidden_state=rectified_image_output,
+            last_hidden_state=out_point_positions2D,
         )
 
 

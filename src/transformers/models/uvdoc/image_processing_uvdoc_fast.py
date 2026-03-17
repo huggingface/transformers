@@ -21,6 +21,7 @@
 from typing import Optional
 
 import torch
+import torch.nn.functional as F
 import torchvision.transforms.v2.functional as tvF
 
 from ...feature_extraction_utils import BatchFeature
@@ -29,11 +30,15 @@ from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import SizeDict
 from ...utils import auto_docstring
 from ...utils.generic import TensorType
+from .image_processing_uvdoc import UVDocImageProcessorKwargs
 
 
 @auto_docstring
 class UVDocImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
+    upsample_size = [712, 488]
+    upsample_mode = "bilinear"
+    valid_kwargs = UVDocImageProcessorKwargs
 
     def _preprocess(
         self,
@@ -46,6 +51,8 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
+        upsample_size: list[float] | None,
+        upsample_mode: str,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         **kwargs,
@@ -68,28 +75,80 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
             stacked_images = stacked_images[:, [2, 1, 0], :, :]
             processed_images_grouped[shape] = stacked_images
 
-        pixel_values = reorder_images(processed_images_grouped, grouped_images_index)
+        rescale_and_normalize_images = reorder_images(processed_images_grouped, grouped_images_index)
+
+        grouped_images, grouped_images_index = group_images_by_shape(
+            rescale_and_normalize_images, disable_grouping=disable_grouping
+        )
+        interpolated_images_grouped = {}
+        original_images = []
+
+        # Upsample images and extract originals for post-processing
+        for shape, stacked_images in grouped_images.items():
+            # Store original images before upsampling for later use
+            original_images.append(stacked_images[0])
+
+            # Interpolate to target size
+            stacked_images = F.interpolate(
+                stacked_images,
+                size=(upsample_size[0], upsample_size[1]),
+                mode=upsample_mode,
+                align_corners=True,
+            )
+            interpolated_images_grouped[shape] = stacked_images
+
+        pixel_values = reorder_images(interpolated_images_grouped, grouped_images_index)
 
         return BatchFeature(
-            data={"pixel_values": pixel_values},
+            data={"pixel_values": pixel_values, "original_images": original_images},
             tensor_type=return_tensors,
         )
 
-    def post_process_document_rectification(self, images, scale=255.0):
-        scale = torch.tensor(float(scale), device=images.device)
+    def post_process_document_rectification(self, prediction, original_images, scale=255.0):
+        """
+        Post-process document rectification predictions to convert them into rectified images.
 
+        Args:
+            prediction: Predicted 2D Bezier mesh coordinates
+            original_images: Original input images
+            scale: Scaling factor for output images (default: 255.0)
+
+        Returns:
+            List of dictionaries containing rectified images
+        """
+        # Get original image dimensions
+        original_height, original_width = original_images.shape[2:]
+
+        # Upsample predicted mesh to original image size
+        upsampled_mesh = F.interpolate(
+            prediction,
+            size=(original_height, original_width),
+            mode=self.upsample_mode,
+            align_corners=True,
+        )
+
+        # Permute mesh for grid_sample: (B, H, W, 2)
+        rearranged_mesh = upsampled_mesh.permute(0, 2, 3, 1)
+
+        # Apply spatial transformation to rectify the document
+        rectified_images = F.grid_sample(original_images, rearranged_mesh, align_corners=True)
+
+        # Convert to uint8 for visualization
+        scale = torch.tensor(float(scale), device=prediction.device)
         results = []
-        for image in images:
+
+        for image in rectified_images:
+            # Handle tuple format if present
             image = image[0] if isinstance(image, tuple) else image
+
+            # Remove batch dimension and rearrange channels: (H, W, C)
             image = image.squeeze().permute(1, 2, 0)
+
+            # Scale and convert to uint8
             image = image * scale
             image = image.flip(dims=[-1]).to(dtype=torch.uint8, non_blocking=True, copy=False)
 
-            results.append(
-                {
-                    "images": image,
-                }
-            )
+            results.append({"images": image})
 
         return results
 

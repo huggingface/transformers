@@ -21,7 +21,6 @@
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithNoAttention
@@ -318,9 +317,6 @@ class UVDocModel(UVDocPreTrainedModel):
     def __init__(self, config: UVDocConfig):
         super().__init__(config)
 
-        self.upsample_size = config.upsample_size
-        self.upsample_mode = config.upsample_mode
-
         self.resnet_head = UVDocResNetHead(config)
         self.resnet_down = UVDocResNetStraight(config)
 
@@ -349,15 +345,7 @@ class UVDocModel(UVDocPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
-        residual = pixel_values
-        original_height, original_width = pixel_values.shape[2:]
-        hidden_state = F.interpolate(
-            pixel_values,
-            size=(self.upsample_size[0], self.upsample_size[1]),
-            mode=self.upsample_mode,
-            align_corners=True,
-        )
-        hidden_state = self.resnet_head(hidden_state)
+        hidden_state = self.resnet_head(pixel_values)
         resnet_down = self.resnet_down(hidden_state)
 
         bridge_outputs = []
@@ -370,18 +358,8 @@ class UVDocModel(UVDocPreTrainedModel):
 
         out_point_positions2D = self.out_point_positions2D(bridge)
 
-        upsampled_2d_bezier_mesh = F.interpolate(
-            out_point_positions2D,
-            size=(original_height, original_width),
-            mode=self.upsample_mode,
-            align_corners=True,
-        )
-
-        rearranged_bezier_mesh = upsampled_2d_bezier_mesh.permute(0, 2, 3, 1)
-        rectified_image_output = F.grid_sample(residual, rearranged_bezier_mesh, align_corners=True)
-
         return BaseModelOutputWithNoAttention(
-            last_hidden_state=rectified_image_output,
+            last_hidden_state=out_point_positions2D,
         )
 
 
