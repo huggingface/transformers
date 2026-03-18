@@ -26,7 +26,6 @@ from collections import defaultdict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from enum import Enum
 from functools import partial, wraps
 from itertools import cycle
 from threading import Thread
