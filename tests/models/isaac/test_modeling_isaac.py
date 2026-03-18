@@ -318,7 +318,6 @@ def to_model_multimodal_inputs(processor_output, device):
         "vision_token_grids",
         "vision_token_offsets",
         "vision_token_lengths",
-        "vision_image_attention_mask",
     )
     return {
         key: (value.to(device) if isinstance(value, torch.Tensor) else value)
@@ -1128,8 +1127,8 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
             torch.testing.assert_close(batch_modality_row, expected_modality)
 
             if single_packed["vision_patches"] is not None:
-                expected_image_count = int(single_packed["vision_image_attention_mask"].sum().item())
-                batch_image_count = int(batch_packed["vision_image_attention_mask"][i].sum().item())
+                expected_image_count = int(single_packed["vision_token_lengths"].gt(0).sum().item())
+                batch_image_count = int(batch_packed["vision_token_lengths"][i].gt(0).sum().item())
                 assert batch_image_count == expected_image_count
                 if expected_image_count > 0:
                     torch.testing.assert_close(
@@ -1159,7 +1158,6 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
         assert batch_packed["vision_token_grids"] is not None
         assert batch_packed["vision_token_offsets"] is not None
         assert batch_packed["vision_token_lengths"] is not None
-        assert batch_packed["vision_image_attention_mask"] is not None
 
         batch_texts = self._generate_batch(prompts, images_list, num_tokens=100)
         assert len(batch_texts) == len(single_texts) == 3
