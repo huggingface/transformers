@@ -120,7 +120,7 @@ class ContinuousBatchProcessor:
 
         # Generation-related attributes
         self.do_sample = getattr(generation_config, "do_sample", True)
-        self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
+        self.return_logprobs = continuous_batching_config.return_logprobs
 
         # Retrieve the size of the sliding window if there is one
         self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
@@ -169,11 +169,11 @@ class ContinuousBatchProcessor:
             # Since in async there are 2 IO pairs, there are also 2 graph buffers: we divide the max_cached_graphs by 2
             max_cached_graphs = ceil(self.max_cached_graphs / 2)
             self.inputs_and_outputs = ContinuousBatchingAsyncIOs(
-                cache, config, model_device, model_dtype, max_cached_graphs, self.log_prob_generation
+                cache, config, model_device, model_dtype, max_cached_graphs, self.return_logprobs
             )
         else:
             self.inputs_and_outputs = ContinuousBatchingIOs(
-                cache, config, model_device, model_dtype, self.max_cached_graphs, self.log_prob_generation
+                cache, config, model_device, model_dtype, self.max_cached_graphs, self.return_logprobs
             )
         # Set up the graph pool. This allows all graphs to share the same memory pool, which is fine because they never
         # run concurrently. This greatly saves memory.
@@ -353,7 +353,7 @@ class ContinuousBatchProcessor:
                     state.status = RequestStatus.DECODING
 
                 token = new_tokens[current_logits_index]
-                logprob = logprobs[current_logits_index] if self.log_prob_generation else None
+                logprob = logprobs[current_logits_index] if self.return_logprobs else None
                 current_logits_index += 1
 
                 # Update the request and stop if it is complete
@@ -531,7 +531,7 @@ class ContinuousBatchProcessor:
     def _sample(self, probs: torch.Tensor, logits_indices: torch.Tensor, output_ids: torch.Tensor) -> None:
 
         # Apply softmax if we are sampling or if we are generating log probabilities
-        if self.do_sample or self.log_prob_generation:
+        if self.do_sample or self.return_logprobs:
             probs = nn.functional.softmax(probs[0], dim=-1)  # shape [seq_len, vocab_size]
         # Otherwise just remove the bastch size dimension, which is always 1
         else:
@@ -544,7 +544,7 @@ class ContinuousBatchProcessor:
             next_tokens = torch.argmax(probs, dim=-1, keepdim=True)  # shape [seq_len, 1]
 
         # Maybe retrieve log probabilities
-        if self.log_prob_generation:
+        if self.return_logprobs:
             logprobs = probs.gather(dim=1, index=next_tokens).squeeze(-1).log()  # shape [seq_len]
         # And always remove the extra dimension for the gather
         next_tokens = next_tokens.squeeze(-1)  # shape [seq_len]
@@ -556,7 +556,7 @@ class ContinuousBatchProcessor:
         next_tokens = next_tokens[indices]
         # Copy the next tokens and maybe their logprobs to the static output tensor
         output_ids[0, :tokens].copy_(next_tokens)
-        if self.log_prob_generation:
+        if self.return_logprobs:
             # Shuffle the logprobs the same way as the next tokens
             logprobs = logprobs[indices]
             # In order to match the dtype of the output ids, we convert them to fp32 and cast them as int32
