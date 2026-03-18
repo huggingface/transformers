@@ -197,13 +197,14 @@ class RichInterface:
         self._console.print()
 
     def print_model_load(self, model: str):
-        stages = ["processor", "config", "model"]
         size_of_tqdm = 50
         stage_labels = {
-            "processor:start": f"{model}  →  Loading processor",
-            "config:start": f"{model}  →  Loading config",
-            "model:start": f"{model}  →  Loading model weights",
+            "processor": f"{model}  →  Loading processor",
+            "config": f"{model}  →  Loading config",
+            "download": f"{model}  →  Downloading files",
+            "weights": f"{model}  →  Loading model weights",
         }
+        loading_stages = ["processor", "config", "download", "weights"]
 
         class _StatsColumn(ProgressColumn):
             """Shows 'X.X GB / Y.Y GB  Z MB/s  ETA' for download tasks, 'n/total' for others."""
@@ -249,7 +250,7 @@ class RichInterface:
             console=self._console,
         )
 
-        stage_task = progress.add_task(model + " " * (size_of_tqdm - len(model)), total=len(stages))
+        stage_task = progress.add_task(model + " " * (size_of_tqdm - len(model)), total=len(loading_stages))
 
         dl_task = progress.add_task(
             " " * len(model) + "  ↳  Downloading files", total=None, visible=False, is_download=True
@@ -257,9 +258,8 @@ class RichInterface:
 
         weights_task = progress.add_task(" " * len(model) + "  ↳  Loading into memory", total=None, visible=False)
 
-        bar_last_n: dict[str, int] = {}
-        byte_descs: set[str] = set()
-        weight_descs: set[str] = set()
+        stages_advanced: set[str] = set()
+        prev_dl_current = 0
 
         with Live(progress, console=self._console, transient=True):
             for line in response.iter_lines():
@@ -267,56 +267,52 @@ class RichInterface:
                     continue
 
                 payload = json.loads(line.split(b"data: ", 1)[1])
+                status = payload.get("status")
                 stage = payload.get("stage")
+                prog = payload.get("progress")
 
-                if stage and stage.startswith("tqdm:"):
-                    desc = payload.get("desc") or "download"
-                    total = payload.get("total")
-                    n = payload.get("n")
-                    unit = payload.get("unit")
+                if status == "loading":
+                    # Advance the stage counter for each new stage
+                    if stage and stage in stage_labels and stage not in stages_advanced:
+                        progress.update(stage_task, description=stage_labels[stage])
+                        # Advance for all prior stages that were skipped
+                        for s in loading_stages:
+                            if s == stage:
+                                break
+                            if s not in stages_advanced:
+                                stages_advanced.add(s)
+                                progress.advance(stage_task, 1)
 
-                    if stage == "tqdm:start" and unit == "B":
-                        byte_descs.add(desc)
+                    if stage == "download" and prog:
                         progress.update(dl_task, visible=True)
-                        if total:
-                            current_total = next((t.total for t in progress.tasks if t.id == dl_task), 0) or 0
-                            progress.update(dl_task, total=current_total + total)
-
-                    elif stage == "tqdm:update" and n is not None and desc in byte_descs:
-                        delta = n - bar_last_n.get(desc, 0)
-                        bar_last_n[desc] = n
-                        progress.advance(dl_task, delta)
+                        current = prog.get("current", 0)
+                        total = prog.get("total")
                         if total is not None:
-                            current_total = next((t.total for t in progress.tasks if t.id == dl_task), 0) or 0
-                            if total > current_total:
-                                progress.update(dl_task, total=total)
+                            progress.update(dl_task, total=total)
+                        delta = current - prev_dl_current
+                        if delta > 0:
+                            progress.advance(dl_task, delta)
+                        prev_dl_current = current
 
-                    elif stage == "tqdm:start" and desc == "Loading weights":
-                        weight_descs.add(desc)
+                    elif stage == "weights" and prog:
                         progress.update(dl_task, visible=False)
-                        progress.update(weights_task, visible=True, total=total)
+                        progress.update(weights_task, visible=True)
+                        current = prog.get("current", 0)
+                        total = prog.get("total")
+                        if total is not None:
+                            progress.update(weights_task, total=total, completed=current)
+                        else:
+                            progress.update(weights_task, completed=current)
 
-                    elif stage == "tqdm:update" and n is not None and desc in weight_descs:
-                        delta = n - bar_last_n.get(desc, 0)
-                        bar_last_n[desc] = n
-                        progress.advance(weights_task, delta)
-
-                    continue
-
-                if stage == "model:weights_loading":
-                    progress.update(dl_task, visible=False)
-                    progress.update(weights_task, visible=True)
-                    continue
-
-                if stage in stage_labels:
-                    progress.update(stage_task, description=stage_labels[stage])
-
-                if stage and stage.endswith(":ready"):
-                    progress.advance(stage_task, 1)
-
-                if stage == "ready":
+                elif status == "ready":
+                    # Advance any remaining stages
+                    for s in loading_stages:
+                        if s not in stages_advanced:
+                            stages_advanced.add(s)
+                            progress.advance(stage_task, 1)
                     break
-                if stage == "error":
+
+                elif status == "error":
                     raise RuntimeError(payload.get("message", "Unknown error"))
 
         self._console.print(Markdown(f"_*{model} is warm.*_"))

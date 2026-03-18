@@ -231,66 +231,46 @@ class Modality(enum.Enum):
     TTS = "TTS"
 
 
-class StreamingTqdmWrapper:
-    def __init__(
-        self,
-        wrapped,
-        enqueue: Callable[[dict], None],
-        model_id_and_revision: str,
-        desc: str,
-        total: int,
-    ):
-        self._wrapped = wrapped
-        self.enqueue = enqueue
-        self.model_id_and_revision = model_id_and_revision
-        self.desc = desc
-        self.total = total
+class _DownloadAggregator:
+    """Aggregates byte-progress across multiple concurrent download tqdm bars into a single SSE stream.
 
-    def __getattr__(self, name):
-        return getattr(self._wrapped, name)
+    huggingface_hub opens one tqdm bar per file shard. This class tracks them all and emits
+    a single aggregate ``{"stage": "download", "progress": {"current": ..., "total": ...}}``
+    event whenever any bar updates.
+    """
 
-    def update(self, n: int = 1):
-        result = self._wrapped.update(n)
-        self.enqueue(
+    def __init__(self, enqueue: Callable[[dict], None], model_id_and_revision: str):
+        self._enqueue = enqueue
+        self._model = model_id_and_revision
+        self._bars: dict[int, tuple[int, int | None]] = {}  # id -> (current, total)
+        self._last_emitted_current: int | None = None
+
+    def register(self, bar_id: int, total: int | None):
+        self._bars[bar_id] = (0, total)
+        self._emit()
+
+    def update(self, bar_id: int, current: int, total: int | None):
+        self._bars[bar_id] = (current, total)
+        self._emit()
+
+    def close(self, bar_id: int):
+        pass  # keep the bar in _bars so totals remain correct
+
+    def _emit(self):
+        agg_current = sum(c for c, _ in self._bars.values())
+        if agg_current == self._last_emitted_current:
+            return
+        self._last_emitted_current = agg_current
+        totals = [t for _, t in self._bars.values() if t is not None]
+        agg_total = sum(totals) if totals else None
+        self._enqueue(
             {
-                "stage": "tqdm:update",
-                "model": self.model_id_and_revision,
-                "desc": self.desc,
-                "n": getattr(self._wrapped, "n", None),
-                "total": getattr(self._wrapped, "total", self.total),
+                "status": "loading",
+                "model": self._model,
+                "stage": "download",
+                "progress": {"current": agg_current, "total": agg_total},
             }
         )
-        return result
-
-    def close(self):
-        self.enqueue({"stage": "tqdm:close", "model": self.model_id_and_revision, "desc": self.desc})
-        return self._wrapped.close()
-
-    def __enter__(self):
-        self._wrapped.__enter__()
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        return self._wrapped.__exit__(exc_type, exc_value, traceback)
-
-    def __iter__(self):
-        # tqdm's __iter__ calls _wrapped.update() internally (after each yield), so we
-        # must NOT call self.update() here — that would double-increment _wrapped.n and
-        # report 2× the real iteration count.  Instead, track the count ourselves and
-        # enqueue SSE events directly.
-        count = 0
-        for item in self._wrapped:
-            count += 1
-            self.enqueue(
-                {
-                    "stage": "tqdm:update",
-                    "model": self.model_id_and_revision,
-                    "desc": self.desc,
-                    "n": count,
-                    "total": getattr(self._wrapped, "total", self.total),
-                }
-            )
-            yield item
 
 
 def create_generation_config_from_req(
@@ -622,26 +602,125 @@ class Serve:
                 def enqueue(payload: dict):
                     loop.call_soon_threadsafe(queue.put_nowait, f"data: {json.dumps(payload)}\n\n")
 
+                dl_agg = _DownloadAggregator(enqueue, model_id_and_revision)
+
                 def streaming_tqdm_hook(factory, args, kwargs):
                     bar = factory(*args, **kwargs)
-                    desc = kwargs.get("desc") or getattr(bar, "desc", None)
+                    desc = kwargs.get("desc") or getattr(bar, "desc", None) or ""
+                    unit = kwargs.get("unit") or getattr(bar, "unit", "it")
                     total = getattr(bar, "total", kwargs.get("total"))
-                    enqueue({"stage": "tqdm:start", "model": model_id_and_revision, "desc": desc, "total": total})
 
-                    return StreamingTqdmWrapper(
-                        bar, enqueue=enqueue, model_id_and_revision=model_id_and_revision, desc=desc, total=total
-                    )
+                    # Only forward byte-progress bars (file downloads) — skip noise like "Fetching N files"
+                    if unit == "B":
+                        bar_id = id(bar)
+                        dl_agg.register(bar_id, total)
+
+                        class _DlProxy:
+                            """Wraps a download tqdm bar to feed the aggregate tracker."""
+
+                            def __init__(self, wrapped):
+                                self._wrapped = wrapped
+                                self._n = 0
+                                self._bar_id = bar_id
+
+                            def __getattr__(self, name):
+                                return getattr(self._wrapped, name)
+
+                            def update(self, n=1):
+                                if n is None:
+                                    n = 1
+                                self._n += n
+                                dl_agg.update(self._bar_id, self._n, getattr(self._wrapped, "total", total))
+                                return self._wrapped.update(n)
+
+                            def close(self):
+                                dl_agg.close(self._bar_id)
+                                return self._wrapped.close()
+
+                            def __enter__(self):
+                                self._wrapped.__enter__()
+                                return self
+
+                            def __exit__(self, *a):
+                                return self._wrapped.__exit__(*a)
+
+                            def __iter__(self):
+                                count = 0
+                                for item in self._wrapped:
+                                    count += 1
+                                    dl_agg.update(self._bar_id, count, getattr(self._wrapped, "total", total))
+                                    yield item
+
+                        return _DlProxy(bar)
+
+                    # "Loading weights" bar — emit as stage: "weights" with item-count progress
+                    if desc == "Loading weights":
+
+                        class _WeightsProxy:
+                            """Wraps the weight-loading tqdm bar to emit weights stage events."""
+
+                            def __init__(self, wrapped):
+                                self._wrapped = wrapped
+                                self._n = 0
+                                self._last_emitted = -1
+                                self._total = total
+
+                            def __getattr__(self, name):
+                                return getattr(self._wrapped, name)
+
+                            def _emit(self):
+                                if self._n == self._last_emitted:
+                                    return
+                                self._last_emitted = self._n
+                                enqueue(
+                                    {
+                                        "status": "loading",
+                                        "model": model_id_and_revision,
+                                        "stage": "weights",
+                                        "progress": {
+                                            "current": self._n,
+                                            "total": getattr(self._wrapped, "total", self._total),
+                                        },
+                                    }
+                                )
+
+                            def update(self, n=1):
+                                if n is None:
+                                    n = 1
+                                self._n += n
+                                self._emit()
+                                return self._wrapped.update(n)
+
+                            def close(self):
+                                return self._wrapped.close()
+
+                            def __enter__(self):
+                                self._wrapped.__enter__()
+                                return self
+
+                            def __exit__(self, *a):
+                                return self._wrapped.__exit__(*a)
+
+                            def __iter__(self):
+                                for item in self._wrapped:
+                                    self._n += 1
+                                    self._emit()
+                                    yield item
+
+                        return _WeightsProxy(bar)
+
+                    # Other non-byte, non-weights bars (noise) — return unmodified
+                    return bar
 
                 async def run_load():
-                    enqueue({"stage": "received", "model": model_id_and_revision})
                     previous_hook = logging.set_tqdm_hook(streaming_tqdm_hook)
                     try:
                         await asyncio.to_thread(method, model_id_and_revision, enqueue)
                     except Exception as e:
                         logger.error(f"Failed to load {model_id_and_revision}: {e}", exc_info=True)
-                        enqueue({"stage": "error", "model": model_id_and_revision, "message": str(e), "error": True})
-                    else:
-                        enqueue({"stage": "ready", "model": model_id_and_revision})
+                        enqueue(
+                            {"status": "error", "model": model_id_and_revision, "message": str(e)}
+                        )
                     finally:
                         logging.set_tqdm_hook(previous_hook)
                         loop.call_soon_threadsafe(queue.put_nowait, None)
@@ -1958,69 +2037,59 @@ class Serve:
         _mid = model_id_and_revision
 
         if _callback is not None:
-            _open_byte_bars = [0]  # count of currently-open unit="B" bars
+            _dl_agg = _DownloadAggregator(_callback, _mid)
 
-            class _SseTqdm(base_tqdm):
-                """Thin tqdm subclass that forwards progress events to the SSE stream."""
+            class _ProgressTqdm(base_tqdm):
+                """tqdm subclass that routes progress to the correct SSE stage.
+
+                Bars with ``unit="B"`` are download bars (one per file shard) — they are
+                aggregated into a single ``download`` stage stream via ``_DownloadAggregator``.
+                All other bars are weight-loading bars emitted as ``weights`` stage events.
+                """
 
                 def __init__(self, *args, **kwargs):
-                    # Extract before super().__init__ because disable=True takes an early
-                    # return that skips setting self.desc and self.unit.
-                    self._sse_desc = kwargs.get("desc") or ""
                     self._sse_unit = kwargs.get("unit") or "it"
                     kwargs["disable"] = True  # suppress server-side display
                     super().__init__(*args, **kwargs)
                     self._n = 0
+                    self._last_emitted = -1
                     if self._sse_unit == "B":
-                        _open_byte_bars[0] += 1
-                    # self.total IS set by the disabled path, so read it after super().__init__
-                    _callback(
-                        {
-                            "stage": "tqdm:start",
-                            "model": _mid,
-                            "desc": self._sse_desc,
-                            "total": self.total,
-                            "unit": self._sse_unit,
-                        }
-                    )
+                        self._bar_id = id(self)
+                        _dl_agg.register(self._bar_id, self.total)
 
                 def update(self, n=1):
                     if n is None:
                         n = 1
                     self._n += n
-                    _callback(
-                        {
-                            "stage": "tqdm:update",
-                            "model": _mid,
-                            "desc": self._sse_desc,
-                            "n": self._n,
-                            "total": self.total,  # may grow after init via direct assignment
-                            "unit": self._sse_unit,
-                        }
-                    )
+                    if self._sse_unit == "B":
+                        _dl_agg.update(self._bar_id, self._n, self.total)
+                    elif self._n != self._last_emitted:
+                        self._last_emitted = self._n
+                        _callback(
+                            {
+                                "status": "loading",
+                                "model": _mid,
+                                "stage": "weights",
+                                "progress": {"current": self._n, "total": self.total},
+                            }
+                        )
 
                 def close(self):
-                    _callback({"stage": "tqdm:close", "model": _mid, "desc": self._sse_desc})
                     if self._sse_unit == "B":
-                        _open_byte_bars[0] -= 1
-                        if _open_byte_bars[0] == 0:
-                            _callback({"stage": "model:weights_loading", "model": _mid})
+                        _dl_agg.close(self._bar_id)
                     super().close()
 
-            tqdm_class: type | None = _SseTqdm
+            tqdm_class: type | None = _ProgressTqdm
         else:
             tqdm_class = None
 
-        def emit_progress(stage: str, message: str | None = None):
+        def emit_progress(stage: str):
             if progress_callback is None:
                 return
-            payload = {"stage": stage, "model": model_id_and_revision}
-            if message is not None:
-                payload["message"] = message
-            progress_callback(payload)
+            progress_callback({"status": "loading", "model": model_id_and_revision, "stage": stage})
 
         logger.warning(f"Loading {model_id_and_revision}")
-        emit_progress("processor:start", "Loading processor")
+        emit_progress("processor")
 
         if "@" in model_id_and_revision:
             model_id, revision = model_id_and_revision.split("@", 1)
@@ -2043,7 +2112,7 @@ class Serve:
             except OSError:
                 raise OSError("Failed to load processor with `AutoProcessor` and `AutoTokenizer`.")
 
-        emit_progress("processor:ready", "Processor loaded")
+        # processor done — move on to config
         dtype = self.dtype if self.dtype in ["auto", None] else getattr(torch, self.dtype)
         quantization_config = self.get_quantization_config()
 
@@ -2056,13 +2125,11 @@ class Serve:
             "quantization_config": quantization_config,
         }
 
-        emit_progress("config:start", "Loading config")
+        emit_progress("config")
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
-        emit_progress("config:ready")
         architecture = getattr(transformers, config.architectures[0])
-        emit_progress("model:start", "Loading model weights")
+        # weights stage events are emitted by _WeightsTqdm (and download by _DownloadAggregator)
         model = architecture.from_pretrained(model_id, tqdm_class=tqdm_class, **model_kwargs)
-        emit_progress("model:ready", "Model weights loaded")
 
         has_default_max_length = (
             model.generation_config.max_new_tokens is None and model.generation_config.max_length == 20
@@ -2089,16 +2156,7 @@ class Serve:
             `tuple[PreTrainedModel, PreTrainedTokenizerFast]`: The loaded text model and processor.
         """
 
-        def emit_progress(stage: str, message: str | None = None):
-            if progress_callback is None:
-                return
-            payload = {"stage": stage, "model": model_id_and_revision}
-            if message is not None:
-                payload["message"] = message
-            progress_callback(payload)
-
         if model_id_and_revision not in self.loaded_models or self.loaded_models[model_id_and_revision].is_deleted():
-            emit_progress("start", "Loading model and processor")
             model, processor = self._load_model_and_data_processor(
                 model_id_and_revision, progress_callback=progress_callback
             )
@@ -2107,13 +2165,15 @@ class Serve:
                 timeout_seconds=self.model_timeout,
                 processor=processor,
             )
+            if progress_callback is not None:
+                progress_callback({"status": "ready", "model": model_id_and_revision, "cached": False})
         else:
             self.loaded_models[model_id_and_revision].reset_timer()
             model = self.loaded_models[model_id_and_revision].model
             processor = self.loaded_models[model_id_and_revision].processor
-            emit_progress("cached", "Model already loaded in memory")
+            if progress_callback is not None:
+                progress_callback({"status": "ready", "model": model_id_and_revision, "cached": True})
 
-        emit_progress("loaded", "Model available")
         return model, processor
 
     def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple["PreTrainedModel", "ProcessorMixin"]:
