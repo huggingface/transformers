@@ -1380,8 +1380,6 @@ class IsaacModel(Qwen3PreTrainedModel):
                 mm_token_type_ids = mm_token_type_ids.to(device=input_ids.device, dtype=torch.long)
                 inputs_embeds = self.text_model.embed_tokens(input_ids)
                 image_token_mask = mm_token_type_ids == MM_TOKEN_TYPE_IMAGE
-                if torch.any(image_token_mask) and (vision_patches is None or vision_token_grids is None):
-                    raise ValueError("Image placeholders require `vision_patches` and `vision_token_grids`.")
                 if torch.any(image_token_mask):
                     image_outputs = self.get_image_features(
                         pixel_values=vision_patches,
