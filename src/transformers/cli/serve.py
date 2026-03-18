@@ -2105,9 +2105,7 @@ class Serve:
             self.loaded_models[model_id_and_revision] = TimedModel(
                 model,
                 timeout_seconds=self.model_timeout,
-                model_id_and_revision=model_id_and_revision,
                 processor=processor,
-                loaded_models=self.loaded_models,
             )
         else:
             self.loaded_models[model_id_and_revision].reset_timer()
