@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import functools
+
 import numpy as np
 import torch
 
@@ -96,9 +98,28 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         )
         self.mel_filters = torch.from_numpy(mel_filters).to(torch.float32)
 
+    @staticmethod
+    @functools.cache
+    def _get_window(win_length: int, device: str) -> torch.Tensor:
+        return torch.hann_window(win_length, periodic=False, device=device)
+
+    @staticmethod
+    @functools.cache
+    def _get_mel_filters(feature_size: int, sampling_rate: int, n_fft: int, device: str) -> torch.Tensor:
+        mel_filters = librosa.filters.mel(
+            sr=sampling_rate,
+            n_fft=n_fft,
+            n_mels=feature_size,
+            fmin=0.0,
+            fmax=sampling_rate / 2,
+            norm="slaney",
+        )
+        return torch.from_numpy(mel_filters).to(device=device, dtype=torch.float32)
+
     def _torch_extract_fbank_features(self, waveform, device="cpu"):
         # spectrogram
-        window = torch.hann_window(self.win_length, periodic=False, device=device)
+        device = str(torch.device(device))
+        window = self._get_window(self.win_length, device)
         stft = torch.stft(
             waveform,
             self.n_fft,
@@ -110,12 +131,10 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         )
         # Let's math original implementation
         # magnitudes = torch.abs(stft) ** 2
-        magnitudes = torch.view_as_real(stft)
-        magnitudes = torch.sqrt(magnitudes.pow(2).sum(-1))
-        magnitudes = magnitudes.pow(2)
+        magnitudes = stft.real.square() + stft.imag.square()
 
         # log mel spectrogram
-        mel_filters = self.mel_filters.to(device)
+        mel_filters = self._get_mel_filters(self.feature_size, self.sampling_rate, self.n_fft, device)
         mel_spec = mel_filters @ magnitudes
         mel_spec = torch.log(mel_spec + LOG_ZERO_GUARD_VALUE)
 
@@ -205,11 +224,13 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
+        device_obj = torch.device(device if device is not None else "cpu")
+
         # Convert to torch tensor
         if isinstance(raw_speech, np.ndarray):
-            raw_speech = torch.tensor(raw_speech)
+            raw_speech = torch.as_tensor(raw_speech, device=device_obj)
         elif isinstance(raw_speech, (list, tuple)) and isinstance(raw_speech[0], np.ndarray):
-            raw_speech = [torch.tensor(speech) for speech in raw_speech]
+            raw_speech = [torch.as_tensor(speech, device=device_obj) for speech in raw_speech]
 
         is_batched_torch = isinstance(raw_speech, torch.Tensor) and len(raw_speech.shape) > 1
         if is_batched_torch and len(raw_speech.shape) > 2:
@@ -230,38 +251,50 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
                     speech = speech.mean(-1)
 
         if is_batched_torch or is_batched_sequence:
-            raw_speech = [speech[:, None].to(torch.float32) for speech in raw_speech]
+            raw_speech = [speech[:, None].to(device=device_obj, dtype=torch.float32) for speech in raw_speech]
         else:
-            raw_speech = [raw_speech[:, None].to(torch.float32)]
+            raw_speech = [raw_speech[:, None].to(device=device_obj, dtype=torch.float32)]
 
-        audio_lengths = [len(speech) for speech in raw_speech]
-        batched_speech = BatchFeature({"input_features": raw_speech, "audio_lengths": audio_lengths})
-
-        padded_inputs = self.pad(
-            batched_speech,
-            padding=padding,
-            max_length=max_length,
-            truncation=truncation,
-            pad_to_multiple_of=pad_to_multiple_of,
-            return_tensors="pt",
-        )
-        input_features = padded_inputs.input_features.squeeze(-1)
+        audio_lengths = torch.tensor([len(speech) for speech in raw_speech], dtype=torch.long, device=device_obj)
+        if device_obj.type == "cuda":
+            max_audio_len = int(audio_lengths.max().item()) if raw_speech else 0
+            input_features = torch.full(
+                (len(raw_speech), max_audio_len, raw_speech[0].shape[-1]),
+                fill_value=self.padding_value,
+                dtype=torch.float32,
+                device=device_obj,
+            )
+            for idx, speech in enumerate(raw_speech):
+                input_features[idx, : len(speech)] = speech
+            input_features = input_features.squeeze(-1)
+        else:
+            batched_speech = BatchFeature({"input_features": raw_speech, "audio_lengths": audio_lengths.tolist()})
+            padded_inputs = self.pad(
+                batched_speech,
+                padding=padding,
+                max_length=max_length,
+                truncation=truncation,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_tensors="pt",
+            )
+            input_features = padded_inputs.input_features.squeeze(-1).to(device_obj)
+            audio_lengths = padded_inputs.audio_lengths.to(device_obj)
 
         # preemphasis
         if self.preemphasis is not None:
             timemask = torch.arange(input_features.shape[1], device=input_features.device).unsqueeze(
                 0
-            ) < padded_inputs.audio_lengths.unsqueeze(1)
+            ) < audio_lengths.unsqueeze(1)
             input_features = torch.cat(
                 [input_features[:, :1], input_features[:, 1:] - self.preemphasis * input_features[:, :-1]], dim=1
             )
             input_features = input_features.masked_fill(~timemask, 0.0)
 
-        input_features = self._torch_extract_fbank_features(input_features, device)
+        input_features = self._torch_extract_fbank_features(input_features, device_obj)
         features_lengths = torch.floor_divide(
-            padded_inputs.audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length
+            audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length
         )
-        attention_mask = torch.arange(input_features.shape[1], device=device)[None, :] < features_lengths[:, None]
+        attention_mask = torch.arange(input_features.shape[1], device=input_features.device)[None, :] < features_lengths[:, None]
 
         # normalize mel features, ignoring padding
         mask = attention_mask.unsqueeze(-1)
