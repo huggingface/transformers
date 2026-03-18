@@ -175,6 +175,7 @@ else:
             ("pp_doclayout_v3", (None, "PPDocLayoutV3ImageProcessorFast")),
             ("pp_lcnet", (None, "PPLCNetImageProcessorFast")),
             ("pp_ocrv5_mobile_det", (None, "PPOCRV5ServerDetImageProcessorFast")),
+            ("pp_ocrv5_mobile_rec", (None, "PPOCRV5ServerRecImageProcessorFast")),
             ("pp_ocrv5_server_det", (None, "PPOCRV5ServerDetImageProcessorFast")),
             ("pp_ocrv5_server_rec", (None, "PPOCRV5ServerRecImageProcessorFast")),
             ("prompt_depth_anything", ("PromptDepthAnythingImageProcessor", "PromptDepthAnythingImageProcessorFast")),

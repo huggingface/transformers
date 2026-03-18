@@ -254,11 +254,8 @@ class PPOCRV5ServerRecModelIntegrationTest(unittest.TestCase):
         self.image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
     def test_inference_text_recognition_head(self):
-        inputs = self.image_processor(images=self.image, return_tensors="pt")["pixel_values"]
-        inputs = inputs.to(torch_device)
-
-        with torch.no_grad():
-            outputs = self.model(inputs)
+        inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)
+        outputs = self.model(**inputs)
 
         results = self.image_processor.post_process_text_recognition(outputs)
         expected_text = "绿洲仕格维花园公寓"
