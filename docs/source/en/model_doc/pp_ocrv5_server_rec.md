@@ -101,6 +101,15 @@ for result in results:
 
 [[autodoc]] PPOCRV5ServerRecModel
 
+## PPOCRV5ServerRecEncoderWithSVTR
+
+[[autodoc]] PPOCRV5ServerRecEncoderWithSVTR
+
+## PPOCRV5MobileRecEncoderWithSVTR
+
+[[autodoc]] PPOCRV5MobileRecEncoderWithSVTR
+
+
 ## PPOCRV5ServerRecImageProcessorFast
 
 [[autodoc]] PPOCRV5ServerRecImageProcessorFast

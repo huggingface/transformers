@@ -399,4 +399,9 @@ class PPOCRV5MobileRecForTextRecognition(PPOCRV5MobileRecPreTrainedModel):
         )
 
 
-__all__ = ["PPOCRV5MobileRecForTextRecognition", "PPOCRV5MobileRecModel"]
+__all__ = [
+    "PPOCRV5MobileRecForTextRecognition",
+    "PPOCRV5MobileRecModel",
+    "PPOCRV5MobileRecPreTrainedModel",
+    "PPOCRV5MobileRecEncoderWithSVTR",
+]

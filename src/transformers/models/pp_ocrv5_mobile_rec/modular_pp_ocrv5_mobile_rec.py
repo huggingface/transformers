@@ -78,4 +78,6 @@ __all__ = [
     "PPOCRV5MobileRecForTextRecognition",
     "PPOCRV5MobileRecConfig",
     "PPOCRV5MobileRecModel",
+    "PPOCRV5MobileRecPreTrainedModel",  # noqa: F822
+    "PPOCRV5MobileRecEncoderWithSVTR",
 ]

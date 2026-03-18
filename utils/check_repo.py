@@ -256,6 +256,8 @@ IGNORE_NON_TESTED = (
         "VibeVoiceAcousticTokenizerEncoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "VibeVoiceAcousticTokenizerDecoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
+        "PPOCRV5MobileRecEncoderWithSVTR",  # Tested through PPOCRV5MobileRecForTextRecognition
+        "PPOCRV5ServerRecEncoderWithSVTR",  # Tested through PPOCRV5ServerRecForTextRecognition
     ]
 )
 
@@ -478,6 +480,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Ernie4_5_VL_MoeForConditionalGeneration",  # BC Alias
     "Ernie4_5_VL_MoeModel",  # BC Alias
     "Ernie4_5_VL_MoeTextModel",  # BC Alias
+    "PPOCRV5MobileRecModel", # Building part of bigger model
+    "PPOCRV5ServerRecModel",  # Building part of bigger model
 ]
 
 

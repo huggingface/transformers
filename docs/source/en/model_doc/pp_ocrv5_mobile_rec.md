@@ -100,3 +100,7 @@ for result in results:
 ## PPOCRV5MobileRecModel
 
 [[autodoc]] PPOCRV5MobileRecModel
+
+## PPOCRV5MobileRecModel
+
+[[autodoc]] PPOCRV5MobileRecModel

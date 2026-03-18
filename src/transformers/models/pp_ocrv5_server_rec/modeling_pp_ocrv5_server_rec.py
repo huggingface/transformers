@@ -382,4 +382,9 @@ class PPOCRV5ServerRecForTextRecognition(PPOCRV5ServerRecPreTrainedModel):
         )
 
 
-__all__ = ["PPOCRV5ServerRecForTextRecognition", "PPOCRV5ServerRecModel", "PPOCRV5ServerRecPreTrainedModel"]
+__all__ = [
+    "PPOCRV5ServerRecForTextRecognition",
+    "PPOCRV5ServerRecModel",
+    "PPOCRV5ServerRecPreTrainedModel",
+    "PPOCRV5ServerRecEncoderWithSVTR",
+]

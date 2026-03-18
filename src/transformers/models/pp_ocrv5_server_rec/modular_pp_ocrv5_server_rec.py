@@ -467,4 +467,5 @@ __all__ = [
     "PPOCRV5ServerRecConfig",
     "PPOCRV5ServerRecModel",
     "PPOCRV5ServerRecPreTrainedModel",
+    "PPOCRV5ServerRecEncoderWithSVTR",
 ]
