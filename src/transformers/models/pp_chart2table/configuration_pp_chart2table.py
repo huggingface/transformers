@@ -70,13 +70,13 @@ class PPChart2TableConfig(PreTrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import PPChart2TableForConditionalGeneration, PPChart2TableConfig
+    >>> from transformers import GotOcr2ForConditionalGeneration, PPChart2TableConfig
 
     >>> # Initializing a PPChart2Table style configuration
     >>> configuration = PPChart2TableConfig()
 
-    >>> # Initializing a model from the Qwen2-VL-7B style configuration
-    >>> model = PPChart2TableForConditionalGeneration(configuration)
+    >>> # Initializing a model from the PaddlePaddle/PP-Chart2Table_safetensors style configuration
+    >>> model = GotOcr2ForConditionalGeneration(configuration)  # underlying architecture is Got Ocr 2
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

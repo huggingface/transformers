@@ -16,17 +16,11 @@
 import unittest
 
 from transformers import (
+    AutoModelForImageTextToText,
     AutoProcessor,
-    is_torch_available,
     is_vision_available,
 )
 from transformers.testing_utils import cleanup, require_torch, require_vision, slow, torch_device
-
-
-if is_torch_available():
-    from transformers import (
-        PPChart2TableForConditionalGeneration,
-    )
 
 
 if is_vision_available():
@@ -39,7 +33,7 @@ if is_vision_available():
 class PPChart2TableIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "PaddlePaddle/PP-Chart2Table_safetensors"
-        self.model = PPChart2TableForConditionalGeneration.from_pretrained(model_path).to(torch_device)
+        self.model = AutoModelForImageTextToText.from_pretrained(model_path).to(torch_device)
         self.processor = AutoProcessor.from_pretrained(model_path)
         url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png"
         self.image = load_image(url)

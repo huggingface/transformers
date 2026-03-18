@@ -32,6 +32,22 @@ logger = logging.get_logger(__name__)
 class PPChart2TableConfig(GotOcr2Config):
     model_type = "pp_chart2table"
 
+    r"""
+    Example:
+
+    ```python
+    >>> from transformers import GotOcr2ForConditionalGeneration, PPChart2TableConfig
+
+    >>> # Initializing a PPChart2Table style configuration
+    >>> configuration = PPChart2TableConfig()
+
+    >>> # Initializing a model from the PaddlePaddle/PP-Chart2Table_safetensors style configuration
+    >>> model = GotOcr2ForConditionalGeneration(configuration)  # underlying architecture is Got Ocr 2
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
 
 @auto_docstring
 class PPChart2TableImageProcessorFast(BaseImageProcessorFast):

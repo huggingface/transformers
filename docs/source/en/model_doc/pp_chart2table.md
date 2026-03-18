@@ -145,13 +145,6 @@ print(result)
 </hfoption>
 </hfoptions>
 
-## PPChart2TableForConditionalGeneration
-
-[[autodoc]] PPChart2TableForConditionalGeneration
-
-## PPChart2TableModel
-
-[[autodoc]] PPChart2TableModel
 
 ## PPChart2TableConfig
 
