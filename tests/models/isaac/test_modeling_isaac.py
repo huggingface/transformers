@@ -313,7 +313,6 @@ def create_isaac_processor(
 def to_model_multimodal_inputs(processor_output, device):
     keys = (
         "mm_token_type_ids",
-        "position_ids",
         "vision_patches",
         "vision_patch_attention_mask",
         "vision_token_grids",
@@ -1127,13 +1126,6 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
             )
             expected_modality[-single_len:] = single_packed["mm_token_type_ids"].squeeze(0)
             torch.testing.assert_close(batch_modality_row, expected_modality)
-
-            batch_positions_row = batch_packed["position_ids"][i]
-            expected_positions = torch.zeros(
-                (max_length, 3), dtype=batch_positions_row.dtype, device=batch_positions_row.device
-            )
-            expected_positions[-single_len:] = single_packed["position_ids"].squeeze(0)
-            torch.testing.assert_close(batch_positions_row, expected_positions)
 
             if single_packed["vision_patches"] is not None:
                 expected_image_count = int(single_packed["vision_image_attention_mask"].sum().item())

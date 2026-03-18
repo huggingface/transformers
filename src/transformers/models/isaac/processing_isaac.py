@@ -168,7 +168,6 @@ class IsaacProcessor(ProcessorMixin):
 
         pairs = list(zip(texts, batched_images, strict=True))
         image_inputs = self.image_processor(images=batched_images, return_tensors=TensorType.PYTORCH)
-        vision_position_ids = image_inputs.pop("vision_position_ids")
         vision_token_grids = image_inputs["vision_token_grids"]
         vision_segment_lengths = (vision_token_grids[..., 0] // self.image_processor.pixel_shuffle_scale) * (
             vision_token_grids[..., 1] // self.image_processor.pixel_shuffle_scale
@@ -178,7 +177,6 @@ class IsaacProcessor(ProcessorMixin):
         vision_image_attention_mask = image_inputs["vision_patch_attention_mask"].any(dim=-1).to(dtype=torch.long)
 
         sample_input_ids: list[torch.Tensor] = []
-        sample_position_ids: list[torch.Tensor] = []
         expanded_texts = []
         expected_image_lengths_per_sample = []
 
@@ -209,9 +207,6 @@ class IsaacProcessor(ProcessorMixin):
         ):
             sample_input = torch.tensor(sample_input_ids_list, dtype=torch.long)
             image_positions = sample_input.eq(self.image_pad_token_id).nonzero(as_tuple=False).flatten()
-            full_position_ids = []
-            token_offset = 0
-            position_offset = 0
             image_spans = image_positions.split(expected_image_lengths) if expected_image_lengths else ()
             image_bounds = []
 
@@ -220,35 +215,10 @@ class IsaacProcessor(ProcessorMixin):
             ):
                 image_start = int(image_span[0].item())
                 image_end = int(image_span[-1].item()) + 1
-                if image_start > token_offset:
-                    text_position_ids = torch.arange(
-                        position_offset, position_offset + image_start - token_offset, dtype=torch.long
-                    )
-                    zero_axis = torch.zeros_like(text_position_ids)
-                    full_position_ids.append(torch.stack((text_position_ids, zero_axis, zero_axis), -1))
-                    position_offset += image_start - token_offset
-
-                image_position_ids = vision_position_ids[batch_idx, image_idx, :segment_length].clone()
-                image_position_ids[:, 0] += position_offset
-                full_position_ids.append(image_position_ids)
                 image_bounds.append((image_start, image_end))
-                token_offset = image_end
-                position_offset += int(vision_position_ids[batch_idx, image_idx, segment_length - 1, 0].item()) + 1
-
-            if token_offset < sample_input.shape[0]:
-                text_position_ids = torch.arange(
-                    position_offset, position_offset + sample_input.shape[0] - token_offset, dtype=torch.long
-                )
-                zero_axis = torch.zeros_like(text_position_ids)
-                full_position_ids.append(torch.stack((text_position_ids, zero_axis, zero_axis), -1))
-
-            sample_position = (
-                torch.cat(full_position_ids, 0) if full_position_ids else torch.zeros((0, 3), dtype=torch.long)
-            )
             total = int(sample_input.shape[0])
             start = max(0, total - self.max_sequence_length)
             sample_input_ids.append(sample_input[start:])
-            sample_position_ids.append(sample_position[start:])
 
             for image_idx, (image_start, image_end) in enumerate(image_bounds):
                 kept_start = max(start, image_start)
@@ -265,14 +235,12 @@ class IsaacProcessor(ProcessorMixin):
 
         input_ids = torch.full((batch_size, max_len), self.text_pad_token_id, dtype=torch.long)
         attention_mask = torch.zeros((batch_size, max_len), dtype=torch.long)
-        position_ids = torch.zeros((batch_size, max_len, 3), dtype=torch.long)
 
         for batch_idx, length in enumerate(lengths):
             if length == 0:
                 continue
             input_ids[batch_idx, -length:] = sample_input_ids[batch_idx]
             attention_mask[batch_idx, -length:] = 1
-            position_ids[batch_idx, -length:] = sample_position_ids[batch_idx]
 
         mm_token_type_ids = input_ids.eq(self.image_pad_token_id).to(dtype=torch.long)
 
@@ -282,7 +250,6 @@ class IsaacProcessor(ProcessorMixin):
         return {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "position_ids": position_ids,
             "mm_token_type_ids": mm_token_type_ids,
             "vision_patches": vision_patches,
             "vision_patch_attention_mask": vision_patch_attention_mask,
