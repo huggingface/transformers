@@ -504,6 +504,10 @@ class TokenizerChatTemplateKwargs(TypedDict, total=False):
         The reasoning effort level to use for the model's response. Supported values depend on the model
         (e.g. `"none"`, "low"`, `"medium"`, `"high"`). If the template does not support reasoning effort,
         this argument will have no effect.
+    enable_thinking (`bool`, *optional*):
+        Template-level flag used by some chat templates (for example, Qwen-style templates) to control whether
+        a visible `</think>` marker is emitted. This argument is consumed by template rendering and is not a
+        processor/tokenizer preprocessing option.
     """
 
     tools: list[dict] | None = None
@@ -512,6 +516,7 @@ class TokenizerChatTemplateKwargs(TypedDict, total=False):
     continue_final_message: bool | None = False
     return_assistant_tokens_mask: bool | None = False
     reasoning_effort: str | None = None
+    enable_thinking: bool | None = None
 
 
 class ProcessorChatTemplateKwargs(TokenizerChatTemplateKwargs, total=False):
