@@ -1277,9 +1277,8 @@ class IsaacModel(Qwen3PreTrainedModel):
             position_ids = position_ids.to(device=inputs_embeds.device)
             if position_ids.ndim == 2:
                 return position_ids.view(1, position_ids.shape[0], -1).expand(3, -1, -1)
-            if position_ids.ndim == 3 and position_ids.shape[-1] == 3:
-                return position_ids.permute(2, 0, 1).contiguous()
-            return position_ids
+            if position_ids.ndim == 3 and position_ids.shape[0] in (1, 4):
+                return position_ids
 
         if self.rope_deltas is None:
             return None
@@ -1536,12 +1535,7 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
                 image_patch_attention_mask if vision_patch_attention_mask is None else vision_patch_attention_mask
             )
             vision_token_grids = image_token_grids if vision_token_grids is None else vision_token_grids
-        should_recompute_position_ids = position_ids is None or (
-            position_ids.ndim == 3
-            and position_ids.shape[0] == input_ids.shape[0]
-            and position_ids.shape[1] != input_ids.shape[0]
-        )
-        if should_recompute_position_ids:
+        if position_ids is None or position_ids.ndim == 2:
             position_ids = self._prepare_position_ids_for_generation(
                 input_ids,
                 {
@@ -1554,8 +1548,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
                     "vision_token_lengths": vision_token_lengths,
                 },
             )
-        else:
-            position_ids = self._normalize_generation_position_ids(position_ids)
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -1579,22 +1571,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             model_inputs[key] = value if is_prefill else None
 
         return model_inputs
-
-    def _normalize_generation_position_ids(self, position_ids: torch.LongTensor | None) -> torch.LongTensor | None:
-        if position_ids is None or position_ids.ndim != 3:
-            return position_ids
-
-        if position_ids.shape[0] in (1, 4):
-            return position_ids
-
-        if position_ids.shape[0] == 3:
-            return torch.cat([position_ids[:1], position_ids], dim=0)
-
-        if position_ids.shape[-1] == 3:
-            vision_position_ids = position_ids.permute(2, 0, 1).contiguous()
-            return torch.cat([vision_position_ids[:1], vision_position_ids], dim=0)
-
-        return position_ids
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
@@ -1639,7 +1615,7 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         input_ids: torch.LongTensor | None = None,
         **model_kwargs,
     ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        position_ids = self._normalize_generation_position_ids(model_kwargs.pop("position_ids", None))
+        position_ids = model_kwargs.pop("position_ids", None)
         input_ids, model_kwargs = super()._expand_inputs_for_generation(
             expand_size=expand_size,
             is_encoder_decoder=is_encoder_decoder,
@@ -1647,7 +1623,8 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             **model_kwargs,
         )
         if position_ids is not None:
-            model_kwargs["position_ids"] = position_ids
+            dim = 1 if position_ids.ndim == 3 else 0
+            model_kwargs["position_ids"] = position_ids.repeat_interleave(expand_size, dim=dim)
         return input_ids, model_kwargs
 
     def get_input_embeddings(self) -> nn.Module:

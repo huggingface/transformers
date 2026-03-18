@@ -494,8 +494,7 @@ class IsaacModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config, input_ids, attention_mask, labels = self.prepare_config_and_inputs()
-        position_ids = torch.arange(self.seq_length, device=torch_device).view(1, -1)
-        position_ids = position_ids.expand(self.batch_size, -1).unsqueeze(2).expand(-1, -1, 3)
+        position_ids = torch.arange(self.seq_length, device=torch_device).view(1, -1).expand(self.batch_size, -1)
         patch_size = self.vision_config["patch_size"]
         patch_dim = self.vision_config["num_channels"] * patch_size * patch_size
         num_image_patches = 4

@@ -174,7 +174,6 @@ class IsaacProcessor(ProcessorMixin):
         )
         vision_token_offsets = torch.zeros_like(vision_segment_lengths)
         vision_token_lengths = torch.zeros_like(vision_segment_lengths)
-        vision_image_attention_mask = image_inputs["vision_patch_attention_mask"].any(dim=-1).to(dtype=torch.long)
 
         sample_input_ids: list[torch.Tensor] = []
         expanded_texts = []
@@ -226,8 +225,6 @@ class IsaacProcessor(ProcessorMixin):
                 if kept_end > kept_start:
                     vision_token_offsets[batch_idx, image_idx] = kept_start - image_start
                     vision_token_lengths[batch_idx, image_idx] = kept_end - kept_start
-                else:
-                    vision_image_attention_mask[batch_idx, image_idx] = 0
 
         text_inputs = self.tokenizer.pad(
             {"input_ids": [sample_input.tolist() for sample_input in sample_input_ids]},
@@ -240,6 +237,7 @@ class IsaacProcessor(ProcessorMixin):
         attention_mask = text_inputs["attention_mask"]
 
         mm_token_type_ids = input_ids.eq(self.image_pad_token_id).to(dtype=torch.long)
+        vision_image_attention_mask = vision_token_lengths.gt(0).to(dtype=torch.long)
 
         vision_patches = image_inputs["vision_patches"]
         vision_patch_attention_mask = image_inputs["vision_patch_attention_mask"]

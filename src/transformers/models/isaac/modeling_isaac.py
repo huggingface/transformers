@@ -1235,7 +1235,13 @@ class IsaacModel(PreTrainedModel):
         pixel_values = pixel_values.to(device=device)
         image_token_grids = image_token_grids.to(device=device, dtype=torch.long)
         patch_attention_mask = image_patch_attention_mask.to(device=device, dtype=torch.long)
-        image_attention_mask = image_attention_mask.to(device=device, dtype=torch.bool)
+        if image_attention_mask is None:
+            if image_token_lengths is not None:
+                image_attention_mask = image_token_lengths.to(device=device, dtype=torch.long) > 0
+            else:
+                image_attention_mask = image_token_grids.any(dim=-1)
+        else:
+            image_attention_mask = image_attention_mask.to(device=device, dtype=torch.bool)
 
         batch_size, max_images = pixel_values.shape[:2]
         hidden_size = self.config.get_text_config().hidden_size
@@ -1332,9 +1338,8 @@ class IsaacModel(PreTrainedModel):
         image_token_grids: torch.Tensor,
         image_token_offsets: torch.Tensor,
         image_token_lengths: torch.Tensor,
-        image_attention_mask: torch.Tensor,
         attention_mask: torch.Tensor,
-        inputs_embeds: torch.Tensor,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Prepare multimodal RoPE positions for the current prefill sequence.
 
@@ -1344,14 +1349,14 @@ class IsaacModel(PreTrainedModel):
         the attended sequence length and Isaac's multimodal positions so decode steps can
         keep counting forward from the cached prefix."""
 
-        device = inputs_embeds.device
-        batch_size, seq_len = inputs_embeds.shape[:2]
+        device = attention_mask.device
+        batch_size, seq_len = attention_mask.shape
         mm_token_type_ids = mm_token_type_ids.to(device=device, dtype=torch.long)
         image_token_grids = image_token_grids.to(device=device, dtype=torch.long)
         image_token_offsets = image_token_offsets.to(device=device, dtype=torch.long)
         image_token_lengths = image_token_lengths.to(device=device, dtype=torch.long)
-        image_attention_mask = image_attention_mask.to(device=device, dtype=torch.bool)
         attention_mask = attention_mask.to(device=device, dtype=torch.long)
+        image_attention_mask = image_token_lengths > 0
 
         position_ids = torch.zeros((3, batch_size, seq_len), device=device, dtype=torch.long)
         rope_deltas = torch.zeros((batch_size, 1), device=device, dtype=torch.long)
@@ -1409,7 +1414,6 @@ class IsaacModel(PreTrainedModel):
         image_token_grids: torch.Tensor | None = None,
         image_token_offsets: torch.Tensor | None = None,
         image_token_lengths: torch.Tensor | None = None,
-        image_attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         past_key_values: torch.Tensor | None = None,
     ) -> torch.Tensor:
@@ -1420,7 +1424,6 @@ class IsaacModel(PreTrainedModel):
             and image_token_grids is not None
             and image_token_offsets is not None
             and image_token_lengths is not None
-            and image_attention_mask is not None
         )
 
         if can_compute_mrope and past_seen_tokens == 0:
@@ -1429,7 +1432,6 @@ class IsaacModel(PreTrainedModel):
                 image_token_grids=image_token_grids,
                 image_token_offsets=image_token_offsets,
                 image_token_lengths=image_token_lengths,
-                image_attention_mask=image_attention_mask,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
             )
@@ -1440,9 +1442,8 @@ class IsaacModel(PreTrainedModel):
             position_ids = position_ids.to(device=inputs_embeds.device)
             if position_ids.ndim == 2:
                 return position_ids.view(1, position_ids.shape[0], -1).expand(3, -1, -1)
-            if position_ids.ndim == 3 and position_ids.shape[-1] == 3:
-                return position_ids.permute(2, 0, 1).contiguous()
-            return position_ids
+            if position_ids.ndim == 3 and position_ids.shape[0] in (1, 4):
+                return position_ids
 
         if self.rope_deltas is None:
             return None
@@ -1484,7 +1485,6 @@ class IsaacModel(PreTrainedModel):
         image_token_grids: torch.LongTensor | None = None,
         vision_token_offsets: torch.LongTensor | None = None,
         vision_token_lengths: torch.LongTensor | None = None,
-        vision_image_attention_mask: torch.LongTensor | None = None,
         image_attention_mask: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -1518,10 +1518,9 @@ class IsaacModel(PreTrainedModel):
                 Start offsets inside the per-image vision embedding sequence, shape `(batch_size, max_images)`.
             vision_token_lengths (`torch.LongTensor`, *optional*):
                 Number of vision tokens to consume per image, shape `(batch_size, max_images)`.
-            vision_image_attention_mask (`torch.LongTensor`, *optional*):
-                Mask indicating which image slots are populated, shape `(batch_size, max_images)`.
             image_attention_mask (`torch.LongTensor`, *optional*):
-                Alias for `vision_image_attention_mask`.
+                Backward-compatible override for populated image slots. When omitted, the model derives it from
+                `vision_token_lengths > 0`.
         """
         created_inputs_embeds = inputs_embeds is None
         if created_inputs_embeds:
@@ -1543,7 +1542,7 @@ class IsaacModel(PreTrainedModel):
                 image_patch_attention_mask=vision_patch_attention_mask,
                 image_token_offsets=vision_token_offsets,
                 image_token_lengths=vision_token_lengths,
-                image_attention_mask=vision_image_attention_mask,
+                image_attention_mask=image_attention_mask,
                 return_dict=True,
             )
             image_features = image_outputs.pooler_output.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
@@ -1564,7 +1563,6 @@ class IsaacModel(PreTrainedModel):
             image_token_grids=vision_token_grids,
             image_token_offsets=vision_token_offsets,
             image_token_lengths=vision_token_lengths,
-            image_attention_mask=vision_image_attention_mask,
             position_ids=position_ids,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
@@ -1618,7 +1616,6 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         image_token_grids: torch.LongTensor | None = None,
         vision_token_offsets: torch.LongTensor | None = None,
         vision_token_lengths: torch.LongTensor | None = None,
-        vision_image_attention_mask: torch.LongTensor | None = None,
         image_attention_mask: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -1648,10 +1645,9 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             Start offsets inside the per-image vision embedding sequence, shape `(batch_size, max_images)`.
         vision_token_lengths (`torch.LongTensor`, *optional*):
             Number of vision tokens to consume per image, shape `(batch_size, max_images)`.
-        vision_image_attention_mask (`torch.LongTensor`, *optional*):
-            Mask indicating which image slots are populated, shape `(batch_size, max_images)`.
         image_attention_mask (`torch.LongTensor`, *optional*):
-            Alias for `vision_image_attention_mask`.
+            Backward-compatible override for populated image slots. When omitted, the model derives it from
+            `vision_token_lengths > 0`.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -1661,7 +1657,7 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             vision_token_grids=vision_token_grids,
             vision_token_offsets=vision_token_offsets,
             vision_token_lengths=vision_token_lengths,
-            vision_image_attention_mask=vision_image_attention_mask,
+            image_attention_mask=image_attention_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1698,33 +1694,36 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         image_token_grids: torch.LongTensor | None = None,
         vision_token_offsets: torch.LongTensor | None = None,
         vision_token_lengths: torch.LongTensor | None = None,
-        vision_image_attention_mask: torch.LongTensor | None = None,
         image_attention_mask: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         is_first_iteration=False,
         use_cache=True,
         **kwargs,
     ) -> dict[str, Any]:
-        if vision_patches is None and pixel_values is not None:
-            vision_patches = pixel_values
+        if vision_patches is None:
             vision_patch_attention_mask = (
                 image_patch_attention_mask if vision_patch_attention_mask is None else vision_patch_attention_mask
             )
             vision_token_grids = image_token_grids if vision_token_grids is None else vision_token_grids
-            vision_image_attention_mask = (
-                image_attention_mask if vision_image_attention_mask is None else vision_image_attention_mask
+        if position_ids is None or position_ids.ndim == 2:
+            position_ids = self._prepare_position_ids_for_generation(
+                input_ids,
+                {
+                    "input_ids": input_ids,
+                    "attention_mask": attention_mask,
+                    "past_key_values": past_key_values,
+                    "mm_token_type_ids": mm_token_type_ids,
+                    "vision_token_grids": vision_token_grids,
+                    "vision_token_offsets": vision_token_offsets,
+                    "vision_token_lengths": vision_token_lengths,
+                },
             )
-        custom_position_ids = (
-            position_ids
-            if position_ids is not None and position_ids.ndim == 3 and vision_patches is not None
-            else None
-        )
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            position_ids=None,
+            position_ids=position_ids,
             is_first_iteration=is_first_iteration,
             use_cache=use_cache,
             **kwargs,
@@ -1736,15 +1735,67 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             "vision_token_grids": vision_token_grids,
             "vision_token_offsets": vision_token_offsets,
             "vision_token_lengths": vision_token_lengths,
-            "vision_image_attention_mask": vision_image_attention_mask,
         }
         is_prefill = is_first_iteration or not use_cache
         for key, value in multimodal_inputs.items():
             model_inputs[key] = value if is_prefill else None
-        if custom_position_ids is not None:
-            model_inputs["position_ids"] = custom_position_ids if is_prefill else None
 
         return model_inputs
+
+    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+        text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
+
+        past_length = 0
+        if (cache := model_kwargs.get("past_key_values")) is not None:
+            past_length = cache.get_seq_length()
+        if past_length != 0 and self.model.rope_deltas is not None:
+            return text_positions[None, ...] + self.model.rope_deltas
+
+        if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
+            inputs_tensor = model_kwargs["input_ids"]
+
+        if (
+            len(inputs_tensor.shape) == 2
+            and inputs_tensor.dtype in [torch.int, torch.long]
+            and model_kwargs.get("mm_token_type_ids") is not None
+            and model_kwargs.get("vision_token_grids") is not None
+            and model_kwargs.get("vision_token_offsets") is not None
+            and model_kwargs.get("vision_token_lengths") is not None
+        ):
+            vision_positions, rope_deltas = self.model.get_rope_index(
+                mm_token_type_ids=model_kwargs["mm_token_type_ids"],
+                image_token_grids=model_kwargs["vision_token_grids"],
+                image_token_offsets=model_kwargs["vision_token_offsets"],
+                image_token_lengths=model_kwargs["vision_token_lengths"],
+                attention_mask=model_kwargs.get("attention_mask"),
+            )
+            self.model.rope_deltas = rope_deltas
+        else:
+            vision_positions = text_positions.unsqueeze(0).expand(3, -1, -1)
+            self.model.rope_deltas = torch.zeros(
+                inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device
+            )
+
+        return torch.cat([text_positions[None, ...], vision_positions], dim=0)
+
+    def _expand_inputs_for_generation(
+        self,
+        expand_size: int = 1,
+        is_encoder_decoder: bool = False,
+        input_ids: torch.LongTensor | None = None,
+        **model_kwargs,
+    ) -> tuple[torch.LongTensor, dict[str, Any]]:
+        position_ids = model_kwargs.pop("position_ids", None)
+        input_ids, model_kwargs = super()._expand_inputs_for_generation(
+            expand_size=expand_size,
+            is_encoder_decoder=is_encoder_decoder,
+            input_ids=input_ids,
+            **model_kwargs,
+        )
+        if position_ids is not None:
+            dim = 1 if position_ids.ndim == 3 else 0
+            model_kwargs["position_ids"] = position_ids.repeat_interleave(expand_size, dim=dim)
+        return input_ids, model_kwargs
 
     def get_input_embeddings(self) -> nn.Module:
         return self.model.get_input_embeddings()
