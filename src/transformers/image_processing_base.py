@@ -16,6 +16,7 @@ import copy
 import json
 import os
 from typing import Any, TypeVar
+from urllib.parse import urlparse
 
 import numpy as np
 from huggingface_hub import create_repo, is_offline_mode
@@ -38,6 +39,28 @@ ImageProcessorType = TypeVar("ImageProcessorType", bound="ImageProcessingMixin")
 
 
 logger = logging.get_logger(__name__)
+
+
+def _is_url(path: str) -> bool:
+    """Check if a path is a URL."""
+    try:
+        result = urlparse(path)
+        return bool(result.scheme and result.netloc)
+    except Exception:
+        return False
+
+
+def _load_json_from_file_or_url(file_path: str) -> dict:
+    """Load JSON from a local file or a URL."""
+    if _is_url(file_path):
+        import requests
+        response = requests.get(file_path)
+        response.raise_for_status()
+        return json.loads(response.text)
+    else:
+        with open(file_path, encoding="utf-8") as reader:
+            text = reader.read()
+        return json.loads(text)
 
 
 # TODO: Move BatchFeature to be imported by both image_processing_utils and image_processing_utils_fast
@@ -272,7 +295,7 @@ class ImageProcessingMixin(PushToHubMixin):
         is_local = os.path.isdir(pretrained_model_name_or_path)
         if os.path.isdir(pretrained_model_name_or_path):
             image_processor_file = os.path.join(pretrained_model_name_or_path, image_processor_filename)
-        if os.path.isfile(pretrained_model_name_or_path):
+        if os.path.isfile(pretrained_model_name_or_path) or _is_url(pretrained_model_name_or_path):
             resolved_image_processor_file = pretrained_model_name_or_path
             resolved_processor_file = None
             is_local = True
@@ -323,12 +346,12 @@ class ImageProcessingMixin(PushToHubMixin):
         # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
         image_processor_dict = None
         if resolved_processor_file is not None:
-            processor_dict = safe_load_json_file(resolved_processor_file)
+            processor_dict = _load_json_from_file_or_url(resolved_processor_file)
             if "image_processor" in processor_dict:
                 image_processor_dict = processor_dict["image_processor"]
 
         if resolved_image_processor_file is not None and image_processor_dict is None:
-            image_processor_dict = safe_load_json_file(resolved_image_processor_file)
+            image_processor_dict = _load_json_from_file_or_url(resolved_image_processor_file)
 
         if image_processor_dict is None:
             raise OSError(

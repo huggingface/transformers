@@ -21,6 +21,7 @@ import os
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar, Union
+from urllib.parse import urlparse
 
 from huggingface_hub import create_repo
 from huggingface_hub.dataclasses import strict
@@ -48,6 +49,28 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
+
+
+def _is_url(path: str) -> bool:
+    """Check if a path is a URL."""
+    try:
+        result = urlparse(path)
+        return bool(result.scheme and result.netloc)
+    except Exception:
+        return False
+
+
+def _load_dict_from_file_or_url(file_path: str) -> dict:
+    """Load dict from a local file or a URL."""
+    if _is_url(file_path):
+        import requests
+        response = requests.get(file_path)
+        response.raise_for_status()
+        return json.loads(response.text)
+    else:
+        with open(file_path, encoding="utf-8") as reader:
+            text = reader.read()
+        return json.loads(text)
 
 
 # type hinting: specifying the type of config class that inherits from PreTrainedConfig
@@ -652,8 +675,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
 
         is_local = os.path.isdir(pretrained_model_name_or_path)
-        if os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)):
-            # Special case when pretrained_model_name_or_path is a local file
+        if os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)) or _is_url(pretrained_model_name_or_path):
+            # Special case when pretrained_model_name_or_path is a local file or URL
             resolved_config_file = pretrained_model_name_or_path
             is_local = True
         else:
@@ -693,6 +716,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         try:
             if gguf_file:
                 config_dict = load_gguf_checkpoint(resolved_config_file, return_tensors=False)["config"]
+            elif _is_url(resolved_config_file):
+                # Load config dict from URL
+                config_dict = _load_dict_from_file_or_url(resolved_config_file)
+                config_dict = cls._decode_special_floats(config_dict)
             else:
                 # Load config dict
                 config_dict = cls._dict_from_json_file(resolved_config_file)
