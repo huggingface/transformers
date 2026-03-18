@@ -17,6 +17,7 @@
 import inspect
 import unittest
 
+import requests
 from parameterized import parameterized
 
 from transformers import (
