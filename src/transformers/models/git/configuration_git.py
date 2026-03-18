@@ -13,6 +13,8 @@
 # limitations under the License.
 
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
@@ -21,6 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="microsoft/git-base")
+@strict(accept_kwargs=True)
 class GitVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -41,37 +44,21 @@ class GitVisionConfig(PreTrainedConfig):
     model_type = "git_vision_model"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        hidden_size=768,
-        intermediate_size=3072,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        num_channels=3,
-        image_size=224,
-        patch_size=16,
-        hidden_act="quick_gelu",
-        layer_norm_eps=1e-5,
-        attention_dropout=0.0,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.image_size = image_size
-        self.initializer_range = initializer_range
-        self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
+    hidden_size: int = 768
+    intermediate_size: int = 3072
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    num_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] = 224
+    patch_size: int | list[int] | tuple[int, int] = 16
+    hidden_act: str = "quick_gelu"
+    layer_norm_eps: float = 1e-5
+    attention_dropout: float | int = 0.0
+    initializer_range: float = 0.02
 
 
 @auto_docstring(checkpoint="microsoft/git-base")
+@strict(accept_kwargs=True)
 class GitConfig(PreTrainedConfig):
     r"""
     num_image_with_embedding (`int`, *optional*):
@@ -95,52 +82,32 @@ class GitConfig(PreTrainedConfig):
     model_type = "git"
     sub_configs = {"vision_config": GitVisionConfig}
 
-    def __init__(
-        self,
-        vision_config=None,
-        vocab_size=30522,
-        hidden_size=768,
-        num_hidden_layers=6,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=1024,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        pad_token_id=0,
-        use_cache=True,
-        tie_word_embeddings=False,
-        bos_token_id=101,
-        eos_token_id=102,
-        num_image_with_embedding=None,
-        **kwargs,
-    ):
-        if vision_config is None:
-            vision_config = {}
+    vision_config: dict | GitVisionConfig | None = None
+    vocab_size: int = 30522
+    hidden_size: int = 768
+    num_hidden_layers: int = 6
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.1
+    attention_probs_dropout_prob: float = 0.1
+    max_position_embeddings: int = 1024
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    pad_token_id: int | None = 0
+    use_cache: bool = True
+    tie_word_embeddings: bool = False
+    bos_token_id: int | None = 101
+    eos_token_id: int | None = 102
+    num_image_with_embedding: int | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.vision_config is None:
+            self.vision_config = GitVisionConfig()
             logger.info("vision_config is None. initializing the GitVisionConfig with default values.")
-
-        self.vision_config = GitVisionConfig(**vision_config)
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
-        self.intermediate_size = intermediate_size
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        self.num_image_with_embedding = num_image_with_embedding
-
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+        elif isinstance(self.vision_config, dict):
+            self.vision_config = GitVisionConfig(**self.vision_config)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["GitConfig", "GitVisionConfig"]

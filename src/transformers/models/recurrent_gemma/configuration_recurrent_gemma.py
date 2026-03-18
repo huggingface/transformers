@@ -13,15 +13,15 @@
 # limitations under the License.
 """RecurrentGemma model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/recurrentgemma-2b")
+@strict(accept_kwargs=True)
 class RecurrentGemmaConfig(PreTrainedConfig):
     r"""
     lru_width (`int` or `None`, *optional*):
@@ -54,60 +54,44 @@ class RecurrentGemmaConfig(PreTrainedConfig):
 
     model_type = "recurrent_gemma"
 
-    def __init__(
-        self,
-        num_hidden_layers: int | None = 26,
-        vocab_size: int | None = 256000,
-        hidden_size: int | None = 2560,
-        intermediate_size: int | None = 3 * 2560,
-        num_attention_heads: int | None = 10,
-        lru_width: int | None = None,
-        attention_window_size: int | None = 2048,
-        conv1d_width: int | None = 4,
-        logits_soft_cap: float | None = 30.0,
-        rms_norm_eps: int | None = 1e-6,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = 0,
-        eos_token_id: int | None = 1,
-        bos_token_id: int | None = 2,
-        hidden_activation: str | None = "gelu_pytorch_tanh",
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        block_types: list[str] | None = ("recurrent", "recurrent", "attention"),
-        attention_dropout: float | None = 0.0,
-        num_key_value_heads: int | None = None,
-        attention_bias: str | None = False,
-        w_init_variance_scale: float | None = 0.01,
-        tie_word_embeddings: bool | None = True,
-        **kwargs,
-    ):
-        self.num_hidden_layers = num_hidden_layers
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_attention_heads = num_attention_heads
-        self.lru_width = lru_width if lru_width is not None else hidden_size
-        self.attention_window_size = attention_window_size
-        self.conv1d_width = conv1d_width
-        self.logits_soft_cap = logits_soft_cap
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.block_types = list(block_types)
-        self.hidden_activation = hidden_activation
+    num_hidden_layers: int = 26
+    vocab_size: int = 256000
+    hidden_size: int = 2560
+    intermediate_size: int = 3 * 2560
+    num_attention_heads: int = 10
+    lru_width: int | None = None
+    attention_window_size: int = 2048
+    conv1d_width: int = 4
+    logits_soft_cap: float = 30.0
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    pad_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 1
+    bos_token_id: int | None = 2
+    hidden_activation: str = "gelu_pytorch_tanh"
+    rope_parameters: RopeParameters | dict | None = None
+    block_types: list[str] | tuple[str, ...] | None = ("recurrent", "recurrent", "attention")
+    attention_dropout: float | int = 0.0
+    num_key_value_heads: int | None = None
+    attention_bias: bool = False
+    w_init_variance_scale: float = 0.01
+    tie_word_embeddings: bool = True
+
+    def __post_init__(self, **kwargs):
+        self.lru_width = self.lru_width if self.lru_width is not None else self.hidden_size
+        self.block_types = list(self.block_types)
         self.head_dim = self.hidden_size // self.num_attention_heads
-        self.num_key_value_heads = num_key_value_heads if num_key_value_heads is not None else num_attention_heads
+        self.num_key_value_heads = (
+            self.num_key_value_heads if self.num_key_value_heads is not None else self.num_attention_heads
+        )
+        self.final_w_init_variance_scale = 2.0 / self.num_hidden_layers
+        kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if self.num_key_value_heads > self.num_attention_heads:
             raise ValueError("The number of `num_key_value_heads` must be smaller than `num_attention_heads`")
-        self.attention_dropout = attention_dropout
-        self.attention_bias = attention_bias
-        self.w_init_variance_scale = w_init_variance_scale
-        self.final_w_init_variance_scale = 2.0 / self.num_hidden_layers
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.rope_parameters = rope_parameters
-        kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
-        super().__init__(**kwargs)
 
     @property
     def layers_block_type(self):

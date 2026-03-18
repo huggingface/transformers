@@ -13,6 +13,8 @@
 # limitations under the License.
 """FastSpeech2Conformer model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
@@ -21,6 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="espnet/fastspeech2_conformer")
+@strict(accept_kwargs=True)
 class FastSpeech2ConformerConfig(PreTrainedConfig):
     r"""
     encoder_num_attention_heads (`int`, *optional*, defaults to 2):
@@ -143,166 +146,124 @@ class FastSpeech2ConformerConfig(PreTrainedConfig):
     base_config_key = "model_config"
     attribute_map = {"num_hidden_layers": "encoder_layers", "num_attention_heads": "encoder_num_attention_heads"}
 
-    def __init__(
-        self,
-        hidden_size=384,
-        vocab_size=78,
-        num_mel_bins=80,
-        encoder_num_attention_heads=2,
-        encoder_layers=4,
-        encoder_linear_units=1536,
-        decoder_layers=4,
-        decoder_num_attention_heads=2,
-        decoder_linear_units=1536,
-        speech_decoder_postnet_layers=5,
-        speech_decoder_postnet_units=256,
-        speech_decoder_postnet_kernel=5,
-        positionwise_conv_kernel_size=3,
-        encoder_normalize_before=False,
-        decoder_normalize_before=False,
-        encoder_concat_after=False,
-        decoder_concat_after=False,
-        reduction_factor=1,
-        speaking_speed=1.0,
-        use_macaron_style_in_conformer=True,
-        use_cnn_in_conformer=True,
-        encoder_kernel_size=7,
-        decoder_kernel_size=31,
-        duration_predictor_layers=2,
-        duration_predictor_channels=256,
-        duration_predictor_kernel_size=3,
-        energy_predictor_layers=2,
-        energy_predictor_channels=256,
-        energy_predictor_kernel_size=3,
-        energy_predictor_dropout=0.5,
-        energy_embed_kernel_size=1,
-        energy_embed_dropout=0.0,
-        stop_gradient_from_energy_predictor=False,
-        pitch_predictor_layers=5,
-        pitch_predictor_channels=256,
-        pitch_predictor_kernel_size=5,
-        pitch_predictor_dropout=0.5,
-        pitch_embed_kernel_size=1,
-        pitch_embed_dropout=0.0,
-        stop_gradient_from_pitch_predictor=True,
-        encoder_dropout_rate=0.2,
-        encoder_positional_dropout_rate=0.2,
-        encoder_attention_dropout_rate=0.2,
-        decoder_dropout_rate=0.2,
-        decoder_positional_dropout_rate=0.2,
-        decoder_attention_dropout_rate=0.2,
-        duration_predictor_dropout_rate=0.2,
-        speech_decoder_postnet_dropout=0.5,
-        max_source_positions=5000,
-        use_masking=True,
-        use_weighted_masking=False,
-        num_speakers=None,
-        num_languages=None,
-        speaker_embed_dim=None,
-        is_encoder_decoder=True,
-        convolution_bias=True,
-        **kwargs,
-    ):
-        if positionwise_conv_kernel_size % 2 == 0:
-            raise ValueError(
-                f"positionwise_conv_kernel_size must be odd, but got {positionwise_conv_kernel_size} instead."
-            )
-        if encoder_kernel_size % 2 == 0:
-            raise ValueError(f"encoder_kernel_size must be odd, but got {encoder_kernel_size} instead.")
-        if decoder_kernel_size % 2 == 0:
-            raise ValueError(f"decoder_kernel_size must be odd, but got {decoder_kernel_size} instead.")
-        if duration_predictor_kernel_size % 2 == 0:
-            raise ValueError(
-                f"duration_predictor_kernel_size must be odd, but got {duration_predictor_kernel_size} instead."
-            )
-        if energy_predictor_kernel_size % 2 == 0:
-            raise ValueError(
-                f"energy_predictor_kernel_size must be odd, but got {energy_predictor_kernel_size} instead."
-            )
-        if energy_embed_kernel_size % 2 == 0:
-            raise ValueError(f"energy_embed_kernel_size must be odd, but got {energy_embed_kernel_size} instead.")
-        if pitch_predictor_kernel_size % 2 == 0:
-            raise ValueError(
-                f"pitch_predictor_kernel_size must be odd, but got {pitch_predictor_kernel_size} instead."
-            )
-        if pitch_embed_kernel_size % 2 == 0:
-            raise ValueError(f"pitch_embed_kernel_size must be odd, but got {pitch_embed_kernel_size} instead.")
-        if hidden_size % encoder_num_attention_heads != 0:
-            raise ValueError("The hidden_size must be evenly divisible by encoder_num_attention_heads.")
-        if hidden_size % decoder_num_attention_heads != 0:
-            raise ValueError("The hidden_size must be evenly divisible by decoder_num_attention_heads.")
-        if use_masking and use_weighted_masking:
-            raise ValueError("Either use_masking or use_weighted_masking can be True, but not both.")
+    hidden_size: int = 384
+    vocab_size: int = 78
+    num_mel_bins: int = 80
+    encoder_num_attention_heads: int = 2
+    encoder_layers: int = 4
+    encoder_linear_units: int = 1536
+    decoder_layers: int = 4
+    decoder_num_attention_heads: int = 2
+    decoder_linear_units: int = 1536
+    speech_decoder_postnet_layers: int = 5
+    speech_decoder_postnet_units: int = 256
+    speech_decoder_postnet_kernel: int = 5
+    positionwise_conv_kernel_size: int = 3
+    encoder_normalize_before: bool = False
+    decoder_normalize_before: bool = False
+    encoder_concat_after: bool = False
+    decoder_concat_after: bool = False
+    reduction_factor: int = 1
+    speaking_speed: float = 1.0
+    use_macaron_style_in_conformer: bool = True
+    use_cnn_in_conformer: bool = True
+    encoder_kernel_size: int = 7
+    decoder_kernel_size: int = 31
+    duration_predictor_layers: int = 2
+    duration_predictor_channels: int = 256
+    duration_predictor_kernel_size: int = 3
+    energy_predictor_layers: int = 2
+    energy_predictor_channels: int = 256
+    energy_predictor_kernel_size: int = 3
+    energy_predictor_dropout: float | int = 0.5
+    energy_embed_kernel_size: int = 1
+    energy_embed_dropout: float | int = 0.0
+    stop_gradient_from_energy_predictor: bool = False
+    pitch_predictor_layers: int = 5
+    pitch_predictor_channels: int = 256
+    pitch_predictor_kernel_size: int = 5
+    pitch_predictor_dropout: float | int = 0.5
+    pitch_embed_kernel_size: int = 1
+    pitch_embed_dropout: float | int = 0.0
+    stop_gradient_from_pitch_predictor: bool = True
+    encoder_dropout_rate: float = 0.2
+    encoder_positional_dropout_rate: float = 0.2
+    encoder_attention_dropout_rate: float = 0.2
+    decoder_dropout_rate: float = 0.2
+    decoder_positional_dropout_rate: float = 0.2
+    decoder_attention_dropout_rate: float = 0.2
+    duration_predictor_dropout_rate: float = 0.2
+    speech_decoder_postnet_dropout: float | int = 0.5
+    max_source_positions: int = 5000
+    use_masking: bool = True
+    use_weighted_masking: bool = False
+    num_speakers: int | None = None
+    num_languages: int | None = None
+    speaker_embed_dim: int | None = None
+    is_encoder_decoder: bool = True
+    convolution_bias: bool = True
 
-        self.hidden_size = hidden_size
-        self.vocab_size = vocab_size
-        self.num_mel_bins = num_mel_bins
+    def __post_init__(self, **kwargs):
         self.encoder_config = {
-            "num_attention_heads": encoder_num_attention_heads,
-            "layers": encoder_layers,
-            "kernel_size": encoder_kernel_size,
-            "attention_dropout_rate": encoder_attention_dropout_rate,
-            "dropout_rate": encoder_dropout_rate,
-            "positional_dropout_rate": encoder_positional_dropout_rate,
-            "linear_units": encoder_linear_units,
-            "normalize_before": encoder_normalize_before,
-            "concat_after": encoder_concat_after,
+            "num_attention_heads": self.encoder_num_attention_heads,
+            "layers": self.encoder_layers,
+            "kernel_size": self.encoder_kernel_size,
+            "attention_dropout_rate": self.encoder_attention_dropout_rate,
+            "dropout_rate": self.encoder_dropout_rate,
+            "positional_dropout_rate": self.encoder_positional_dropout_rate,
+            "linear_units": self.encoder_linear_units,
+            "normalize_before": self.encoder_normalize_before,
+            "concat_after": self.encoder_concat_after,
         }
         self.decoder_config = {
-            "num_attention_heads": decoder_num_attention_heads,
-            "layers": decoder_layers,
-            "kernel_size": decoder_kernel_size,
-            "attention_dropout_rate": decoder_attention_dropout_rate,
-            "dropout_rate": decoder_dropout_rate,
-            "positional_dropout_rate": decoder_positional_dropout_rate,
-            "linear_units": decoder_linear_units,
-            "normalize_before": decoder_normalize_before,
-            "concat_after": decoder_concat_after,
+            "num_attention_heads": self.decoder_num_attention_heads,
+            "layers": self.decoder_layers,
+            "kernel_size": self.decoder_kernel_size,
+            "attention_dropout_rate": self.decoder_attention_dropout_rate,
+            "dropout_rate": self.decoder_dropout_rate,
+            "positional_dropout_rate": self.decoder_positional_dropout_rate,
+            "linear_units": self.decoder_linear_units,
+            "normalize_before": self.decoder_normalize_before,
+            "concat_after": self.decoder_concat_after,
         }
-        self.encoder_num_attention_heads = encoder_num_attention_heads
-        self.encoder_layers = encoder_layers
-        self.duration_predictor_channels = duration_predictor_channels
-        self.duration_predictor_kernel_size = duration_predictor_kernel_size
-        self.duration_predictor_layers = duration_predictor_layers
-        self.energy_embed_dropout = energy_embed_dropout
-        self.energy_embed_kernel_size = energy_embed_kernel_size
-        self.energy_predictor_channels = energy_predictor_channels
-        self.energy_predictor_dropout = energy_predictor_dropout
-        self.energy_predictor_kernel_size = energy_predictor_kernel_size
-        self.energy_predictor_layers = energy_predictor_layers
-        self.pitch_embed_dropout = pitch_embed_dropout
-        self.pitch_embed_kernel_size = pitch_embed_kernel_size
-        self.pitch_predictor_channels = pitch_predictor_channels
-        self.pitch_predictor_dropout = pitch_predictor_dropout
-        self.pitch_predictor_kernel_size = pitch_predictor_kernel_size
-        self.pitch_predictor_layers = pitch_predictor_layers
-        self.positionwise_conv_kernel_size = positionwise_conv_kernel_size
-        self.speech_decoder_postnet_units = speech_decoder_postnet_units
-        self.speech_decoder_postnet_dropout = speech_decoder_postnet_dropout
-        self.speech_decoder_postnet_kernel = speech_decoder_postnet_kernel
-        self.speech_decoder_postnet_layers = speech_decoder_postnet_layers
-        self.reduction_factor = reduction_factor
-        self.speaking_speed = speaking_speed
-        self.stop_gradient_from_energy_predictor = stop_gradient_from_energy_predictor
-        self.stop_gradient_from_pitch_predictor = stop_gradient_from_pitch_predictor
-        self.max_source_positions = max_source_positions
-        self.use_cnn_in_conformer = use_cnn_in_conformer
-        self.use_macaron_style_in_conformer = use_macaron_style_in_conformer
-        self.use_masking = use_masking
-        self.use_weighted_masking = use_weighted_masking
-        self.num_speakers = num_speakers
-        self.num_languages = num_languages
-        self.speaker_embed_dim = speaker_embed_dim
-        self.duration_predictor_dropout_rate = duration_predictor_dropout_rate
-        self.convolution_bias = convolution_bias
+        super().__post_init__(**kwargs)
 
-        super().__init__(
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.positionwise_conv_kernel_size % 2 == 0:
+            raise ValueError(
+                f"positionwise_conv_kernel_size must be odd, but got {self.self.positionwise_conv_kernel_size} instead."
+            )
+        if self.encoder_kernel_size % 2 == 0:
+            raise ValueError(f"encoder_kernel_size must be odd, but got {self.encoder_kernel_size} instead.")
+        if self.decoder_kernel_size % 2 == 0:
+            raise ValueError(f"decoder_kernel_size must be odd, but got {self.decoder_kernel_size} instead.")
+        if self.duration_predictor_kernel_size % 2 == 0:
+            raise ValueError(
+                f"duration_predictor_kernel_size must be odd, but got {self.duration_predictor_kernel_size} instead."
+            )
+        if self.energy_predictor_kernel_size % 2 == 0:
+            raise ValueError(
+                f"energy_predictor_kernel_size must be odd, but got {self.energy_predictor_kernel_size} instead."
+            )
+        if self.energy_embed_kernel_size % 2 == 0:
+            raise ValueError(f"energy_embed_kernel_size must be odd, but got {self.energy_embed_kernel_size} instead.")
+        if self.pitch_predictor_kernel_size % 2 == 0:
+            raise ValueError(
+                f"pitch_predictor_kernel_size must be odd, but got {self.pitch_predictor_kernel_size} instead."
+            )
+        if self.pitch_embed_kernel_size % 2 == 0:
+            raise ValueError(f"pitch_embed_kernel_size must be odd, but got {self.pitch_embed_kernel_size} instead.")
+        if self.hidden_size % self.encoder_num_attention_heads != 0:
+            raise ValueError("The hidden_size must be evenly divisible by encoder_num_attention_heads.")
+        if self.hidden_size % self.decoder_num_attention_heads != 0:
+            raise ValueError("The hidden_size must be evenly divisible by decoder_num_attention_heads.")
+        if self.use_masking and self.use_weighted_masking:
+            raise ValueError("Either use_masking or use_weighted_masking can be True, but not both.")
 
 
 @auto_docstring(checkpoint="espnet/fastspeech2_conformer")
+@strict(accept_kwargs=True)
 class FastSpeech2ConformerHifiGanConfig(PreTrainedConfig):
     r"""
     model_in_dim (`int`, *optional*, defaults to 80):
@@ -346,32 +307,24 @@ class FastSpeech2ConformerHifiGanConfig(PreTrainedConfig):
     model_type = "hifigan"
     base_config_key = "vocoder_config"
 
-    def __init__(
-        self,
-        model_in_dim=80,
-        upsample_initial_channel=512,
-        upsample_rates=[8, 8, 2, 2],
-        upsample_kernel_sizes=[16, 16, 4, 4],
-        resblock_kernel_sizes=[3, 7, 11],
-        resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
-        initializer_range=0.01,
-        leaky_relu_slope=0.1,
-        normalize_before=True,
-        **kwargs,
-    ):
-        self.model_in_dim = model_in_dim
-        self.upsample_initial_channel = upsample_initial_channel
-        self.upsample_rates = upsample_rates
-        self.upsample_kernel_sizes = upsample_kernel_sizes
-        self.resblock_kernel_sizes = resblock_kernel_sizes
-        self.resblock_dilation_sizes = resblock_dilation_sizes
-        self.initializer_range = initializer_range
-        self.leaky_relu_slope = leaky_relu_slope
-        self.normalize_before = normalize_before
-        super().__init__(**kwargs)
+    model_in_dim: int = 80
+    upsample_initial_channel: int = 512
+    upsample_rates: list[int] | tuple[int, ...] = (8, 8, 2, 2)
+    upsample_kernel_sizes: list[int] | tuple[int, ...] = (16, 16, 4, 4)
+    resblock_kernel_sizes: list[int] | tuple[int, ...] = (3, 7, 11)
+    resblock_dilation_sizes: list | tuple | None = None
+    initializer_range: float = 0.01
+    leaky_relu_slope: float = 0.1
+    normalize_before: bool = True
+
+    def __post_init__(self, **kwargs):
+        if self.resblock_dilation_sizes is None:
+            self.resblock_dilation_sizes = [[1, 3, 5], [1, 3, 5], [1, 3, 5]]
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="espnet/fastspeech2_conformer")
+@strict(accept_kwargs=True)
 class FastSpeech2ConformerWithHifiGanConfig(PreTrainedConfig):
     """
     model_config ([`FastSpeech2ConformerConfig | dict`], *optional*):
@@ -407,24 +360,23 @@ class FastSpeech2ConformerWithHifiGanConfig(PreTrainedConfig):
     model_type = "fastspeech2_conformer_with_hifigan"
     sub_configs = {"model_config": FastSpeech2ConformerConfig, "vocoder_config": FastSpeech2ConformerHifiGanConfig}
 
-    def __init__(
-        self,
-        model_config: dict | None = None,
-        vocoder_config: dict | None = None,
-        **kwargs,
-    ):
-        if model_config is None:
-            model_config = {}
+    model_config: dict | PreTrainedConfig | None = None
+    vocoder_config: dict | PreTrainedConfig | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.model_config is None:
+            self.model_config = FastSpeech2ConformerConfig()
             logger.info("model_config is None. initializing the model with default values.")
+        elif isinstance(self.model_config, dict):
+            self.model_config = FastSpeech2ConformerConfig(**self.model_config)
 
-        if vocoder_config is None:
-            vocoder_config = {}
+        if self.vocoder_config is None:
+            self.vocoder_config = FastSpeech2ConformerHifiGanConfig()
             logger.info("vocoder_config is None. initializing the coarse model with default values.")
+        elif isinstance(self.vocoder_config, dict):
+            self.vocoder_config = FastSpeech2ConformerHifiGanConfig(**self.vocoder_config)
 
-        self.model_config = FastSpeech2ConformerConfig(**model_config)
-        self.vocoder_config = FastSpeech2ConformerHifiGanConfig(**vocoder_config)
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["FastSpeech2ConformerConfig", "FastSpeech2ConformerHifiGanConfig", "FastSpeech2ConformerWithHifiGanConfig"]
