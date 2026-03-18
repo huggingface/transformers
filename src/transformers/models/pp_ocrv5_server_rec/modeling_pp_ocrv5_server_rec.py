@@ -18,8 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -33,6 +33,7 @@ from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_pp_ocrv5_server_rec import PPOCRV5ServerRecConfig
 
@@ -220,9 +221,6 @@ class PPOCRV5ServerRecPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 
-    def _init_weights(self, module):
-        super()._init_weights(module)
-
 
 class PPOCRV5ServerRecHead(nn.Module):
     def __init__(self, config):
@@ -234,7 +232,7 @@ class PPOCRV5ServerRecHead(nn.Module):
     def forward(self, hidden_states: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
         outputs = self.encoder(hidden_states, **kwargs)
         hidden_states = self.head(outputs.last_hidden_state)
-        hidden_states = F.softmax(hidden_states.float(), dim=2)
+        hidden_states = F.softmax(hidden_states, dim=2, dtype=torch.float32).to(hidden_states.dtype)
 
         return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=outputs.hidden_states)
 
@@ -295,6 +293,7 @@ class PPOCRV5ServerRecEncoderWithSVTR(PPOCRV5ServerRecPreTrainedModel):
 
         self.norm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
+    @merge_with_config_defaults
     @capture_outputs
     def forward(self, hidden_states: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
         residual = hidden_states
@@ -303,16 +302,16 @@ class PPOCRV5ServerRecEncoderWithSVTR(PPOCRV5ServerRecPreTrainedModel):
         hidden_states = self.conv_block[1](hidden_states)
 
         batch_size, channels, height, width = hidden_states.shape
-        hidden_states = hidden_states.flatten(2).permute(0, 2, 1)
-        for blk in self.svtr_block:
-            hidden_states = blk(hidden_states=hidden_states, attention_mask=None)
+        hidden_states = hidden_states.flatten(2).transpose(1, 2)
+        for block in self.svtr_block:
+            hidden_states = block(hidden_states=hidden_states, attention_mask=None)
 
         hidden_states = self.norm(hidden_states)
         hidden_states = hidden_states.view(batch_size, height, width, channels).permute(0, 3, 1, 2)
         hidden_states = self.conv_block[2](hidden_states)
         hidden_states = self.conv_block[3](torch.cat((residual, hidden_states), dim=1))
         hidden_states = self.conv_block[4](hidden_states)
-        hidden_states = hidden_states.squeeze(2).permute(0, 2, 1)
+        hidden_states = hidden_states.squeeze(2).transpose(1, 2)
 
         return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states)
 
@@ -323,7 +322,6 @@ class PPOCRV5ServerRecModel(PPOCRV5ServerRecPreTrainedModel):
         super().__init__(config)
         self.backbone = load_backbone(config)
 
-        self.gradient_checkpointing = False
         self.post_init()
 
     @can_return_tuple
@@ -341,6 +339,17 @@ class PPOCRV5ServerRecModel(PPOCRV5ServerRecPreTrainedModel):
             last_hidden_state=hidden_state,
             hidden_states=outputs.hidden_states,
         )
+
+
+@dataclass
+@auto_docstring
+class PPOCRV5ServerRecForTextRecognitionOutput(BaseModelOutputWithNoAttention):
+    r"""
+    head_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Hidden-states of the PPOCRV5ServerRecHead at the output of each layer plus the optional initial embedding outputs.
+    """
+
+    head_hidden_states: torch.FloatTensor | None = None
 
 
 @auto_docstring(custom_intro="PPOCRV5ServerRec model for text recognition tasks.")
@@ -361,11 +370,12 @@ class PPOCRV5ServerRecForTextRecognition(PPOCRV5ServerRecPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
         outputs = self.model(pixel_values, **kwargs)
-        logits = self.head(outputs.last_hidden_state, **kwargs)
+        head_outputs = self.head(outputs.last_hidden_state, **kwargs)
 
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=logits,
+        return PPOCRV5ServerRecForTextRecognitionOutput(
+            last_hidden_state=head_outputs,
             hidden_states=outputs.hidden_states,
+            head_hidden_states=head_outputs.hidden_states,
         )
 
 

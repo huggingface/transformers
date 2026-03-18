@@ -134,6 +134,7 @@ class PPOCRV5ServerRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 
     has_attentions = False
     test_resize_embeddings = False
+    model_split_percents = [0.5, 0.8]
 
     def setUp(self):
         self.model_tester = PPOCRV5ServerRecModelTester()
@@ -147,18 +148,6 @@ class PPOCRV5ServerRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    @unittest.skip("PPOCRV5ServerRec does not has no attribute `hf_device_map`")
-    def test_cpu_offload(self):
-        pass
-
-    @unittest.skip("PPOCRV5ServerRec does not has no attribute `hf_device_map`")
-    def test_disk_offload_bin(self):
-        pass
-
-    @unittest.skip("PPOCRV5ServerRec does not has no attribute `hf_device_map`")
-    def test_disk_offload_safetensors(self):
-        pass
 
     @unittest.skip("PPOCRV5ServerRec does not has no attribute `hf_device_map`")
     def test_model_parallelism(self):
