@@ -889,15 +889,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         # Generate with flash_attn_with_kvcache path for decode
         continuous_batching_config.max_blocks_per_request = 16
-        # This context manager ensures that the varlen path is used
-        og_get_block_table_key = PagedAttentionCache.get_block_table_key
-        with patch.object(
-            PagedAttentionCache, "get_block_table_key", autospec=True, side_effect=og_get_block_table_key
-        ) as mock_get_block_table_key:
-            outputs_kvcache = model.generate_batch(
-                inputs=input_ids, generation_config=gen_config, continuous_batching_config=continuous_batching_config
-            )
-            self.assertTrue(mock_get_block_table_key.called, "get_block_table_key method was not called.")
+        outputs_kvcache = model.generate_batch(
+            inputs=input_ids, generation_config=gen_config, continuous_batching_config=continuous_batching_config
+        )
 
         self.assertEqual(len(outputs_varlen), len(outputs_kvcache))
         for (_, out_fa2), (_, out_fa3) in zip(outputs_varlen.items(), outputs_kvcache.items()):
