@@ -1,7 +1,7 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-.PHONY: style check-repo check-model-rules check-model-rules-pr check-model-rules-all fix-repo test test-examples benchmark
+.PHONY: style check-repo check-model-rules check-model-rules-pr check-model-rules-all fix-repo test test-examples benchmark codex claude clean-ai
 
 check_dirs := examples tests src utils scripts benchmark benchmark_v2
 exclude_folders :=  ""
@@ -86,6 +86,19 @@ test-examples:
 # Run benchmark
 benchmark:
 	python3 benchmark/benchmark.py --config-dir benchmark/config --config-name generation --commit=diff backend.model=google/gemma-2b backend.cache_implementation=null,static backend.torch_compile=false,true --multirun
+
+codex:
+	mkdir -p .agents
+	rm -rf .agents/skills
+	ln -snf ../.ai/skills .agents/skills
+
+claude:
+	mkdir -p .claude
+	rm -rf .claude/skills
+	ln -snf ../.ai/skills .claude/skills
+
+clean-ai:
+	rm -rf .agents/skills .claude/skills
 
 
 # Release stuff
