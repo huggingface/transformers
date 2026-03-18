@@ -1163,7 +1163,6 @@ class IsaacModel(Qwen3PreTrainedModel):
 
     def get_rope_index(
         self,
-        *,
         mm_token_type_ids: torch.Tensor,
         image_token_grids: torch.Tensor,
         image_token_offsets: torch.Tensor,
