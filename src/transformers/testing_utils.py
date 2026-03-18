@@ -54,7 +54,7 @@ import torch.multiprocessing as mp
 from huggingface_hub import create_repo, delete_repo
 from packaging import version
 
-#TODO(3outeille): guarding to protect against missing import
+# TODO(3outeille): guarding to protect against missing import
 from torch.distributed.device_mesh import init_device_mesh
 
 from transformers import logging as transformers_logging
@@ -345,6 +345,7 @@ def is_training_test(test_case):
         else:
             return pytest.mark.is_training_test()(test_case)
 
+
 def is_training_distributed_test(test_case):
     """
     Decorator marking a test as a training distributed test. If RUN_TRAINING_DISTRIBUTED_TESTS is set to a falsy value, those tests will be
@@ -359,6 +360,7 @@ def is_training_distributed_test(test_case):
             return test_case
         else:
             return pytest.mark.is_training_distributed_test()(test_case)
+
 
 def is_tensor_parallel_test(test_case):
     """
@@ -4110,6 +4112,7 @@ def read_json_file(file):
 # Training CI Utilities - Logging and Memory Monitoring
 # =============================================================================
 
+
 def global_wrapper(rank, func, fsdp_size, tp_size, port, func_args, func_kwargs):
     def setup_dist_env(rank, world_size, port):
         os.environ["WORLD_SIZE"] = str(world_size)
@@ -4147,6 +4150,7 @@ def init_distributed(fsdp_size: int = 1, tp_size: int = 1):
         return wrapper
 
     return _init_distributed
+
 
 # ANSI color codes for terminal output
 class Colors:

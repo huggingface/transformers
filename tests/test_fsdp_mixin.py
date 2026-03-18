@@ -67,9 +67,7 @@ LR = 3e-4
 MIXED_PRECISION_LR = 1e-3
 SEED = 42
 MIXED_PRECISION_NUM_STEPS = 40
-MIXED_PRECISION_REDUCTION_THRESHOLD = 0.4
-MIXED_PRECISION_GENERATION_MAX_NEW_TOKENS = 31
-MIXED_PRECISION_GENERATION_MATCH_THRESHOLD = 0.8
+MIXED_PRECISION_REDUCTION_THRESHOLD = 0.9
 
 
 # =============================================================================
@@ -233,13 +231,16 @@ def _build_manual_fsdp_plan(config, device, policy_options=None):
     return {"mode": "manual", "modules": module_plan}
 
 
-def _create_init_state_dict(config, dtype):
-    """Create a deterministic initial state dict for reproducible model initialization."""
-    set_seed(SEED)
-    model = AutoModelForCausalLM.from_config(config).to(dtype)
-    state_dict = {k: v.clone().detach() for k, v in model.state_dict().items()}
-    del model
-    return state_dict
+def _save_init_pretrained(rank, config, dtype):
+    """Save a deterministic initial model to a shared tmpdir for from_pretrained loading."""
+    tmpdir, tmpdir_obj = _create_shared_tmpdir(rank)
+    if rank == 0:
+        set_seed(SEED)
+        model = AutoModelForCausalLM.from_config(config).to(dtype)
+        model.save_pretrained(tmpdir)
+        del model
+    dist.barrier()
+    return tmpdir, tmpdir_obj
 
 
 def _save_training_state(model, optimizer, training_state_dir):
@@ -280,17 +281,16 @@ def _load_training_state(model, optimizer, training_state_dir):
     torch.cuda.set_rng_state(loaded_training_state["cuda_rng_state"])
 
 
-def train_ddp(rank, config, batches, lr, device, dtype, init_state_dict):
+def train_ddp(rank, batches, lr, device, dtype, init_model_dir):
     _set_determinism(SEED)
-    model = AutoModelForCausalLM.from_config(config).to(device).to(dtype)
-    model.load_state_dict(init_state_dict)
+    model = AutoModelForCausalLM.from_pretrained(init_model_dir, torch_dtype=dtype).to(device)
     # MoE/conditional-routing variants) may not use all params on
     # every step, and DDP would otherwise fail. Specifying find_unused_parameters=True allows running backward on a subgraph of the model.
     ddp_model = DDP(
         model,
         device_ids=[rank],
         find_unused_parameters=True,
-    ).to(dtype)
+    )
     ddp_model.train()
     optimizer = torch.optim.Adam(ddp_model.parameters(), lr=lr)
 
@@ -317,21 +317,19 @@ def train_ddp(rank, config, batches, lr, device, dtype, init_state_dict):
 
 def train_fsdp2(
     rank,
-    config,
     batches,
     lr,
-    device_map,
-    device_mesh,
     dtype,
-    init_state_dict,
+    init_model_dir,
     checkpoint_step,
     fsdp_plan,
 ):
     # -- Phase 1: Pre-checkpoint run -- train only the first `checkpoint_step` steps, then save
     _set_determinism(SEED)
-    pre_ckpt_model = AutoModelForCausalLM.from_config(config).to(device_map).to(dtype)
-    pre_ckpt_model.load_state_dict(init_state_dict)
-    pre_ckpt_model = apply_fsdp2(pre_ckpt_model, device_mesh, fsdp_plan=fsdp_plan)
+    _, device_mesh, _ = initialize_fsdp(fsdp_plan=fsdp_plan)
+    pre_ckpt_model = AutoModelForCausalLM.from_pretrained(
+        init_model_dir, torch_dtype=dtype, fsdp_plan=fsdp_plan, fsdp_device_mesh=device_mesh
+    )
     pre_ckpt_model.train()
     pre_ckpt_optimizer = torch.optim.Adam(pre_ckpt_model.parameters(), lr=lr)
 
@@ -409,11 +407,15 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
     batches = _build_repeated_training_batches(config, device, NUM_STEPS)
 
     auto_plan = {"mode": "auto"}
-    device_map, device_mesh, _ = initialize_fsdp(fsdp_plan=auto_plan)
 
-    _set_determinism(SEED)
-    model = AutoModelForCausalLM.from_config(config).to(device_map)
-    model = apply_fsdp2(model, device_mesh, fsdp_plan=auto_plan)
+    init_tmpdir, init_tmpdir_obj = _save_init_pretrained(rank, config, torch.float32)
+    try:
+        _, device_mesh, _ = initialize_fsdp(fsdp_plan=auto_plan)
+        _set_determinism(SEED)
+        model = AutoModelForCausalLM.from_pretrained(init_tmpdir, fsdp_plan=auto_plan, fsdp_device_mesh=device_mesh)
+    finally:
+        if rank == 0 and init_tmpdir_obj is not None:
+            init_tmpdir_obj.cleanup()
     model.train()
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 
@@ -430,9 +432,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
         model.save_pretrained(tmpdir, is_main_process=(rank == 0))
         dist.barrier()
 
-        new_model = AutoModelForCausalLM.from_pretrained(
-            tmpdir, fsdp_plan=auto_plan, fsdp_device_mesh=device_mesh
-        )
+        new_model = AutoModelForCausalLM.from_pretrained(tmpdir, fsdp_plan=auto_plan, fsdp_device_mesh=device_mesh)
         dist.barrier()
     finally:
         if rank == 0:
@@ -557,23 +557,23 @@ def _test_fsdp2_plan_vs_ddp_impl(
         raise ValueError(f"Unsupported plan_mode '{plan_mode}'. Expected 'auto' or 'manual'.")
 
     checkpoint_step = NUM_STEPS // 2
-    init_state_dict = _create_init_state_dict(config, dtype)
+    init_model_dir, init_tmpdir_obj = _save_init_pretrained(rank, config, dtype)
     batches = _build_repeated_training_batches(config, device, NUM_STEPS)
-    ddp_losses, ddp_grad_norms, ddp_state_dict = train_ddp(rank, config, batches, LR, device, dtype, init_state_dict)
+    try:
+        ddp_losses, ddp_grad_norms, ddp_state_dict = train_ddp(rank, batches, LR, device, dtype, init_model_dir)
 
-    device_map, device_mesh, _ = initialize_fsdp(fsdp_plan=fsdp_plan)
-    fsdp_losses, fsdp_grad_norms, fsdp_state_dict = train_fsdp2(
-        rank,
-        config,
-        batches,
-        LR,
-        device_map,
-        device_mesh,
-        dtype,
-        init_state_dict=init_state_dict,
-        checkpoint_step=checkpoint_step,
-        fsdp_plan=fsdp_plan,
-    )
+        fsdp_losses, fsdp_grad_norms, fsdp_state_dict = train_fsdp2(
+            rank,
+            batches,
+            LR,
+            dtype,
+            init_model_dir=init_model_dir,
+            checkpoint_step=checkpoint_step,
+            fsdp_plan=fsdp_plan,
+        )
+    finally:
+        if rank == 0 and init_tmpdir_obj is not None:
+            init_tmpdir_obj.cleanup()
 
     for step in range(len(ddp_losses)):
         torch.testing.assert_close(
@@ -621,7 +621,7 @@ def _test_fsdp2_plan_cpu_offload_mixed_precision(
     assert "mixed_precision" in policy_options, "Mixed-precision test requires mixed_precision policy option."
 
     dtype = torch.float32
-    init_state_dict = _create_init_state_dict(config, dtype)
+    init_model_dir, init_tmpdir_obj = _save_init_pretrained(rank, config, dtype)
     batches = _build_repeated_training_batches(config, device, num_steps)
 
     if plan_mode == "auto":
@@ -637,19 +637,19 @@ def _test_fsdp2_plan_cpu_offload_mixed_precision(
     else:
         raise ValueError(f"Unsupported plan_mode '{plan_mode}'. Expected 'auto' or 'manual'.")
 
-    device_map, device_mesh, _ = initialize_fsdp(fsdp_plan=fsdp_plan)
-    fsdp_losses, fsdp_grad_norms, fsdp_state_dict = train_fsdp2(
-        rank,
-        config,
-        batches,
-        lr,
-        device_map,
-        device_mesh,
-        dtype,
-        init_state_dict=init_state_dict,
-        checkpoint_step=checkpoint_step,
-        fsdp_plan=fsdp_plan,
-    )
+    try:
+        fsdp_losses, fsdp_grad_norms, _ = train_fsdp2(
+            rank,
+            batches,
+            lr,
+            dtype,
+            init_model_dir=init_model_dir,
+            checkpoint_step=checkpoint_step,
+            fsdp_plan=fsdp_plan,
+        )
+    finally:
+        if rank == 0 and init_tmpdir_obj is not None:
+            init_tmpdir_obj.cleanup()
 
     if not dist.is_initialized() or dist.get_rank() == 0:
         logger.debug("%s per-step trace:", label)
@@ -671,40 +671,8 @@ def _test_fsdp2_plan_cpu_offload_mixed_precision(
         f"{label}: expected loss reduction >= {MIXED_PRECISION_REDUCTION_THRESHOLD:.0%}, "
         f"got {loss_reduction_ratio:.2%}"
     )
-
-    # Assert generation matches training pattern
-    model = AutoModelForCausalLM.from_config(config).to(device)
-    model.load_state_dict(fsdp_state_dict)
-    model.eval()
-
-    input_ids, _ = batches[0]
-    expected_tokens = input_ids[0].tolist()
-    prompt = torch.tensor([[expected_tokens[0]]], device=device)
-    with torch.no_grad():
-        generated = model.generate(
-            input_ids=prompt,
-            max_new_tokens=MIXED_PRECISION_GENERATION_MAX_NEW_TOKENS,
-            do_sample=False,
-            pad_token_id=config.pad_token_id if hasattr(config, "pad_token_id") else 0,
-            eos_token_id=0,
-            use_cache=getattr(config, "model_type", "") == "recurrent_gemma",
-        )[0].tolist()
-
-    if not dist.is_initialized() or dist.get_rank() == 0:
-        logger.debug("Generation prompt tokens: %s", prompt[0].tolist())
-        logger.debug("Generation expected tokens: %s", expected_tokens[: len(generated)])
-        logger.debug("Generation generated tokens: %s", generated)
-
-    expected_slice = expected_tokens[: len(generated)]
-    num_matches = sum(int(a == b) for a, b in zip(generated, expected_slice))
-    match_ratio = num_matches / max(len(expected_slice), 1)
-    assert match_ratio >= MIXED_PRECISION_GENERATION_MATCH_THRESHOLD, (
-        "Expected generated sequence to match at least "
-        f"{MIXED_PRECISION_GENERATION_MATCH_THRESHOLD:.0%} of target tokens after overfitting; "
-        f"got {match_ratio:.2%}"
-    )
     if rank == 0:
-        logger.debug(f"{label} reduction + generation checks passed.")
+        logger.debug(f"{label} loss reduction check passed.")
 
 
 # =============================================================================

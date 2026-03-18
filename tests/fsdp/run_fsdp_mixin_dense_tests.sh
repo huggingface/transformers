@@ -116,18 +116,18 @@ TEST_METHODS=(
 TEST_ENTRIES=(
     # --- Top 7 (active) ---
     "tests/models/gpt2/test_modeling_gpt2.py::GPT2ModelTest"                                                  #  1. gpt2                 10.2M
-    # "tests/models/qwen3/test_modeling_qwen3.py::Qwen3ModelTest"                                                #  2. qwen3                 7.1M
-    # "tests/models/phi/test_modeling_phi.py::PhiModelTest"                                                      #  3. phi                   1.7M
-    # "tests/models/llama/test_modeling_llama.py::LlamaModelTest"                                                #  4. llama                 1.3M
-    # "tests/models/modernbert_decoder/test_modeling_modernbert_decoder.py::ModernBertDecoderModelTest"           #  5. modernbert_decoder    1.3M
-    # "tests/models/olmo3/test_modeling_olmo3.py::Olmo3ModelTest"                                                #  6. olmo3                 879K
-    # "tests/models/phi3/test_modeling_phi3.py::Phi3ModelTest"                                                   #  7. phi3                  867K
+    "tests/models/qwen3/test_modeling_qwen3.py::Qwen3ModelTest"                                                #  2. qwen3                 7.1M
+    "tests/models/phi/test_modeling_phi.py::PhiModelTest"                                                      #  3. phi                   1.7M
+    "tests/models/llama/test_modeling_llama.py::LlamaModelTest"                                                #  4. llama                 1.3M
+    "tests/models/modernbert_decoder/test_modeling_modernbert_decoder.py::ModernBertDecoderModelTest"           #  5. modernbert_decoder    1.3M
+    "tests/models/olmo3/test_modeling_olmo3.py::Olmo3ModelTest"                                                #  6. olmo3                 879K
+    "tests/models/phi3/test_modeling_phi3.py::Phi3ModelTest"                                                   #  7. phi3                  867K
     # --- Remaining (commented out, by download rank) ---
-    # "tests/models/mistral/test_modeling_mistral.py::MistralModelTest"                                        #  8. mistral               483K
-    # "tests/models/lfm2/test_modeling_lfm2.py::Lfm2ModelTest"                                      #  9. lfm2                  391K
+    "tests/models/mistral/test_modeling_mistral.py::MistralModelTest"                                        #  8. mistral               483K
+    "tests/models/lfm2/test_modeling_lfm2.py::Lfm2ModelTest"                                      #  9. lfm2                  391K
     # "tests/models/gemma2/test_modeling_gemma2.py::Gemma2ModelTest"                                           # 10. gemma2                295K
     # "tests/models/gemma3n/test_modeling_gemma3n.py::Gemma3nTextModelTest"                                    # 11. gemma3n               285K
-    # "tests/models/qwen3_5/test_modeling_qwen3_5.py::Qwen3_5TextModelTest"                                   # 12. qwen3_5               214K
+    "tests/models/qwen3_5/test_modeling_qwen3_5.py::Qwen3_5TextModelTest"                                   # 12. qwen3_5               214K
     # "tests/models/ministral/test_modeling_ministral.py::MinistralModelTest"                                  # 13. ministral             188K
     # "tests/models/gemma/test_modeling_gemma.py::GemmaModelTest"                                              # 14. gemma                 179K
     # "tests/models/exaone4/test_modeling_exaone4.py::Exaone4ModelTest"                                        # 15. exaone4               175K

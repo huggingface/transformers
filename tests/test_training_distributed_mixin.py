@@ -40,7 +40,7 @@ logger = logging.getLogger("transformers.training_test")
 
 def _create_text_training_batch(batch_size: int, seq_length: int, vocab_size: int) -> dict:
     """Create a simple text batch without needing a tokenizer.
-    
+
     Standalone function for use in distributed spawned processes.
     """
     pattern = list(range(1, min(20, vocab_size)))  # tokens 1-19
@@ -52,9 +52,9 @@ def _create_text_training_batch(batch_size: int, seq_length: int, vocab_size: in
 
 def _test_training_distributed_overfit_impl(mesh, config_class, model_class, training_params):
     """Implementation for distributed training overfit test.
-    
+
     Note: `mesh` is automatically created and passed by `global_wrapper` in testing_utils.py.
-    
+
     Args:
         mesh: DeviceMesh created by global_wrapper
         config_class: The config class (e.g., LlamaConfig)
@@ -99,7 +99,7 @@ def _test_training_distributed_overfit_impl(mesh, config_class, model_class, tra
     load_start = time.perf_counter()
 
     # Reconstruct config from passed config class
-    config = config_class.from_dict(training_params['config_dict'])
+    config = config_class.from_dict(training_params["config_dict"])
 
     # NOTE(3outeille): Need to figure out how to do it natively when calling tp_plan="auto"
     # Create a shared temp directory for model saving/loading
@@ -108,7 +108,7 @@ def _test_training_distributed_overfit_impl(mesh, config_class, model_class, tra
 
     # Broadcast the temp_dir path to all ranks
     if is_rank_0:
-        temp_dir_bytes = temp_dir.encode('utf-8')
+        temp_dir_bytes = temp_dir.encode("utf-8")
         temp_dir_tensor = torch.tensor(list(temp_dir_bytes), dtype=torch.uint8)
         temp_dir_len = torch.tensor([len(temp_dir_bytes)], dtype=torch.long)
     else:
@@ -120,7 +120,7 @@ def _test_training_distributed_overfit_impl(mesh, config_class, model_class, tra
         temp_dir_tensor = torch.zeros(temp_dir_len.item(), dtype=torch.uint8)
 
     dist.broadcast(temp_dir_tensor, src=0)
-    temp_dir = bytes(temp_dir_tensor.tolist()).decode('utf-8')
+    temp_dir = bytes(temp_dir_tensor.tolist()).decode("utf-8")
 
     # Rank 0 creates and saves the model
     if is_rank_0:
@@ -198,11 +198,11 @@ def _test_training_distributed_overfit_impl(mesh, config_class, model_class, tra
         logger.info(f"{Colors.BOLD}Creating fixed batch{Colors.RESET}")
 
     batch = _create_text_training_batch(
-        batch_size=training_params['batch_size'],
-        seq_length=training_params['seq_length'],
+        batch_size=training_params["batch_size"],
+        seq_length=training_params["seq_length"],
         vocab_size=config.vocab_size,
     )
-    tokens_per_batch = training_params['batch_size'] * training_params['seq_length']
+    tokens_per_batch = training_params["batch_size"] * training_params["seq_length"]
 
     if is_rank_0:
         logger.info(f"{Colors.CYAN}Training pattern:{Colors.RESET} Repeating token sequence (1-19)")
@@ -217,7 +217,7 @@ def _test_training_distributed_overfit_impl(mesh, config_class, model_class, tra
         logger.info(f"{Colors.BOLD}Building optimizer{Colors.RESET}")
 
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=training_params['learning_rate'], weight_decay=0.0, betas=(0.9, 0.999)
+        model.parameters(), lr=training_params["learning_rate"], weight_decay=0.0, betas=(0.9, 0.999)
     )
 
     if is_rank_0:
@@ -238,8 +238,8 @@ def _test_training_distributed_overfit_impl(mesh, config_class, model_class, tra
     training_start = time.perf_counter()
     memory_monitor.reset_peak_stats()
 
-    steps = training_params['steps']
-    log_freq = training_params['log_freq']
+    steps = training_params["steps"]
+    log_freq = training_params["log_freq"]
 
     for step in range(1, steps + 1):
         step_start = time.perf_counter()
@@ -338,9 +338,7 @@ def _test_training_distributed_overfit_impl(mesh, config_class, model_class, tra
     if is_rank_0:
         logger.info("-" * 70)
         logger.info(f"{Colors.BOLD}Running assertions{Colors.RESET}")
-        logger.info(
-            f"{Colors.GREEN}✓ Loss decreased by more than {loss_reduction_threshold * 100:.0f}%{Colors.RESET}"
-        )
+        logger.info(f"{Colors.GREEN}✓ Loss decreased by more than {loss_reduction_threshold * 100:.0f}%{Colors.RESET}")
         logger.info(
             f"{Colors.GREEN}✓ Grad norm decreased by more than {grad_norm_reduction_threshold * 100:.0f}%{Colors.RESET}"
         )
@@ -353,10 +351,11 @@ def _test_training_distributed_overfit_impl(mesh, config_class, model_class, tra
     # Cleanup temp directory
     if is_rank_0:
         import shutil
+
         try:
             shutil.rmtree(temp_dir)
         except Exception:
-            pass  # Ignore cleanup errors
+            logger.debug("Failed to clean up temp directory %s", temp_dir)
 
 
 class TrainingDistributedTesterMixin(TrainingConfigMixin, ABC):
@@ -370,7 +369,7 @@ class TrainingDistributedTesterMixin(TrainingConfigMixin, ABC):
       - causal_lm_class, base_model_class, etc.
 
     This mixin adds distributed training-specific tests using that infrastructure.
-    
+
     Note: Base training hyperparameters are inherited from TrainingConfigMixin.
     We override some values here for faster distributed tests.
     """

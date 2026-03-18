@@ -31,11 +31,13 @@ if is_torch_available() and is_torch_greater_or_equal("2.5"):
 
 logger = logging.get_logger(__name__)
 
-#TODO(3outeille): too many imports, make sure there is no redundant imports
+
+# TODO(3outeille): too many imports, make sure there is no redundant imports
 def is_fsdp_managed_module(module: nn.Module) -> bool:
     if not is_torch_available():
         return False
     import torch
+
     if not torch.distributed.is_available():
         return False
     try:
@@ -49,6 +51,7 @@ def is_fsdp_enabled():
     if not is_torch_available():
         return False
     import torch
+
     return (
         torch.distributed.is_available()
         and torch.distributed.is_initialized()
@@ -203,6 +206,7 @@ def get_transformer_block_classes(model):
 
     return block_classes
 
+
 def _get_auto_policy_kwargs(fsdp_plan: dict[str, Any]) -> dict[str, Any]:
     """Parse auto-mode fsdp_plan into fully_shard policy kwargs."""
     policy_kwargs = {}
@@ -216,6 +220,7 @@ def _get_auto_policy_kwargs(fsdp_plan: dict[str, Any]) -> dict[str, Any]:
         )
     return policy_kwargs
 
+
 def _shard_auto_input_embedding(input_embed, is_weights_tied: bool, device_mesh, auto_policy_kwargs):
     # Shard input embeddings (only when not tied).
     # When tied, the shared weight is grouped with the final norm in step 3.
@@ -224,17 +229,28 @@ def _shard_auto_input_embedding(input_embed, is_weights_tied: bool, device_mesh,
     fully_shard(input_embed, mesh=device_mesh, reshard_after_forward=True, **auto_policy_kwargs)
     logger.debug(f"Applied fully_shard to input embeddings ({type(input_embed).__name__})")
 
+
 def _shard_auto_transformer_blocks(model, block_classes, device_mesh, auto_policy_kwargs):
     for name, module in model.named_modules():
         if type(module) in block_classes:
             fully_shard(module, mesh=device_mesh, reshard_after_forward=True, **auto_policy_kwargs)
             logger.debug(f"Applied fully_shard to {name} ({type(module).__name__})")
 
+
 def _find_final_norm(model, decoder_layer_names):
-    """Find the final normalization layer before the output head."""
+    """Find the final normalization layer before the output head.
+
+    Searches only within the base model scope (e.g. ``model.*``) so that
+    norms inside the output head / prediction head (e.g. ``lm_head.norm``)
+    are excluded.
+    """
+    base_prefix = model.base_model_prefix  # e.g. "model"
     final_norm = None
     for name, module in model.named_modules():
         if "Norm" not in type(module).__name__:
+            continue
+        # Only consider norms inside the base model (skip root-level heads like lm_head)
+        if base_prefix and not name.startswith(base_prefix + ".") and name != base_prefix:
             continue
         if any(name.startswith(layer_name + ".") for layer_name in decoder_layer_names):
             continue
@@ -287,8 +303,7 @@ def _parse_manual_plan_entry(
 
     if not isinstance(entry, list):
         raise ValueError(
-            "Manual fsdp_plan values must be a list of strings combining strategy/policies, "
-            f"got {type(entry)}"
+            f"Manual fsdp_plan values must be a list of strings combining strategy/policies, got {type(entry)}"
         )
     items = entry
 
@@ -308,7 +323,7 @@ def _parse_manual_plan_entry(
         elif token == "cpu_offload":
             offload_policy = CPUOffloadPolicy()
         elif token == "mixed_precision":
-            #TODO(3outeille): add support for different dtypes
+            # TODO(3outeille): add support for different dtypes
             mp_policy = MixedPrecisionPolicy(
                 param_dtype=torch.bfloat16,
                 reduce_dtype=torch.float32,
@@ -341,11 +356,15 @@ def _iter_manual_plan_targets(model, pattern, name_to_module, already_sharded_na
 
     # Prefix match: "model.layers" matches "model.layers.0", etc.
     for name, module in model.named_modules():
-        if name in already_sharded_names or isinstance(module, (torch.nn.ModuleList, torch.nn.ModuleDict, torch.nn.Sequential)):
+        if name in already_sharded_names or isinstance(
+            module, (torch.nn.ModuleList, torch.nn.ModuleDict, torch.nn.Sequential)
+        ):
             continue
         if name != pattern and not name.startswith(pattern + "."):
             continue
-        if any(name.startswith(already_sharded_names_name + ".") for already_sharded_names_name in already_sharded_names):
+        if any(
+            name.startswith(already_sharded_names_name + ".") for already_sharded_names_name in already_sharded_names
+        ):
             continue
         yield name, module
 
@@ -367,6 +386,7 @@ def _get_manual_plan_modules(fsdp_plan: dict[str, Any]) -> dict[str, list[str]]:
         raise ValueError("Manual fsdp_plan must define a 'modules' dict.")
     return modules
 
+
 def apply_fsdp2(
     model,
     device_mesh,
@@ -379,7 +399,7 @@ def apply_fsdp2(
 
         Auto mode:
         fsdp_plan = {"mode": "auto"}
-        
+
         Auto mode with optional policies:
         fsdp_plan = {"mode": "auto", "cpu_offload": False, "mixed_precision": True}
 
@@ -413,35 +433,35 @@ def apply_fsdp2(
         and hasattr(output_embed, "weight")
         and input_embed.weight is output_embed.weight
     )
-    
+
     mode = _parse_fsdp_plan_mode(fsdp_plan)
 
     if mode == "auto":
         auto_policy_kwargs = _get_auto_policy_kwargs(fsdp_plan)
-       
+
         block_classes = get_transformer_block_classes(model)
         # Need to collect decoder layer names for norm detection.
         decoder_layer_names = {name for name, module in model.named_modules() if type(module) in block_classes}
 
         if not block_classes:
             logger.warning(
-                "Could not auto-detect transformer block classes for FSDP. "
-                "Applying FSDP only to root module."
+                "Could not auto-detect transformer block classes for FSDP. Applying FSDP only to root module."
             )
         else:
             _shard_auto_input_embedding(input_embed, is_weights_tied, device_mesh, auto_policy_kwargs)
-            
+
             _shard_auto_transformer_blocks(model, block_classes, device_mesh, auto_policy_kwargs)
-            
-            tail_modules = _get_auto_tail_modules(model, decoder_layer_names, input_embed, output_embed, is_weights_tied)
+
+            tail_modules = _get_auto_tail_modules(
+                model, decoder_layer_names, input_embed, output_embed, is_weights_tied
+            )
             _shard_auto_tail_modules(tail_modules, device_mesh, auto_policy_kwargs)
 
         # Shard root model
         fully_shard(model, mesh=device_mesh, **auto_policy_kwargs)
 
         logger.info(
-            f"FSDP2 applied to model: {len(block_classes)} block type(s), "
-            f"{len(decoder_layer_names)} decoder layers"
+            f"FSDP2 applied to model: {len(block_classes)} block type(s), {len(decoder_layer_names)} decoder layers"
         )
 
     else:
@@ -453,7 +473,7 @@ def apply_fsdp2(
         #         "model.layers.0.mlp": ["free_full_weight", "cpu_offload", "mixed_precision"],
         #     },
         # }
-        
+
         name_to_module = dict(model.named_modules())
         already_sharded_names: set[str] = set()
         root_mp_policy = MixedPrecisionPolicy()
@@ -496,7 +516,8 @@ def apply_fsdp2(
 
     return model
 
-#TODO(3outeille): probably remove this function. Will be handled when someone tackle PEFT + FSDP.
+
+# TODO(3outeille): probably remove this function. Will be handled when someone tackle PEFT + FSDP.
 def save_fsdp_model(model, save_directory):
     """Save FSDP2 model weights as HF safetensors via DCP distributed save + consolidation.
 
@@ -551,6 +572,7 @@ def distribute_fsdp_model(model, fsdp_plan, device_mesh):
     model = apply_fsdp2(model, device_mesh, fsdp_plan)
 
     return model
+
 
 # ========================= PEFT compatibility =========================
 # TODO(3outeille): make sure new FSDP works with PEFT

@@ -30,7 +30,7 @@ logger = logging.getLogger("transformers.training_test")
 class TrainingConfigMixin:
     """
     Shared training hyperparameters for training tests.
-    
+
     Both TrainingTesterMixin and TrainingDistributedTesterMixin inherit from this
     to avoid MRO conflicts when a test class inherits from both.
     """

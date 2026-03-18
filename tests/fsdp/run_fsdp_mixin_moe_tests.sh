@@ -37,31 +37,60 @@ TEST_METHODS=(
 )
 
 # MoE models that inherit from CausalLMModelTest
+# Ranked by HuggingFace Hub downloads (30-day, as of 2026-03-10):
+#   1. gpt_oss              7.4M   openai/gpt-oss-20b
+#   2. glm_moe_dsa          4.0M   zai-org/GLM-5-FP8
+#   3. qwen3_moe            2.2M   Qwen/Qwen3-30B-A3B-Instruct-2507
+#   4. glm4_moe_lite        1.7M   zai-org/GLM-4.7-Flash
+#   5. qwen3_5_moe          1.5M   Qwen/Qwen3.5-397B-A17B
+#   6. deepseek_v2          1.3M   deepseek-ai/DeepSeek-V3
+#   7. qwen3_next           1.2M   Qwen/Qwen3-Coder-Next
+#   8. mixtral              764K   mistralai/Mixtral-8x7B-Instruct-v0.1
+#   9. qwen2_moe            103K   Qwen/Qwen1.5-MoE-A2.7B
+#  10. phimoe                89K   microsoft/Phi-3.5-MoE-instruct
+#  11. glm4_moe              73K   zai-org/GLM-4.6
+#  12. minimax_m2            63K   MiniMaxAI/MiniMax-M1-80k
+#  13. lfm2_moe              50K   LiquidAI/LFM2-8B-A1B
+#  14. longcat_flash         32K   meituan-longcat/LongCat-Flash-Chat
+#  15. exaone_moe            26K   LGAI-EXAONE/K-EXAONE-236B-A23B
+#  16. ernie4_5_moe          23K   baidu/ERNIE-4.5-21B-A3B-PT
+#  17. hunyuan_v1_moe        16K   tencent/Hunyuan-A13B-Instruct
+#  18. solar_open           6.4K   upstage/Solar-Open-100B
+#  19. dots1                5.3K   rednote-hilab/dots.llm1.inst
+#  20. dbrx                   —    databricks/dbrx-instruct (gated)
+#  21. afmoe                2.7K   arcee-ai/Trinity-Mini
+#  22. jetmoe               2.6K   jetmoe/jetmoe-8b
+#  23. flex_olmo              —    allenai/FlexOlmo (gated)
+#  24. minimax              1.2K   MiniMaxAI/MiniMax-Text-01
+
+# Entries ordered by download rank. Top 7 are active; rest are commented out.
 TEST_ENTRIES=(
-    "tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest"
-    "tests/models/dbrx/test_modeling_dbrx.py::DbrxModelTest"
-    "tests/models/deepseek_v2/test_modeling_deepseek_v2.py::DeepseekV2ModelTest"
-    "tests/models/dots1/test_modeling_dots1.py::Dots1ModelTest"
-    "tests/models/ernie4_5_moe/test_modeling_ernie4_5_moe.py::Ernie4_5_MoeModelTest"
-    "tests/models/exaone_moe/test_modeling_exaone_moe.py::ExaoneMoeModelTest"
-    "tests/models/flex_olmo/test_modeling_flex_olmo.py::FlexOlmoModelTest"
-    "tests/models/glm4_moe/test_modeling_glm4_moe.py::Glm4MoeModelTest"
-    "tests/models/glm4_moe_lite/test_modeling_glm4_moe_lite.py::Glm4MoeModelTest"
-    "tests/models/glm_moe_dsa/test_modeling_glm_moe_dsa.py::GlmMoeDsaModelTest"
-    "tests/models/gpt_oss/test_modeling_gpt_oss.py::GptOssModelTest"
-    "tests/models/hunyuan_v1_moe/test_modeling_hunyuan_v1_moe.py::HunYuanMoEV1ModelTest"
-    "tests/models/jetmoe/test_modeling_jetmoe.py::JetMoeModelTest"
-    "tests/models/lfm2_moe/test_modeling_lfm2_moe.py::Lfm2MoeModelTest"
-    "tests/models/longcat_flash/test_modeling_longcat_flash.py::LongcatFlashModelTest"
-    "tests/models/minimax/test_modeling_minimax.py::MiniMaxModelTest"
-    "tests/models/minimax_m2/test_modeling_minimax_m2.py::MiniMaxM2ModelTest"
-    "tests/models/mixtral/test_modeling_mixtral.py::MixtralModelTest"
-    "tests/models/phimoe/test_modeling_phimoe.py::PhimoeModelTest"
-    "tests/models/qwen2_moe/test_modeling_qwen2_moe.py::Qwen2MoeModelTest"
-    "tests/models/qwen3_moe/test_modeling_qwen3_moe.py::Qwen3MoeModelTest"
-    "tests/models/qwen3_5_moe/test_modeling_qwen3_5_moe.py::Qwen3_5MoeTextModelTest"
-    "tests/models/qwen3_next/test_modeling_qwen3_next.py::Qwen3NextModelTest"
-    "tests/models/solar_open/test_modeling_solar_open.py::SolarOpenModelTest"
+    # --- Top 7 (active) ---
+    "tests/models/gpt_oss/test_modeling_gpt_oss.py::GptOssModelTest"                                                #  1. gpt_oss              7.4M
+    "tests/models/glm_moe_dsa/test_modeling_glm_moe_dsa.py::GlmMoeDsaModelTest"                                     #  2. glm_moe_dsa          4.0M
+    "tests/models/qwen3_moe/test_modeling_qwen3_moe.py::Qwen3MoeModelTest"                                          #  3. qwen3_moe            2.2M
+    "tests/models/glm4_moe_lite/test_modeling_glm4_moe_lite.py::Glm4MoeModelTest"                                   #  4. glm4_moe_lite        1.7M
+    "tests/models/qwen3_5_moe/test_modeling_qwen3_5_moe.py::Qwen3_5MoeTextModelTest"                                #  5. qwen3_5_moe          1.5M
+    "tests/models/deepseek_v2/test_modeling_deepseek_v2.py::DeepseekV2ModelTest"                                     #  6. deepseek_v2          1.3M
+    "tests/models/qwen3_next/test_modeling_qwen3_next.py::Qwen3NextModelTest"                                        #  7. qwen3_next           1.2M
+    # --- Remaining (commented out, by download rank) ---
+    "tests/models/mixtral/test_modeling_mixtral.py::MixtralModelTest"                                                #  8. mixtral              764K
+    "tests/models/qwen2_moe/test_modeling_qwen2_moe.py::Qwen2MoeModelTest"                                          #  9. qwen2_moe            103K
+    "tests/models/phimoe/test_modeling_phimoe.py::PhimoeModelTest"                                                   # 10. phimoe                89K
+    # "tests/models/glm4_moe/test_modeling_glm4_moe.py::Glm4MoeModelTest"                                           # 11. glm4_moe              73K
+    # "tests/models/minimax_m2/test_modeling_minimax_m2.py::MiniMaxM2ModelTest"                                      # 12. minimax_m2            63K
+    # "tests/models/lfm2_moe/test_modeling_lfm2_moe.py::Lfm2MoeModelTest"                                           # 13. lfm2_moe              50K
+    # "tests/models/longcat_flash/test_modeling_longcat_flash.py::LongcatFlashModelTest"                             # 14. longcat_flash         32K
+    # "tests/models/exaone_moe/test_modeling_exaone_moe.py::ExaoneMoeModelTest"                                      # 15. exaone_moe            26K
+    # "tests/models/ernie4_5_moe/test_modeling_ernie4_5_moe.py::Ernie4_5_MoeModelTest"                              # 16. ernie4_5_moe          23K
+    # "tests/models/hunyuan_v1_moe/test_modeling_hunyuan_v1_moe.py::HunYuanMoEV1ModelTest"                          # 17. hunyuan_v1_moe        16K
+    # "tests/models/solar_open/test_modeling_solar_open.py::SolarOpenModelTest"                                      # 18. solar_open           6.4K
+    # "tests/models/dots1/test_modeling_dots1.py::Dots1ModelTest"                                                    # 19. dots1                5.3K
+    # "tests/models/dbrx/test_modeling_dbrx.py::DbrxModelTest"                                                       # 20. dbrx                   —
+    # "tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest"                                                    # 21. afmoe                2.7K
+    # "tests/models/jetmoe/test_modeling_jetmoe.py::JetMoeModelTest"                                                 # 22. jetmoe               2.6K
+    # "tests/models/flex_olmo/test_modeling_flex_olmo.py::FlexOlmoModelTest"                                         # 23. flex_olmo              —
+    # "tests/models/minimax/test_modeling_minimax.py::MiniMaxModelTest"                                              # 24. minimax              1.2K
 )
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -318,7 +347,9 @@ run_test() {
     local result_file="$RESULTS_DIR/${model_name}.result"
 
     CUDA_VISIBLE_DEVICES=$gpu_list \
-        python -m pytest -v -rs "${test_ids[@]}" \
+        python -m pytest -v -rs -o log_cli=true -o log_cli_level=INFO \
+        --log-disable=httpx --log-disable=httpcore --log-disable=huggingface_hub --log-disable=urllib3 \
+        "${test_ids[@]}" \
         > "$log_file" 2>&1
 
     local exit_code=$?
@@ -367,7 +398,9 @@ if [ -n "$DEBUG_MODE" ]; then
     echo ""
     CUDA_VISIBLE_DEVICES=0,1 \
         python -m debugpy --listen 0.0.0.0:${DEBUGPY_PORT} --wait-for-client \
-        -m pytest -v -rs -s "${test_ids[@]}"
+        -m pytest -v -rs -s -o log_cli=true -o log_cli_level=INFO \
+        --log-disable=httpx --log-disable=httpcore --log-disable=huggingface_hub --log-disable=urllib3 \
+        "${test_ids[@]}"
     exit $?
 fi
 
