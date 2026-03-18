@@ -1640,24 +1640,19 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         input_ids: torch.LongTensor | None = None,
         **model_kwargs,
     ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        if expand_size == 1:
-            return input_ids, model_kwargs
-
-        def _expand_dict_for_generation(dict_to_expand):
-            for key in dict_to_expand:
-                value = dict_to_expand[key]
-                if key == "position_ids" and value is not None and isinstance(value, torch.Tensor) and value.ndim == 3:
-                    value = self._normalize_generation_position_ids(value)
-                    dict_to_expand[key] = value.repeat_interleave(expand_size, dim=1)
-                elif key != "cache_position" and value is not None and isinstance(value, torch.Tensor):
-                    dict_to_expand[key] = value.repeat_interleave(expand_size, dim=0)
-            return dict_to_expand
-
-        if input_ids is not None:
-            input_ids = input_ids.repeat_interleave(expand_size, dim=0)
-
-        model_kwargs = _expand_dict_for_generation(model_kwargs)
-
+        position_ids = self._normalize_generation_position_ids(model_kwargs.pop("position_ids", None))
+        input_ids, model_kwargs = super()._expand_inputs_for_generation(
+            expand_size=expand_size,
+            is_encoder_decoder=is_encoder_decoder,
+            input_ids=input_ids,
+            **model_kwargs,
+        )
+        if position_ids is not None:
+            if position_ids.ndim == 3:
+                position_ids = position_ids.repeat_interleave(expand_size, dim=1)
+            else:
+                position_ids = position_ids.repeat_interleave(expand_size, dim=0)
+            model_kwargs["position_ids"] = position_ids
         return input_ids, model_kwargs
 
     def get_input_embeddings(self) -> nn.Module:
