@@ -1,10 +1,13 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-.PHONY: style check-repo fix-repo test test-examples benchmark
+.PHONY: style check-repo check-model-rules check-model-rules-pr check-model-rules-all fix-repo test test-examples benchmark
 
 check_dirs := examples tests src utils scripts benchmark benchmark_v2
 exclude_folders :=  ""
+
+# Directories to type-check with ty
+ty_check_dirs := src/transformers/_typing.py src/transformers/utils src/transformers/generation src/transformers/quantizers
 
 
 # this runs all linting/formatting scripts, most notably ruff
@@ -13,13 +16,14 @@ style:
 	ruff format $(check_dirs) setup.py conftest.py --exclude $(exclude_folders)
 	python utils/custom_init_isort.py
 	python utils/sort_auto_mappings.py
-
+	python utils/check_types.py $(ty_check_dirs)
 
 # Check that the repo is in a good state (both style and consistency CI checks)
 # Note: each line is run in its own shell, and doing `-` before the command ignores the errors if any, continuing with next command
 check-repo:
 	ruff check $(check_dirs) setup.py conftest.py
 	ruff format --check $(check_dirs) setup.py conftest.py
+	python utils/check_types.py $(ty_check_dirs)
 	-python utils/custom_init_isort.py --check_only
 	-python utils/sort_auto_mappings.py --check_only
 	-python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
@@ -40,9 +44,21 @@ check-repo:
 	-@{ \
 		md5sum src/transformers/dependency_versions_table.py > md5sum.saved; \
 		python setup.py deps_table_update; \
-		md5sum -c --quiet md5sum.saved || (printf "Error: the version dependency table is outdated.\nPlease run 'make fix-repo' and commit the changes.\n" && exit 1); \
+		md5sum -c --quiet md5sum.saved || (printf "Error: the version dependency table is outdated.\nPlease run 'make fix-repo' and commit the changes. This requires Python 3.10.\n" && exit 1); \
 		rm md5sum.saved; \
 	}
+
+
+check-model-rules:
+	python utils/check_modeling_structure.py --changed-only --base-ref origin/main
+
+
+check-model-rules-pr:
+	python utils/check_modeling_structure.py --changed-only --base-ref origin/main --github-annotations
+
+
+check-model-rules-all:
+	python utils/check_modeling_structure.py
 
 
 # Run all repo checks for which there is an automatic fix, most notably modular conversions
@@ -59,13 +75,13 @@ fix-repo: style
 	-python utils/add_dates.py
 
 
-# Run tests for the library
+# Run tests for the library, requires pytest-random-order
 test:
-	python -m pytest -n auto --dist=loadfile -s -v ./tests/
+	python -m pytest -p random_order -n auto --dist=loadfile -s -v --random-order-bucket=module ./tests/
 
-# Run tests for examples
+# Run tests for examples, requires pytest-random-order
 test-examples:
-	python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/
+	python -m pytest -p random_order -n auto --dist=loadfile -s -v --random-order-bucket=module ./examples/pytorch/
 
 # Run benchmark
 benchmark:

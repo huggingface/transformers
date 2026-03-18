@@ -17,12 +17,11 @@
 from collections.abc import Callable
 
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from transformers.utils.generic import check_model_inputs
-
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -31,10 +30,9 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    logging,
-)
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaForCausalLM,
@@ -56,74 +54,21 @@ _CHECKPOINT_FOR_DOC = "LGAI-EXAONE/EXAONE-4.0-32B"
 _CONFIG_FOR_DOC = "Exaone4Config"
 
 
+@auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.0-32B")
+@strict(accept_kwargs=True)
 class Exaone4Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Exaone4Model`]. It is used to
-    instantiate a EXAONE 4.0 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the EXAONE-4.0-32B [LGAI-EXAONE/EXAONE-4.0-32B](https://huggingface.co/LGAI-EXAONE/EXAONE-4.0-32B)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 102400):
-            Vocabulary size of the EXAONE 4.0 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Exaone4Model`].
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to `hidden_size * 4`):
-            Dimensionality of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
-            `num_attention_heads`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 32768 for EXAONE 3.5).
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if ``config.is_decoder=True``.
-        bos_token_id (`int`, *optional*, defaults to 0):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            End of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        sliding_window (`int`, *optional*):
-            The size of the sliding window for the sliding window attention.
-        sliding_window_pattern (`str`, *optional*):
-            The pattern to use for sliding window attention. Can be one of:
-                - `None`: No sliding window attention is used
-                - `int`: Every `sliding_window` layers, use global attention, else use local attention.
-                - `str`: A sequence of "L" (local attention) and "G" (global attention) characters that defines the
-                  attention pattern. The pattern starts from layer 0 and repeats every `sliding_window` layers. The
-                  final layer always uses global attention regardless of the pattern.
-            For instance, sliding_window_pattern="LLLG" same as sliding_window=4, which means:
-                - Layer 0, 1, 2: local attention,
-                - Layer 3: global attention,
-                ...(repeated)
-        layer_types (`list`, *optional*):
-            Attention pattern for each layer. Prioritized over `sliding_window_pattern`.
+    sliding_window_pattern (`str`, *optional*):
+        The pattern to use for sliding window attention. Can be one of:
+            - `None`: No sliding window attention is used
+            - `int`: Every `sliding_window` layers, use global attention, else use local attention.
+            - `str`: A sequence of "L" (local attention) and "G" (global attention) characters that defines the
+              attention pattern. The pattern starts from layer 0 and repeats every `sliding_window` layers. The
+              final layer always uses global attention regardless of the pattern.
+        For instance, sliding_window_pattern="LLLG" same as sliding_window=4, which means:
+            - Layer 0, 1, 2: local attention,
+            - Layer 3: global attention,
+            ...(repeated)
 
     Example:
 
@@ -147,6 +92,8 @@ class Exaone4Config(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
@@ -158,63 +105,39 @@ class Exaone4Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 102400,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 16384,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = 32,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 2048,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-5,
-        use_cache: bool | None = True,
-        bos_token_id: int | None = 0,
-        eos_token_id: int | None = 2,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_dropout: float | None = 0.0,
-        sliding_window: int | None = 4096,
-        sliding_window_pattern: int | None = 4,
-        layer_types: list[str] | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_dropout = attention_dropout
-        self.sliding_window = sliding_window
-        self.sliding_window_pattern = sliding_window_pattern
+    vocab_size: int = 102400
+    hidden_size: int = 4096
+    intermediate_size: int = 16384
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    num_key_value_heads: int = 32
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 2048
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 2
+    pad_token_id: int | None = None
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_dropout: float | int = 0.0
+    sliding_window: int | None = 4096
+    sliding_window_pattern: str | int | None = 4
+    layer_types: list[str] | None = None
 
-        self.layer_types = layer_types
+    def __post_init__(self, **kwargs):
         if self.sliding_window is None:
-            sliding_window_pattern = 0
+            self.sliding_window_pattern = 0
         if self.layer_types is None:
             self.layer_types = [
                 "sliding_attention"
-                if ((i + 1) % (sliding_window_pattern) != 0 and i < self.num_hidden_layers)
+                if ((i + 1) % (self.sliding_window_pattern) != 0 and i < self.num_hidden_layers)
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        if "sliding_window" in self.layer_types:
-            self.cache_implementation = "hybrid"
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        self.rope_parameters = rope_parameters
-
-        super().__init__(
-            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
-        )
+        super().__post_init__(**kwargs)
 
 
 class Exaone4RMSNorm(LlamaRMSNorm):
@@ -257,7 +180,6 @@ class Exaone4Attention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
@@ -277,14 +199,11 @@ class Exaone4Attention(nn.Module):
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            cache_kwargs = {
-                "cache_position": cache_position,
-            }
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -327,7 +246,8 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -336,7 +256,6 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -348,23 +267,18 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
@@ -386,7 +300,6 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -409,7 +322,6 @@ class Exaone4ForCausalLM(LlamaForCausalLM):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
@@ -452,7 +364,6 @@ class Exaone4ForCausalLM(LlamaForCausalLM):
             inputs_embeds=inputs_embeds,
             labels=labels,
             use_cache=use_cache,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )

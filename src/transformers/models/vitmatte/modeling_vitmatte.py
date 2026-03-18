@@ -19,9 +19,9 @@ import torch
 from torch import nn
 
 from ... import initialization as init
+from ...backbone_utils import load_backbone
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring
-from ...utils.backbone_utils import load_backbone
 from .configuration_vitmatte import VitMatteConfig
 
 
@@ -109,7 +109,7 @@ class VitMatteConvStream(nn.Module):
         if config.backbone_config is not None:
             in_channels = config.backbone_config.num_channels
 
-        out_channels = config.convstream_hidden_sizes
+        out_channels = list(config.convstream_hidden_sizes)
 
         self.convs = nn.ModuleList()
         self.conv_chans = [in_channels] + out_channels
@@ -270,7 +270,7 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
         >>> print(alphas.shape)
         torch.Size([1, 1, 640, 960])
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

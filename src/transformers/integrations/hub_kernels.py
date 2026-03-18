@@ -15,6 +15,7 @@ import importlib.metadata
 import os
 import re
 from collections.abc import Callable
+from contextlib import contextmanager
 from types import ModuleType
 
 from packaging import version as pkg_version
@@ -152,13 +153,25 @@ try:
                     layer_name="MegaBlocksMoeMLP",
                 )
             },
+            "xpu": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/megablocks",
+                    layer_name="MegaBlocksMoeMLP",
+                )
+            },
+            "cpu": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/megablocks",
+                    layer_name="CPUMegaBlocksMoeMLP",
+                )
+            },
         },
         "FastGELU": {
             "cuda": {
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                     repo_id="kernels-community/activation",
                     layer_name="FastGELU",
-                    version=">=0.0.4,<0.1.0",
+                    version=1,
                 )
             }
         },
@@ -167,7 +180,7 @@ try:
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                     repo_id="kernels-community/activation",
                     layer_name="QuickGELU",
-                    version=">=0.0.4,<0.1.0",
+                    version=1,
                 )
             }
         },
@@ -176,28 +189,28 @@ try:
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                     repo_id="kernels-community/activation",
                     layer_name="NewGELU",
-                    version=">=0.0.4,<0.1.0",
+                    version=1,
                 )
             }
         },
         "SiLU": {
             "cuda": {
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation", layer_name="Silu", version=">=0.1.0"
+                    repo_id="kernels-community/activation", layer_name="Silu", version=1
                 )
             }
         },
         "GeLU": {
             "cuda": {
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation", layer_name="Gelu", version=">=0.1.0"
+                    repo_id="kernels-community/activation", layer_name="Gelu", version=1
                 )
             }
         },
         "GeluTanh": {
             "cuda": {
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation", layer_name="GeluTanh", version=">=0.1.0"
+                    repo_id="kernels-community/activation", layer_name="GeluTanh", version=1
                 )
             }
         },
@@ -210,7 +223,12 @@ try:
                 Mode.INFERENCE: FuncRepository(
                     repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
                 )
-            }
+            },
+            "cuda": {
+                Mode.INFERENCE: FuncRepository(
+                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+                )
+            },
         }
 
     def has_key(d, key):
@@ -263,9 +281,9 @@ except ImportError:
 
 
 _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
-    "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d"},
-    "mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "revision": "v0.0.4"},
-    "falcon_mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "revision": "v0.0.4"},
+    "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d", "version": 1},
+    "mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
+    "falcon_mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
@@ -280,7 +298,7 @@ def is_kernel(attn_implementation: str | None) -> bool:
 
 
 def load_and_register_attn_kernel(
-    attn_implementation: str, attention_wrapper: Callable | None = None
+    attn_implementation: str, attention_wrapper: Callable | None = None, allow_all_kernels: bool = False
 ) -> ModuleType | None:
     """
     Load and register the kernel associated to `attn_implementation`.
@@ -291,6 +309,9 @@ def load_and_register_attn_kernel(
             have a wrapper around the `flash_attn_var_len` call, and the same goes for `sdpa` and `eager`.
             They just prepare the arguments properly. This is mostly used for continious batching, where we
             want the `paged` wrapper, which calls the paged cache.
+        allow_all_kernels (`bool`, optional):
+            Whether to load kernels from unverified hub repos, if it is a custom kernel outside of the `kernels-community`
+            hub repository.
     """
     from ..masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
     from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -319,7 +340,7 @@ def load_and_register_attn_kernel(
 
     # Load the kernel from hub
     try:
-        kernel = get_kernel(repo_id, revision=rev)
+        kernel = get_kernel(repo_id, revision=rev, allow_all_kernels=allow_all_kernels)
     except Exception as e:
         raise ValueError(f"An error occurred while trying to load from '{repo_id}': {e}.")
     # correctly wrap the kernel
@@ -384,18 +405,33 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     return mapping[kernel_name]
 
 
-def get_kernel(kernel_name: str, revision: str | None = None, version: str | None = None) -> ModuleType:
+def get_kernel(
+    kernel_name: str,
+    revision: str | None = None,
+    version: int | str | None = None,
+    allow_all_kernels: bool = False,
+) -> ModuleType:
     from .. import __version__
 
+    if not _kernels_available:
+        raise ImportError(
+            "`kernels` is either not installed or uses an incompatible version. Please install the latest version "
+            "with `pip install -U kernels`."
+        )
+
+    repo_parent = kernel_name.split("/")[0]
+    # all `kernels-community` repos are trusted by default!
+    if repo_parent != "kernels-community" and not allow_all_kernels:
+        raise ValueError(
+            "You need to specify `allow_all_kernels=True` to use kernels outside of the `kernels-community` repository"
+        )
+
     user_agent = {"framework": "transformers", "version": __version__, "repo_id": kernel_name}
-    if _kernels_available:
-        kernels_version = importlib.metadata.version("kernels")
-        if pkg_version.parse(kernels_version) >= pkg_version.parse("0.10.4"):
-            return get_kernel_hub(kernel_name, revision=revision, version=version, user_agent=user_agent)
-        else:
-            return get_kernel_hub(kernel_name, revision=revision)
+    kernels_version = importlib.metadata.version("kernels")
+    if pkg_version.parse(kernels_version) >= pkg_version.parse("0.10.4"):
+        return get_kernel_hub(kernel_name, revision=revision, version=version, user_agent=user_agent)
     else:
-        raise ImportError("kernels is not installed, please install it with `pip install kernels`")
+        return get_kernel_hub(kernel_name, revision=revision, version=version)
 
 
 def use_kernelized_func(module_names: list[Callable] | Callable):
@@ -422,6 +458,27 @@ def use_kernelized_func(module_names: list[Callable] | Callable):
         return cls
 
     return decorator
+
+
+# Whether to allow hub kernels coming from untrusted repos, i.e. repos outside `kernels-community`
+ALLOW_ALL_KERNELS = False
+
+
+@contextmanager
+def allow_all_hub_kernels():
+    """
+    Context manager used to adjust the value of the global `ALLOW_HUB_KERNELS`. This is needed, as this argument
+    cannot be forwarded directly to the `__init__` of the models, where we set the attention implementation.
+    """
+    global ALLOW_ALL_KERNELS
+
+    try:
+        ALLOW_ALL_KERNELS = True
+
+        yield
+    finally:
+        # Set back the original
+        ALLOW_ALL_KERNELS = False
 
 
 __all__ = [

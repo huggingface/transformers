@@ -31,7 +31,6 @@ from .auto_docstring import (
     parse_docstring,
     set_min_indent,
 )
-from .backbone_utils import BackboneConfigMixin, BackboneMixin
 from .chat_template_utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 from .constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from .doc import (
@@ -118,7 +117,6 @@ from .import_utils import (
     is_av_available,
     is_bitsandbytes_available,
     is_bs4_available,
-    is_ccl_available,
     is_coloredlogs_available,
     is_compressed_tensors_available,
     is_cuda_platform,
@@ -134,12 +132,12 @@ from .import_utils import (
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_flash_attn_4_available,
     is_flash_attn_greater_or_equal,
-    is_flash_attn_greater_or_equal_2_10,
     is_flute_available,
+    is_fouroversix_available,
     is_fp_quant_available,
     is_fsdp_available,
-    is_ftfy_available,
     is_g2p_en_available,
     is_galore_torch_available,
     is_gguf_available,
@@ -151,7 +149,6 @@ from .import_utils import (
     is_hqq_available,
     is_huggingface_hub_greater_or_equal,
     is_in_notebook,
-    is_ipex_available,
     is_jinja_available,
     is_jmespath_available,
     is_jumanpp_available,
@@ -200,6 +197,7 @@ from .import_utils import (
     is_scipy_available,
     is_sentencepiece_available,
     is_seqio_available,
+    is_sinq_available,
     is_sklearn_available,
     is_soundfile_available,
     is_spacy_available,
@@ -224,6 +222,7 @@ from .import_utils import (
     is_torch_mlu_available,
     is_torch_mps_available,
     is_torch_musa_available,
+    is_torch_neuron_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_optimi_available,
@@ -248,6 +247,7 @@ from .import_utils import (
     is_xlstm_available,
     is_yt_dlp_available,
     requires_backends,
+    torch_compilable_check,
     torch_only_method,
 )
 from .kernel_config import KernelConfig

@@ -13,14 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
 from ..idefics3.image_processing_idefics3_fast import Idefics3ImageProcessorFast
@@ -36,42 +39,10 @@ from ..idefics3.modeling_idefics3 import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="HuggingFaceTB/SmolVLM2-2.2B-Instruct")
+@strict(accept_kwargs=True)
 class SmolVLMVisionConfig(Idefics3VisionConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SmolVLMVisionModel`]. It is used to instantiate a
-    SmolVLM vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the SigLIP checkpoint
-    [google/siglip-so400m-patch14-384](https://huggingface.co/google/siglip-so400m-patch14-384) used in SmolVLM
-    [HuggingFaceTB/SmolVLM2-2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1152):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels in the input images.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 32):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
     Example:
 
     ```python
@@ -99,32 +70,12 @@ class SmolVLMVisionTransformer(Idefics3VisionTransformer):
     pass
 
 
+@auto_docstring(checkpoint="HuggingFaceTB/SmolVLM2-2.2B-Instruct")
+@strict(accept_kwargs=True)
 class SmolVLMConfig(Idefics3Config):
     r"""
-    This is the configuration class to store the configuration of a [`SmolVLMModel`]. It is used to instantiate a
-    SmolVLM model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the model of the SmolVLM
-    [HuggingFaceTB/SmolVLM2-2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should cache the key/value pairs of the attention mechanism. Only
-            relevant if `config.is_decoder=True`.
-        image_token_id (`int`, *optional*, defaults to 128257):
-            The id of the "image" token.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether or not to tie the word embeddings with the token embeddings.
-        vision_config (`IdeficsVisionConfig` or `dict`, *optional*, defaults to `IdeficsVisionConfig`):
-            Custom vision config or dict for the vision tower
-        text_config (`PreTrainedConfig` or `dict`, *optional*, defaults to `LlamaConfig`):
-            Custom text config or dict for the text model
-        scale_factor (`int`, *optional*, defaults to 2):
-            The scale factor for the image encoder.
-        pad_token_id (`int`, *optional*, defaults to 128002):
-            The id of the padding token.
+    scale_factor (`int`, *optional*, defaults to 2):
+        The scale factor for the image encoder.
 
     Example:
     ```python
@@ -172,9 +123,10 @@ class SmolVLMModel(Idefics3Model):
             image_mask = input_ids == self.config.image_token_id
 
         num_image_tokens = image_mask.sum(dim=1)
-        if not torch.all(num_image_tokens % patch_size == 0):
-            raise ValueError("At least one sample has <image> tokens not divisible by patch_size.")
-
+        torch_compilable_check(
+            torch.all(num_image_tokens % patch_size == 0),
+            "At least one sample has <image> tokens not divisible by patch_size.",
+        )
         blocks_per_sample = num_image_tokens // patch_size
 
         offsets = torch.nn.functional.pad(blocks_per_sample.cumsum(dim=0), (1, 0), value=0)
@@ -190,17 +142,21 @@ class SmolVLMModel(Idefics3Model):
         merged_embeds = torch.where(image_mask.unsqueeze(-1), image_embeds, inputs_embeds)
         return merged_embeds
 
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Encodes images into continuous embeddings that can be forwarded to the language model."
+    )
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, pixel_attention_mask: torch.LongTensor | None = None
-    ):
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            pixel_attention_mask (`torch.LongTensor`, *optional*):
-                The attention mask indicating padded regions in the image.
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_attention_mask: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        pixel_attention_mask (`torch.LongTensor`, *optional*):
+            The attention mask indicating padded regions in the image.
         """
         batch_size, num_images, num_channels, height, width = pixel_values.shape
         pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
@@ -210,9 +166,8 @@ class SmolVLMModel(Idefics3Model):
         nb_values_per_image = pixel_values.shape[1:].numel()
         real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
 
-        if not any(real_images_inds):
-            # no images, leave one empty image.
-            real_images_inds[0] = True
+        # If no images, leave one empty image.
+        real_images_inds[0] |= ~torch.any(real_images_inds)
 
         pixel_values = pixel_values[real_images_inds].contiguous()
         # Handle the vision attention mask
@@ -232,12 +187,16 @@ class SmolVLMModel(Idefics3Model):
         patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
 
         # Get sequence from the vision encoder
-        image_hidden_states = self.vision_model(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
-        image_hidden_states = image_hidden_states.last_hidden_state
+        image_outputs = self.vision_model(
+            pixel_values=pixel_values, patch_attention_mask=patch_attention_mask, return_dict=True, **kwargs
+        )
+        image_hidden_states = image_outputs.last_hidden_state
 
         # Modality projection & resampling
-        image_hidden_states = self.connector(image_hidden_states)
-        return image_hidden_states
+        image_features = self.connector(image_hidden_states)
+        image_outputs.pooler_output = image_features
+
+        return image_outputs
 
     @can_return_tuple
     @auto_docstring(
@@ -251,6 +210,7 @@ class SmolVLMModel(Idefics3Model):
         image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
         """
     )
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -262,26 +222,14 @@ class SmolVLMModel(Idefics3Model):
         pixel_attention_mask: torch.BoolTensor | None = None,
         image_hidden_states: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | SmolVLMBaseModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if self.training and self.text_model.gradient_checkpointing and use_cache:
             logger.warning_once(
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
             )
             use_cache = False
 
-        # retrieve input_ids and inputs_embeds
         if input_ids is not None:
             batch_size, seq_length = input_ids.shape
         elif inputs_embeds is not None:
@@ -295,18 +243,18 @@ class SmolVLMModel(Idefics3Model):
         if inputs_embeds is None:
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(input_ids.device)
 
-        # START VISUAL INPUTS INTEGRATION
         if pixel_values is not None and image_hidden_states is not None:
             raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
 
         if pixel_values is not None:
-            image_hidden_states = self.get_image_features(pixel_values, pixel_attention_mask).to(inputs_embeds.device)
+            image_hidden_states = self.get_image_features(
+                pixel_values, pixel_attention_mask, return_dict=True
+            ).pooler_output
+            image_hidden_states = image_hidden_states.to(inputs_embeds.device)
         elif image_hidden_states is not None:
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=inputs_embeds.device)
 
         if image_hidden_states is not None:
-            # When we generate, we don't want to replace the potential image_token_id that we generated by images
-            # that simply don't exist
             inputs_embeds = self.inputs_merger(
                 input_ids=input_ids,
                 inputs_embeds=inputs_embeds,
@@ -319,10 +267,6 @@ class SmolVLMModel(Idefics3Model):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -359,7 +303,8 @@ class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
         Example:
 
         ```python
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
         >>> from PIL import Image
         >>> from io import BytesIO

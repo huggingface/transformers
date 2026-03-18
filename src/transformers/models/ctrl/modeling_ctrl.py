@@ -201,10 +201,6 @@ class CTRLModel(CTRLPreTrainedModel):
         self.d_model_size = config.n_embd
         self.num_layers = config.n_layer
 
-        self.register_buffer(
-            "pos_encoding", positional_encoding(config.n_positions, self.d_model_size, torch.float), persistent=False
-        )
-
         self.w = nn.Embedding(config.vocab_size, config.n_embd)
 
         self.dropout = nn.Dropout(config.embd_pdrop)
@@ -215,6 +211,10 @@ class CTRLModel(CTRLPreTrainedModel):
             ]
         )
         self.layernorm = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
+
+        self.register_buffer(
+            "pos_encoding", positional_encoding(config.n_positions, self.d_model_size, torch.float), persistent=False
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -266,7 +266,7 @@ class CTRLModel(CTRLPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -435,7 +435,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
         >>> list(outputs.logits.shape)
         [1, 5, 246534]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -480,30 +480,18 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, use_cache=None, is_first_iteration=False, **kwargs
     ):
-        # Overwritten -- inputs_embeds not working properly
+        # Overwritten -- `token_type_ids` are created in custom way inside model`
 
-        # only last tokens for inputs_ids if past is defined in kwargs
-        if past_key_values is not None:
-            past_length = past_key_values.get_seq_length()
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-
-        model_inputs = {"input_ids": input_ids, "past_key_values": past_key_values, "use_cache": use_cache}
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
 
         # token_type_ids are computed on CTRLModel.forward()
-        kwargs.pop("token_type_ids", None)
-        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
-        for key, value in kwargs.items():
-            if key not in model_inputs:
-                print(f"Warning: {key} is not a recognized input.")
-                model_inputs[key] = value
+        model_inputs.pop("token_type_ids", None)
 
         return model_inputs
 
@@ -622,7 +610,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> loss.backward()  # doctest: +IGNORE_RESULT
         ```"""
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,

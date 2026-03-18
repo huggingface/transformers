@@ -13,69 +13,36 @@
 # limitations under the License.
 """MarkupLM model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring
 
 
-logger = logging.get_logger(__name__)
-
-
+@auto_docstring(checkpoint="microsoft/markuplm-base")
+@strict(accept_kwargs=True)
 class MarkupLMConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MarkupLMModel`]. It is used to instantiate a
-    MarkupLM model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the MarkupLM
-    [microsoft/markuplm-base](https://huggingface.co/microsoft/markuplm-base) architecture.
-
-    Configuration objects inherit from [`BertConfig`] and can be used to control the model outputs. Read the
-    documentation from [`BertConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the MarkupLM model. Defines the different tokens that can be represented by the
-            *inputs_ids* passed to the forward method of [`MarkupLMModel`].
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-        max_position_embeddings (`int`, *optional*, defaults to 512):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed into [`MarkupLMModel`].
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        max_tree_id_unit_embeddings (`int`, *optional*, defaults to 1024):
-            The maximum value that the tree id unit embedding might ever use. Typically set this to something large
-            just in case (e.g., 1024).
-        max_xpath_tag_unit_embeddings (`int`, *optional*, defaults to 256):
-            The maximum value that the xpath tag unit embedding might ever use. Typically set this to something large
-            just in case (e.g., 256).
-        max_xpath_subs_unit_embeddings (`int`, *optional*, defaults to 1024):
-            The maximum value that the xpath subscript unit embedding might ever use. Typically set this to something
-            large just in case (e.g., 1024).
-        tag_pad_id (`int`, *optional*, defaults to 216):
-            The id of the padding token in the xpath tags.
-        subs_pad_id (`int`, *optional*, defaults to 1001):
-            The id of the padding token in the xpath subscripts.
-        xpath_tag_unit_hidden_size (`int`, *optional*, defaults to 32):
-            The hidden size of each tree id unit. One complete tree index will have
-            (50*xpath_tag_unit_hidden_size)-dim.
-        max_depth (`int`, *optional*, defaults to 50):
-            The maximum depth in xpath.
+    max_tree_id_unit_embeddings (`int`, *optional*, defaults to 1024):
+        The maximum value that the tree id unit embedding might ever use. Typically set this to something large
+        just in case (e.g., 1024).
+    max_xpath_tag_unit_embeddings (`int`, *optional*, defaults to 256):
+        The maximum value that the xpath tag unit embedding might ever use. Typically set this to something large
+        just in case (e.g., 256).
+    max_xpath_subs_unit_embeddings (`int`, *optional*, defaults to 1024):
+        The maximum value that the xpath subscript unit embedding might ever use. Typically set this to something
+        large just in case (e.g., 1024).
+    tag_pad_id (`int`, *optional*, defaults to 216):
+        The id of the padding token in the xpath tags.
+    subs_pad_id (`int`, *optional*, defaults to 1001):
+        The id of the padding token in the xpath subscripts.
+    xpath_tag_unit_hidden_size (`int`, *optional*, defaults to 32):
+        The hidden size of each tree id unit. One complete tree index will have
+        (50*xpath_tag_unit_hidden_size)-dim.
+    max_depth (`int`, *optional*, defaults to 50):
+        The maximum depth in xpath.
+    xpath_unit_hidden_size (`int`, *optional*, defaults to 32):
+        The hidden size of each unit in xpath.
 
     Examples:
 
@@ -94,60 +61,29 @@ class MarkupLMConfig(PreTrainedConfig):
 
     model_type = "markuplm"
 
-    def __init__(
-        self,
-        vocab_size=30522,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=2,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        pad_token_id=0,
-        bos_token_id=0,
-        eos_token_id=2,
-        max_xpath_tag_unit_embeddings=256,
-        max_xpath_subs_unit_embeddings=1024,
-        tag_pad_id=216,
-        subs_pad_id=1001,
-        xpath_unit_hidden_size=32,
-        max_depth=50,
-        use_cache=True,
-        classifier_dropout=None,
-        **kwargs,
-    ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
-        self.intermediate_size = intermediate_size
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        self.classifier_dropout = classifier_dropout
-        # additional properties
-        self.max_depth = max_depth
-        self.max_xpath_tag_unit_embeddings = max_xpath_tag_unit_embeddings
-        self.max_xpath_subs_unit_embeddings = max_xpath_subs_unit_embeddings
-        self.tag_pad_id = tag_pad_id
-        self.subs_pad_id = subs_pad_id
-        self.xpath_unit_hidden_size = xpath_unit_hidden_size
+    vocab_size: int = 30522
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.1
+    attention_probs_dropout_prob: float = 0.1
+    max_position_embeddings: int = 512
+    type_vocab_size: int = 2
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 0
+    eos_token_id: int | None = 2
+    max_xpath_tag_unit_embeddings: int = 256
+    max_xpath_subs_unit_embeddings: int = 1024
+    tag_pad_id: int = 216
+    subs_pad_id: int = 1001
+    xpath_unit_hidden_size: int = 32
+    max_depth: int = 50
+    use_cache: bool = True
+    classifier_dropout: float | int | None = None
 
 
 __all__ = ["MarkupLMConfig"]

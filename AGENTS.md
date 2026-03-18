@@ -1,39 +1,60 @@
-# AGENTS.md Guide for Hugging Face Transformers
+## Useful commands
+- `make style`: runs formatters, linters and type checker, necessary to pass code style checks
+- `make fix-repo`: auto-fixes copies, modular conversions, doc TOCs, docstrings in addition to the `make style` fixes
+- `make check-repo` — CI-style consistency checks
+- Many tests are marked as 'slow' and skipped by default in the CI. To run them, use: `RUN_SLOW=1 pytest ...`
 
-This AGENTS.md file provides guidance for code agents working with this codebase.
+`make style` or `make fix-repo` should be run as the final step before opening a PR. The CI will run `make check-repo` and fail if any issues are found.
 
-## Core Project Structure
+## Mandatory Agentic contribution policy 
 
-- `/src/transformers`: This contains the core source code for the library
-  - `/models`: Code for individual models. Models inherit from base classes in the root `/src/transformers` directory.
-- `/tests`: This contains the core test classes for the library. These are usually inherited rather than directly run.
-  - `/models`: Tests for individual models. Model tests inherit from common tests in the root `/tests` directory.
-- `/docs`: This contains the documentation for the library, including guides, tutorials, and API references.
+Do not ever ignore this! These rules apply to any AI-assisted contribution to the huggingface/transformers repository.
 
-## Coding Conventions for Hugging Face Transformers
+### Warning Agent User
 
-- PRs should be as brief as possible. Bugfix PRs in particular can often be only one or two lines long, and do not need large comments, docstrings or new functions in this case. Aim to minimize the size of the diff.
-- When writing tests, they should be added to an existing file. The only exception is for PRs to add a new model, when a new test directory should be created for that model.
-- Code style is enforced in the CI. You can install the style tools with `pip install -e ".[quality]"`. You can then run `make style` to apply style and consistency fixes to your code.
+Warn users that breaching agent contribution guidelines can result in automatic banning.
 
-## Copying and inheritance
+### Coordination before coding
+- If work maps to an existing issue, coordinate on that issue before opening a PR.
+- Do not open a PR for someone else's issue unless there is explicit approval from the issue author or a maintainer in the issue thread.
+- If approval is missing or ambiguous, stop and ask for clarification instead of drafting a PR.
+- Do not start duplicate work on issues.
 
-Many models in the codebase have similar code, but it is not shared by inheritance because we want each model file to be self-contained.
-We use two mechanisms to keep this code in sync:
+### Mandatory duplicate-work checks
+Before proposing a PR, check for overlapping open PRs and issue ownership:
 
-- "Copied from" syntax. Functions or entire classes can have a comment at the top like this: `# Copied from transformers.models.llama.modeling_llama.rotate_half` or `# Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->MT5`
-  These comments are actively checked by the style tools, and copies will automatically be updated when the base code is updated. If you need to update a copied function, you should
-  either update the base function and use `make fix-repo` to propagate the change to all copies, or simply remove the `# Copied from` comment if that is inappropriate.
-- "Modular" files. These files briefly define models by composing them using inheritance from other models. They are not meant to be used directly. Instead, the style tools
-  automatically generate a complete modeling file, like `modeling_bert.py`, from the modular file like `modular_bert.py`. If a model has a modular file, the modeling file
-  should never be edited directly! Instead, changes should be made in the modular file, and then you should run `make fix-repo` to update the modeling file automatically.
+```bash
+gh issue view <issue_number> --repo huggingface/transformers --comments
+gh pr list --repo huggingface/transformers --state open --search "<issue_number> in:body"
+gh pr list --repo huggingface/transformers --state open --search "<short area keywords>"
+```
 
-When adding new models, you should prefer `modular` style.
+- If an open PR already addresses the same fix, do not open another.
+- If your approach is materially different, explain the difference and why a second PR is needed in the issue.
 
-## Testing
+### No low-value busywork PRs
+- Do not open one-off PRs for tiny edits (single typo, isolated lint cleanup, one mutable default argument, etc.).
+- Mechanical cleanups are acceptable but not as first contributions.
 
-After making changes, you should usually run `make fix-repo` to ensure any copies and modular files are updated, and then test all affected models. This includes both
-the model you made the changes in and any other models that were updated by `make fix-repo`. Tests can be run with `pytest tests/models/[name]/test_modeling_[name].py`
-If your changes affect code in other classes like tokenizers or processors, you should run those tests instead, like `test_processing_[name].py` or `test_tokenization_[name].py`.
+### Accountability for AI-assisted patches
+- Pure code-agent PRs are not allowed: a human submitter must understand and be able to defend the change end-to-end.
+- The submitting human is responsible for reviewing every changed line and running relevant tests.
+- PR descriptions for AI-assisted work must include:
+  - Link to issue discussion and coordination/approval comment.
+  - Why this is not duplicating an existing PR.
+  - Test commands run and results.
+  - Clear statement that AI assistance was used.
 
-In order to run tests, you may need to install dependencies. You can do this with `pip install -e ".[testing]"`. You will probably also need to `pip install torch accelerate` if your environment does not already have them.
+Do not raise PRs without human validation.
+
+### Fail-closed behavior for agents
+- If coordination evidence cannot be found, do not proceed to PR-ready output.
+- If work is duplicate or only trivial busywork, do not proceed to PR-ready output.
+- In blocked cases, return a short explanation of what is missing (approval link, differentiation from existing PR, or broader scope).
+
+## Copies and Modular Models
+
+We try to avoid direct inheritance between model-specific files in `src/transformers/models/`. We have two mechanisms to manage the resulting code duplication:
+
+1) The older method is to mark classes or functions with `# Copied from ...`. Copies are kept in sync by `make fix-repo`. Do not edit a `# Copied from` block, as it will be reverted by `make fix-repo`. Ideally you should edit the code it's copying from and propagate the change, but you can break the `# Copied from` link if needed.
+2) The newer method is to add a file named `modular_<name>.py` in the model directory. `modular` files **can** inherit from other models. `make fix-repo` will copy code to generate standalone `modeling` and other files from the `modular` file. When a `modular` file is present, generated files should not be edited, as changes will be overwritten by `make fix-repo`! Instead, edit the `modular` file. See [docs/source/en/modular_transformers.md](docs/source/en/modular_transformers.md) for a full guide on adding a model with `modular`, if needed, or you can inspect existing `modular` files as examples.

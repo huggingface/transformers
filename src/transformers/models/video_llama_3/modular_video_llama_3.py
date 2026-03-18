@@ -19,6 +19,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch.nn import LayerNorm
 
 from ... import initialization as init
@@ -37,7 +38,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -47,7 +48,8 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ...video_utils import (
     VideoInput,
     group_videos_by_shape,
@@ -88,125 +90,40 @@ from ..siglip.modeling_siglip import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="lkhl/VideoLLaMA3-2B-Image-HF")
+@strict(accept_kwargs=True)
 class VideoLlama3VisionConfig(SiglipVisionConfig):
-    """
-    This is the configuration class to store the configuration of a [`VideoLlama3VisionModel`]. It is used to instantiate a
-    VideoLLaMA3 vision encoder model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of
-    VideoLLaMA3-2B [lkhl/VideoLLaMA3-2B-Image-HF](https://huggingface.co/lkhl/VideoLLaMA3-2B-Image-HF).
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels in the input images.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-    """
-
     model_type = "video_llama_3_vision"
     base_config_key = "vision_config"
-
-    def __init__(
-        self,
-        hidden_size=768,
-        intermediate_size=3072,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        num_channels=3,
-        patch_size=16,
-        hidden_act="gelu_pytorch_tanh",
-        layer_norm_eps=1e-6,
-        attention_dropout=0.0,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_channels=num_channels,
-            patch_size=patch_size,
-            hidden_act=hidden_act,
-            layer_norm_eps=layer_norm_eps,
-            attention_dropout=attention_dropout,
-            **kwargs,
-        )
-
-        self.initializer_range = initializer_range
-        del self.image_size
+    image_size = AttributeError()
+    initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="lkhl/VideoLLaMA3-2B-Image-HF")
+@strict(accept_kwargs=True)
 class VideoLlama3Config(PreTrainedConfig):
-    """
-    This is the configuration class to store the configuration of a [`VideoLlama3Model`]. It is used to instantiate a
-    VideoLLaMA3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of
-    VideoLLaMA3-2B [lkhl/VideoLLaMA3-2B-Image-HF](https://huggingface.co/lkhl/VideoLLaMA3-2B-Image-HF).
-
-    Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Qwen2Config`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `VideoLlama3VisionConfig`):
-            The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to 151655):
-            The image token index to encode the image prompt.
-        video_token_id (`int`, *optional*, defaults to 151656):
-            The video token index to encode the image prompt.
-    """
-
     model_type = "video_llama_3"
     sub_configs = {"vision_config": VideoLlama3VisionConfig, "text_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        image_token_id=151655,
-        video_token_id=151656,
-        **kwargs,
-    ):
-        if isinstance(vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif isinstance(vision_config, PreTrainedConfig):
-            self.vision_config = vision_config
-        elif vision_config is None:
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 151655
+    video_token_id: int = 151656
+    tie_word_embeddings: bool = False
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+        elif self.vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
-        else:
-            raise ValueError(
-                f"vision_config must be of type `dict` or `PreTrainedConfig`, but got {type(vision_config)}."
-            )
 
-        if isinstance(text_config, dict):
-            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif isinstance(text_config, PreTrainedConfig):
-            self.text_config = text_config
-        elif text_config is None:
+        if isinstance(self.text_config, dict):
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen2"]()
-        else:
-            raise ValueError(f"text_config must be of type `dict` or `PreTrainedConfig`, but got {type(text_config)}.")
 
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 class VideoLlama3VisionRotaryEmbedding(VisionRotaryEmbedding):
@@ -308,11 +225,11 @@ class VideoLlama3VisionAttention(SiglipAttention):
         key_states = key_states.transpose(0, 1).unsqueeze(0)
         value_states = value_states.transpose(0, 1).unsqueeze(0)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             # Flash Attention 2: Use cu_seqlens for variable length attention
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             attn_output, attn_weights = attention_interface(
@@ -487,7 +404,8 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
 
         return torch.cat(outputs, dim=0)
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -576,7 +494,6 @@ class VideoLlama3ModelOutputWithPast(ModelOutput):
 
 
 class VideoLlama3Model(Qwen2VLModel):
-    _checkpoint_conversion_mapping = {}
     _can_compile_fullgraph = False
 
     def __init__(self, config: VideoLlama3Config):
@@ -590,54 +507,68 @@ class VideoLlama3Model(Qwen2VLModel):
     def get_rope_index(self):
         raise AttributeError("Not needed for VideoLLaMA3")
 
+    def get_vision_position_ids(self):
+        raise AttributeError("Not needed for VideoLLaMA3")
+
+    def compute_3d_position_ids(self):
+        raise AttributeError("Not needed for VideoLLaMA3")
+
+    @can_return_tuple
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
         video_merge_sizes: torch.LongTensor,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
+            The spatial downsampling ratio of each video feature.
         """
-        Encodes videos into continuous embeddings that can be forwarded to the language model.
+        return self.get_image_features(
+            pixel_values=pixel_values_videos,
+            image_grid_thw=video_grid_thw,
+            image_merge_sizes=video_merge_sizes,
+            **kwargs,
+        )
 
-        Args:
-            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input videos.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
-            video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
-                The spatial downsampling ratio of each video feature.
-        """
-        return self.get_image_features(pixel_values_videos, video_grid_thw, video_merge_sizes)
-
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
         image_merge_sizes: torch.LongTensor,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
+            The spatial downsampling ratio of each image feature.
         """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-            image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
-                The spatial downsampling ratio of each image feature.
-        """
-        image_embeds = self.vision_model(
+        vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             grid_thw=image_grid_thw,
             merge_sizes=image_merge_sizes,
             return_dict=True,
-        ).last_hidden_state
-        image_embeds = self.projector(image_embeds)
+            **kwargs,
+        )
+        last_hidden_state = vision_outputs.last_hidden_state
+        image_embeds = self.projector(last_hidden_state)
 
         split_sizes = image_grid_thw.prod(dim=1) // (image_merge_sizes**2)
         image_embeds = torch.split(image_embeds, split_sizes.tolist())
+        vision_outputs.pooler_output = image_embeds
 
-        return image_embeds
+        return vision_outputs
 
     @can_return_tuple
     def forward(
@@ -655,7 +586,6 @@ class VideoLlama3Model(Qwen2VLModel):
         video_grid_thw: torch.LongTensor | None = None,
         video_merge_sizes: torch.LongTensor | None = None,
         video_compression_mask: torch.BoolTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VideoLlama3ModelOutputWithPast:
         r"""
@@ -676,7 +606,9 @@ class VideoLlama3Model(Qwen2VLModel):
 
         image_embeds = None
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw, image_merge_sizes)
+            image_embeds = self.get_image_features(
+                pixel_values, image_grid_thw, image_merge_sizes, return_dict=True
+            ).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -685,7 +617,9 @@ class VideoLlama3Model(Qwen2VLModel):
 
         video_embeds = None
         if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, video_merge_sizes)
+            video_embeds = self.get_video_features(
+                pixel_values_videos, video_grid_thw, video_merge_sizes, return_dict=True
+            ).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             if video_compression_mask is not None:
                 video_embeds = video_embeds[video_compression_mask.to(video_embeds.device)]
@@ -701,7 +635,6 @@ class VideoLlama3Model(Qwen2VLModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -751,7 +684,6 @@ class VideoLlama3CausalLMOutputWithPast(ModelOutput):
 
 
 class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
-    _checkpoint_conversion_mapping = {}
     _can_compile_fullgraph = False
 
     def __init__(self, config: VideoLlama3Config):
@@ -775,7 +707,6 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
         video_grid_thw: torch.LongTensor | None = None,
         video_merge_sizes: torch.LongTensor | None = None,
         video_compression_mask: torch.BoolTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VideoLlama3CausalLMOutputWithPast:
         r"""
@@ -810,7 +741,6 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -839,7 +769,6 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         position_ids=None,
         use_cache=True,
         pixel_values: torch.Tensor | None = None,
@@ -859,7 +788,6 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             position_ids=position_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
@@ -878,6 +806,9 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
             model_inputs["pixel_values_videos"] = None
 
         return model_inputs
+
+    def _prepare_position_ids_for_generation(self):
+        raise AttributeError("Not needed for VideoLLaMA3")
 
     def _get_image_nums_and_video_nums(
         self,
@@ -1178,9 +1109,13 @@ class VideoLlama3Processor(Qwen2VLProcessor):
             array_ids = np.array(text_inputs["input_ids"])
             mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
             mm_token_type_ids[array_ids == self.image_token_id] = 1
+            mm_token_type_ids[array_ids == self.video_token_id] = 2
             text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
+
+    def model_input_names(self):
+        raise AttributeError("VideoLlama doesn't need to override it")
 
 
 class VideoLlama3ImageProcessorKwargs(Qwen2VLImageProcessorKwargs):
@@ -1473,9 +1408,6 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
     valid_kwargs = VideoLlama3VideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw", "video_merge_sizes", "video_compression_mask"]
 
-    def _further_process_kwargs(self):
-        raise AttributeError("VideoLlama3 never supported min/max pixels, no need to copy from Qwen")
-
     def _get_compression_mask(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -1532,8 +1464,6 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
-        min_pixels: int | None = None,
-        max_pixels: int | None = None,
         patch_size: int | None = None,
         temporal_patch_size: int | None = None,
         merge_size: int | None = None,
@@ -1553,8 +1483,8 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
                     height,
                     width,
                     factor=patch_size * merge_size,
-                    min_pixels=min_pixels,
-                    max_pixels=max_pixels // shape[0],
+                    min_pixels=size["shortest_edge"],
+                    max_pixels=size["longest_edge"] // shape[0],
                 )
                 stacked_videos = self.resize(
                     image=stacked_videos,
@@ -1613,7 +1543,9 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
         processed_grids = reorder_videos(processed_grids, grouped_videos_index)
         pixel_values_videos = torch.cat(processed_videos, dim=0)
         video_grid_thw = torch.tensor(processed_grids)
-        video_merge_sizes = torch.tensor([merge_size] * video_grid_thw.size(0)).to(video_grid_thw)
+        video_merge_sizes = torch.full(
+            (video_grid_thw.size(0),), merge_size, dtype=video_grid_thw.dtype, device=video_grid_thw.device
+        )
 
         if use_token_compression:
             video_compression_mask = self._get_compression_mask(

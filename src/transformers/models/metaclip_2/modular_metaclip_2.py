@@ -1,4 +1,20 @@
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
@@ -6,7 +22,6 @@ from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs
 from ..clip.configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 from ..clip.modeling_clip import (
     CLIPMLP,
@@ -31,52 +46,10 @@ _CHECKPOINT_FOR_DOC = "facebook/metaclip-2-worldwide-huge-quickgelu"
 _CONFIG_FOR_DOC = "MetaClip2Config"
 
 
+@auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
+@strict(accept_kwargs=True)
 class MetaClip2TextConfig(CLIPTextConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MetaClip2TextModel`]. It is used to instantiate
-    a MetaClip2 text encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the MetaClip2
-    [facebook/metaclip-2-worldwide-huge-quickgelu](https://huggingface.co/facebook/metaclip-2-worldwide-huge-quickgelu) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 49408):
-            Vocabulary size of the MetaClip2 text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`MetaClip2TextModel`].
-        hidden_size (`int`, *optional*, defaults to 512):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of text and vision projection layers.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        max_position_embeddings (`int`, *optional*, defaults to 77):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-        pad_token_id (`int`, *optional*, defaults to 1):
-            Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 49406):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 49407):
-            End of stream token id.
-
     Example:
 
     ```python
@@ -93,46 +66,10 @@ class MetaClip2TextConfig(CLIPTextConfig):
     ```"""
 
 
+@auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
+@strict(accept_kwargs=True)
 class MetaClip2VisionConfig(CLIPVisionConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MetaClip2VisionModel`]. It is used to instantiate a MetaClip2
-    vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the vision encoder of the MetaClip2
-    [facebook/metaclip-2-worldwide-huge-quickgelu](https://huggingface.co/facebook/metaclip-2-worldwide-huge-quickgelu) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of text and vision projection layers.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 32):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-
     Example:
 
     ```python
@@ -149,28 +86,10 @@ class MetaClip2VisionConfig(CLIPVisionConfig):
     ```"""
 
 
+@auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
+@strict(accept_kwargs=True)
 class MetaClip2Config(CLIPConfig):
     r"""
-    [`MetaClip2Config`] is the configuration class to store the configuration of a [`MetaClip2Model`]. It is used to
-    instantiate a MetaClip2 model according to the specified arguments, defining the text model and vision model configs.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the MetaClip2
-    [facebook/metaclip-2-worldwide-huge-quickgelu](https://huggingface.co/facebook/metaclip-2-worldwide-huge-quickgelu) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`MetaClip2TextConfig`].
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`MetaClip2VisionConfig`].
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of text and vision projection layers.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The initial value of the *logit_scale* parameter. Default is used as per the original MetaClip2 implementation.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
-
     Example:
 
     ```python
@@ -274,10 +193,11 @@ class MetaClip2PreTrainedModel(CLIPPreTrainedModel):
             init.ones_(module.weight)
         if isinstance(module, nn.Linear) and module.bias is not None:
             init.zeros_(module.bias)
+        if hasattr(module, "logit_scale"):
+            init.constant_(module.logit_scale, self.config.logit_scale_init_value)
 
 
 class MetaClip2TextTransformer(CLIPTextTransformer):
-    @auto_docstring
     def forward(
         self,
         input_ids,
@@ -292,9 +212,8 @@ class MetaClip2TextTransformer(CLIPTextTransformer):
 
         attention_mask = create_causal_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            cache_position=torch.arange(hidden_states.shape[1], device=hidden_states.device),
             past_key_values=None,
         )
 
@@ -354,8 +273,6 @@ class MetaClip2TextModel(CLIPTextModel):
     >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
     ```"""
 
-    @check_model_inputs(tie_last_hidden_states=False)
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -417,8 +334,6 @@ class MetaClip2TextModelWithProjection(CLIPTextModelWithProjection):
     >>> text_embeds = outputs.text_embeds
     ```"""
 
-    @check_model_inputs(tie_last_hidden_states=False)
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -467,14 +382,16 @@ class MetaClip2Model(CLIPModel):
 
     ```python
     >>> from PIL import Image
-    >>> import requests
+    >>> import httpx
+        >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2Model
 
     >>> model = MetaClip2Model.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
     >>> processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
     >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    >>> image = Image.open(requests.get(url, stream=True).raw)
+    >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
     >>> inputs = processor(
     ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
@@ -508,8 +425,6 @@ class MetaClip2Model(CLIPModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -528,14 +443,16 @@ class MetaClip2Model(CLIPModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2Model
 
         >>> model = MetaClip2Model.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
         >>> processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(
         ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
@@ -555,17 +472,16 @@ class MetaClip2Model(CLIPModel):
             **kwargs,
         )
 
+    @can_return_tuple
+    @auto_docstring
     def get_text_features(
         self,
-        input_ids: torch.Tensor | None = None,
+        input_ids: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`MetaClip2TextModel`].
-
         Examples:
 
         ```python
@@ -581,30 +497,33 @@ class MetaClip2Model(CLIPModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            return_dict=True,
+            **kwargs,
         )
 
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool = False,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`MetaClip2VisionModel`].
-
         Examples:
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2Model
 
         >>> model = MetaClip2Model.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
         >>> processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -613,6 +532,8 @@ class MetaClip2Model(CLIPModel):
         return super().get_image_features(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
+            **kwargs,
         )
 
 
@@ -637,14 +558,16 @@ class MetaClip2VisionModel(CLIPVisionModel):
 
     ```python
     >>> from PIL import Image
-    >>> import requests
+    >>> import httpx
+    >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2VisionModel
 
     >>> model = MetaClip2VisionModel.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
     >>> processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
     >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    >>> image = Image.open(requests.get(url, stream=True).raw)
+    >>> with httpx.stream("GET", url) as response:
+    ...     image = Image.open(BytesIO(response.read()))
 
     >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -653,8 +576,6 @@ class MetaClip2VisionModel(CLIPVisionModel):
     >>> pooled_output = outputs.pooler_output  # pooled CLS states
     ```"""
 
-    @check_model_inputs(tie_last_hidden_states=False)
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -666,14 +587,16 @@ class MetaClip2VisionModel(CLIPVisionModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2VisionModel
 
         >>> model = MetaClip2VisionModel.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
         >>> processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -709,14 +632,16 @@ class MetaClip2VisionModelWithProjection(CLIPVisionModelWithProjection):
 
     ```python
     >>> from PIL import Image
-    >>> import requests
+    >>> import httpx
+    >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2VisionModelWithProjection
 
     >>> model = MetaClip2VisionModelWithProjection.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
     >>> processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
     >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    >>> image = Image.open(requests.get(url, stream=True).raw)
+    >>> with httpx.stream("GET", url) as response:
+    ...     image = Image.open(BytesIO(response.read()))
 
     >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -724,8 +649,6 @@ class MetaClip2VisionModelWithProjection(CLIPVisionModelWithProjection):
     >>> image_embeds = outputs.image_embeds
     ```"""
 
-    @check_model_inputs(tie_last_hidden_states=False)
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -737,14 +660,16 @@ class MetaClip2VisionModelWithProjection(CLIPVisionModelWithProjection):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2VisionModelWithProjection
 
         >>> model = MetaClip2VisionModelWithProjection.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
         >>> processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, return_tensors="pt")
 

@@ -94,7 +94,6 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     )
 
     test_resize_embeddings = False
-
     has_attentions = False
 
     def setUp(self):

@@ -11,21 +11,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
 
 import inspect
 import os
-import textwrap
+from collections.abc import Mapping
+from functools import lru_cache
 from pathlib import Path
 from types import UnionType
 from typing import Union, get_args, get_origin
 
 import regex as re
+import typing_extensions
 
 from .doc import (
     MODELS_TO_PIPELINE,
     PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS,
     PT_SAMPLE_DOCSTRINGS,
-    _prepare_output_docstrings,
 )
 from .generic import ModelOutput
 
@@ -50,6 +52,7 @@ PLACEHOLDER_TO_AUTO_MODULE = {
     "feature_extractor_class": ("feature_extraction_auto", "FEATURE_EXTRACTOR_MAPPING_NAMES"),
     "processor_class": ("processing_auto", "PROCESSOR_MAPPING_NAMES"),
     "config_class": ("configuration_auto", "CONFIG_MAPPING_NAMES"),
+    "model_class": ("modeling_auto", "MODEL_MAPPING_NAMES"),
 }
 
 UNROLL_KWARGS_METHODS = {
@@ -58,9 +61,13 @@ UNROLL_KWARGS_METHODS = {
 }
 
 UNROLL_KWARGS_CLASSES = {
-    "ImageProcessorFast",
+    "BaseImageProcessor",
     "ProcessorMixin",
 }
+BASIC_KWARGS_TYPES = ["TextKwargs", "ImagesKwargs", "VideosKwargs", "AudioKwargs"]
+
+# Short indicator added to unrolled kwargs to distinguish them from regular args
+KWARGS_INDICATOR = ", *kwargs*"
 
 HARDCODED_CONFIG_FOR_MODELS = {
     "openai": "OpenAIGPTConfig",
@@ -75,6 +82,23 @@ HARDCODED_CONFIG_FOR_MODELS = {
 }
 
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
+
+# Pre-compiled patterns used repeatedly at runtime.  Compiling once here avoids
+# repeated compilation overhead (and cache lookups) on every decorator call.
+_re_example_or_return = re.compile(r"(?m)^([ \t]*)(?=Example|Return)")
+_re_return = re.compile(r"(?m)^([ \t]*)(?=Return)")
+_re_example = re.compile(r"(?m)^([ \t]*)(?=Example)")
+_re_args_section = re.compile(r"(?:Args:)(\n.*)?(\n)?$", re.DOTALL)
+_re_shape = re.compile(r"(of shape\s*(?:`.*?`|\(.*?\)))")
+_re_default = re.compile(r"(defaults to \s*[^)]*)")
+_re_param = re.compile(
+    r"^\s{0,0}(\w+)\s*\(\s*([^, \)]*)(\s*.*?)\s*\)\s*:\s*((?:(?!\n^\s{0,0}\w+\s*\().)*)",
+    re.DOTALL | re.MULTILINE,
+)
+_re_forward_ref = re.compile(r"ForwardRef\('([\w.]+)'\)")
+_re_optional = re.compile(r"Optional\[(.*?)\]")
+_re_placeholders = re.compile(r"{(.*?)}")
+_re_model_task = None  # built lazily because PT_SAMPLE_DOCSTRINGS isn't available yet
 
 
 class ImageProcessorArgs:
@@ -206,7 +230,7 @@ class ImageProcessorArgs:
 
     return_tensors = {
         "description": """
-    Returns stacked tensors if set to `pt, otherwise returns a list of tensors.
+    Returns stacked tensors if set to `'pt'`, otherwise returns a list of tensors.
     """,
         "shape": None,
     }
@@ -249,6 +273,15 @@ class ImageProcessorArgs:
         "description": """
     The number of image tokens to be used for each image in the input.
     Added for backward compatibility but this should be set as a processor attribute in future models.
+    """,
+        "shape": None,
+    }
+
+    # Used for the **kwargs summary line when unrolling typed kwargs (key: "__kwargs__")
+    __kwargs__ = {
+        "description": """
+    Additional image preprocessing options. Model-specific kwargs are listed above; see the TypedDict class
+    for the complete list of supported arguments.
     """,
         "shape": None,
     }
@@ -517,6 +550,1289 @@ class ProcessorArgs:
         "type": "list[int] or list[list[int]]",
     }
 
+    # Used for the **kwargs summary line when unrolling typed kwargs (key: "__kwargs__")
+    __kwargs__ = {
+        "description": """
+    Additional processing options for each modality (text, images, videos, audio). Model-specific parameters
+    are listed above; see the TypedDict class for the complete list of supported arguments.
+    """,
+        "shape": None,
+    }
+
+
+class ConfigArgs:
+    output_hidden_states = {
+        "description": """
+    Whether or not the model should return all hidden-states.
+    """,
+    }
+
+    chunk_size_feed_forward = {
+        "description": """
+    The `dtype` of the weights. This attribute can be used to initialize the model to a non-default `dtype`
+    (which is normally `float32`) and thus allow for optimal storage allocation. For example, if the saved
+    model is `float16`, ideally we want to load it back using the minimal amount of memory needed to load
+    `float16` weights.
+    """,
+    }
+
+    dtype = {
+        "description": """
+    The chunk size of all feed forward layers in the residual attention blocks. A chunk size of `0` means that
+    the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes `n` <
+    sequence_length embeddings at a time. For more information on feed forward chunking, see [How does Feed
+    Forward Chunking work?](../glossary.html#feed-forward-chunking).
+    """,
+    }
+
+    id2label = {
+        "description": """
+    A map from index (for instance prediction index, or target index) to label.
+    """,
+    }
+
+    label2id = {
+        "description": """
+    A map from label to index for the model.
+    """,
+    }
+
+    problem_type = {
+        "description": """
+    Problem type for `XxxForSequenceClassification` models. Can be one of `"regression"`,
+            `"single_label_classification"` or `"multi_label_classification"`.
+    """,
+    }
+
+    tokenizer_class = {
+        "description": """
+    The class name of model's tokenizer.
+    """,
+    }
+
+    vocab_size = {
+        "description": """
+    Vocabulary size of the model. Defines the number of different tokens that can be represented by the `input_ids`.
+    """,
+    }
+
+    hidden_size = {
+        "description": """
+    Dimension of the hidden representations.
+    """,
+    }
+
+    intermediate_size = {
+        "description": """
+    Dimension of the MLP representations.
+    """,
+    }
+
+    head_dim = {
+        "description": """
+    The attention head dimension. If None, it will default to hidden_size // num_attention_heads
+    """
+    }
+
+    num_hidden_layers = {
+        "description": """
+    Number of hidden layers in the Transformer decoder.
+    """,
+    }
+
+    num_attention_heads = {
+        "description": """
+    Number of attention heads for each attention layer in the Transformer decoder.
+    """,
+    }
+
+    num_key_value_heads = {
+        "description": """
+    This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+    `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+    `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+    converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+    by meanpooling all the original heads within that group. For more details, check out [this
+    paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
+    `num_attention_heads`.
+    """,
+    }
+    hidden_act = {
+        "description": """
+    The non-linear activation function (function or string) in the decoder. For example, `"gelu"`,
+    `"relu"`, `"silu"`, etc.
+    """,
+    }
+
+    max_position_embeddings = {
+        "description": """
+    The maximum sequence length that this model might ever be used with.
+    """,
+    }
+
+    initializer_range = {
+        "description": """
+    The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+    """,
+    }
+
+    rms_norm_eps = {
+        "description": """
+    The epsilon used by the rms normalization layers.
+    """,
+    }
+
+    use_cache = {
+        "description": """
+    Whether or not the model should return the last key/values attentions (not used by all models). Only
+    relevant if `config.is_decoder=True` or when the model is a decoder-only generative model.
+    """,
+    }
+
+    rope_parameters = {
+        "description": """
+    Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+    a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+    with longer `max_position_embeddings`.
+    """,
+    }
+
+    attention_bias = {
+        "description": """
+    Whether to use a bias in the query, key, value and output projection layers during self-attention.
+    """,
+    }
+
+    mlp_bias = {
+        "description": """
+    Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
+    """,
+    }
+
+    attention_dropout = {
+        "description": """
+    The dropout ratio for the attention probabilities.
+    """,
+    }
+
+    pretraining_tp = {
+        "description": """
+    Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
+    document](https://huggingface.co/docs/transformers/main/perf_train_gpu_many#tensor-parallelism) to
+    understand more about it. This value is necessary to ensure exact reproducibility of the pretraining
+    results. Please refer to [this issue](https://github.com/pytorch/pytorch/issues/76232).
+    """,
+    }
+
+    pad_token_id = {
+        "description": """
+    Token id used for padding in the vocabulary.
+    """,
+    }
+
+    eos_token_id = {
+        "description": """
+    Token id used for end-of-stream in the vocabulary.
+    """,
+    }
+
+    bos_token_id = {
+        "description": """
+    Token id used for beginning-of-stream in the vocabulary.
+    """,
+    }
+
+    sep_token_id = {
+        "description": """
+    Token id used for separator in the vocabulary.
+    """,
+    }
+
+    cls_token_id = {
+        "description": """
+    Token id used for CLS in the vocabulary.
+    """,
+    }
+
+    tie_word_embeddings = {
+        "description": """
+    Whether to tie weight embeddings according to model's `tied_weights_keys` mapping.
+    """,
+    }
+
+    d_model = {
+        "description": """
+    Size of the encoder layers and the pooler layer.
+    """,
+    }
+
+    d_kv = {
+        "description": """
+    Size of the key, query, value projections per attention head. The `inner_dim` of the projection layer will
+    be defined as `num_heads * d_kv`.
+    """,
+    }
+
+    num_decoder_layers = {
+        "description": """
+    Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
+    """,
+    }
+
+    num_encoder_layers = {
+        "description": """
+    Number of hidden layers in the Transformer encoder. Will use the same value as `num_layers` if not set.
+    """,
+    }
+
+    dropout_rate = {
+        "description": """
+    The ratio for all dropout layers.
+    """,
+    }
+
+    classifier_dropout = {
+        "description": """
+    The dropout ratio for classifier.
+    """,
+    }
+
+    layer_norm_eps = {
+        "description": """
+    The epsilon used by the layer normalization layers.
+    """,
+    }
+
+    initializer_factor = {
+        "description": """
+    A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
+    testing).
+    """,
+    }
+
+    encoder_attention_heads = {
+        "description": """
+    Number of attention heads for each attention layer in the Transformer encoder.
+    """,
+    }
+
+    decoder_attention_heads = {
+        "description": """
+    Number of attention heads for each attention layer in the Transformer decoder.
+    """,
+    }
+
+    decoder_ffn_dim = {
+        "description": """
+    Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+    """,
+    }
+
+    encoder_ffn_dim = {
+        "description": """
+    Dimensionality of the "intermediate" (often named feed-forward) layer in encoder.
+    """,
+    }
+
+    activation_dropout = {
+        "description": """
+    The dropout ratio for activations inside the fully connected layer.
+    """,
+    }
+
+    encoder_layerdrop = {
+        "description": """
+    The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
+    for more details.
+    """,
+    }
+
+    decoder_layerdrop = {
+        "description": """
+    The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
+    for more details.
+    """,
+    }
+
+    scale_embedding = {
+        "description": """
+    Whether to scale embeddings by dividing by sqrt(d_model).
+    """,
+    }
+
+    forced_eos_token_id = {
+        "description": """
+    The id of the token to force as the last generated token when `max_length` is reached. Usually set to
+    `eos_token_id`.
+    """,
+    }
+
+    moe_intermediate_size = {
+        "description": """
+    Intermediate size of the routed expert MLPs.
+    """,
+    }
+
+    num_experts = {
+        "description": """
+    Number of routed experts in MoE layers.
+
+    """,
+    }
+
+    num_experts_per_tok = {
+        "description": """
+    Number of experts to route each token to. This is the top-k value for the token-choice routing.
+    """,
+    }
+
+    num_shared_experts = {
+        "description": """
+    Number of shared experts that are always activated for all tokens.
+    """,
+    }
+
+    layer_types = {
+        "description": """
+    A list that explicitly maps each layer index with its layer type. If not provided, it will be automatically
+    generated based on config values.
+    """,
+    }
+
+    norm_topk_prob = {
+        "description": """
+    Whether to normalize the weights of the routed experts.
+
+    """,
+    }
+
+    topk_group = {
+        "description": """
+    Number of selected groups for each token (for each token, ensuring the selected experts is only within `topk_group` groups).
+    """,
+    }
+
+    qk_rope_head_dim = {
+        "description": """
+    Dimension of the query/key heads that use rotary position embeddings.
+    """,
+    }
+
+    v_head_dim = {
+        "description": """
+    Dimension of the value heads.
+    """,
+    }
+
+    qk_nope_head_dim = {
+        "description": """
+    Dimension of the query/key heads that don't use rotary position embeddings.
+    """,
+    }
+
+    kv_lora_rank = {
+        "description": """
+    Rank of the LoRA matrices for key and value projections.
+    """,
+    }
+
+    q_lora_rank = {
+        "description": """
+    Rank of the LoRA matrices for query projections.
+    """,
+    }
+
+    routed_scaling_factor = {
+        "description": """
+    Scaling factor or routed experts.
+    """,
+    }
+
+    n_routed_experts = {
+        "description": """
+    Number of routed experts.
+    """,
+    }
+
+    n_shared_experts = {
+        "description": """
+    Number of shared experts.
+    """,
+    }
+
+    vision_config = {
+        "description": """
+    The config object or dictionary of the vision backbone.
+    """,
+    }
+
+    text_config = {
+        "description": """
+    The config object or dictionary of the text backbone.
+    """,
+    }
+
+    projector_hidden_act = {
+        "description": """
+    The activation function used by the multimodal projector.
+    """,
+    }
+
+    vision_feature_select_strategy = {
+        "description": """
+    The feature selection strategy used to select the vision feature from the vision backbone.
+    """,
+    }
+
+    vision_feature_layer = {
+        "description": """
+    The index of the layer to select the vision feature. If multiple indices are provided,
+    the vision feature of the corresponding indices will be concatenated to form the
+    vision features.
+    """,
+    }
+
+    multimodal_projector_bias = {
+        "description": """
+    Whether to use bias in the multimodal projector.
+    """,
+    }
+
+    image_token_id = {
+        "description": """
+    The image token index used as a placeholder for input images.
+    """,
+    }
+
+    video_token_id = {
+        "description": """
+    The video token index used as a placeholder for input videos.
+    """,
+    }
+
+    audio_token_id = {
+        "description": """
+    The audio token index used as a placeholder for input audio.
+    """,
+    }
+
+    image_seq_length = {
+        "description": """
+    Sequence length of one image embedding.
+    """,
+    }
+
+    video_seq_length = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    add_cross_attention = {
+        "description": """
+    Whether cross-attention layers should be added to the model.
+    """,
+    }
+
+    is_decoder = {
+        "description": """
+    Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
+    """,
+    }
+
+    sliding_window = {
+        "description": """
+    Sliding window attention window size. If `None`, no sliding window is applied.
+    """,
+    }
+
+    use_sliding_window = {
+        "description": """
+    Whether to use sliding window attention.
+    """,
+    }
+
+    shared_expert_intermediate_size = {
+        "description": """
+    Intermediate size of the shared expert MLPs.
+    """,
+    }
+
+    decoder_sparse_step = {
+        "description": """
+    The frequency of adding a sparse MoE layer. The default is 1, which means all decoder layers are sparse MoE.
+    """,
+    }
+
+    output_router_logits = {
+        "description": """
+    Whether or not the router logits should be returned by the model. Enabling this will also allow the model
+    to output the auxiliary loss, including load balancing loss and router z-loss.
+    """,
+    }
+
+    router_aux_loss_coef = {
+        "description": """
+    Auxiliary load balancing loss coefficient. Used to penalize uneven expert routing in MoE models.
+    """,
+    }
+
+    out_indices = {
+        "description": """
+    Indices of the intermediate hidden states (feature maps) to return from the backbone. Each index
+    corresponds to one stage of the model.
+    """,
+    }
+
+    out_features = {
+        "description": """
+    Names of the intermediate hidden states (feature maps) to return from the backbone. One of `"stem"`,
+    `"stage1"`, `"stage2"`, etc.
+    """,
+    }
+
+    image_size = {
+        "description": """
+    The size (resolution) of each image.
+    """,
+    }
+
+    patch_size = {
+        "description": """
+    The size (resolution) of each patch.
+    """,
+    }
+
+    num_channels = {
+        "description": """
+    The number of input channels.
+    """,
+    }
+
+    num_mel_bins = {
+        "description": """
+    Number of mel features used per input frame. Should correspond to the value used in the
+    `AutoFeatureExtractor` class.
+    """,
+    }
+
+    sampling_rate = {
+        "description": """
+    The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
+    """,
+    }
+
+    hidden_dropout = {
+        "description": """
+    The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+    """,
+    }
+
+    mlp_ratio = {
+        "description": """
+    Ratio of the MLP hidden dim to the embedding dim.
+    """,
+    }
+
+    qkv_bias = {
+        "description": """
+    Whether to add a bias to the queries, keys and values.
+    """,
+    }
+
+    n_embd = {
+        "description": """
+    Dimensionality of the embeddings and hidden states.
+    """,
+    }
+
+    resid_pdrop = {
+        "description": """
+    The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+    """,
+    }
+
+    embd_pdrop = {
+        "description": """
+    The dropout ratio for the embeddings.
+    """,
+    }
+
+    clip_qkv = {
+        "description": """
+    If not `None`, cap the absolute value of the query, key, and value tensors to this value.
+    """,
+    }
+
+    type_vocab_size = {
+        "description": """
+    The vocabulary size of the `token_type_ids`.
+    """,
+    }
+
+    audio_config = {
+        "description": """
+    The config object or dictionary of the audio backbone.
+    """,
+    }
+
+    layerdrop = {
+        "description": """
+    The LayerDrop probability. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556) for
+    more details.
+    """,
+    }
+
+    expert_capacity = {
+        "description": """
+    The number of tokens that each expert can process. If `None`, `expert_capacity` will be set to
+    `(sequence_length / num_experts) * capacity_factor`.
+    """,
+    }
+
+    decoder_start_token_id = {
+        "description": """
+    If an encoder-decoder model starts decoding with a different token than `bos`, the id of that token.
+    """,
+    }
+
+    is_encoder_decoder = {
+        "description": """
+    Whether the model is used as an encoder/decoder or not.
+    """,
+    }
+
+    num_codebooks = {
+        "description": """
+    The number of parallel codebooks used by the model.
+    """,
+    }
+
+    codebook_dim = {
+        "description": """
+    Dimensionality of each codebook embedding vector.
+    """,
+    }
+
+    hidden_sizes = {
+        "description": """
+    Dimensionality (hidden size) at each stage of the model.
+    """,
+    }
+
+    depths = {
+        "description": """
+    Depth of each layer in the Transformer.
+    """,
+    }
+
+    patch_sizes = {
+        "description": """
+    Patch size at each stage of the model.
+    """,
+    }
+
+    strides = {
+        "description": """
+    Stride at each stage of the model.
+    """,
+    }
+
+    router_jitter_noise = {
+        "description": """
+    Amount of noise to add to the router logits during training for better load balancing.
+    """,
+    }
+
+    num_local_experts = {
+        "description": """
+    Number of local experts on each device. `num_experts` should be divisible by `num_local_experts`.
+    """,
+    }
+
+    qk_layernorm = {
+        "description": """
+    Whether to use query-key normalization in the attention.
+    """,
+    }
+
+    backbone_config = {
+        "description": """
+    The configuration of the backbone model.
+    """,
+    }
+
+    no_object_weight = {
+        "description": """
+    Relative classification weight of the no-object class in the object detection loss.
+    """,
+    }
+
+    class_weight = {
+        "description": """
+    Relative weight of the classification error in the Hungarian matching cost.
+    """,
+    }
+
+    mask_weight = {
+        "description": """
+    Relative weight of the focal loss in the panoptic segmentation loss.
+    """,
+    }
+
+    dice_weight = {
+        "description": """
+    Relative weight of the dice loss in the panoptic segmentation loss.
+    """,
+    }
+
+    class_cost = {
+        "description": """
+    Relative weight of the classification error in the Hungarian matching cost.
+    """,
+    }
+
+    bbox_cost = {
+        "description": """
+    Relative weight of the L1 bounding box error in the Hungarian matching cost.
+    """,
+    }
+
+    giou_cost = {
+        "description": """
+    Relative weight of the generalized IoU loss in the Hungarian matching cost.
+    """,
+    }
+
+    focal_alpha = {
+        "description": """
+    Alpha parameter in the focal loss.
+    """,
+    }
+
+    mask_loss_coefficient = {
+        "description": """
+    Relative weight of the focal loss in the panoptic segmentation loss.
+    """,
+    }
+
+    giou_loss_coefficient = {
+        "description": """
+    Relative weight of the generalized IoU loss in the panoptic segmentation loss.
+    """,
+    }
+
+    bbox_loss_coefficient = {
+        "description": """
+    Relative weight of the L1 bounding box loss in the panoptic segmentation loss.
+    """,
+    }
+
+    cls_loss_coefficient = {
+        "description": """
+    Relative weight of the classification loss in the panoptic segmentation loss.
+    """,
+    }
+
+    dice_loss_coefficient = {
+        "description": """
+    Relative weight of the dice loss in the panoptic segmentation loss.
+    """,
+    }
+
+    semantic_loss_ignore_index = {
+        "description": """
+    The index that is ignored by the loss function of the semantic segmentation model.
+    """,
+    }
+
+    projection_dim = {
+        "description": """
+    Dimensionality of text and vision projection layers.
+    """,
+    }
+
+    logit_scale_init_value = {
+        "description": """
+    The initial value of the *logit_scale* parameter.
+    """,
+    }
+
+    num_dense_layers = {
+        "description": """
+    Number of initial dense layers before MoE layers begin. Layers with index < num_dense_layers will use
+    standard dense MLPs instead of MoE.
+    """,
+    }
+
+    drop_path_rate = {
+        "description": """
+    Drop path rate for the patch fusion.
+    """,
+    }
+
+    vq_config = {
+        "description": """
+    Configuration dict of the vector quantize module.
+    """,
+    }
+
+    num_embeddings = {
+        "description": """
+    Number of codebook embeddings.
+    """,
+    }
+
+    double_latent = {
+        "description": """
+    Whether to use double z channels.
+    """,
+    }
+
+    latent_channels = {
+        "description": """
+    Number of channels for the latent space.
+    """,
+    }
+
+    qformer_config = {
+        "description": """
+    Configuration dict of the Q-Former module.
+    """,
+    }
+
+    conv_kernel_size = {
+        "description": """
+    The size of the convolutional kernel.
+    """,
+    }
+
+    output_stride = {
+        "description": """
+    The ratio between the spatial resolution of the input and output feature maps.
+    """,
+    }
+
+    depth_multiplier = {
+        "description": """
+    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    """,
+    }
+
+    use_absolute_position_embeddings = {
+        "description": """
+    Whether to use absolute position embeddings.
+    """,
+    }
+
+    use_relative_position_bias = {
+        "description": """
+    Whether to use relative position bias in the self-attention layers.
+    """,
+    }
+
+    layer_scale_init_value = {
+        "description": """
+    Scale to use in the self-attention layers. 0.1 for base, 1e-6 for large. Set 0 to disable layer scale.
+    """,
+    }
+
+    vlm_config = {
+        "description": """
+    The config object or dictionary of the vision-language backbone.
+    """,
+    }
+
+    init_xavier_std = {
+        "description": """
+    The scaling factor used for the Xavier initialization of the cross-attention weights.
+    """,
+    }
+
+    auxiliary_loss = {
+        "description": """
+    Whether auxiliary decoding losses (losses at each decoder layer) are to be used.
+    """,
+    }
+
+    encoder_config = {
+        "description": """
+    The config object or dictionary of the encoder backbone.
+    """,
+    }
+
+    decoder_config = {
+        "description": """
+    The config object or dictionary of the decoder backbone.
+    """,
+    }
+
+    embedding_multiplier = {
+        "description": """
+    Scaling factor applied to the word embeddings. Used to scale the embeddings relative to the hidden size.
+    """,
+    }
+
+    logits_scaling = {
+        "description": """
+    Scaling factor applied to the output logits before computing the probability distribution.
+    """,
+    }
+
+    residual_multiplier = {
+        "description": """
+    Scaling factor applied to the residual connections.
+    """,
+    }
+
+    attention_multiplier = {
+        "description": """
+    Scaling factor applied to the attention weights.
+    """,
+    }
+
+    classifier_activation = {
+        "description": """
+    The activation function for the classification head.
+    """,
+    }
+
+    return_dict = {
+        "description": """
+    Whether to return a `ModelOutput` (dataclass) instead of a plain tuple.
+    """,
+    }
+
+    router_z_loss_coef = {
+        "description": """
+    Coefficient for the router z-loss, which penalizes large router logits to improve training stability.
+    """,
+    }
+
+    final_logit_softcapping = {
+        "description": """
+    Soft-capping value applied to the final logits before computing the probability distribution. Logits are
+    scaled by `tanh(logit / cap) * cap`.
+    """,
+    }
+
+    cross_attention_hidden_size = {
+        "description": """
+    Hidden size of the encoder outputs projected into the cross-attention key/value space of the decoder. Used
+    when the encoder and decoder have different hidden sizes.
+    """,
+    }
+
+    input_dim = {
+        "description": """
+    Dimensionality of the input acoustic features (e.g., number of mel-filterbank channels).
+    """,
+    }
+
+    use_auxiliary_loss = {
+        "description": """
+    Whether to calculate loss using intermediate predictions from transformer decoder.
+    """,
+    }
+
+    batch_norm_eps = {
+        "description": """
+    The epsilon used by the batch normalization layers.
+    """,
+    }
+
+    max_window_layers = {
+        "description": """
+    The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
+    additional layer afterwards will use SWA (Sliding Window Attention).
+    """,
+    }
+
+    ctc_loss_reduction = {
+        "description": """
+    Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training.
+    """,
+    }
+
+    mask_feature_prob = {
+        "description": """
+    Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
+    masking procedure generates `mask_feature_prob*len(feature_axis)/mask_time_length` independent masks over
+    the axis. If reasoning from the probability of each feature vector to be chosen as the start of the vector
+    span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
+    may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment` is
+    `True`.
+    """,
+    }
+
+    eos_coefficient = {
+        "description": """
+    Relative classification weight of the 'no-object' class in the object detection loss.
+    """,
+    }
+
+    num_labels = {
+        "description": """
+    Number of labels to use in the last layer added to the model, typically for a classification task.
+    """,
+    }
+
+    depth = {
+        "description": """
+    Number of Transformer layers in the vision encoder.
+    """,
+    }
+
+    temporal_patch_size = {
+        "description": """
+    Temporal patch size used in the 3D patch embedding for video inputs.
+    """,
+    }
+
+    spatial_merge_size = {
+        "description": """
+        The size of the spatial merge window used to reduce the number of visual tokens by merging neighboring patches.
+    """,
+    }
+
+    vision_start_token_id = {
+        "description": """
+    Token ID that marks the start of a visual segment in the multimodal input sequence.
+    """,
+    }
+
+    vision_end_token_id = {
+        "description": """
+    Token ID that marks the end of a visual segment in the multimodal input sequence.
+    """,
+    }
+
+    mamba_n_heads = {
+        "description": """
+    The number of mamba heads used in the v2 implementation.
+    """,
+    }
+
+    mamba_d_head = {
+        "description": """
+    Head embedding dimension size
+    """,
+    }
+
+    mamba_n_groups = {
+        "description": """
+    The number of the mamba groups used in the v2 implementation.
+    """,
+    }
+
+    mamba_d_conv = {
+        "description": """
+    The size of the mamba convolution kernel
+    """,
+    }
+
+    mamba_expand = {
+        "description": """
+    Expanding factor (relative to hidden_size) used to determine the mamba intermediate size
+    """,
+    }
+
+    mamba_chunk_size = {
+        "description": """
+    The chunks in which to break the sequence when doing prefill/training
+    """,
+    }
+
+    mamba_conv_bias = {
+        "description": """
+    Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
+    """,
+    }
+
+    mamba_proj_bias = {
+        "description": """
+    Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the mamba mixer block
+    """,
+    }
+
+    time_step_min = {
+        "description": """
+    Minimum `time_step` used to bound `dt_proj.bias`.
+    """,
+    }
+
+    time_step_max = {
+        "description": """
+    Maximum `time_step` used to bound `dt_proj.bias`.
+    """,
+    }
+
+    time_step_limit = {
+        "description": """
+    Accepted range of time step values for clamping.
+    """,
+    }
+
+    expand_ratio = {
+        "description": """
+    Expand ratio to set the output dimensions for the expansion
+    """,
+    }
+
+    state_size = {
+        "description": """
+    Size of the SSM state (latent state dimension) in the Mamba layers.
+    """,
+    }
+
+    time_step_rank = {
+        "description": """
+    Rank of the delta (time step) projection. Can be `"auto"` to set it automatically.
+    """,
+    }
+
+    time_step_floor = {
+        "description": """
+    Minimum allowed value for the discrete time step delta after softplus activation.
+    """,
+    }
+
+    time_step_scale = {
+        "description": """
+    Scale applied to the time step delta before discretization.
+    """,
+    }
+
+    time_step_init_scheme = {
+        "description": """
+    Initialization scheme for the time step delta. Can be `"random"` or `"uniform"`.
+    """,
+    }
+
+    mamba_d_ssm = {
+        "description": """
+    Inner state size of the SSM (state-space model) in the Mamba layers of FalconH1.
+    """,
+    }
+
+    mamba_norm_before_gate = {
+        "description": """
+    Whether to apply normalization before the gating mechanism in the Mamba mixer.
+    """,
+    }
+
+    mamba_rms_norm = {
+        "description": """
+    Whether to use RMS normalization in the Mamba layers (as opposed to standard LayerNorm).
+    """,
+    }
+
+    mamba_d_state = state_size
+    mamba_num_heads = mamba_n_heads
+    mamba_head_dim = mamba_d_head
+    num_input_channels = num_channels
+    audio_channels = num_channels
+    input_channels = num_channels
+    in_channels = num_channels
+    in_chans = num_channels
+    scale_attn_weights = scale_embedding
+    attention_probs_dropout_prob = attention_dropout
+    attn_pdrop = attention_dropout
+    attn_dropout = attention_dropout
+    dropout = dropout_rate
+    resid_dropout = resid_pdrop
+    residual_dropout = resid_pdrop
+    emb_pdrop = embd_pdrop
+    embed_dropout = embd_pdrop
+    embedding_dropout = embd_pdrop
+    hidden_dropout_prob = hidden_dropout
+    hidden_dropout_rate = hidden_dropout
+    classifier_dropout_prob = classifier_dropout
+    classifier_dropout_rate = classifier_dropout
+    dropout_prob = dropout
+    dropout_p = dropout
+    decoder_attention_dropout = attention_dropout
+    decoder_dropout = dropout
+    encoder_dropout = dropout
+
+    route_scale = routed_scaling_factor
+    activation_function = hidden_act
+    hidden_dim = hidden_size
+    num_decoder_attention_heads = decoder_attention_heads
+    num_encoder_attention_heads = encoder_attention_heads
+    decoder_num_heads = decoder_attention_heads
+    decoder_num_attention_heads = decoder_attention_heads
+    encoder_num_heads = encoder_attention_heads
+    encoder_num_attention_heads = encoder_attention_heads
+    encoder_layers = num_encoder_layers
+    decoder_layers = num_decoder_layers
+    decoder_num_layers = num_decoder_layers
+    encoder_num_layers = num_encoder_layers
+    d_ff = intermediate_size
+    dim_ff = intermediate_size
+    n_inner = intermediate_size
+    decoder_intermediate_size = intermediate_size
+    num_kv_heads = num_key_value_heads
+    num_layers = num_hidden_layers
+    n_layers = num_hidden_layers
+    n_layer = num_hidden_layers
+    layers = num_layers
+    encoder_num_hidden_layers = encoder_layers
+    decoder_num_hidden_layers = decoder_layers
+    num_heads = num_attention_heads
+    n_heads = num_attention_heads
+    n_head = num_attention_heads
+    hidden_activation = hidden_act
+    activation = hidden_act
+    mlp_hidden_act = hidden_act
+    d_head = head_dim
+    d_inner = intermediate_size
+    dim_head = head_dim
+    ffn_dim = intermediate_size
+    attention_heads = num_attention_heads
+    n_positions = max_position_embeddings
+    init_std = initializer_range
+    initializer_std = initializer_range
+    projector_bias = multimodal_projector_bias
+    image_token_index = image_token_id
+    video_token_index = video_token_id
+    audio_token_index = audio_token_id
+    embedding_size = n_embd
+    embed_dim = n_embd
+    projection_hidden_act = projector_hidden_act
+    layer_norm_epsilon = layer_norm_eps
+    rms_norm = rms_norm_eps
+    norm_eps = layer_norm_eps
+    eps = layer_norm_eps
+    norm_epsilon = layer_norm_eps
+    qk_layernorms = qk_layernorm
+    use_qk_norm = qk_layernorm
+    use_qkv_bias = qkv_bias
+
+    decoder_hidden_act = hidden_act
+    decoder_hidden_dim = hidden_size
+    decoder_hidden_size = hidden_size
+    encoder_hidden_dim = hidden_size
+    encoder_hidden_size = hidden_size
+    layer_scale_initial_scale = layer_scale_init_value
+    multi_modal_projector_bias = projector_bias
+    projector_hidden_size = projection_dim
+    projection_size = projection_dim
+    kernel_size = conv_kernel_size
+    conv_kernel = conv_kernel_size
+    use_absolute_embeddings = use_absolute_position_embeddings
+    use_abs_pos = use_absolute_position_embeddings
+    use_rel_pos = use_relative_position_bias
+    aux_loss_coef = router_aux_loss_coef
+    embedding_dimension = embed_dim
+    embedding_dim = embed_dim
+    emb_dim = embed_dim
+    n_codebooks = num_codebooks
+    codebook_size = num_codebooks
+    layers_block_type = layer_types
+    sample_rate = sampling_rate
+    text_vocab_size = vocab_size
+
 
 class ModelArgs:
     labels = {
@@ -607,6 +1923,15 @@ class ModelArgs:
     - 1 corresponds to a *sentence B* token.
 
     [What are token type IDs?](../glossary#token-type-ids)
+    """,
+        "shape": "of shape `(batch_size, sequence_length)`",
+    }
+
+    mm_token_type_ids = {
+        "description": """
+    Indices of input sequence tokens matching each modality. For example text (0), image (1), video (2).
+    Multimodal token type ids can be obtained using [`AutoProcessor`]. See [`ProcessorMixin.__call__`] for details.
+
     """,
         "shape": "of shape `(batch_size, sequence_length)`",
     }
@@ -1119,6 +2444,15 @@ class ModelOutputArgs:
 
 
 class ClassDocstring:
+    Config = r"""
+    This is the configuration class to store the configuration of a {model_base_class}. It is used to instantiate a {model_name}
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the [{model_checkpoint}](https://huggingface.co/{model_checkpoint})
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+    """
+
     PreTrainedModel = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1245,6 +2579,7 @@ class ClassAttrs:
 
 
 ARGS_TO_IGNORE = {"self", "kwargs", "args", "deprecated_arguments"}
+ARGS_TO_RENAME = {"_out_features": "out_features", "_out_indices": "out_indices"}
 
 
 def get_indent_level(func):
@@ -1252,33 +2587,40 @@ def get_indent_level(func):
     return (len(func.__qualname__.split(".")) - 1) * 4
 
 
-def equalize_indent(docstring, indent_level):
+def equalize_indent(docstring: str, indent_level: int) -> str:
     """
     Adjust the indentation of a docstring to match the specified indent level.
     """
-    # fully dedent the docstring
-    docstring = "\n".join([line.lstrip() for line in docstring.splitlines()])
-    return textwrap.indent(docstring, " " * indent_level)
+    prefix = " " * indent_level
+    # Uses splitlines() (no keepends) to match previous behaviour that dropped
+    # any trailing newline via the old splitlines() + "\n".join() + textwrap.indent path.
+    return "\n".join(prefix + line.lstrip() if line.strip() else "" for line in docstring.splitlines())
 
 
-def set_min_indent(docstring, indent_level):
+def set_min_indent(docstring: str, indent_level: int) -> str:
     """
     Adjust the indentation of a docstring to match the specified indent level.
     """
-    return textwrap.indent(textwrap.dedent(docstring), " " * indent_level)
+    # Equivalent to textwrap.dedent + textwrap.indent but avoids the two regex
+    # passes that textwrap uses internally (one per call in dedent, one in indent).
+    lines = docstring.split("\n")
+    min_indent = min(
+        (len(line) - len(line.lstrip()) for line in lines if line.strip()),
+        default=0,
+    )
+    prefix = " " * indent_level
+    return "\n".join(prefix + line[min_indent:] if line.strip() else "" for line in lines)
 
 
 def parse_shape(docstring):
-    shape_pattern = re.compile(r"(of shape\s*(?:`.*?`|\(.*?\)))")
-    match = shape_pattern.search(docstring)
+    match = _re_shape.search(docstring)
     if match:
         return " " + match.group(1)
     return None
 
 
 def parse_default(docstring):
-    default_pattern = re.compile(r"(defaults to \s*[^)]*)")
-    match = default_pattern.search(docstring)
+    match = _re_default.search(docstring)
     if match:
         return " " + match.group(1)
     return None
@@ -1298,15 +2640,14 @@ def parse_docstring(docstring, max_indent_level=0, return_intro=False):
     Returns:/Example:
     ...
     """
-    match = re.search(r"(?m)^([ \t]*)(?=Example|Return)", docstring)
+    match = _re_example_or_return.search(docstring)
     if match:
         remainder_docstring = docstring[match.start() :]
         docstring = docstring[: match.start()]
     else:
         remainder_docstring = ""
-    args_pattern = re.compile(r"(?:Args:)(\n.*)?(\n)?$", re.DOTALL)
 
-    args_match = args_pattern.search(docstring)
+    args_match = _re_args_section.search(docstring)
     # still try to find args description in the docstring, if args are not preceded by "Args:"
     docstring_intro = None
     if args_match:
@@ -1325,22 +2666,26 @@ def parse_docstring(docstring, max_indent_level=0, return_intro=False):
     args_section = set_min_indent(args_section, 0)
     params = {}
     if args_section:
-        param_pattern = re.compile(
-            # |--- Group 1 ---|| Group 2 ||- Group 3 -||---------- Group 4 ----------|
-            rf"^\s{{0,{max_indent_level}}}(\w+)\s*\(\s*([^, \)]*)(\s*.*?)\s*\)\s*:\s*((?:(?!\n^\s{{0,{max_indent_level}}}\w+\s*\().)*)",
-            re.DOTALL | re.MULTILINE,
-        )
+        # Use the pre-compiled pattern (max_indent_level is always 0 at all call
+        # sites; if a non-zero value is ever needed, compile a fresh pattern).
+        if max_indent_level == 0:
+            param_pattern = _re_param
+        else:
+            param_pattern = re.compile(
+                # |--- Group 1 ---|| Group 2 ||- Group 3 -||---------- Group 4 ----------|
+                rf"^\s{{0,{max_indent_level}}}(\w+)\s*\(\s*([^, \)]*)(\s*.*?)\s*\)\s*:\s*((?:(?!\n^\s{{0,{max_indent_level}}}\w+\s*\().)*)",
+                re.DOTALL | re.MULTILINE,
+            )
         for match in param_pattern.finditer(args_section):
             param_name = match.group(1)
             param_type = match.group(2)
-            # param_type = match.group(2).replace("`", "")
             additional_info = match.group(3)
             optional = "optional" in additional_info
             shape = parse_shape(additional_info)
             default = parse_default(additional_info)
             param_description = match.group(4).strip()
-            # set first line of param_description to 4 spaces:
-            param_description = re.sub(r"^", " " * 4, param_description, 1)
+            # indent the first line of param_description to 4 spaces:
+            param_description = " " * 4 + param_description
             param_description = f"\n{param_description}"
             params[param_name] = {
                 "type": param_type,
@@ -1383,20 +2728,31 @@ def get_model_name(obj):
     """
     Get the model name from the file path of the object.
     """
+
     path = inspect.getsourcefile(obj)
     if path is None:
         return None
     if path.split(os.path.sep)[-3] != "models":
         return None
     file_name = path.split(os.path.sep)[-1]
+    model_name_lowercase_from_folder = path.split(os.path.sep)[-2]
+    model_name_lowercase_from_file = None
     for file_type in AUTODOC_FILES:
         start = file_type.split("*")[0]
         end = file_type.split("*")[-1] if "*" in file_type else ""
         if file_name.startswith(start) and file_name.endswith(end):
-            model_name_lowercase = file_name[len(start) : -len(end)]
-            return model_name_lowercase
-    print(f"[ERROR] Something went wrong trying to find the model name in the path: {path}")
-    return "model"
+            model_name_lowercase_from_file = file_name[len(start) : -len(end)]
+            break
+    if model_name_lowercase_from_file and model_name_lowercase_from_folder != model_name_lowercase_from_file:
+        from transformers.models.auto.configuration_auto import SPECIAL_MODEL_TYPE_TO_MODULE_NAME
+
+        if (
+            model_name_lowercase_from_file in SPECIAL_MODEL_TYPE_TO_MODULE_NAME
+            or model_name_lowercase_from_file.replace("_", "-") in SPECIAL_MODEL_TYPE_TO_MODULE_NAME
+        ):
+            return model_name_lowercase_from_file
+        return model_name_lowercase_from_folder
+    return model_name_lowercase_from_folder
 
 
 def generate_processor_intro(cls) -> str:
@@ -1456,7 +2812,7 @@ def generate_processor_intro(cls) -> str:
     return intro
 
 
-def get_placeholders_dict(placeholders: list, model_name: str) -> dict:
+def get_placeholders_dict(placeholders: set[str], model_name: str) -> Mapping[str, str | None]:
     """
     Get the dictionary of placeholders for the given model name.
     """
@@ -1487,13 +2843,13 @@ def get_placeholders_dict(placeholders: list, model_name: str) -> dict:
     return placeholders_dict
 
 
-def format_args_docstring(docstring, model_name):
+def format_args_docstring(docstring: str, model_name: str) -> str:
     """
     Replaces placeholders such as {image_processor_class} in the docstring with the actual values,
     deducted from the model name and the auto modules.
     """
     # first check if there are any placeholders in the docstring, if not return it as is
-    placeholders = set(re.findall(r"{(.*?)}", docstring))
+    placeholders = set(_re_placeholders.findall(docstring))
     if not placeholders:
         return docstring
 
@@ -1502,20 +2858,23 @@ def format_args_docstring(docstring, model_name):
     # replace the placeholders in the docstring with the values from the placeholders_dict
     for placeholder, value in placeholders_dict.items():
         if placeholder is not None:
-            try:
-                docstring = docstring.replace(f"{{{placeholder}}}", value)
-            except Exception:
-                pass
+            docstring = docstring.replace(f"{{{placeholder}}}", value)
     return docstring
 
 
 def get_args_doc_from_source(args_classes: object | list[object]) -> dict:
     if isinstance(args_classes, (list, tuple)):
-        args_classes_dict = {}
-        for args_class in args_classes:
-            args_classes_dict.update(args_class.__dict__)
-        return args_classes_dict
+        return _merge_args_dicts(tuple(args_classes))
     return args_classes.__dict__
+
+
+@lru_cache(maxsize=16)
+def _merge_args_dicts(args_classes_tuple: tuple) -> dict:
+    """Cached merger of args-doc dicts. The input classes are static so caching is safe."""
+    result = {}
+    for cls in args_classes_tuple:
+        result.update(cls.__dict__)
+    return result
 
 
 def get_checkpoint_from_config_class(config_class):
@@ -1524,6 +2883,9 @@ def get_checkpoint_from_config_class(config_class):
     # source code of `config_class`
     # config_source = inspect.getsource(config_class)
     config_source = config_class.__doc__
+    if not config_source:
+        return None
+
     checkpoints = _re_checkpoint.findall(config_source)
     # Each `checkpoint` is a tuple of a checkpoint name and a checkpoint link.
     # For example, `('google-bert/bert-base-uncased', 'https://huggingface.co/google-bert/bert-base-uncased')`
@@ -1603,50 +2965,245 @@ def _get_model_info(func, parent_class):
                 print(
                     f"[ERROR] Config not found for {model_name_lowercase}. You can manually add it to HARDCODED_CONFIG_FOR_MODELS in utils/auto_docstring.py"
                 )
-
     return model_name_lowercase, class_name, config_class
+
+
+def _format_type_annotation_recursive(type_hint):
+    """
+    Recursively format a type annotation object as a string, preserving generic type arguments.
+
+    This is an internal helper used by process_type_annotation for the type object path.
+
+    Args:
+        type_hint: A type annotation object
+
+    Returns:
+        str: Formatted type string
+    """
+    # Handle special cases
+    if type_hint is type(...) or type_hint is Ellipsis:
+        return "..."
+    # Note: NoneType handling is done later to preserve "NoneType" in Union[] but "None" in | syntax
+
+    # Check if this is a generic type (e.g., list[str], dict[str, int])
+    origin = get_origin(type_hint)
+    args = get_args(type_hint)
+
+    if origin is not None and args:
+        # This is a generic type - format it with its arguments
+        # Get the origin type name
+        if hasattr(origin, "__module__") and hasattr(origin, "__name__"):
+            # Clean up module name - need to handle both 'typing.' prefix and just 'typing'
+            module_name = origin.__module__
+            if module_name in ("typing", "types", "builtins"):
+                module_name = ""
+            else:
+                module_name = (
+                    module_name.replace("transformers.", "~")
+                    .replace("typing.", "")
+                    .replace("types.", "")
+                    .replace("builtins.", "")
+                )
+
+            if module_name:
+                origin_str = f"{module_name}.{origin.__name__}"
+            else:
+                origin_str = origin.__name__
+        else:
+            origin_str = str(origin)
+
+        # Handle special origin types
+        if origin_str == "UnionType":
+            # Python 3.13's X | Y syntax - format it nicely
+            arg_strs = [_format_type_annotation_recursive(arg) for arg in args]
+            return " | ".join(arg_strs)
+
+        # Special handling for Annotated[Union[...], ...] and Annotated[UnionType[...], ...]
+        # Check if first arg is a Union/UnionType and format it specially
+        if origin_str == "Annotated" and args:
+            first_arg_origin = get_origin(args[0])
+            # Check if it's a UnionType (modern | syntax) or Union (old Union[] syntax)
+            if first_arg_origin is UnionType:
+                # Modern union type - format as X | Y | Z (with None not NoneType)
+                union_args = get_args(args[0])
+                union_strs = []
+                for arg in union_args:
+                    if arg is type(None):
+                        union_strs.append("None")  # Modern syntax uses "None"
+                    else:
+                        union_strs.append(_format_type_annotation_recursive(arg))
+                formatted_union = " | ".join(union_strs)
+                # Include the rest of the Annotated metadata
+                remaining_args = [_format_type_annotation_recursive(arg) for arg in args[1:]]
+                all_args = [formatted_union] + remaining_args
+                return f"{origin_str}[{', '.join(all_args)}]"
+            elif first_arg_origin is Union:
+                # Old-style Union - format as Union[X, Y, Z]
+                union_args = get_args(args[0])
+                union_strs = [_format_type_annotation_recursive(arg) for arg in union_args]
+                formatted_union = f"Union[{', '.join(union_strs)}]"
+                # Include the rest of the Annotated metadata
+                remaining_args = [_format_type_annotation_recursive(arg) for arg in args[1:]]
+                all_args = [formatted_union] + remaining_args
+                return f"{origin_str}[{', '.join(all_args)}]"
+
+        # Recursively format the generic arguments
+        arg_strs = [_format_type_annotation_recursive(arg) for arg in args]
+        return f"{origin_str}[{', '.join(arg_strs)}]"
+    elif hasattr(type_hint, "__module__") and hasattr(type_hint, "__name__"):
+        # Simple type with module and name
+        # Clean up module name - need to handle both 'typing.' prefix and just 'typing'
+        module_name = type_hint.__module__
+        if module_name in ("typing", "types", "builtins"):
+            module_name = ""
+        else:
+            module_name = (
+                module_name.replace("transformers.", "~")
+                .replace("typing.", "")
+                .replace("types.", "")
+                .replace("builtins.", "")
+            )
+
+        if module_name:
+            type_name = f"{module_name}.{type_hint.__name__}"
+        else:
+            type_name = type_hint.__name__
+
+        return type_name
+    else:
+        # Fallback to string representation
+        type_str = str(type_hint)
+        # Clean up ForwardRef
+        if "ForwardRef" in type_str:
+            type_str = _re_forward_ref.sub(r"\1", type_str)
+        # Clean up module prefixes
+        type_str = type_str.replace("typing.", "").replace("types.", "")
+        return type_str
+
+
+def process_type_annotation(type_input, param_name: str | None = None) -> tuple[str, bool]:
+    """
+    Unified function to process and format a parameter's type annotation.
+
+    This function intelligently handles both type objects (from inspect.Parameter.annotation)
+    and string representations of types. It will:
+    - Use type introspection when given a type object (preserves generic arguments)
+    - Parse string representations when that's all that's available
+    - Always return a formatted type string and optional flag
+
+    Handles various type representations including:
+    - Type objects with generics (e.g., list[str], Optional[int])
+    - Union types (both Union[X, Y] and X | Y syntax)
+    - Modern union syntax with | (e.g., "bool | None")
+    - Complex typing constructs (Union, Optional, Annotated, etc.)
+    - Generic types with brackets
+    - Class type strings
+    - Simple types and module paths
+
+    Args:
+        type_input: Either a type annotation object or a string representation of a type
+        param_name (`str | None`): The parameter name (used for legacy module path handling)
+
+    Returns:
+        tuple[str, bool]: (formatted_type_string, is_optional)
+    """
+    optional = False
+
+    # Path 1: Type object (best approach - preserves generic type information)
+    if not isinstance(type_input, str):
+        # Handle None type
+        if type_input is None or type_input is type(None):
+            return "None", True
+
+        # Handle Union types and modern UnionType (X | Y)
+        if get_origin(type_input) is Union or get_origin(type_input) is UnionType:
+            subtypes = get_args(type_input)
+            out_str = []
+            for subtype in subtypes:
+                if subtype is type(None):
+                    optional = True
+                    continue
+                formatted_type = _format_type_annotation_recursive(subtype)
+                out_str.append(formatted_type)
+
+            if not out_str:
+                return "", optional
+            elif len(out_str) == 1:
+                return out_str[0], optional
+            else:
+                return f"Union[{', '.join(out_str)}]", optional
+
+        # Single type (not a Union)
+        formatted_type = _format_type_annotation_recursive(type_input)
+        return formatted_type, optional
+
+    # Path 2: String representation (fallback when we only have strings)
+    param_type = type_input
+
+    # Handle Union types with | syntax
+    if " | " in param_type:
+        # Modern union syntax (e.g., "bool | None")
+        parts = [p.strip() for p in param_type.split(" | ")]
+        if "None" in parts:
+            optional = True
+            parts = [p for p in parts if p != "None"]
+        param_type = " | ".join(parts) if parts else ""
+        # Clean up module prefixes including typing
+        param_type = "".join(param_type.split("typing.")).replace("transformers.", "~").replace("builtins.", "")
+
+    elif "typing" in param_type or "Union[" in param_type or "Optional[" in param_type or "[" in param_type:
+        # Complex typing construct or generic type - clean up typing module references
+        param_type = "".join(param_type.split("typing.")).replace("transformers.", "~")
+
+    elif "<class '" in param_type:
+        # This is a class type like "<class 'module.ClassName'>" - should NOT append param_name
+        param_type = (
+            param_type.replace("transformers.", "~").replace("builtins.", "").replace("<class '", "").replace("'>", "")
+        )
+
+    else:
+        # Simple type or module path - only append param_name if it looks like a module path
+        # This is legacy behavior for backwards compatibility
+        if param_name and "." in param_type and not param_type.split(".")[-1][0].isupper():
+            # Looks like a module path ending with an attribute
+            param_type = f"{param_type.replace('transformers.', '~').replace('builtins', '')}.{param_name}"
+        else:
+            # Simple type name, don't append param_name
+            param_type = param_type.replace("transformers.", "~").replace("builtins.", "")
+
+    # Clean up ForwardRef
+    if "ForwardRef" in param_type:
+        param_type = _re_forward_ref.sub(r"\1", param_type)
+
+    # Handle Optional wrapper
+    if "Optional" in param_type:
+        param_type = _re_optional.sub(r"\1", param_type)
+        optional = True
+
+    return param_type, optional
 
 
 def _process_parameter_type(param):
     """
-    Process and format a parameter's type annotation.
+    Process and format a parameter's type annotation from an inspect.Parameter object.
 
     Args:
         param (`inspect.Parameter`): The parameter from the function signature
+
+    Returns:
+        tuple[str, bool]: (formatted_type_string, is_optional)
     """
-    optional = False
     if param.annotation == inspect.Parameter.empty:
         return "", False
-    elif param.annotation is None:
-        return "None", True
-    # This is, astonishingly, the right way to do it: https://docs.python.org/3/library/typing.html#typing.Union
-    elif get_origin(param.annotation) is Union or get_origin(param.annotation) is UnionType:
-        subtypes = get_args(param.annotation)
-    else:
-        subtypes = [param.annotation]  # Just pretend it's a single-element union so we don't need two code paths
-    out_str = []
-    for subtype in subtypes:
-        if subtype is type(None):
-            optional = True
-            continue
-        if hasattr(subtype, "__module__") and hasattr(subtype, "__name__"):
-            subtype = f"{subtype.__module__.replace('transformers.', '~').replace('builtins', '').replace('typing.', '')}.{subtype.__name__}".removeprefix(
-                "."
-            )
-        else:
-            subtype = str(subtype)  # Just give up
-        if "ForwardRef" in subtype:
-            subtype = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", subtype)
-        out_str.append(subtype)
 
+    # Use the unified function to process the type annotation
+    formatted_type, optional = process_type_annotation(param.annotation)
+
+    # Check if parameter has a default value (makes it optional)
     if param.default is not inspect.Parameter.empty:
         optional = True
-    if not out_str:
-        return "", optional
-    elif len(out_str) == 1:
-        return out_str[0], optional
-    else:
-        return f"Union[{', '.join(out_str)}]", optional
+
+    return formatted_type, optional
 
 
 def _get_parameter_info(param_name, documented_params, source_args_dict, param_type, optional):
@@ -1734,6 +3291,8 @@ def _process_regular_parameters(
         ):
             continue
 
+        param_name = ARGS_TO_RENAME.get(param_name, param_name)
+
         # Process parameter type and optional status
         param_type, optional = _process_parameter_type(param)
 
@@ -1798,6 +3357,49 @@ def find_sig_line(lines, line_end):
     return sig_line_end
 
 
+def _is_image_processor_class(func, parent_class):
+    """
+    Check if a function belongs to a ProcessorMixin class.
+
+    Uses two methods:
+    1. Check parent_class inheritance (if provided)
+    2. Check if the source file is named processing_*.py (multimodal processors)
+       vs image_processing_*.py, video_processing_*.py, etc. (single-modality processors)
+
+    Args:
+        func: The function to check
+        parent_class: Optional parent class (if available)
+
+    Returns:
+        bool: True if this is a multimodal processor (inherits from ProcessorMixin), False otherwise
+    """
+    # First, check if parent_class is provided and use it
+    if parent_class is not None:
+        return "BaseImageProcessor" in parent_class.__name__ or any(
+            "BaseImageProcessor" in base.__name__ for base in parent_class.__mro__
+        )
+
+    # If parent_class is None, check the filename
+    # Multimodal processors are in files named "processing_*.py"
+    # Single-modality processors are in "image_processing_*.py", "video_processing_*.py", etc.
+    try:
+        source_file = inspect.getsourcefile(func)
+    except TypeError:
+        return False
+    if not source_file:
+        return False
+
+    # Exception for DummyProcessorForTest
+    if func.__qualname__.split(".")[0] == "DummyForTestImageProcessorFast":
+        return True
+
+    filename = os.path.basename(source_file)
+
+    # Multimodal processors are implemented in processing_*.py modules
+    # (single-modality processors use image_processing_*, video_processing_*, etc.)self.
+    return filename.startswith("image_processing_") and filename.endswith(".py")
+
+
 def _is_processor_class(func, parent_class):
     """
     Check if a function belongs to a ProcessorMixin class.
@@ -1825,18 +3427,89 @@ def _is_processor_class(func, parent_class):
     # Single-modality processors are in "image_processing_*.py", "video_processing_*.py", etc.
     try:
         source_file = inspect.getsourcefile(func)
-        if source_file:
-            filename = os.path.basename(source_file)
-            # Check if it's a processing file (processing_*.py) but NOT a single-modality processor
-            # Single-modality processors: image_processing_*.py, video_processing_*.py, feature_extraction_*.py
-            if filename.startswith("processing_") and filename.endswith(".py"):
-                # This is a multimodal processor file
-                return True
-    except Exception:
-        pass
+    except TypeError:
+        return False
+    if not source_file:
+        return False
 
-    # Default to False (conservative approach)
-    return False
+    # Exception for DummyProcessorForTest
+    if func.__qualname__.split(".")[0] == "DummyProcessorForTest":
+        return True
+
+    filename = os.path.basename(source_file)
+
+    # Multimodal processors are implemented in processing_*.py modules
+    # (single-modality processors use image_processing_*, video_processing_*, etc.)self.
+    return filename.startswith("processing_") and filename.endswith(".py")
+
+
+# Python < 3.12 fallback: naming heuristics when __orig_bases__ is not set (cpython#103699).
+# Order matters: check ImageProcessorKwargs before ProcessorKwargs.
+_BASIC_KWARGS_NAMES = frozenset({"ImagesKwargs", "ProcessingKwargs", "TextKwargs", "VideosKwargs", "AudioKwargs"})
+_BASIC_KWARGS_CLASSES = None  # Lazy-loaded name -> class mapping
+
+
+def _get_base_kwargs_class_from_name(cls_name: str) -> str | None:
+    """Map kwargs class name to base using naming conventions. Returns base class name or None."""
+    if cls_name in _BASIC_KWARGS_NAMES:
+        return cls_name
+    if "ImageProcessorKwargs" in cls_name or cls_name.endswith("ImagesKwargs"):
+        return "ImagesKwargs"
+    if "ProcessorKwargs" in cls_name:
+        return "ProcessingKwargs"
+    if "VideoProcessorKwargs" in cls_name or cls_name.endswith("VideosKwargs"):
+        return "VideosKwargs"
+    if "AudioProcessorKwargs" in cls_name or cls_name.endswith("AudioKwargs"):
+        return "AudioKwargs"
+    if "TextKwargs" in cls_name:
+        return "TextKwargs"
+    return None
+
+
+def _get_base_kwargs_class(cls):
+    """
+    Get the root/base TypedDict class by walking the inheritance chain.
+    For model-specific kwargs like ComplexProcessingKwargs(ProcessingKwargs), returns ProcessingKwargs.
+    For model-specific kwargs like DummyImageProcessorKwargs(ImagesKwargs), returns ImagesKwargs.
+
+    Compatibility: On Python < 3.12, non-generic TypedDict subclasses do not have __orig_bases__ set
+    (cpython#103699). We fall back to naming heuristics (e.g. *ImageProcessorKwargs -> ImagesKwargs).
+    """
+    current = cls
+    while True:
+        bases = typing_extensions.get_original_bases(current)
+        parent = None
+        for base in bases:
+            if isinstance(base, type) and base not in (dict, object):
+                if getattr(base, "__name__", "") == "TypedDict" and getattr(base, "__module__", "") == "typing":
+                    continue
+                parent = base
+                break
+        if parent is None:
+            # Python < 3.12 fallback: use naming heuristics
+            base_name = _get_base_kwargs_class_from_name(current.__name__)
+            if base_name is not None:
+                global _BASIC_KWARGS_CLASSES
+                if _BASIC_KWARGS_CLASSES is None:
+                    from transformers.processing_utils import (
+                        AudioKwargs,
+                        ImagesKwargs,
+                        ProcessingKwargs,
+                        TextKwargs,
+                        VideosKwargs,
+                    )
+
+                    _BASIC_KWARGS_CLASSES = {
+                        "ImagesKwargs": ImagesKwargs,
+                        "ProcessingKwargs": ProcessingKwargs,
+                        "TextKwargs": TextKwargs,
+                        "VideosKwargs": VideosKwargs,
+                        "AudioKwargs": AudioKwargs,
+                    }
+                parent = _BASIC_KWARGS_CLASSES[base_name]
+        if parent is None or parent == current:
+            return current
+        current = parent
 
 
 def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, indent_level, undocumented_parameters):
@@ -1850,49 +3523,60 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
         documented_kwargs (`dict`): Dictionary of kwargs that are already documented
         indent_level (`int`): Indentation level
         undocumented_parameters (`list`): List to append undocumented parameters to
+
+    Returns:
+        tuple[str, str]: (kwargs docstring, kwargs summary line to add after return_tensors)
     """
     docstring = ""
-
-    # Check if this is a processor by inspecting class hierarchy
-    is_processor = _is_processor_class(func, parent_class)
-
-    # Use appropriate args source based on whether it's a processor or not
-    if is_processor:
-        source_args_dict = get_args_doc_from_source([ImageProcessorArgs, ProcessorArgs])
-    else:
-        source_args_dict = get_args_doc_from_source(ImageProcessorArgs)
-
+    kwargs_summary = ""
     # Check if we need to add typed kwargs description to the docstring
     unroll_kwargs = func.__name__ in UNROLL_KWARGS_METHODS
     if not unroll_kwargs and parent_class is not None:
         # Check if the function has a parent class with unroll kwargs
         unroll_kwargs = any(
-            unroll_kwargs_class in parent_class.__name__ for unroll_kwargs_class in UNROLL_KWARGS_CLASSES
+            any(unroll_kwargs_class in base.__name__ for base in parent_class.__mro__)
+            for unroll_kwargs_class in UNROLL_KWARGS_CLASSES
         )
-    if unroll_kwargs:
-        # get all unpackable "kwargs" parameters
-        kwargs_parameters = [
-            kwargs_param
-            for _, kwargs_param in sig.parameters.items()
-            if kwargs_param.kind == inspect.Parameter.VAR_KEYWORD
-        ]
-        for kwarg_param in kwargs_parameters:
-            # If kwargs not typed, skip
-            if kwarg_param.annotation == inspect.Parameter.empty:
-                continue
+    if not unroll_kwargs:
+        return docstring, kwargs_summary
 
+    # Check if this is a processor by inspecting class hierarchy
+    is_processor = _is_processor_class(func, parent_class)
+    is_image_processor = _is_image_processor_class(func, parent_class)
+
+    # Use appropriate args source based on whether it's a processor or not
+    if is_processor:
+        source_args_dict = get_args_doc_from_source([ImageProcessorArgs, ProcessorArgs])
+    elif is_image_processor:
+        source_args_dict = get_args_doc_from_source(ImageProcessorArgs)
+    else:
+        raise ValueError(
+            f"Unrolling kwargs is not supported for {func.__name__} of {parent_class.__name__ if parent_class else 'None'} class"
+        )
+
+    # get all unpackable "kwargs" parameters
+    kwargs_parameters = [
+        kwargs_param
+        for _, kwargs_param in sig.parameters.items()
+        if kwargs_param.kind == inspect.Parameter.VAR_KEYWORD
+    ]
+    for kwarg_param in kwargs_parameters:
+        # If kwargs not typed, skip
+        if kwarg_param.annotation == inspect.Parameter.empty:
+            continue
+
+        if kwarg_param.annotation.__args__[0].__name__ not in BASIC_KWARGS_TYPES:
             # Extract documentation for kwargs
             kwargs_documentation = kwarg_param.annotation.__args__[0].__doc__
             if kwargs_documentation is not None:
                 documented_kwargs = parse_docstring(kwargs_documentation)[0]
-
             # Process each kwarg parameter
             for param_name, param_type_annotation in kwarg_param.annotation.__args__[0].__annotations__.items():
                 # Handle nested kwargs structures for processors
+
                 if is_processor and param_name.endswith("_kwargs"):
                     # Check if this is a basic kwargs type that should be skipped
                     # Basic kwargs types are generic containers that shouldn't be documented as individual params
-                    basic_kwargs_types = ["TextKwargs", "ImagesKwargs", "VideosKwargs", "AudioKwargs"]
 
                     # Get the actual type (unwrap Optional if needed)
                     actual_type = param_type_annotation
@@ -1907,7 +3591,7 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                                 break
 
                     # Skip only if it's one of the basic kwargs types
-                    if type_name in basic_kwargs_types:
+                    if type_name in BASIC_KWARGS_TYPES:
                         continue
 
                     # Otherwise, unroll the custom typed kwargs
@@ -1929,23 +3613,9 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                             # Only document parameters that are explicitly documented in the TypedDict's docstring
                             if nested_param_name not in documented_nested_kwargs:
                                 continue
-                            nested_param_type_str = str(nested_param_type)
-                            nested_optional = False
-
-                            # Process parameter type
-                            if "typing" in nested_param_type_str:
-                                nested_param_type_str = "".join(nested_param_type_str.split("typing.")).replace(
-                                    "transformers.", "~"
-                                )
-                            else:
-                                nested_param_type_str = f"{nested_param_type_str.replace('transformers.', '~').replace('builtins', '')}.{nested_param_name}"
-                            if "ForwardRef" in nested_param_type_str:
-                                nested_param_type_str = re.sub(
-                                    r"ForwardRef\('([\w.]+)'\)", r"\1", nested_param_type_str
-                                )
-                            if "Optional" in nested_param_type_str:
-                                nested_param_type_str = re.sub(r"Optional\[(.*?)\]", r"\1", nested_param_type_str)
-                                nested_optional = True
+                            nested_param_type_str, nested_optional = process_type_annotation(
+                                nested_param_type, nested_param_name
+                            )
 
                             # Check for default value
                             nested_param_default = ""
@@ -1981,15 +3651,15 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                             nested_param_type_str = (
                                 nested_param_type_str if "`" in nested_param_type_str else f"`{nested_param_type_str}`"
                             )
-                            # Format the parameter docstring
+                            # Format the parameter docstring (KWARGS_INDICATOR distinguishes from regular args)
                             if nested_additional_info:
                                 docstring += set_min_indent(
-                                    f"{nested_param_name} ({nested_param_type_str}{nested_additional_info}):{nested_description}",
+                                    f"{nested_param_name} ({nested_param_type_str}{KWARGS_INDICATOR}{nested_additional_info}):{nested_description}",
                                     indent_level + 8,
                                 )
                             else:
                                 docstring += set_min_indent(
-                                    f"{nested_param_name} ({nested_param_type_str}{nested_shape_string}{nested_optional_string}{nested_param_default}):{nested_description}",
+                                    f"{nested_param_name} ({nested_param_type_str}{KWARGS_INDICATOR}{nested_shape_string}{nested_optional_string}{nested_param_default}):{nested_description}",
                                     indent_level + 8,
                                 )
 
@@ -1999,19 +3669,9 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                         # If we can't get annotations, skip this parameter
                         continue
 
-                param_type = str(param_type_annotation)
-                optional = False
-
-                # Process parameter type
-                if "typing" in param_type:
-                    param_type = "".join(param_type.split("typing.")).replace("transformers.", "~")
-                else:
-                    param_type = f"{param_type.replace('transformers.', '~').replace('builtins', '')}.{param_name}"
-                if "ForwardRef" in param_type:
-                    param_type = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", param_type)
-                if "Optional" in param_type:
-                    param_type = re.sub(r"Optional\[(.*?)\]", r"\1", param_type)
-                    optional = True
+                if documented_kwargs and param_name not in documented_kwargs:
+                    continue
+                param_type, optional = process_type_annotation(param_type_annotation, param_name)
 
                 # Check for default value
                 param_default = ""
@@ -2030,15 +3690,15 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                             f"[ERROR] {param_name} for {kwarg_param.annotation.__args__[0].__qualname__} in file {func.__code__.co_filename} has no type"
                         )
                     param_type = param_type if "`" in param_type else f"`{param_type}`"
-                    # Format the parameter docstring
+                    # Format the parameter docstring (KWARGS_INDICATOR distinguishes from regular args)
                     if additional_info:
                         docstring += set_min_indent(
-                            f"{param_name} ({param_type}{additional_info}):{description}",
+                            f"{param_name} ({param_type}{KWARGS_INDICATOR}{additional_info}):{description}",
                             indent_level + 8,
                         )
                     else:
                         docstring += set_min_indent(
-                            f"{param_name} ({param_type}{shape_string}{optional_string}{param_default}):{description}",
+                            f"{param_name} ({param_type}{KWARGS_INDICATOR}{shape_string}{optional_string}{param_default}):{description}",
                             indent_level + 8,
                         )
                 else:
@@ -2046,10 +3706,23 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                         f"[ERROR] `{param_name}` is part of {kwarg_param.annotation.__args__[0].__qualname__}, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
                     )
 
-    return docstring
+        # Build **kwargs summary line (added after return_tensors in _process_parameters_section)
+        kwargs_annot_cls = kwarg_param.annotation.__args__[0]
+        kwargs_type_name = _get_base_kwargs_class(kwargs_annot_cls).__name__
+        kwargs_info = source_args_dict.get("__kwargs__", {})
+        kwargs_description = kwargs_info.get(
+            "description",
+            "Additional keyword arguments. Model-specific parameters are listed above.",
+        )
+        kwargs_summary = set_min_indent(
+            f"**kwargs ([`{kwargs_type_name}`], *optional*):{kwargs_description}",
+            indent_level + 8,
+        )
+
+    return docstring, kwargs_summary
 
 
-def _add_return_tensors_for_processor_call(func, parent_class, docstring, indent_level):
+def _add_return_tensors_to_docstring(func, parent_class, docstring, indent_level):
     """
     Add return_tensors parameter documentation for processor __call__ methods if not already present.
 
@@ -2062,16 +3735,24 @@ def _add_return_tensors_for_processor_call(func, parent_class, docstring, indent
     Returns:
         str: Updated docstring with return_tensors if applicable
     """
-    # Check if this is a processor __call__ method
+    # Check if this is a processor __call__ method or an image processor preprocess method
     is_processor_call = False
+    is_image_processor_preprocess = False
     if func.__name__ == "__call__":
         # Check if this is a processor by inspecting class hierarchy
         is_processor_call = _is_processor_class(func, parent_class)
 
-    # If it's a processor __call__ method and return_tensors is not already documented
-    if is_processor_call and "return_tensors" not in docstring:
+    if func.__name__ == "preprocess":
+        is_image_processor_preprocess = _is_image_processor_class(func, parent_class)
+
+    # If it's a processor __call__ method or an image processor preprocess method and return_tensors is not already documented
+    if (is_processor_call or is_image_processor_preprocess) and "return_tensors" not in docstring:
         # Get the return_tensors documentation from ImageProcessorArgs
-        source_args_dict = get_args_doc_from_source(ProcessorArgs)
+        source_args_dict = (
+            get_args_doc_from_source(ProcessorArgs)
+            if is_processor_call
+            else get_args_doc_from_source(ImageProcessorArgs)
+        )
         return_tensors_info = source_args_dict["return_tensors"]
         param_type = return_tensors_info.get("type", "`str` or [`~utils.TensorType`]")
         description = return_tensors_info["description"]
@@ -2101,8 +3782,8 @@ def _process_parameters_section(
         parent_class (`class`): Parent class of the function (if any)
         indent_level (`int`): Indentation level
     """
-    # Start Args section
-    docstring = set_min_indent("Args:\n", indent_level + 4)
+    # Start Args section — constant string, min_indent is always 0, so skip set_min_indent
+    docstring = " " * (indent_level + 4) + "Args:\n"
     undocumented_parameters = []
     documented_params = {}
     documented_kwargs = {}
@@ -2118,19 +3799,135 @@ def _process_parameters_section(
     docstring += param_docstring
 
     # Process **kwargs parameters if needed
-    kwargs_docstring = _process_kwargs_parameters(
+    kwargs_docstring, kwargs_summary = _process_kwargs_parameters(
         sig, func, parent_class, documented_kwargs, indent_level, undocumented_parameters
     )
     docstring += kwargs_docstring
 
     # Add return_tensors for processor __call__ methods if not already present
-    docstring = _add_return_tensors_for_processor_call(func, parent_class, docstring, indent_level)
+    docstring = _add_return_tensors_to_docstring(func, parent_class, docstring, indent_level)
+
+    # Add **kwargs summary line after return_tensors
+    docstring += kwargs_summary
 
     # Report undocumented parameters
     if len(undocumented_parameters) > 0:
         print("\n".join(undocumented_parameters))
 
     return docstring
+
+
+def _prepare_return_docstring(output_type, config_class, add_intro=True):
+    """
+    Prepare the return docstring from a ModelOutput class.
+
+    This is a robust replacement for the old _prepare_output_docstrings from doc.py,
+    using the same parsing and formatting methods as the rest of auto_docstring.
+
+    Args:
+        output_type: The ModelOutput class to generate documentation for
+        config_class (`str`): Config class for the model
+        add_intro (`bool`): Whether to add the introduction text
+
+    Returns:
+        str: Formatted return docstring
+    """
+    output_docstring = output_type.__doc__
+
+    # If the class has no docstring, try to use the parent class's docstring
+    if output_docstring is None and hasattr(output_type, "__mro__"):
+        for base in output_type.__mro__[1:]:  # Skip the class itself
+            if base.__doc__ is not None:
+                output_docstring = base.__doc__
+                break
+
+    if output_docstring is None:
+        if add_intro:
+            raise ValueError(
+                f"No docstring found for `{output_type.__name__}` or its parent classes. "
+                "Make sure the ModelOutput class or one of its parents has a docstring."
+            )
+        return ""
+
+    # Parse the output class docstring to extract parameters
+    documented_params, _ = parse_docstring(output_docstring)
+
+    if not documented_params and add_intro:
+        raise ValueError(
+            f"No `Args` or `Parameters` section is found in the docstring of `{output_type.__name__}`. "
+            "Make sure it has a docstring and contains either `Args` or `Parameters`."
+        )
+
+    # Build the return section
+    full_output_type, _ = process_type_annotation(output_type)
+    if add_intro:
+        # Import here to avoid circular import
+        from .doc import PT_RETURN_INTRODUCTION
+
+        intro = PT_RETURN_INTRODUCTION.format(full_output_type=full_output_type, config_class=config_class)
+    else:
+        intro = f"Returns:\n    `{full_output_type}`"
+        if documented_params:
+            intro += ":\n"
+        else:
+            intro += "\n"
+
+    # Build the parameters section
+    params_text = ""
+    if documented_params:
+        for param_name, param_info in documented_params.items():
+            param_type = param_info.get("type", "")
+            param_description = param_info.get("description", "").strip()
+            additional_info = param_info.get("additional_info", "")
+
+            # Handle types with unbalanced backticks due to nested parentheses
+            # The parse_docstring function splits types like `tuple(torch.FloatTensor)` incorrectly
+            # so we need to reconstruct the complete type by grabbing the closing part from additional_info
+            if param_type.startswith("`") and not param_type.endswith("`"):
+                # Find the closing backtick in additional_info
+                closing_backtick_idx = additional_info.find("`")
+                if closing_backtick_idx != -1:
+                    # Grab everything up to and including the closing backtick
+                    param_type += additional_info[: closing_backtick_idx + 1]
+                    # Remove that part from additional_info
+                    additional_info = additional_info[closing_backtick_idx + 1 :]
+
+            # Strip backticks from type to add them back consistently
+            param_type = param_type.strip("`")
+
+            # Use process_type_annotation to ensure consistent type formatting
+            # This applies the same formatting rules as the rest of auto_docstring
+            if param_type:
+                param_type, _ = process_type_annotation(param_type)
+
+            # Build the parameter line
+            if additional_info:
+                # additional_info contains shape and optional status
+                param_line = f"- **{param_name}** (`{param_type}`{additional_info}) -- {param_description}"
+            else:
+                param_line = f"- **{param_name}** (`{param_type}`) -- {param_description}"
+
+            # Handle multi-line descriptions:
+            # Split the description to handle continuations with proper indentation
+            lines = param_line.split("\n")
+            formatted_lines = []
+            for i, line in enumerate(lines):
+                if i == 0:
+                    # First line gets no extra indent (just the bullet point)
+                    formatted_lines.append(line)
+                else:
+                    # Continuation lines: strip existing indentation and add 2 spaces (relative to the bullet)
+                    formatted_lines.append("  " + line.lstrip())
+
+            param_text = "\n".join(formatted_lines)
+
+            # Indent everything to 4 spaces and append with newline
+            param_text_indented = set_min_indent(param_text, 4)
+            params_text += param_text_indented + "\n"
+
+    result = intro + params_text
+
+    return result
 
 
 def _process_returns_section(func_documentation, sig, config_class, indent_level):
@@ -2146,11 +3943,8 @@ def _process_returns_section(func_documentation, sig, config_class, indent_level
     return_docstring = ""
 
     # Extract returns section from existing docstring if available
-    if (
-        func_documentation is not None
-        and (match_start := re.search(r"(?m)^([ \t]*)(?=Return)", func_documentation)) is not None
-    ):
-        match_end = re.search(r"(?m)^([ \t]*)(?=Example)", func_documentation)
+    if func_documentation is not None and (match_start := _re_return.search(func_documentation)) is not None:
+        match_end = _re_example.search(func_documentation)
         if match_end:
             return_docstring = func_documentation[match_start.start() : match_end.start()]
             func_documentation = func_documentation[match_end.start() :]
@@ -2161,8 +3955,10 @@ def _process_returns_section(func_documentation, sig, config_class, indent_level
     # Otherwise, generate return docstring from return annotation if available
     elif sig.return_annotation is not None and sig.return_annotation != inspect._empty:
         add_intro, return_annotation = contains_type(sig.return_annotation, ModelOutput)
-        return_docstring = _prepare_output_docstrings(return_annotation, config_class, add_intro=add_intro)
-        return_docstring = return_docstring.replace("typing.", "")
+        return_docstring = _prepare_return_docstring(return_annotation, config_class, add_intro=add_intro)
+        # PT_RETURN_INTRODUCTION already starts with \n, so only add blank line if it doesn't start with one
+        if not return_docstring.startswith("\n"):
+            return_docstring = "\n" + return_docstring
         return_docstring = set_min_indent(return_docstring, indent_level + 4)
 
     return return_docstring, func_documentation
@@ -2190,7 +3986,7 @@ def _process_example_section(
     example_docstring = ""
 
     # Use existing example section if available
-    if func_documentation is not None and (match := re.search(r"(?m)^([ \t]*)(?=Example)", func_documentation)):
+    if func_documentation is not None and (match := _re_example.search(func_documentation)):
         example_docstring = func_documentation[match.start() :]
         example_docstring = "\n" + set_min_indent(example_docstring, indent_level + 4)
     # Skip examples for processors
@@ -2199,8 +3995,10 @@ def _process_example_section(
         return example_docstring
     # No examples for __init__ methods or if the class is not a model
     elif parent_class is None and model_name_lowercase is not None:
-        task = rf"({'|'.join(PT_SAMPLE_DOCSTRINGS.keys())})"
-        model_task = re.search(task, class_name)
+        global _re_model_task
+        if _re_model_task is None:
+            _re_model_task = re.compile(rf"({'|'.join(PT_SAMPLE_DOCSTRINGS.keys())})")
+        model_task = _re_model_task.search(class_name)
         CONFIG_MAPPING = auto_module.configuration_auto.CONFIG_MAPPING
 
         # Get checkpoint example
@@ -2274,6 +4072,7 @@ def auto_method_docstring(
     # Get model information
     model_name_lowercase, class_name, config_class = _get_model_info(func, parent_class)
     func_documentation = func.__doc__
+
     if custom_args is not None and func_documentation is not None:
         func_documentation = "\n" + set_min_indent(custom_args.strip("\n"), 0) + "\n" + func_documentation
     elif custom_args is not None:
@@ -2328,6 +4127,8 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
 
     is_dataclass = False
     is_processor = False
+    is_config = False
+    is_image_processor = False
     docstring_init = ""
     docstring_args = ""
     if "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
@@ -2356,9 +4157,41 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             checkpoint=checkpoint,
             source_args_dict=get_args_doc_from_source(ModelOutputArgs),
         ).__doc__
+    elif any("BaseImageProcessor" in x.__name__ for x in cls.__mro__):
+        is_image_processor = True
+        docstring_init = auto_method_docstring(
+            cls.__init__,
+            parent_class=cls,
+            custom_args=custom_args,
+            checkpoint=checkpoint,
+            source_args_dict=get_args_doc_from_source(ImageProcessorArgs),
+        ).__doc__
+    elif "PreTrainedConfig" in (x.__name__ for x in cls.__mro__):
+        is_config = True
+        doc_class = cls.__doc__
+        if custom_args is None and doc_class:
+            custom_args = doc_class
+        docstring_init = auto_method_docstring(
+            cls.__init__,
+            parent_class=cls,
+            custom_args=custom_args,
+            checkpoint=checkpoint,
+            source_args_dict=get_args_doc_from_source([ConfigArgs]),
+        ).__doc__
+
     indent_level = get_indent_level(cls)
     model_name_lowercase = get_model_name(cls)
     model_name_title = " ".join([k.title() for k in model_name_lowercase.split("_")]) if model_name_lowercase else None
+    model_base_class = f"{model_name_title.title()}Model" if model_name_title is not None else None
+    if model_name_lowercase is not None:
+        try:
+            model_base_class = getattr(
+                getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["model_class"][0]),
+                PLACEHOLDER_TO_AUTO_MODULE["model_class"][1],
+            )[model_name_lowercase]
+        except KeyError:
+            pass
+
     if model_name_lowercase and model_name_lowercase not in getattr(
         getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["config_class"][0]),
         PLACEHOLDER_TO_AUTO_MODULE["config_class"][1],
@@ -2366,13 +4199,17 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         model_name_lowercase = model_name_lowercase.replace("_", "-")
 
     name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})$", cls.__name__)
-    if name == [] and custom_intro is None and not is_dataclass and not is_processor:
+
+    if name == [] and custom_intro is None and not is_dataclass and not is_processor and not is_image_processor:
         raise ValueError(
             f"`{cls.__name__}` is not registered in the auto doc. Here are the available classes: {ClassDocstring.__dict__.keys()}.\n"
             "Add a `custom_intro` to the decorator if you want to use `auto_docstring` on a class not registered in the auto doc."
         )
-    if name != [] or custom_intro is not None or is_dataclass or is_processor:
+    if name != [] or custom_intro is not None or is_config or is_dataclass or is_processor or is_image_processor:
         name = name[0] if name else None
+        formatting_kwargs = {"model_name": model_name_title}
+        if name == "Config":
+            formatting_kwargs.update({"model_base_class": model_base_class, "model_checkpoint": checkpoint})
         if custom_intro is not None:
             pre_block = equalize_indent(custom_intro, indent_level)
             if not pre_block.endswith("\n"):
@@ -2383,10 +4220,15 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             if pre_block:
                 pre_block = equalize_indent(pre_block, indent_level)
                 pre_block = format_args_docstring(pre_block, model_name_lowercase)
+        elif is_image_processor:
+            pre_block = r"Constructs a {image_processor_class} image processor."
+            if pre_block:
+                pre_block = equalize_indent(pre_block, indent_level)
+                pre_block = format_args_docstring(pre_block, model_name_lowercase)
         elif model_name_title is None or name is None:
             pre_block = ""
         else:
-            pre_block = getattr(ClassDocstring, name).format(model_name=model_name_title)
+            pre_block = getattr(ClassDocstring, name).format(**formatting_kwargs)
         # Start building the docstring
         docstring = set_min_indent(f"{pre_block}", indent_level) if len(pre_block) else ""
         if name != "PreTrainedModel" and "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
@@ -2394,26 +4236,14 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         # Add the __init__ docstring
         if docstring_init:
             docstring += set_min_indent(f"\n{docstring_init}", indent_level)
-        elif is_dataclass:
+        elif is_dataclass or is_config:
             # No init function, we have a data class
             docstring += docstring_args if docstring_args else "\nArgs:\n"
             source_args_dict = get_args_doc_from_source(ModelOutputArgs)
             doc_class = cls.__doc__ if cls.__doc__ else ""
             documented_kwargs = parse_docstring(doc_class)[0]
             for param_name, param_type_annotation in cls.__annotations__.items():
-                param_type = str(param_type_annotation)
-                optional = False
-
-                # Process parameter type
-                if "typing" in param_type:
-                    param_type = "".join(param_type.split("typing.")).replace("transformers.", "~")
-                else:
-                    param_type = f"{param_type.replace('transformers.', '~').replace('builtins', '')}.{param_name}"
-                if "ForwardRef" in param_type:
-                    param_type = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", param_type)
-                if "Optional" in param_type:
-                    param_type = re.sub(r"Optional\[(.*?)\]", r"\1", param_type)
-                    optional = True
+                param_type, optional = process_type_annotation(param_type_annotation, param_name)
 
                 # Check for default value
                 param_default = ""

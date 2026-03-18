@@ -12,50 +12,20 @@
 # limitations under the License.
 """Idefics2 model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="HuggingFaceM4/idefics2-8b")
+@strict(accept_kwargs=True)
 class Idefics2VisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Idefics2VisionModel`]. It is used to instantiate a
-    Idefics2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the SigLIP checkpoint
-    [google/siglip-base-patch16-224](https://huggingface.co/google/siglip-base-patch16-224) used in the Idefics2 model
-    [HuggingFaceM4/idefics2-8b](https://huggingface.co/HuggingFaceM4/idefics2-8b).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels in the input images.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 32):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation for initializing all weight matrices in the model.
-
     Example:
 
     ```python
@@ -75,121 +45,61 @@ class Idefics2VisionConfig(PreTrainedConfig):
     model_type = "idefics2_vision"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        hidden_size=768,
-        intermediate_size=3072,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        num_channels=3,
-        image_size=224,
-        patch_size=32,
-        hidden_act="gelu_pytorch_tanh",
-        layer_norm_eps=1e-6,
-        attention_dropout=0.0,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.image_size = image_size
-        self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
+    hidden_size: int = 768
+    intermediate_size: int = 3072
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    num_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] = 224
+    patch_size: int | list[int] | tuple[int, int] = 32
+    hidden_act: str = "gelu_pytorch_tanh"
+    layer_norm_eps: float = 1e-6
+    attention_dropout: float | int = 0.0
+    initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="HuggingFaceM4/idefics2-8b")
+@strict(accept_kwargs=True)
 class Idefics2PerceiverConfig(PreTrainedConfig):
     r"""
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the perceiver block.
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        resampler_n_latents (`int`, *optional*, defaults to 64):
-            Number of latent embeddings to resample ("compress") the input sequence to (usually < 128).
-        resampler_depth (`int`, *optional*, defaults to 3):
-            Depth of the Perceiver Resampler (Transformer w/ cross attention). Should be shallow (<= 3).
-        resampler_n_heads (`int`, *optional*, defaults to 16):
-            Number of heads in each Transformer block (for multi-headed self-attention).
-        resampler_head_dim (`int`, *optional*, defaults to 96):
-            Dimensionality of each head projection in the Transformer block.
-        num_key_value_heads (`int`, *optional*, defaults to 4):
-            Number of key-value heads in the perceiver attention block.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation for initializing all weight matrices in the model.
+    resampler_n_latents (`int`, *optional*, defaults to 64):
+        Number of latent embeddings to resample ("compress") the input sequence to (usually < 128).
+    resampler_depth (`int`, *optional*, defaults to 3):
+        Depth of the Perceiver Resampler (Transformer w/ cross attention). Should be shallow (<= 3).
+    resampler_n_heads (`int`, *optional*, defaults to 16):
+        Number of heads in each Transformer block (for multi-headed self-attention).
+    resampler_head_dim (`int`, *optional*, defaults to 96):
+        Dimensionality of each head projection in the Transformer block.
     """
 
     model_type = "idefics2_perceiver"
 
-    def __init__(
-        self,
-        hidden_act="silu",
-        hidden_size=4096,
-        rms_norm_eps=1e-06,
-        resampler_n_latents=64,
-        resampler_depth=3,
-        resampler_n_heads=16,
-        resampler_head_dim=96,
-        num_key_value_heads=4,
-        attention_dropout=0.0,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        self.hidden_act = hidden_act
-        self.hidden_size = hidden_size
-        self.rms_norm_eps = rms_norm_eps
-        self.resampler_n_latents = resampler_n_latents
-        self.resampler_depth = resampler_depth
-        self.resampler_n_heads = resampler_n_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.resampler_head_dim = resampler_head_dim
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
+    hidden_act: str = "silu"
+    hidden_size: int = 4096
+    rms_norm_eps: float = 1e-06
+    resampler_n_latents: int = 64
+    resampler_depth: int = 3
+    resampler_n_heads: int = 16
+    resampler_head_dim: int = 96
+    num_key_value_heads: int = 4
+    attention_dropout: float | int = 0.0
+    initializer_range: float = 0.02
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if self.num_key_value_heads > self.resampler_n_heads:
             raise ValueError(
                 f"num_key_value_heads={self.num_key_value_heads} must be less than or equal to"
                 f" resampler_n_heads={self.resampler_n_heads}"
             )
-        super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="HuggingFaceM4/idefics2-8b")
+@strict(accept_kwargs=True)
 class Idefics2Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Idefics2Model`]. It is used to instantiate a
-    Idefics2 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the model of the Idefics2
-    [HuggingFaceM4/idefics2-8b](https://huggingface.co/HuggingFaceM4/idefics2-8b) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should cache the key/value pairs of the attention mechanism.
-        image_token_id (`int`, *optional*, defaults to 32001):
-            The id of the "image" token.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether or not to tie the word embeddings with the token embeddings.
-        vision_config (`IdeficsVisionConfig` or `dict`, *optional*):
-            Custom vision config or dict
-        perceiver_config (`IdeficsPerceiverConfig` or `dict`, *optional*):
-            Custom perceiver config or dict
-        text_config (`MistralConfig` or `dict`, *optional*):
-            Custom text config or dict for the text model
+    perceiver_config (`IdeficsPerceiverConfig` or `dict`, *optional*):
+        Custom perceiver config or dict
 
     Example:
     ```python
@@ -209,50 +119,38 @@ class Idefics2Config(PreTrainedConfig):
         "vision_config": Idefics2VisionConfig,
     }
 
-    def __init__(
-        self,
-        use_cache=True,
-        image_token_id=32_001,
-        tie_word_embeddings=False,
-        vision_config=None,
-        perceiver_config=None,
-        text_config=None,
-        **kwargs,
-    ):
-        self.image_token_id = image_token_id
-        self.use_cache = use_cache
-        self.tie_word_embeddings = tie_word_embeddings
+    use_cache: bool = True
+    image_token_id: int = 32_001
+    tie_word_embeddings: bool = False
+    vision_config: dict | PreTrainedConfig | None = None
+    perceiver_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
 
-        if perceiver_config is None:
+    def __post_init__(self, **kwargs):
+        if self.perceiver_config is None:
             self.perceiver_config = Idefics2PerceiverConfig()
             logger.info("perciver_config is None, using default perceiver config")
-        elif isinstance(perceiver_config, dict):
-            self.perceiver_config = Idefics2PerceiverConfig(**perceiver_config)
-        elif isinstance(perceiver_config, Idefics2PerceiverConfig):
-            self.perceiver_config = perceiver_config
+        elif isinstance(self.perceiver_config, dict):
+            self.perceiver_config = Idefics2PerceiverConfig(**self.perceiver_config)
 
-        if vision_config is None:
+        if self.vision_config is None:
             self.vision_config = Idefics2VisionConfig()
             logger.info("vision_config is None, using default vision config")
-        elif isinstance(vision_config, dict):
-            self.vision_config = Idefics2VisionConfig(**vision_config)
-        elif isinstance(vision_config, Idefics2VisionConfig):
-            self.vision_config = vision_config
+        elif isinstance(self.vision_config, dict):
+            self.vision_config = Idefics2VisionConfig(**self.vision_config)
 
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "mistral")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "mistral")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
             logger.info("text_config is None, using default text config")
-            text_config = CONFIG_MAPPING["mistral"](
+            self.text_config = CONFIG_MAPPING["mistral"](
                 max_position_embeddings=4096 * 8,
                 rms_norm_eps=1e-5,
                 # None in the original configuration_mistral, we set it to the unk_token_id
                 pad_token_id=0,
-                tie_word_embeddings=False,
             )
 
-        self.text_config = text_config
         if self.text_config.hidden_size != self.perceiver_config.hidden_size:
             self.perceiver_config.hidden_size = self.text_config.hidden_size
             self.perceiver_config.rms_norm_eps = self.text_config.rms_norm_eps
@@ -261,7 +159,7 @@ class Idefics2Config(PreTrainedConfig):
                 "In your model's config on the hub, add `hidden_size` and `rms_norm_eps` keys under the `perceiver_config` dict. "
             )
 
-        super().__init__(**kwargs, tie_word_embeddings=tie_word_embeddings)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Idefics2Config"]

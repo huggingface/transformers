@@ -259,6 +259,11 @@ class MobileNetV2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertTrue(encoding["labels"].min().item() >= 0)
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
+            # Ensure reduce label returns the same number of masks
+            image, map = prepare_semantic_batch_inputs()
+            encoding = image_processing(image, map, return_tensors="pt")
+            self.assertTrue(len(encoding["labels"]) == len(map))
+
     def test_slow_fast_equivalence(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")

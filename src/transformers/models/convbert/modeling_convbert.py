@@ -32,11 +32,16 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
+    TransformersKwargs,
     auto_docstring,
+    can_return_tuple,
     logging,
 )
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_convbert import ConvBertConfig
 
 
@@ -99,26 +104,6 @@ class ConvBertEmbeddings(nn.Module):
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
-
-
-@auto_docstring
-class ConvBertPreTrainedModel(PreTrainedModel):
-    config: ConvBertConfig
-    base_model_prefix = "convbert"
-    supports_gradient_checkpointing = True
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        super()._init_weights(module)
-        if isinstance(module, SeparableConv1D):
-            init.zeros_(module.bias)
-        elif isinstance(module, GroupedLinearLayer):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            init.zeros_(module.bias)
-        elif isinstance(module, ConvBertEmbeddings):
-            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-            init.zeros_(module.token_type_ids)
 
 
 class SeparableConv1D(nn.Module):
@@ -192,8 +177,8 @@ class ConvBertSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
-        output_attentions: bool | None = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_length, _ = hidden_states.shape
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
@@ -267,8 +252,7 @@ class ConvBertSelfAttention(nn.Module):
         )
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-        return outputs
+        return context_layer, attention_probs
 
 
 class ConvBertSelfOutput(nn.Module):
@@ -296,17 +280,16 @@ class ConvBertAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
-        output_attentions: bool | None = False,
-    ) -> tuple[torch.Tensor, torch.FloatTensor | None]:
-        self_outputs = self.self(
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        context_layer, _ = self.self(
             hidden_states,
             attention_mask,
-            encoder_hidden_states,
-            output_attentions,
+            encoder_hidden_states=encoder_hidden_states,
+            **kwargs,
         )
-        attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+        attention_output = self.output(context_layer, hidden_states)
+        return attention_output
 
 
 class GroupedLinearLayer(nn.Module):
@@ -391,15 +374,13 @@ class ConvBertLayer(GradientCheckpointingLayer):
         attention_mask: torch.FloatTensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = False,
-    ) -> tuple[torch.Tensor, torch.FloatTensor | None]:
-        self_attention_outputs = self.attention(
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        attention_output = self.attention(
             hidden_states,
             attention_mask,
-            output_attentions=output_attentions,
+            **kwargs,
         )
-        attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
@@ -407,25 +388,46 @@ class ConvBertLayer(GradientCheckpointingLayer):
                     f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers"
                     " by setting `config.add_cross_attention=True`"
                 )
-            cross_attention_outputs = self.crossattention(
+            attention_output = self.crossattention(
                 attention_output,
                 encoder_attention_mask,
-                encoder_hidden_states,
-                output_attentions,
+                encoder_hidden_states=encoder_hidden_states,
+                **kwargs,
             )
-            attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:]  # add cross attentions if we output attention weights
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
-        outputs = (layer_output,) + outputs
-        return outputs
+        return layer_output
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
+
+
+@auto_docstring
+class ConvBertPreTrainedModel(PreTrainedModel):
+    config: ConvBertConfig
+    base_model_prefix = "convbert"
+    supports_gradient_checkpointing = True
+    _can_record_outputs = {
+        "hidden_states": ConvBertLayer,
+        "attentions": ConvBertSelfAttention,
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+        if isinstance(module, SeparableConv1D):
+            init.zeros_(module.bias)
+        elif isinstance(module, GroupedLinearLayer):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.bias)
+        elif isinstance(module, ConvBertEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
 
 
 class ConvBertEncoder(nn.Module):
@@ -441,44 +443,19 @@ class ConvBertEncoder(nn.Module):
         attention_mask: torch.FloatTensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = False,
-        output_hidden_states: bool | None = False,
-        return_dict: bool | None = True,
-    ) -> tuple | BaseModelOutputWithCrossAttentions:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = layer_module(
+        **kwargs,
+    ) -> BaseModelOutputWithCrossAttentions:
+        for layer_module in self.layer:
+            hidden_states = layer_module(
                 hidden_states,
                 attention_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                output_attentions,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                **kwargs,
             )
-            hidden_states = layer_outputs[0]
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-                if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, all_hidden_states, all_self_attentions, all_cross_attentions]
-                if v is not None
-            )
         return BaseModelOutputWithCrossAttentions(
             last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -619,6 +596,8 @@ class ConvBertModel(ConvBertPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -627,17 +606,8 @@ class ConvBertModel(ConvBertPreTrainedModel):
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | BaseModelOutputWithCrossAttentions:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithCrossAttentions:
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -670,15 +640,13 @@ class ConvBertModel(ConvBertPreTrainedModel):
         if hasattr(self, "embeddings_project"):
             hidden_states = self.embeddings_project(hidden_states)
 
-        hidden_states = self.encoder(
+        encoder_outputs: BaseModelOutputWithCrossAttentions = self.encoder(
             hidden_states,
             attention_mask=extended_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        return hidden_states
+        return encoder_outputs
 
 
 class ConvBertGeneratorPredictions(nn.Module):
@@ -719,6 +687,7 @@ class ConvBertForMaskedLM(ConvBertPreTrainedModel):
     def set_output_embeddings(self, word_embeddings):
         self.generator_lm_head = word_embeddings
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -728,10 +697,7 @@ class ConvBertForMaskedLM(ConvBertPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MaskedLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -739,17 +705,13 @@ class ConvBertForMaskedLM(ConvBertPreTrainedModel):
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        generator_hidden_states = self.convbert(
+        generator_hidden_states: BaseModelOutputWithCrossAttentions = self.convbert(
             input_ids,
-            attention_mask,
-            token_type_ids,
-            position_ids,
-            inputs_embeds,
-            output_attentions,
-            output_hidden_states,
-            return_dict,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            **kwargs,
         )
         generator_sequence_output = generator_hidden_states[0]
 
@@ -761,10 +723,6 @@ class ConvBertForMaskedLM(ConvBertPreTrainedModel):
         if labels is not None:
             loss_fct = nn.CrossEntropyLoss()  # -100 index = padding token
             loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = (prediction_scores,) + generator_hidden_states[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return MaskedLMOutput(
             loss=loss,
@@ -815,6 +773,7 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -824,10 +783,7 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -835,17 +791,13 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.convbert(
+        outputs: BaseModelOutputWithCrossAttentions = self.convbert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -874,10 +826,6 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
 
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
@@ -898,6 +846,7 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -907,10 +856,7 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MultipleChoiceModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
@@ -943,7 +889,6 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -956,15 +901,13 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
             else None
         )
 
-        outputs = self.convbert(
+        outputs: BaseModelOutputWithCrossAttentions = self.convbert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -977,10 +920,6 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
-
-        if not return_dict:
-            output = (reshaped_logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
             loss=loss,
@@ -1006,6 +945,7 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1015,26 +955,19 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.convbert(
+        outputs: BaseModelOutputWithCrossAttentions = self.convbert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -1046,10 +979,6 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
@@ -1071,6 +1000,7 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1081,22 +1011,15 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | QuestionAnsweringModelOutput:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.convbert(
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> QuestionAnsweringModelOutput:
+        outputs: BaseModelOutputWithCrossAttentions = self.convbert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -1122,10 +1045,6 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[1:]
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
             loss=total_loss,

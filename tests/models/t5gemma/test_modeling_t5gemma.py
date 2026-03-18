@@ -29,7 +29,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
+from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -584,10 +584,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     pipeline_model_mapping = (
         {
             "feature-extraction": T5GemmaModel,
-            "summarization": T5GemmaForConditionalGeneration,
             "text-classification": T5GemmaForSequenceClassification,
-            "text2text-generation": T5GemmaForConditionalGeneration,
-            "translation": T5GemmaForConditionalGeneration,
             "zero-shot": T5GemmaForSequenceClassification,
         }
         if is_torch_available()
@@ -610,7 +607,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             self,
             config_class=T5GemmaConfig,
             # For faking the testing.
-            hidden_size=37,
+            hidden_size=32,
             vocab_size=self.model_tester.vocab_size,
             num_attention_heads=self.model_tester.num_attention_heads,
             num_hidden_layers=self.model_tester.num_hidden_layers,
@@ -1085,7 +1082,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             outputs_cached.scores = full_cached_scores
 
             # The two sets of generated text and past kv should be equal to each other
-            self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
+            assert_similar_generate_outputs(outputs, outputs_cached)
             self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
 
     # Based on tests.test_modeling_common.ModelTesterMixin.test_inputs_embeds_matches_input_ids
@@ -1479,7 +1476,7 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
             self,
             config_class=T5GemmaConfig,
             # For faking the testing.
-            hidden_size=37,
+            hidden_size=32,
             vocab_size=self.model_tester.vocab_size,
             num_attention_heads=self.model_tester.num_attention_heads,
             num_hidden_layers=self.model_tester.num_hidden_layers,
@@ -1504,20 +1501,20 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_token_classification_head(*config_and_inputs)
 
-    @unittest.skip("No loss in the output of T5GemmaEncoderModel")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip("No loss in the output of T5GemmaEncoderModel")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip("No loss in the output of T5GemmaEncoderModel")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip("No loss in the output of T5GemmaEncoderModel")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     # Based on tests.test_modeling_common.ModelTesterMixin.test_flex_attention_with_grads

@@ -13,57 +13,22 @@
 # limitations under the License.
 """GPTNeoX Japanese model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring
 
 
-logger = logging.get_logger(__name__)
-
-
+@auto_docstring(checkpoint="abeja/gpt-neox-japanese-2.7b")
+@strict(accept_kwargs=True)
 class GPTNeoXJapaneseConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GPTNeoXModelJapanese`]. It is used to instantiate
-    a GPTNeoX model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the GPTNeoXJapanese
-    [abeja/gpt-neox-japanese-2.7b](https://huggingface.co/abeja/gpt-neox-japanese-2.7b) architecture.
+    intermediate_multiple_size (`int`, *optional*, defaults to 4):
+        Dimension of the "intermediate" layer in the Transformer encoder is calculated by hidden_size *
+        intermediate_multiple_size.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information. Default configs is set as 2.7B model
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the GPTNeoXJapanese model. Defines the number of different tokens that can be
-            represented by the `inputs_ids` passed when calling [`GPTNeoXJapanese`].
-        hidden_size (`int`, *optional*, defaults to 2560):
-            Dimension of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_multiple_size (`int`, *optional*, defaults to 4):
-            Dimension of the "intermediate" layer in the Transformer encoder is calculated by hidden_size *
-            intermediate_multiple_size.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
-            The epsilon used by the layer normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        attention_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention.
-        hidden_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the hidden layer.
-        Example:
+    Example:
 
     ```python
     >>> from transformers import GPTNeoXJapaneseConfig, GPTNeoXJapaneseModel
@@ -80,42 +45,26 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
 
     model_type = "gpt_neox_japanese"
 
-    def __init__(
-        self,
-        vocab_size: int | None = 32000,
-        hidden_size: int | None = 2560,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 32,
-        intermediate_multiple_size: int | None = 4,
-        hidden_act: str | None = "gelu",
-        max_position_embeddings: int | None = 2048,
-        initializer_range: float | None = 0.02,
-        layer_norm_eps: int | None = 1e-5,
-        use_cache: bool | None = True,
-        bos_token_id: int | None = 31996,
-        eos_token_id: int | None = 31999,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_dropout: float | None = 0.1,
-        hidden_dropout: float | None = 0.0,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_multiple_size = intermediate_multiple_size
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        self.attention_dropout = attention_dropout
-        self.hidden_dropout = hidden_dropout
-        self.rope_parameters = rope_parameters
+    vocab_size: int = 32000
+    hidden_size: int = 2560
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    intermediate_multiple_size: int = 4
+    hidden_act: str = "gelu"
+    max_position_embeddings: int = 2048
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-5
+    use_cache: bool = True
+    bos_token_id: int | None = 31996
+    eos_token_id: int | list[int] | None = 31999
+    rope_parameters: RopeParameters | dict | None = None
+    attention_dropout: float | int = 0.1
+    hidden_dropout: float | int = 0.0
+    is_decoder: bool = False
+    pad_token_id: int | None = None
+    tie_word_embeddings: bool = True
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
-
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
+    def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
@@ -125,7 +74,6 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
         self.rope_parameters.setdefault("rope_theta", kwargs.pop("rotary_emb_base", self.default_theta))
         self.rope_parameters["partial_rotary_factor"] = kwargs.pop("rotary_pct", 1.0)
         self.standardize_rope_params()
-        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
 
 

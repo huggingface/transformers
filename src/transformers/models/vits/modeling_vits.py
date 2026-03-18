@@ -25,11 +25,11 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, logging, torch_compilable_check
 from .configuration_vits import VitsConfig
 
 
@@ -210,10 +210,10 @@ def _rational_quadratic_spline(
     """
     upper_bound = tail_bound
     lower_bound = -tail_bound
-
-    if torch.min(inputs) < lower_bound or torch.max(inputs) > upper_bound:
-        raise ValueError("Input to a transform is not within its domain")
-
+    torch_compilable_check(
+        (inputs.min() >= lower_bound) & (inputs.max() <= upper_bound),
+        f"Inputs are outside the range [{lower_bound}, {upper_bound}]",
+    )
     num_bins = unnormalized_widths.shape[-1]
 
     if min_bin_width * num_bins > 1.0:
@@ -283,8 +283,10 @@ def _rational_quadratic_spline(
         c = -input_delta * intermediate2
 
         discriminant = b.pow(2) - 4 * a * c
-        if not (discriminant >= 0).all():
-            raise RuntimeError(f"invalid discriminant {discriminant}")
+        torch_compilable_check(
+            torch.all(discriminant >= 0),
+            f"Discriminant has negative values {discriminant}",
+        )
 
         root = (2 * c) / (-b - torch.sqrt(discriminant))
         outputs = root * input_bin_widths + input_cumwidths
@@ -1096,10 +1098,11 @@ class VitsEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        # expand attention_mask
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+        )
 
         hidden_states = hidden_states * padding_mask
 
@@ -1274,6 +1277,7 @@ class VitsModel(VitsPreTrainedModel):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         labels: torch.FloatTensor | None = None,
+        speaking_rate: float | None = None,
         **kwargs,
     ) -> tuple[Any] | VitsModelOutput:
         r"""
@@ -1282,6 +1286,8 @@ class VitsModel(VitsPreTrainedModel):
         labels (`torch.FloatTensor` of shape `(batch_size, config.spectrogram_bins, sequence_length)`, *optional*):
             Float values of target spectrogram. Timesteps set to `-100.0` are ignored (masked) for the loss
             computation.
+        speaking_rate (`float`, *optional*):
+            Speaking rate.
 
         Example:
 
@@ -1306,7 +1312,7 @@ class VitsModel(VitsPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None:
             raise NotImplementedError("Training of VITS is not supported yet.")
@@ -1351,7 +1357,9 @@ class VitsModel(VitsPreTrainedModel):
         else:
             log_duration = self.duration_predictor(hidden_states, input_padding_mask, speaker_embeddings)
 
-        length_scale = 1.0 / self.speaking_rate
+        if speaking_rate is None:
+            speaking_rate = self.speaking_rate
+        length_scale = 1.0 / speaking_rate
         duration = torch.ceil(torch.exp(log_duration) * input_padding_mask * length_scale)
         predicted_lengths = torch.clamp_min(torch.sum(duration, [1, 2]), 1).long()
 

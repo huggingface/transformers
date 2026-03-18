@@ -23,6 +23,7 @@ from typing import Optional
 import numpy as np
 import torch
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
@@ -54,8 +55,17 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
-from ...utils.generic import check_model_inputs
+from ...utils import (
+    TensorType,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    logging,
+    torch_compilable_check,
+    torch_int,
+)
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..ernie4_5.configuration_ernie4_5 import Ernie4_5Config
 from ..ernie4_5.modeling_ernie4_5 import (
     Ernie4_5DecoderLayer,
@@ -462,6 +472,7 @@ class PaddleOCRVLProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_mm_token_type_ids": True,
         },
     }
 
@@ -484,6 +495,7 @@ class PaddleOCRVLProcessor(ProcessorMixin):
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token
+        self.image_token_id = tokenizer.image_token_id
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -554,46 +566,23 @@ class PaddleOCRVLProcessor(ProcessorMixin):
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
 
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
 
+@auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
+@strict(accept_kwargs=True)
 class PaddleOCRVisionConfig(SiglipVisionConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PaddleOCRVisionModel`]. It is used to instantiate a
-    PaddleOCRVL vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the vision encoder of the PaddleOCRVL
-    [PaddlePaddle/PaddleOCRVL](https://huggingface.co/PaddlePaddle/PaddleOCR-VL) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1152):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 4304):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 27):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels in the input images.
-        image_size (`int`, *optional*, defaults to 384):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        spatial_merge_size (`int`, *optional*, defaults to 2):
-            The size used for merging spatial dimensions.
-
     Example:
 
     ```python
@@ -613,53 +602,26 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
     model_type = "paddleocr_vl_vision"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        hidden_size=1152,
-        intermediate_size=4304,
-        num_hidden_layers=27,
-        num_attention_heads=16,
-        num_channels=3,
-        image_size=384,
-        patch_size=14,
-        hidden_act="gelu_pytorch_tanh",
-        layer_norm_eps=1e-6,
-        attention_dropout=0.0,
-        spatial_merge_size=2,
-        **kwargs,
-    ):
-        super().__init__()
-        self.spatial_merge_size = spatial_merge_size
+    hidden_size: int = 1152
+    intermediate_size: int = 4304
+    num_hidden_layers: int = 27
+    num_attention_heads: int = 16
+    image_size: int = 384
+    patch_size: int = 14
+    spatial_merge_size: int = 2
 
 
+@auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
+@strict(accept_kwargs=True)
 class PaddleOCRTextConfig(Ernie4_5Config):
     model_type = "paddleocr_vl_text"
 
 
+@auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
+@strict(accept_kwargs=True)
 class PaddleOCRVLConfig(Qwen2VLConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PaddleOCRVLForConditionalGeneration`]. It is used to instantiate a
-    PaddleOCRVL model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of
-    PaddleOCRVL [PaddlePaddle/PaddleOCR-VL](https://huggingface.co/PaddlePaddle/PaddleOCR-VL).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `PaddleOCRTextConfig`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `PaddleOCRVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to 100295):
-            The image token index to encode the image prompt.
-        video_token_id (`int`, *optional*, defaults to 100296):
-            The video token index to encode the image prompt.
-        vision_start_token_id (`int`, *optional*, defaults to 101305):
-            The token index to denote start of vision input.
-        vision_end_token_id (`int`, *optional*, defaults to 101306):
-            The token index to denote end of vision input.
+    Example:
 
     ```python
     >>> from transformers import PaddleOCRVLForConditionalGeneration, PaddleOCRVLConfig
@@ -676,17 +638,11 @@ class PaddleOCRVLConfig(Qwen2VLConfig):
 
     sub_configs = {"vision_config": PaddleOCRVisionConfig, "text_config": PaddleOCRTextConfig}
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        image_token_id=100295,
-        video_token_id=100296,
-        vision_start_token_id=101305,
-        vision_end_token_id=101306,
-        **kwargs,
-    ):
-        super().__init__()
+    image_token_id: int = 100295
+    video_token_id: int = 100296
+    vision_start_token_id: int = 101305
+    vision_end_token_id: int = 101306
+    tie_word_embeddings: int = True
 
 
 class PaddleOCRProjector(nn.Module):
@@ -790,7 +746,8 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
     def __init__(self, config: PaddleOCRTextConfig):
         super().__init__(config)
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -799,7 +756,6 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -812,14 +768,10 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position: torch.Tensor = (
-                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            )
-
         if position_ids is None:
-            position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
 
@@ -831,9 +783,8 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=text_position_ids,
         )
@@ -849,7 +800,6 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
                 position_ids=text_position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -857,42 +807,6 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-        )
-
-
-class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
-    config: PaddleOCRVisionConfig
-    main_input_name = "pixel_values"
-    input_modalities = "image"
-
-    def __init__(self, config: PaddleOCRVisionConfig):
-        super().__init__(config)
-
-        self.vision_model = PaddleOCRVisionTransformer(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        cu_seqlens: torch.Tensor,
-        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
-        **kwargs,
-    ) -> BaseModelOutputWithPooling:
-        """
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
-                The tensors corresponding to the input images.
-            cu_seqlens (`torch.Tensor` of shape `(num_images + 1,)`):
-                The cumulative sequence lengths of each image or video feature.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-        """
-        return self.vision_model(
-            pixel_values=pixel_values,
-            cu_seqlens=cu_seqlens,
-            image_grid_thw=image_grid_thw,
         )
 
 
@@ -985,6 +899,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
         cu_seqlens: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(sequence_length, hidden_size)`, *optional*):
@@ -1002,7 +917,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
         hidden_states = inputs_embeds
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
         split_hids = []
@@ -1028,6 +943,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
                 hidden_states,
                 cu_seqlens=cu_seqlens,
                 position_embeddings=position_embeddings,
+                **kwargs,
             )
 
         return BaseModelOutput(
@@ -1036,6 +952,14 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
 
 
 class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
+    config: PaddleOCRVisionConfig
+    main_input_name = "pixel_values"
+    input_modalities = "image"
+    _can_record_outputs = {
+        "hidden_states": PaddleOCRVisionEncoderLayer,
+        "attentions": PaddleOCRVisionAttention,
+    }
+
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__(config)
         self.config = config
@@ -1047,13 +971,15 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
 
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         cu_seqlens: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         """
         Args:
@@ -1073,6 +999,7 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
             cu_seqlens=cu_seqlens,
             attention_mask=attention_mask,
             image_grid_thw=image_grid_thw,
+            **kwargs,
         )
 
         last_hidden_state = encoder_outputs.last_hidden_state
@@ -1081,8 +1008,43 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=None,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+        )
+
+
+class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
+    config: PaddleOCRVisionConfig
+    main_input_name = "pixel_values"
+    input_modalities = "image"
+
+    def __init__(self, config: PaddleOCRVisionConfig):
+        super().__init__(config)
+
+        self.vision_model = PaddleOCRVisionTransformer(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        cu_seqlens: torch.Tensor,
+        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        """
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
+                The tensors corresponding to the input images.
+            cu_seqlens (`torch.Tensor` of shape `(num_images + 1,)`):
+                The cumulative sequence lengths of each image or video feature.
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+        """
+        return self.vision_model(
+            pixel_values=pixel_values,
+            cu_seqlens=cu_seqlens,
+            image_grid_thw=image_grid_thw,
+            **kwargs,
         )
 
 
@@ -1095,7 +1057,6 @@ class PaddleOCRVLCausalLMOutputWithPast(Qwen2VLCausalLMOutputWithPast):
 
 
 class PaddleOCRVLModel(Qwen2VLModel):
-    _checkpoint_conversion_mapping = {"^model": "language_model"}
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
 
     def __init__(self, config: PaddleOCRVLConfig):
@@ -1113,15 +1074,22 @@ class PaddleOCRVLModel(Qwen2VLModel):
     def set_input_embeddings(self, value):
         self.language_model.embed_tokens = value
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None):
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
+    def get_video_features(self):
+        raise AttributeError("PaddleOCRVLModel does not support video.")
 
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype).unsqueeze(0)
         cu_seqlens = torch.repeat_interleave(image_grid_thw[:, 1] * image_grid_thw[:, 2], image_grid_thw[:, 0]).cumsum(
@@ -1137,10 +1105,14 @@ class PaddleOCRVLModel(Qwen2VLModel):
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
             cu_seqlens=cu_seqlens,
+            return_dict=True,
+            **kwargs,
         )
         image_embeds = vision_outputs.last_hidden_state
         image_embeds = self.projector(image_embeds, image_grid_thw)
-        return image_embeds
+        vision_outputs.pooler_output = image_embeds
+
+        return vision_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -1160,10 +1132,10 @@ class PaddleOCRVLModel(Qwen2VLModel):
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
+        torch_compilable_check(
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}",
+        )
         return special_image_mask
 
     @can_return_tuple
@@ -1177,8 +1149,8 @@ class PaddleOCRVLModel(Qwen2VLModel):
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
         rope_deltas: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | PaddleOCRVLModelOutputWithPast:
         r"""
@@ -1191,29 +1163,20 @@ class PaddleOCRVLModel(Qwen2VLModel):
             inputs_embeds = self.language_model.embed_tokens(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw, return_dict=True).pooler_output
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if position_ids is None:
-            past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
-            if self.rope_deltas is None or past_key_values_length == 0:
-                position_ids, rope_deltas = self.get_rope_index(
-                    input_ids=input_ids,
-                    image_grid_thw=image_grid_thw,
-                    attention_mask=attention_mask,
-                )
-                self.rope_deltas = rope_deltas
-            # then use the prev pre-calculated rope-deltas to get the correct position ids
-            else:
-                batch_size, seq_length, _ = inputs_embeds.shape
-                position_ids = torch.arange(seq_length, device=inputs_embeds.device)
-                position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1)
-                delta = (past_key_values_length + self.rope_deltas).to(inputs_embeds.device)
-                delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
-                position_ids = position_ids + delta.to(position_ids.device)
+            position_ids = self.compute_3d_position_ids(
+                input_ids=input_ids,
+                image_grid_thw=image_grid_thw,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                mm_token_type_ids=mm_token_type_ids,
+            )
 
         outputs = self.language_model(
             input_ids=None,
@@ -1222,7 +1185,6 @@ class PaddleOCRVLModel(Qwen2VLModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1238,12 +1200,10 @@ class PaddleOCRVLModel(Qwen2VLModel):
 
 
 class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
-    _checkpoint_conversion_mapping = {
-        "^visual": "model.visual",
-        "^mlp_AR": "model.projector",
-        r"^model(?!(\.visual|\.projector|\.language_model))": "model.language_model",
-    }
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
+
+    def get_video_features(self):
+        raise AttributeError("PaddleOCRVLForConditionalGeneration does not support video.")
 
     @can_return_tuple
     @auto_docstring
@@ -1259,7 +1219,7 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         rope_deltas: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | PaddleOCRVLCausalLMOutputWithPast:
@@ -1319,7 +1279,7 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             use_cache=use_cache,
             pixel_values=pixel_values,
             rope_deltas=rope_deltas,
-            cache_position=cache_position,
+            mm_token_type_ids=mm_token_type_ids,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state

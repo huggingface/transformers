@@ -43,12 +43,7 @@ class ShieldGemma2ImageClassifierOutputWithNoAttention(ImageClassifierOutputWith
 class ShieldGemma2ForImageClassification(PreTrainedModel):
     config: ShieldGemma2Config
     input_modalities = ("image", "text")
-    _checkpoint_conversion_mapping = {
-        "model.language_model.model": "model.model.language_model",
-        "model.vision_tower": "model.model.vision_tower",
-        "model.multi_modal_projector": "model.model.multi_modal_projector",
-        "model.language_model.lm_head": "model.lm_head",
-    }
+    base_model_prefix = "model"
 
     def __init__(self, config: ShieldGemma2Config):
         super().__init__(config=config)
@@ -58,16 +53,16 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.model.language_model.get_input_embeddings()
+        return self.model.get_decoder().get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.model.language_model.set_input_embeddings(value)
+        self.model.get_decoder().set_input_embeddings(value)
 
     def get_output_embeddings(self):
-        return self.model.language_model.get_output_embeddings()
+        return self.model.get_decoder().get_output_embeddings()
 
     def set_output_embeddings(self, new_embeddings):
-        self.model.language_model.set_output_embeddings(new_embeddings)
+        self.model.get_decoder().set_output_embeddings(new_embeddings)
 
     @auto_docstring
     def forward(

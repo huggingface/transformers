@@ -22,7 +22,7 @@
 from typing import Optional
 
 import torch
-import torch.nn.functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
@@ -58,7 +58,7 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
         image: "torch.Tensor",
         size: SizeDict,
         min_size: int,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -74,8 +74,8 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
         delta = size / max_size
         # Largest side becomes `size` and the other side is scaled according to the aspect ratio.
         output_size_nonpadded = SizeDict(
-            height=max(int(height * delta), min_size),
-            width=max(int(width * delta), min_size),
+            height=max(round(height * delta), min_size),
+            width=max(round(width * delta), min_size),
         )
 
         return super().resize(image, size=output_size_nonpadded, interpolation=interpolation, antialias=antialias)
@@ -136,7 +136,7 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
         do_resize: bool,
         size: SizeDict,
         min_size: int,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

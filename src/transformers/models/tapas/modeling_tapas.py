@@ -512,6 +512,15 @@ class TapasPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, TapasLMPredictionHead):
             init.zeros_(module.bias)
+        if isinstance(module, TapasForQuestionAnswering):
+            if module.config.init_cell_selection_weights_to_zero:
+                init.zeros_(module.output_weights)
+                init.zeros_(module.column_output_weights)
+            else:
+                init.normal_(module.output_weights, std=module.config.initializer_range)
+                init.normal_(module.column_output_weights, std=module.config.initializer_range)
+            init.zeros_(module.output_bias)
+            init.zeros_(module.column_output_bias)
 
 
 @auto_docstring
@@ -602,7 +611,7 @@ class TapasModel(TapasPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -748,7 +757,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
         >>> outputs = model(**inputs, labels=labels)
         >>> logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.tapas(
             input_ids,
@@ -801,22 +810,10 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # cell selection heads
-        if config.init_cell_selection_weights_to_zero:
-            # init_cell_selection_weights_to_zero: Whether the initial weights should be
-            # set to 0. This ensures that all tokens have the same prior probability.
-            self.output_weights = nn.Parameter(torch.zeros(config.hidden_size))
-            self.column_output_weights = nn.Parameter(torch.zeros(config.hidden_size))
-        else:
-            self.output_weights = nn.Parameter(torch.empty(config.hidden_size))
-            init.normal_(
-                self.output_weights, std=config.initializer_range
-            )  # here, a truncated normal is used in the original implementation
-            self.column_output_weights = nn.Parameter(torch.empty(config.hidden_size))
-            init.normal_(
-                self.column_output_weights, std=config.initializer_range
-            )  # here, a truncated normal is used in the original implementation
-        self.output_bias = nn.Parameter(torch.zeros([]))
-        self.column_output_bias = nn.Parameter(torch.zeros([]))
+        self.output_weights = nn.Parameter(torch.empty(config.hidden_size))
+        self.column_output_weights = nn.Parameter(torch.empty(config.hidden_size))
+        self.output_bias = nn.Parameter(torch.empty([]))
+        self.column_output_bias = nn.Parameter(torch.empty([]))
 
         # aggregation head
         if config.num_aggregation_labels > 0:
@@ -903,7 +900,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         >>> logits = outputs.logits
         >>> logits_aggregation = outputs.logits_aggregation
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.tapas(
             input_ids,
@@ -1212,7 +1209,7 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
         >>> loss = outputs.loss
         >>> logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.tapas(
             input_ids,
@@ -1491,7 +1488,7 @@ def _segment_reduce(values, index, segment_reduce_fn, name):
     new_shape = torch.cat(
         [
             torch.as_tensor(index.batch_shape(), dtype=torch.long, device=device),
-            torch.as_tensor([index.num_segments], dtype=torch.long, device=device),
+            torch.as_tensor(index.num_segments, dtype=torch.long, device=device).unsqueeze(dim=0),
             torch.as_tensor(vector_shape, dtype=torch.long, device=device),
         ],
         dim=0,

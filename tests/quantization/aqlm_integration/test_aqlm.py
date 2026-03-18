@@ -117,7 +117,7 @@ class AqlmTest(unittest.TestCase):
             if isinstance(module, torch.nn.Linear):
                 nb_linears += 1
 
-        model, _ = replace_with_aqlm_linear(model, quantization_config=quantization_config)
+        model = replace_with_aqlm_linear(model, quantization_config=quantization_config)
         nb_aqlm_linear = 0
         for module in model.modules():
             if isinstance(module, QuantizedLinear):
@@ -125,12 +125,12 @@ class AqlmTest(unittest.TestCase):
 
         self.assertEqual(nb_linears, nb_aqlm_linear)
 
-        # Try with `linear_weights_not_to_quantize`
+        # Try with `modules_to_not_convert`
         with torch.device("meta"):
             model = OPTForCausalLM(config)
 
-        model, _ = replace_with_aqlm_linear(
-            model, quantization_config=quantization_config, linear_weights_not_to_quantize=["lm_head.weight"]
+        model = replace_with_aqlm_linear(
+            model, quantization_config=quantization_config, modules_to_not_convert=["lm_head"]
         )
         nb_aqlm_linear = 0
         for module in model.modules():

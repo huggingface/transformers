@@ -30,8 +30,6 @@ class ClassificationFunction(ExplicitEnum):
 @add_end_docstrings(
     build_pipeline_init_args(has_tokenizer=True),
     r"""
-        return_all_scores (`bool`, *optional*, defaults to `False`):
-            Whether to return all prediction scores or just the one of the predicted class.
         function_to_apply (`str`, *optional*, defaults to `"default"`):
             The function to apply to the model outputs in order to retrieve the scores. Accepts four different values:
 
@@ -79,7 +77,6 @@ class TextClassificationPipeline(Pipeline):
     _load_feature_extractor = False
     _load_tokenizer = True
 
-    return_all_scores = False
     function_to_apply = ClassificationFunction.NONE
 
     def __init__(self, **kwargs):

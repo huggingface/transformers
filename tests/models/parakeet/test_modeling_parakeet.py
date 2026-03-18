@@ -52,7 +52,7 @@ class ParakeetEncoderModelTester:
         num_attention_heads=4,
         intermediate_size=256,
         hidden_act="silu",
-        dropout=0,  # so gradient checkpointing doesn't fail
+        dropout=0.0,  # so gradient checkpointing doesn't fail
         conv_kernel_size=9,
         subsampling_factor=8,
         subsampling_conv_channels=32,
@@ -166,7 +166,6 @@ class ParakeetEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ParakeetEncoder,) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = ParakeetEncoderModelTester(self)
@@ -208,7 +207,7 @@ class ParakeetForCTCModelTester:
         return config, input_features, attention_mask
 
     def get_config(self):
-        return ParakeetCTCConfig.from_encoder_config(
+        return ParakeetCTCConfig(
             encoder_config=self.encoder_model_tester.get_config(),
             vocab_size=self.vocab_size,
             pad_token_id=self.pad_token_id,
@@ -250,7 +249,6 @@ class ParakeetForCTCModelTest(ModelTesterMixin, unittest.TestCase):
     test_attention_outputs = False
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     _is_composite = True
 

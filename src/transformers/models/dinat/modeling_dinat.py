@@ -20,6 +20,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -30,7 +31,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
-from ...utils.backbone_utils import BackboneMixin
+from ...utils.generic import can_return_tuple
 from .configuration_dinat import DinatConfig
 
 
@@ -600,7 +601,7 @@ class DinatModel(DinatPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -675,7 +676,7 @@ class DinatForImageClassification(DinatPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.dinat(
             pixel_values,
@@ -710,10 +711,9 @@ class DinatForImageClassification(DinatPreTrainedModel):
     NAT backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
+class DinatBackbone(BackboneMixin, DinatPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         requires_backends(self, ["natten"])
 
@@ -723,7 +723,7 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
 
         # Add layer norms to hidden states of out_features
         hidden_states_norms = {}
-        for stage, num_channels in zip(self._out_features, self.channels):
+        for stage, num_channels in zip(self.out_features, self.channels):
             hidden_states_norms[stage] = nn.LayerNorm(num_channels)
         self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
 
@@ -733,6 +733,8 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -749,10 +751,12 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("shi-labs/nat-mini-in1k-224")
         >>> model = AutoBackbone.from_pretrained(
@@ -767,7 +771,7 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
         >>> list(feature_maps[-1].shape)
         [1, 512, 7, 7]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

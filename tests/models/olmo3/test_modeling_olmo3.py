@@ -16,7 +16,6 @@
 import unittest
 
 import pytest
-from packaging import version
 from parameterized import parameterized
 
 from transformers import is_torch_available, set_seed
@@ -218,9 +217,6 @@ class Olmo3IntegrationTest(unittest.TestCase):
     @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
             convert_and_export_with_cache,

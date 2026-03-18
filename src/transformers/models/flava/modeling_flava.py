@@ -27,7 +27,8 @@ from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, filter_out_non_signature_kwargs, logging, torch_int
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
 from .configuration_flava import (
     FlavaConfig,
     FlavaImageCodebookConfig,
@@ -336,7 +337,7 @@ class PatchEmbeddings(nn.Module):
 
     def __init__(
         self,
-        image_size: int = 224,
+        image_size: int | list[int] | tuple[int, int] = 224,
         patch_size: int | tuple[int, int] = 16,
         num_channels: int = 3,
         embed_dim: int = 768,
@@ -737,7 +738,7 @@ class FlavaImageModel(FlavaPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -825,7 +826,7 @@ class FlavaTextModel(FlavaPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is None:
             raise ValueError("You have to specify input_ids")
@@ -911,7 +912,7 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         batch_size, seq_length, _ = hidden_states.size()
 
@@ -997,7 +998,7 @@ class FlavaModel(FlavaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
@@ -1005,7 +1006,8 @@ class FlavaModel(FlavaPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_seq_length)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
@@ -1017,10 +1019,6 @@ class FlavaModel(FlavaPreTrainedModel):
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
             [What are token type IDs?](../glossary#token-type-ids)
-
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`FlavaTextModel`].
 
         Examples:
 
@@ -1043,13 +1041,15 @@ class FlavaModel(FlavaPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
+            return_dict=True,
+            **kwargs,
         )
-        pooled_output = text_outputs.last_hidden_state
-        text_features = self.text_projection(pooled_output)
+        last_hidden_state = text_outputs.last_hidden_state
+        text_outputs.pooler_output = self.text_projection(last_hidden_state)
 
-        return text_features
+        return text_outputs
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
@@ -1057,14 +1057,11 @@ class FlavaModel(FlavaPreTrainedModel):
         bool_masked_pos: torch.BoolTensor | None = None,
         interpolate_pos_encoding: bool | None = None,
         attention_mask: torch.Tensor | None = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, image_num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`FlavaImageModel`].
 
         Examples:
 
@@ -1090,11 +1087,13 @@ class FlavaModel(FlavaPreTrainedModel):
             bool_masked_pos=bool_masked_pos,
             attention_mask=attention_mask,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
+            **kwargs,
         )
-        pooled_output = image_outputs.last_hidden_state
-        image_features = self.image_projection(pooled_output)
+        last_hidden_state = image_outputs.last_hidden_state
+        image_outputs.pooler_output = self.image_projection(last_hidden_state)
 
-        return image_features
+        return image_outputs
 
     @auto_docstring
     def forward(
@@ -1136,14 +1135,16 @@ class FlavaModel(FlavaPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, FlavaModel
 
         >>> model = FlavaModel.from_pretrained("facebook/flava-full")
         >>> processor = AutoProcessor.from_pretrained("facebook/flava-full")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(text=["a photo of a cat"], images=image, return_tensors="pt", padding=True)
 
@@ -1366,14 +1367,16 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoImageProcessor, FlavaImageCodebook
 
         >>> model = FlavaImageCodebook.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
         >>> image_processor = AutoImageProcessor.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = image_processor([image], return_codebook_pixels=True, return_tensors="pt")
         >>> inputs = dict(pixel_values=inputs.codebook_pixel_values)
@@ -1399,14 +1402,16 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoImageProcessor, FlavaImageCodebook
 
         >>> model = FlavaImageCodebook.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
         >>> image_processor = AutoImageProcessor.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = image_processor([image], return_codebook_pixels=True, return_tensors="pt")
         >>> inputs = dict(pixel_values=inputs.codebook_pixel_values)
@@ -1634,11 +1639,13 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import FlavaForPreTraining, AutoProcessor
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> model = FlavaForPreTraining.from_pretrained("facebook/flava-full")
         >>> processor = AutoProcessor.from_pretrained("facebook/flava-full")
@@ -1659,7 +1666,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         >>> output = model(**inputs)
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         return_loss = return_loss if return_loss is not None else self.config.return_loss
 
         skip_unmasked_multimodal_encoder = (
@@ -1843,7 +1850,8 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
             image_embedding = self.flava.image_projection(image_embeddings[:, 0, :])
             image_embedding = nn.functional.normalize(image_embedding, dim=-1)
 
-            self.flava.logit_scale.data.clamp_(LOGIT_SCALE_CLAMP_MIN, LOGIT_SCALE_CLAMP_MAX)
+            if self.training:
+                self.flava.logit_scale.data.clamp_(LOGIT_SCALE_CLAMP_MIN, LOGIT_SCALE_CLAMP_MAX)
 
             logits_per_image, logits_per_text, gc_labels = self.global_contrastive_head(
                 image_embedding, text_embedding, self.flava.logit_scale

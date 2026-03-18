@@ -73,8 +73,10 @@ print(output_text)
 
 [[autodoc]] LightOnOcrModel
     - forward
+    - get_image_features
 
 ## LightOnOcrForConditionalGeneration
 
 [[autodoc]] LightOnOcrForConditionalGeneration
     - forward
+    - get_image_features

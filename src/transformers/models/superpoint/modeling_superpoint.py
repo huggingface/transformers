@@ -386,10 +386,12 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         >>> from transformers import AutoImageProcessor, SuperPointForKeypointDetection
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("magic-leap-community/superpoint")
         >>> model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/superpoint")
@@ -404,7 +406,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         pixel_values = self.extract_one_channel_pixel_values(pixel_values)
 

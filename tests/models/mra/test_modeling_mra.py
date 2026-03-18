@@ -15,6 +15,8 @@
 
 import unittest
 
+import pytest
+
 from transformers import MraConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -262,12 +264,12 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     has_attentions = False
+    test_torch_exportable = False  # uses custom kernels by default, not compatible with torch.export
 
     pipeline_model_mapping = (
         {
             "feature-extraction": MraModel,
             "fill-mask": MraForMaskedLM,
-            "question-answering": MraForQuestionAnswering,
             "text-classification": MraForSequenceClassification,
             "token-classification": MraForTokenClassification,
             "zero-shot": MraForSequenceClassification,
@@ -278,7 +280,7 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = MraModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MraConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=MraConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -317,23 +319,17 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_attention_outputs(self):
         return
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip(
         reason="Model has `nan` in hidden_states, see https://github.com/huggingface/transformers/issues/29373."

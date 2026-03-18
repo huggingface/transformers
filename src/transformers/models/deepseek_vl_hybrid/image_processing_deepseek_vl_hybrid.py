@@ -236,8 +236,8 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         delta = size / max_size
         # Largest side becomes `size` and the other side is scaled according to the aspect ratio.
         output_size_nonpadded = [
-            max(int(height * delta), self.min_size),
-            max(int(width * delta), self.min_size),
+            max(round(height * delta), self.min_size),
+            max(round(width * delta), self.min_size),
         ]
 
         image = resize(

@@ -216,11 +216,7 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = (
-        {"feature-extraction": SplinterModel, "question-answering": SplinterForQuestionAnswering}
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"feature-extraction": SplinterModel} if is_torch_available() else {}
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
@@ -274,7 +270,7 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = SplinterModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SplinterConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=SplinterConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -359,18 +355,6 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             model = nn.DataParallel(model)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
-
-    @unittest.skip(
-        "Splinter GC with `use_reentrant` fails after #38751, FIXME raushan after deprecated args are removed"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        "Splinter GC with `use_reentrant` fails after #38751, FIXME raushan after deprecated args are removed"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
 
 
 @require_torch

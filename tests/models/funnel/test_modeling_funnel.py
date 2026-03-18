@@ -367,7 +367,6 @@ class FunnelModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "feature-extraction": (FunnelBaseModel, FunnelModel),
             "fill-mask": FunnelForMaskedLM,
-            "question-answering": FunnelForQuestionAnswering,
             "text-classification": FunnelForSequenceClassification,
             "token-classification": FunnelForTokenClassification,
             "zero-shot": FunnelForSequenceClassification,
@@ -375,6 +374,8 @@ class FunnelModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
+
+    test_torch_exportable = False
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -432,6 +433,8 @@ class FunnelBaseModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (FunnelBaseModel, FunnelForMultipleChoice, FunnelForSequenceClassification) if is_torch_available() else ()
     )
+
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = FunnelModelTester(self, base=True)

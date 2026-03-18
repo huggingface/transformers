@@ -14,8 +14,8 @@
 """Fast Image processor class for Pix2Struct."""
 
 import torch
+import torchvision.transforms.v2.functional as tvF
 from PIL import Image
-from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast
@@ -110,11 +110,11 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
 
         # Convert tensor to PIL (channel-first to channel-last for PIL)
         if image.dtype == torch.uint8:
-            image_pil = F.to_pil_image(image)
+            image_pil = tvF.to_pil_image(image)
         else:
             # If float, convert to uint8 first
             image_uint8 = (image * 255).clamp(0, 255).to(torch.uint8)
-            image_pil = F.to_pil_image(image_uint8)
+            image_pil = tvF.to_pil_image(image_uint8)
 
         # Render header text as PIL image
         header_image = render_text(header, font_bytes=font_bytes, font_path=font_path)
@@ -130,7 +130,7 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
         new_image.paste(image_pil.resize((new_width, new_height)), (0, new_header_height))
 
         # Convert back to tensor (channel-first)
-        result = F.pil_to_tensor(new_image).to(device)
+        result = tvF.pil_to_tensor(new_image).to(device)
 
         # Convert back to original dtype if needed
         if dtype != torch.uint8:
@@ -192,7 +192,7 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
         # Resize images (batched) using parent class method
         resize_size = SizeDict(height=resized_height, width=resized_width)
         images = self.resize(
-            image=images, size=resize_size, interpolation=F.InterpolationMode.BILINEAR, antialias=True
+            image=images, size=resize_size, interpolation=tvF.InterpolationMode.BILINEAR, antialias=True
         )
 
         # Extract patches: [batch, rows, columns, patch_height * patch_width * channels]

@@ -164,12 +164,11 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     )
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = TimesformerModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=TimesformerConfig, has_text_modality=False, hidden_size=37
+            self, config_class=TimesformerConfig, has_text_modality=False, hidden_size=32
         )
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

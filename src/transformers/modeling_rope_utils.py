@@ -275,7 +275,7 @@ def _compute_yarn_parameters(
             *   rope_parameters (`dict[str, float | int]`): The standard RoPE scaling parameters, from which the following
                 keys will be accessed:
                 *   `attention_factor` (`float`, *optional*): The scaling factor to be applied to the computed cos/sin.
-                    If None, the value is inferred from `factor`, `mscale`, and `mscale_all_dim` as avaialble.
+                    If None, the value is inferred from `factor`, `mscale`, and `mscale_all_dim` as available.
                 *   `beta_fast` (`float`, *optional*, defaults to 32): Parameter to set the boundary for extrapolation
                     (only) in the linear ramp function.
                 *   `beta_slow` (`float`, *optional*, defaults to 1): Parameter to set the boundary for interpolation
@@ -628,21 +628,27 @@ class RotaryEmbeddingConfigMixin:
     """
 
     default_theta = 10_000.0
+    ignore_keys_at_rope_validation = set()
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
+    def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
 
-        # Standardize and validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
+        # Standardize and validate the correctness of rotary position embeddings parameters. Priority for these parameters is:
+        # 1. Values in `rope_parameters` dict (where they should be after standardization)
+        # 2. Values in `kwargs` (i.e. it's in config.json but not MyConfig.__init__'s args)
+        # 3. Values in the config's attributes (i.e. it's in MyConfig.__init__'s args)
+        # 4. Default values (i.e. not present at all but other RoPE parameters are present)
+        rope_theta = kwargs.pop("rope_theta", getattr(self, "rope_theta", self.default_theta))
+        self.rope_parameters.setdefault("rope_theta", rope_theta)
 
-        if "partial_rotary_factor" in kwargs:
-            self.rope_parameters.setdefault("partial_rotary_factor", kwargs["partial_rotary_factor"])
-            ignore_keys_at_rope_validation = {"partial_rotary_factor"}
+        partial_rotary_factor = kwargs.get("partial_rotary_factor", getattr(self, "partial_rotary_factor", None))
+        if partial_rotary_factor is not None:
+            self.rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
+            self.ignore_keys_at_rope_validation = self.ignore_keys_at_rope_validation | {"partial_rotary_factor"}
 
         self.standardize_rope_params()
-        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
 
     def standardize_rope_params(self):
@@ -693,11 +699,11 @@ class RotaryEmbeddingConfigMixin:
 
         self.rope_parameters = rope_parameters
 
-    def validate_rope(self: "PreTrainedConfig", ignore_keys: set | None = None):
+    def validate_rope(self: "PreTrainedConfig"):
         """
         Validate the RoPE config arguments, given a `"PreTrainedConfig"` object
         """
-        rope_parameters_dict = self.rope_parameters
+        rope_parameters_dict = getattr(self, "rope_parameters", None)
         if rope_parameters_dict is None:
             return
 
@@ -714,7 +720,7 @@ class RotaryEmbeddingConfigMixin:
             rope_parameters["rope_type"] = rope_type
 
             if validation_fn is not None:
-                validation_fn(rope_parameters, ignore_keys=ignore_keys)
+                validation_fn(rope_parameters, ignore_keys=self.ignore_keys_at_rope_validation)
             else:
                 logger.warning(
                     f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"
@@ -933,4 +939,4 @@ def rope_config_validation(config: RotaryEmbeddingConfigMixin, ignore_keys: set 
         FutureWarning,
     )
     config.standardize_rope_params()
-    config.validate_rope(ignore_keys=ignore_keys)
+    config.validate_rope()

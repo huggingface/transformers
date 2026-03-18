@@ -20,6 +20,8 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..llama.modeling_llama import LlamaModel, LlamaPreTrainedModel, LlamaRotaryEmbedding, rotate_half
 from .configuration_gpt_neox import GPTNeoXConfig
 
@@ -118,14 +120,13 @@ def eager_attention_forward(
     value: torch.Tensor,
     attention_mask: torch.Tensor,
     scaling: float,
-    dropout: float = 0.0,
+    dropout: float | int = 0.0,
     **kwargs,
 ):
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
-    if attention_mask is not None:  # no matter the length, we just slice it
-        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
 
@@ -158,7 +159,6 @@ class GPTNeoXAttention(nn.Module):
         hidden_states: torch.FloatTensor,
         attention_mask: torch.FloatTensor,
         layer_past: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ):
@@ -173,17 +173,11 @@ class GPTNeoXAttention(nn.Module):
 
         # Cache QKV values
         if layer_past is not None:
-            cache_kwargs = {
-                "sin": sin,
-                "cos": cos,
-                "partial_rotation_size": self.rotary_ndims,
-                "cache_position": cache_position,
-            }
-            key_states, value_states = layer_past.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = layer_past.update(key_states, value_states, self.layer_idx)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         # Compute attention
         attn_output, attn_weights = attention_interface(
@@ -222,49 +216,41 @@ class GPTNeoXLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         use_cache: bool | None = False,
         layer_past: Cache | None = None,
-        output_attentions: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ):
-        attn_output, attn_weights = self.attention(
+        attn_output, _ = self.attention(
             self.input_layernorm(hidden_states),
             attention_mask=attention_mask,
             position_ids=position_ids,
             layer_past=layer_past,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
         attn_output = self.post_attention_dropout(attn_output)
 
         if self.use_parallel_residual:
-            # pseudocode:
-            # x = x + attn(ln1(x)) + mlp(ln2(x))
             mlp_output = self.mlp(self.post_attention_layernorm(hidden_states))
             mlp_output = self.post_mlp_dropout(mlp_output)
             hidden_states = mlp_output + attn_output + hidden_states
         else:
-            # pseudocode:
-            # x = x + attn(ln1(x))
-            # x = x + mlp(ln2(x))
             attn_output = attn_output + hidden_states
             mlp_output = self.mlp(self.post_attention_layernorm(attn_output))
             mlp_output = self.post_mlp_dropout(mlp_output)
             hidden_states = mlp_output + attn_output
 
-        outputs = (hidden_states,)
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 class GPTNeoXPreTrainedModel(LlamaPreTrainedModel):
     base_model_prefix = "gpt_neox"
     _no_split_modules = ["GPTNeoXLayer"]
     _keys_to_ignore_on_load_unexpected = [r"attention.bias", r"attention.masked_bias"]
+    _can_record_outputs = {
+        "hidden_states": GPTNeoXLayer,
+        "attentions": GPTNeoXAttention,
+    }
 
 
 GPT_NEOX_START_DOCSTRING = None  # Will be picked up by modular
@@ -292,6 +278,9 @@ class GPTNeoXModel(LlamaModel):
     def set_input_embeddings(self, value):
         self.embed_in = value
 
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -300,26 +289,10 @@ class GPTNeoXModel(LlamaModel):
         inputs_embeds: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_in(input_ids)
@@ -327,59 +300,37 @@ class GPTNeoXModel(LlamaModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
 
         hidden_states = self.emb_dropout(inputs_embeds)
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
-
-        all_attentions = () if output_attentions else None
-        all_hidden_states = () if output_hidden_states else None
-        for i, layer in enumerate(self.layers):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            outputs = layer(
+        for layer in self.layers:
+            hidden_states = layer(
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 layer_past=past_key_values,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
-                output_attentions=output_attentions,
-                cache_position=cache_position,
                 **kwargs,
             )
-            hidden_states = outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (outputs[1],)
 
         hidden_states = self.final_layer_norm(hidden_states)
-        # Add last hidden state
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
         )
 
 
@@ -390,7 +341,7 @@ class GPTNeoXModel(LlamaModel):
 )
 class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"embed_out.weight": "gpt_neox.embed_in.weight"}
-    _tp_plan = {"embed_out": "colwise_rep"}
+    _tp_plan = {"embed_out": "colwise_gather_output"}
     _pp_plan = {"embed_out": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):
@@ -419,9 +370,6 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
         past_key_values: Cache | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
@@ -455,14 +403,10 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            cache_position=cache_position,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.embed_out(hidden_states[:, slice_indices, :])
 
@@ -514,8 +458,6 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
         past_key_values: Cache | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> SequenceClassifierOutputWithPast:
         r"""
@@ -532,8 +474,7 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
             inputs_embeds=inputs_embeds,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
         hidden_states = outputs.last_hidden_state
         logits = self.score(hidden_states)
@@ -594,8 +535,6 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> TokenClassifierOutput:
         r"""
@@ -612,8 +551,7 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
@@ -654,8 +592,6 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> QuestionAnsweringModelOutput:
         outputs: BaseModelOutputWithPast = self.gpt_neox(
@@ -663,8 +599,7 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
         sequence_output = outputs.last_hidden_state

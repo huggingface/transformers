@@ -22,7 +22,7 @@ import math
 from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
@@ -79,8 +79,6 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    min_pixels = 128 * 28 * 28
-    max_pixels = 28 * 28 * 768
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
@@ -105,7 +103,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         if "shortest_edge" not in size or "longest_edge" not in size:
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
-        super().__init__(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
+        super().__init__(size=size, **kwargs)
 
     def _further_process_kwargs(
         self,
@@ -128,7 +126,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         else:
             size = {**self.size}
 
-        return super()._further_process_kwargs(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
+        return super()._further_process_kwargs(size=size, **kwargs)
 
     def sample_frames(
         self,
@@ -205,7 +203,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         videos: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

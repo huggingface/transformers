@@ -16,9 +16,10 @@ from collections.abc import Callable
 
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import (
@@ -27,7 +28,7 @@ from ...modeling_rope_utils import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import maybe_autocast
 from ..cohere.modeling_cohere import (
     CohereAttention,
@@ -45,69 +46,12 @@ from ..gemma2.modeling_gemma2 import Gemma2Model
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="CohereForAI/c4ai-command-r-v01")
+@strict(accept_kwargs=True)
 class Cohere2Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CohereModel`]. It is used to instantiate an Cohere
-    model according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the [CohereForAI/c4ai-command-r-v01](https://huggingface.co/CohereForAI/c4ai-command-r-v01) model.
-
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 256000):
-            Vocabulary size of the Cohere model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`CohereModel`]
-        hidden_size (`int`, *optional*, defaults to 8192):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 22528):
-            Dimension of the MLP representations.
-        logit_scale (`float`, *optional*, defaults to 0.0625):
-            The scaling factor for the output logits.
-        num_hidden_layers (`int`, *optional*, defaults to 40):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 64):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
-            `num_attention_heads`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 8192):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*, defaults to 0):
-            Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 5):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 255001):
-            End of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Size of the sliding window attention context.
-        layer_types (`list`, *optional*):
-            Attention pattern for each layer.
+    logit_scale (`float`, *optional*, defaults to 0.0625):
+        The scaling factor for the output logits.
 
     ```python
     >>> from transformers import Cohere2Model, Cohere2Config
@@ -140,77 +84,45 @@ class Cohere2Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 256000,
-        hidden_size: int | None = 8192,
-        intermediate_size: int | None = 22528,
-        logit_scale: float | None = 0.0625,
-        num_hidden_layers: int | None = 40,
-        num_attention_heads: int | None = 64,
-        num_key_value_heads: int | None = None,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 8192,
-        initializer_range: float | None = 0.02,
-        layer_norm_eps: int | None = 1e-5,
-        use_cache: int | None = True,
-        pad_token_id: int | None = 0,
-        bos_token_id: int | None = 5,
-        eos_token_id: int | None = 255001,
-        tie_word_embeddings: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        sliding_window: int | None = 4096,
-        layer_types: list[str] | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.logit_scale = logit_scale
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vocab_size: int = 256000
+    hidden_size: int = 8192
+    intermediate_size: int = 22528
+    logit_scale: float = 0.0625
+    num_hidden_layers: int = 40
+    num_attention_heads: int = 64
+    num_key_value_heads: int | None = None
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 8192
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-5
+    use_cache: int = True
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 5
+    eos_token_id: int | list[int] | None = 255001
+    tie_word_embeddings: bool = True
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
+    sliding_window: int | None = 4096
+    layer_types: list[str] | None = None
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.sliding_window = sliding_window
-        self.layer_types = layer_types
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
         # Need to specify head_dim in the config so it can be used in the attention forward functions
-        self.head_dim = hidden_size // num_attention_heads
+        self.head_dim = self.hidden_size // self.num_attention_heads
 
         # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
-        self._sliding_window_pattern = kwargs.get("sliding_window_pattern", 4)
-
         if self.layer_types is None:
             # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
-            self._sliding_window_pattern = getattr(self, "sliding_window_pattern", 4)
+            _sliding_window_pattern = kwargs.pop("sliding_window_pattern", 4)
             self.layer_types = [
-                "sliding_attention" if bool((i + 1) % self._sliding_window_pattern) else "full_attention"
+                "sliding_attention" if bool((i + 1) % _sliding_window_pattern) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        self.rope_parameters = rope_parameters
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__post_init__(**kwargs)
 
 
 class Cohere2RotaryEmbedding(CohereRotaryEmbedding):
@@ -268,7 +180,6 @@ class Cohere2Attention(CohereAttention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
@@ -283,12 +194,11 @@ class Cohere2Attention(CohereAttention):
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -319,7 +229,6 @@ class Cohere2DecoderLayer(CohereDecoderLayer):
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
@@ -330,7 +239,6 @@ class Cohere2DecoderLayer(CohereDecoderLayer):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -341,12 +249,17 @@ class Cohere2DecoderLayer(CohereDecoderLayer):
 
 class Cohere2PreTrainedModel(CoherePreTrainedModel):
     config: Cohere2Config
+    _can_record_outputs = {
+        "hidden_states": Cohere2DecoderLayer,
+        "attentions": Cohere2Attention,
+    }
 
 
 class Cohere2Model(Gemma2Model):
     def __init__(self, config: Cohere2Config):
         super().__init__(config)
         self.norm = Cohere2LayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
 
     def forward(
         self,
@@ -356,7 +269,6 @@ class Cohere2Model(Gemma2Model):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -368,20 +280,16 @@ class Cohere2Model(Gemma2Model):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
@@ -400,7 +308,6 @@ class Cohere2Model(Gemma2Model):
                 position_embeddings=position_embeddings,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 position_ids=position_ids,
                 **kwargs,
             )

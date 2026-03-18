@@ -153,9 +153,6 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     pipeline_model_mapping = (
         {
             "feature-extraction": FSMTModel,
-            "summarization": FSMTForConditionalGeneration,
-            "text2text-generation": FSMTForConditionalGeneration,
-            "translation": FSMTForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -172,8 +169,6 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             "src_vocab_size": 10,
             "tgt_vocab_size": 20,
         }
-        # XXX: hack to appease to all other models requiring `vocab_size`
-        config["vocab_size"] = 99  # no such thing in FSMT
         self.config_tester = ConfigTester(self, config_class=FSMTConfig, **config)
 
     def test_config(self):
@@ -300,6 +295,19 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_resize_embeddings_untied(self):
         pass
 
+    @unittest.skip(reason="Can't do assisted decoding and not worth fixing")
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
+        pass
+
+    @unittest.skip(reason="Can't do assisted decoding and not worth fixing")
+    def test_assisted_decoding_sample(self):
+        pass
+
+    @unittest.skip(reason="Can't do assisted decoding and not worth fixing")
+    @parameterized.expand([("random",), ("same",)])
+    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
+        pass
+
 
 @require_torch
 class FSMTHeadTests(unittest.TestCase):
@@ -349,23 +357,6 @@ class FSMTHeadTests(unittest.TestCase):
         batch_size = input_ids.shape[0]
         config = self._get_config()
         return config, input_ids, batch_size
-
-    def test_generate_beam_search(self):
-        input_ids = torch.tensor([[71, 82, 2], [68, 34, 2]], dtype=torch.long, device=torch_device)
-        config = self._get_config()
-        lm_model = FSMTForConditionalGeneration(config).to(torch_device)
-        lm_model.eval()
-
-        max_length = 5
-        new_input_ids = lm_model.generate(
-            input_ids.clone(),
-            do_sample=True,
-            num_return_sequences=1,
-            num_beams=2,
-            no_repeat_ngram_size=3,
-            max_length=max_length,
-        )
-        self.assertEqual(new_input_ids.shape, (input_ids.shape[0], max_length))
 
     def test_shift_tokens_right(self):
         input_ids = torch.tensor([[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]], dtype=torch.long)

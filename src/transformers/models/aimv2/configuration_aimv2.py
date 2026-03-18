@@ -18,55 +18,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
+@strict(accept_kwargs=True)
 class Aimv2VisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Aimv2VisionModel`]. It is used to instantiate a
-    AIMv2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the vision encoder of the AIMv2
-    [apple/aimv2-large-patch14-224](https://huggingface.co/apple/aimv2-large-patch14-224) architecture.
+    use_head (`str`, *optional*, defaults to `True`):
+        Whether to use Attention Pooling Head or Not.
+    is_native (`str`, *optional*, defaults to `False`):
+        Whether to use ckpt trained for image native resolution or not.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 2816):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels in the input images.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        qkv_bias (`bool`, *optional*, defaults to `False`):
-            Whether to add a bias to the queries, keys and values.
-        mlp_bias (`bool`, *optional*, defaults to `False`):
-            Whether to add a bias to the Linear layers or Not.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the for initializing all weight matrices.
-        use_head (`str`, *optional*, defaults to `True`):
-            Whether to use Attention Pooling Head or Not.
-        is_native (`str`, *optional*, defaults to `False`):
-            Whether to use ckpt trained for image native resolution or not.
     Example:
 
     ```python
@@ -85,151 +54,68 @@ class Aimv2VisionConfig(PreTrainedConfig):
     model_type = "aimv2_vision_model"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        hidden_size: int = 1024,
-        intermediate_size: int = 2816,
-        num_hidden_layers: int = 24,
-        num_attention_heads: int = 8,
-        num_channels: int = 3,
-        image_size: int = 224,
-        patch_size: int = 14,
-        rms_norm_eps: float = 1e-5,
-        attention_dropout: float = 0.0,
-        qkv_bias: bool = False,
-        mlp_bias: bool = False,
-        hidden_act: str = "silu",
-        initializer_range: float = 0.02,
-        use_head: bool = True,
-        is_native: bool = False,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.image_size = image_size
-        self.attention_dropout = attention_dropout
-        self.hidden_act = hidden_act
-
-        self.use_head = use_head
-        self.initializer_range = initializer_range
-        self.mlp_bias = mlp_bias
-        self.qkv_bias = qkv_bias
-        self.rms_norm_eps = rms_norm_eps
-        self.is_native = is_native
+    hidden_size: int = 1024
+    intermediate_size: int = 2816
+    num_hidden_layers: int = 24
+    num_attention_heads: int = 8
+    num_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] = 224
+    patch_size: int | list[int] | tuple[int, int] = 14
+    hidden_act: str = "silu"
+    attention_dropout: float | int = 0.0
+    rms_norm_eps: float = 1e-5
+    qkv_bias: bool = False
+    mlp_bias: bool = False
+    initializer_range: float = 0.02
+    use_head: bool = True
+    is_native: bool = False
 
 
+@auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
+@strict(accept_kwargs=True)
 class Aimv2TextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Aimv2TextModel`]. It is used to instantiate a
-    AIMv2 text encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the text encoder of the AIMv2
-    [apple/aimv2-large-patch14-224-lit](https://huggingface.co/apple/aimv2-large-patch14-224-lit) architecture.
+    Example:
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    ```python
+    >>> from transformers import Aimv2TextConfig, Aimv2TextModel
 
-    Args:
-        vocab_size (`int`, *optional*, defaults to 49408):
-            Vocabulary size of the AIMv2 text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`Aimv2Model`].
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 6):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        qkv_bias (`bool`, *optional*, defaults to `False`):
-            Whether to add a bias to the queries, keys and values.
-        mlp_bias (`bool`, *optional*, defaults to `False`):
-            Whether to add a bias to the Linear layers or Not.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        pad_token_id (`int`, *optional*, defaults to 1):
-            The id of the padding token in the vocabulary.
-        bos_token_id (`int`, *optional*, defaults to 49406):
-            The id of the beginning-of-sequence token in the vocabulary.
-        eos_token_id (`int`, *optional*, defaults to 49407):
-            The id of the end-of-sequence token in the vocabulary.
-        max_position_embeddings (`int`, *optional*, defaults to 77):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the for initializing all weight matrices.
-    """
+    >>> # Initializing a Aimv2TextConfig with google/aimv2-base-patch16-224 style configuration
+    >>> configuration = Aimv2TextConfig()
+
+    >>> # Initializing a Aimv2TextModel (with random weights) from the google/aimv2-base-patch16-224 style configuration
+    >>> model = Aimv2TextModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "aimv2_text_model"
     base_config_key = "text_config"
+    vocab_size: int = 49408
+    hidden_size: int = 768
+    intermediate_size: int = 2048
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 6
+    max_position_embeddings: int = 77
+    hidden_act: str = "silu"
+    attention_dropout: float | int = 0.0
+    eos_token_id: int | list[int] | None = 49407
+    rms_norm_eps: float = 1e-5
+    qkv_bias: bool = False
+    mlp_bias: bool = False
+    initializer_range: float = 0.02
 
-    def __init__(
-        self,
-        vocab_size: int = 49408,
-        hidden_size: int = 768,
-        intermediate_size: int = 2048,
-        num_hidden_layers: int = 12,
-        num_attention_heads: int = 6,
-        rms_norm_eps: float = 1e-5,
-        attention_dropout: float = 0.0,
-        qkv_bias: bool = False,
-        mlp_bias: bool = False,
-        hidden_act: str = "silu",
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = None,
-        eos_token_id: int = 49407,
-        max_position_embeddings: int = 77,
-        initializer_range: bool = 0.02,
-        **kwargs,
-    ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
-
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_act = hidden_act
-        self.attention_dropout = attention_dropout
-
-        self.initializer_range = initializer_range
-        self.mlp_bias = mlp_bias
-        self.qkv_bias = qkv_bias
-        self.rms_norm_eps = rms_norm_eps
+    def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
+@strict(accept_kwargs=True)
 class Aimv2Config(PreTrainedConfig):
     r"""
-    [`Aimv2Config`] is the configuration class to store the configuration of a [`Aimv2Model`]. It is used to
-    instantiate a AIMv2 model according to the specified arguments, defining the text model and vision model configs.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the AIMv2
-    [apple/aimv2-large-patch14-224-lit](https://huggingface.co/apple/aimv2-large-patch14-224-lit) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`Aimv2TextConfig`].
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`Aimv2VisionConfig`].
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of text and vision projection layers.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The initial value of the *logit_scale* parameter.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+    max_logit_scale (`float`, *optional*, defaults to `100.0`):
+        The maximum logit scale to use
 
     Example:
 
@@ -258,28 +144,28 @@ class Aimv2Config(PreTrainedConfig):
     model_type = "aimv2"
     sub_configs = {"text_config": Aimv2TextConfig, "vision_config": Aimv2VisionConfig}
 
-    def __init__(
-        self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
-    ):
-        self.projection_dim = projection_dim
-        self.logit_scale_init_value = logit_scale_init_value
-        self.max_logit_scale = 100.0
-        if text_config is None:
-            text_config = Aimv2TextConfig()
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    initializer_factor: float = 1.0
+
+    projection_dim: int = 512
+    logit_scale_init_value: float = 2.6592
+    max_logit_scale: float = 100.0
+
+    def __post_init__(self, **kwargs):
+        if self.text_config is None:
+            self.text_config = Aimv2TextConfig()
             logger.info("`text_config` is `None`. Initializing the `Aimv2TextConfig` with default values.")
-        elif isinstance(text_config, dict):
-            text_config = Aimv2TextConfig(**text_config)
+        elif isinstance(self.text_config, dict):
+            self.text_config = Aimv2TextConfig(**self.text_config)
 
-        if vision_config is None:
-            vision_config = Aimv2VisionConfig()
+        if self.vision_config is None:
+            self.vision_config = Aimv2VisionConfig()
             logger.info("`vision_config` is `None`. initializing the `Aimv2VisionConfig` with default values.")
-        elif isinstance(vision_config, dict):
-            vision_config = Aimv2VisionConfig(**vision_config)
+        elif isinstance(self.vision_config, dict):
+            self.vision_config = Aimv2VisionConfig(**self.vision_config)
 
-        self.text_config = text_config
-        self.vision_config = vision_config
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Aimv2Config", "Aimv2VisionConfig", "Aimv2TextConfig"]

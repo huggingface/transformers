@@ -14,74 +14,19 @@
 
 """Phi model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring
 
 
-logger = logging.get_logger(__name__)
-
-
+@auto_docstring(checkpoint="microsoft/phi-1")
+@strict(accept_kwargs=True)
 class PhiConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PhiModel`]. It is used to instantiate an Phi
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Phi
-    [microsoft/phi-1](https://huggingface.co/microsoft/phi-1).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 51200):
-            Vocabulary size of the Phi model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`PhiModel`].
-        hidden_size (`int`, *optional*, defaults to 2048):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 8192):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
-            `num_attention_heads`.
-        resid_pdrop (`float`, *optional*, defaults to 0.0):
-            Dropout probability for mlp outputs.
-        embd_pdrop (`int`, *optional*, defaults to 0.0):
-            The dropout ratio for the embeddings.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio after computing the attention scores.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_new"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. Phi-1 and Phi-1.5 supports up to 2048
-            tokens.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`. Whether to tie weight embeddings or not.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        qk_layernorm (`bool`, *optional*, defaults to `False`):
-            Whether or not to normalize the Queries and Keys after projecting the hidden states.
-        bos_token_id (`int`, *optional*, defaults to 1):
-            Denotes beginning of sequences token id.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            Denotes end of sequences token id.
+    qk_layernorm (`bool`, *optional*, defaults to `False`):
+        Whether or not to normalize the Queries and Keys after projecting the hidden states.
 
     Example:
 
@@ -115,57 +60,33 @@ class PhiConfig(PreTrainedConfig):
         "final_layernorm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 51200,
-        hidden_size: int | None = 2048,
-        intermediate_size: int | None = 8192,
-        num_hidden_layers: int | None = 24,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = None,
-        resid_pdrop: float | None = 0.0,
-        embd_pdrop: float | None = 0.0,
-        attention_dropout: float | None = 0.0,
-        hidden_act: str | None = "gelu_new",
-        max_position_embeddings: int | None = 2048,
-        initializer_range: float | None = 0.02,
-        layer_norm_eps: int | None = 1e-5,
-        use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        qk_layernorm: bool | None = False,
-        bos_token_id: int | None = 1,
-        eos_token_id: int | None = 2,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vocab_size: int = 51200
+    hidden_size: int = 2048
+    intermediate_size: int = 8192
+    num_hidden_layers: int = 24
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = None
+    resid_pdrop: float = 0.0
+    embd_pdrop: float = 0.0
+    attention_dropout: float | int | None = 0.0
+    hidden_act: str = "gelu_new"
+    max_position_embeddings: int = 2048
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-5
+    use_cache: bool = True
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    qk_layernorm: bool = False
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    pad_token_id: int | None = None
 
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.resid_pdrop = resid_pdrop
-        self.embd_pdrop = embd_pdrop
-        self.attention_dropout = attention_dropout
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        self.qk_layernorm = qk_layernorm
-        self.rope_parameters = rope_parameters
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
-
-        super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["PhiConfig"]

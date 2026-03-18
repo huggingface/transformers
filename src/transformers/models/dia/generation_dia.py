@@ -69,7 +69,7 @@ class DiaGenerationMixin(GenerationMixin):
         custom_processors.append(
             DiaEOSChannelFilterLogitsProcessor(
                 num_channels=len(self.config.delay_pattern),
-                eos_token_id=self.config.eos_token_id,
+                eos_token_id=self.config.decoder_config.eos_token_id,
             )
         )
 
@@ -96,7 +96,7 @@ class DiaGenerationMixin(GenerationMixin):
         merged_processors.append(
             DiaEOSDelayPatternLogitsProcessor(
                 delay_pattern=self.config.delay_pattern,
-                eos_token_id=self.config.eos_token_id,
+                eos_token_id=self.config.decoder_config.eos_token_id,
                 max_generation_len=generation_config.max_length,
                 device=device,
             )
@@ -188,7 +188,8 @@ class DiaGenerationMixin(GenerationMixin):
         # 2. Determine the valid input and what works as mask within the input
         delay_mask = decoder_input_ids.long()
         valid_input_size = (
-            decoder_input_ids.shape[1] - (decoder_input_ids[:, :, 0] == self.config.pad_token_id).sum(dim=-1).max()
+            decoder_input_ids.shape[1]
+            - (decoder_input_ids[:, :, 0] == self.config.decoder_config.pad_token_id).sum(dim=-1).max()
         )
         decoder_input_ids = delay_mask[:, :valid_input_size].transpose(1, 2).long()
         decoder_attention_mask = decoder_attention_mask[:, :valid_input_size].long()
@@ -216,7 +217,7 @@ class DiaGenerationMixin(GenerationMixin):
         # Post processing for CFG and overwriting via delay pattern mask
         # 1. Delay pattern mask -- force tokens if not allowed to predict (!= pad_token in mask)
         model_inputs["decoder_input_ids"] = self.apply_delay_mask(
-            input_ids, self.config.pad_token_id, decoder_delay_mask
+            input_ids, self.config.decoder_config.pad_token_id, decoder_delay_mask
         )
 
         # Depending on cache usage we need to pass all or just one
@@ -387,26 +388,16 @@ class DiaGenerationMixin(GenerationMixin):
         # Prepare inner 2D logic in generation loop
         input_ids = input_ids.reshape(-1, input_ids.shape[-1])
 
-        model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
-        # prepare model inputs
-        model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-
-        # 10. Prefill
-        model_inputs.update({"output_attentions": generation_config.output_attentions})
-        model_inputs.update({"output_hidden_states": generation_config.output_hidden_states})
-        outputs = self(**model_inputs, return_dict=True)
-
-        # 11. expand input_ids with `num_return_sequences` additional sequences per batch
+        # 10. expand input_ids with `num_return_sequences` additional sequences per batch
         if generation_config.num_return_sequences > 1:
             raise ValueError("`num_return_sequences>1` is incompatible with Dia.")
 
-        # 12. run sample (it degenerates to greedy search when `generation_config.do_sample=False`)
+        # 11. run sample (it degenerates to greedy search when `generation_config.do_sample=False`)
         return self._sample(
             input_ids,
             logits_processor=prepared_logits_processor,
             stopping_criteria=prepared_stopping_criteria,
             generation_config=generation_config,
-            prefill_outputs=outputs,
             **generation_mode_kwargs,
             **model_kwargs,
         )
@@ -460,7 +451,7 @@ class DiaGenerationMixin(GenerationMixin):
         output_sequences = output_sequences.reshape(bsz, num_channels, -1).transpose(1, 2)
 
         # Apply delay mask
-        output_sequences = self.apply_delay_mask(output_sequences, self.config.pad_token_id, delay_mask)
+        output_sequences = self.apply_delay_mask(output_sequences, self.config.decoder_config.pad_token_id, delay_mask)
 
         if return_dict_in_generate:
             output.sequences = output_sequences

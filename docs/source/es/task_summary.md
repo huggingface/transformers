@@ -222,21 +222,7 @@ Responder preguntas es otra tarea a nivel de tokens que devuelve una respuesta a
 Hay dos tipos comunes de respuestas a preguntas:
 
 * extractivas: dada una pregunta y algún contexto, la respuesta es un fragmento de texto del contexto que el modelo debe extraer
-* abstractivas: dada una pregunta y algún contexto, la respuesta se genera a partir del contexto; este enfoque lo maneja la [`Text2TextGenerationPipeline`] en lugar del [`QuestionAnsweringPipeline`] que se muestra a continuación
-
-```py
->>> from transformers import pipeline
-
->>> question_answerer = pipeline(task="question-answering")
->>> preds = question_answerer(
-...     question="What is the name of the repository?",
-...     context="The name of the repository is huggingface/transformers",
-... )
->>> print(
-...     f"score: {round(preds['score'], 4)}, start: {preds['start']}, end: {preds['end']}, answer: {preds['answer']}"
-... )
-score: 0.9327, start: 30, end: 54, answer: huggingface/transformers
-```
+* abstractivas: dada una pregunta y algún contexto, la respuesta se genera a partir del contexto
 
 ### Resumir
 
@@ -245,32 +231,13 @@ Al resumir se crea una versión más corta de un texto más largo mientras inten
 Al igual que en las respuestas a preguntas, hay dos tipos de resumen:
 
 * extractiva: identifica y extrae las oraciones más importantes del texto original
-* abstractiva: genera el resumen objetivo (que puede incluir nuevas palabras no presentes en el documento de entrada) a partir del texto original; el [`SummarizationPipeline`] utiliza el enfoque abstractivo
-
-```py
->>> from transformers import pipeline
-
->>> summarizer = pipeline(task="summarization")
->>> summarizer(
-...     "In this work, we presented the Transformer, the first sequence transduction model based entirely on attention, replacing the recurrent layers most commonly used in encoder-decoder architectures with multi-headed self-attention. For translation tasks, the Transformer can be trained significantly faster than architectures based on recurrent or convolutional layers. On both WMT 2014 English-to-German and WMT 2014 English-to-French translation tasks, we achieve a new state of the art. In the former task our best model outperforms even all previously reported ensembles."
-... )
-[{'summary_text': ' The Transformer is the first sequence transduction model based entirely on attention . It replaces the recurrent layers most commonly used in encoder-decoder architectures with multi-headed self-attention . For translation tasks, the Transformer can be trained significantly faster than architectures based on recurrent or convolutional layers .'}]
-```
+* abstractiva: genera el resumen objetivo (que puede incluir nuevas palabras no presentes en el documento de entrada) a partir del texto original
 
 ### Traducción
 
 La traducción convierte una secuencia de texto en un idioma a otro. Es importante para ayudar a personas de diferentes orígenes a comunicarse entre sí, traducir contenido para llegar a audiencias más amplias e incluso ser una herramienta de aprendizaje para ayudar a las personas a aprender un nuevo idioma. Al igual que resumir, la traducción es una tarea de secuencia a secuencia, lo que significa que el modelo recibe una secuencia de entrada y devuelve una secuencia de salida objetivo.
 
 En sus primeros días, los modelos de traducción eran principalmente monolingües, pero recientemente ha habido un creciente interés en modelos multilingües que pueden traducir entre muchas combinaciones de idiomas.
-
-```py
->>> from transformers import pipeline
-
->>> text = "translate English to French: Hugging Face is a community-based open-source platform for machine learning."
->>> translator = pipeline(task="translation", model="t5-small")
->>> translator(text)
-[{'translation_text': "Hugging Face est une tribune communautaire de l'apprentissage des machines."}]
-```
 
 ### Modelado de lenguaje
 

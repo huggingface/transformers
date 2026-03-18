@@ -32,6 +32,12 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    "PI0Config": ["vlm_projection_dim"],
+    "EuroBertConfig": ["is_causal"],  # not used directly, allows causal-bidirectional switch
+    "Ernie4_5_VL_MoeConfig": ["args"],  # BC Alias
+    "Ernie4_5_VL_MoeTextConfig": ["args"],  # BC Alias
+    "Ernie4_5_VL_MoeVisionConfig": ["args"],  # BC Alias
+    "ExaoneMoeConfig": ["first_k_dense_replace"],  # BC for other frameworks
     "AfmoeConfig": ["global_attn_every_n_layers", "rope_scaling"],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Lfm2Config": ["full_attn_idxs"],
@@ -69,6 +75,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "Sam3VisionConfig": ["backbone_feature_sizes"],
     "SamHQVisionConfig": ["mlp_ratio"],
     "ClapAudioConfig": ["num_classes"],
+    "ClvpDecoderConfig": ["add_cross_attention"],
     "SpeechT5HifiGanConfig": ["sampling_rate"],
     "UdopConfig": ["feed_forward_proj"],
     "ZambaConfig": ["attn_layer_offset", "attn_layer_period"],
@@ -77,11 +84,16 @@ SPECIAL_CASES_TO_ALLOW = {
     "GPTNeoXConfig": ["rotary_emb_base"],
     "ShieldGemma2Config": ["mm_tokens_per_image", "vision_config"],
     "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
+    "ModernBertConfig": ["local_attention", "reference_compile"],
     "ModernBertDecoderConfig": ["global_attn_every_n_layers", "local_attention", "local_rope_theta"],
     "SmolLM3Config": ["no_rope_layer_interval"],
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],
+    "HiggsAudioV2Config": ["audio_bos_token", "audio_stream_bos_id", "audio_stream_eos_id"],
+    "HiggsAudioV2TokenizerConfig": ["downsample_factor"],
     "CsmConfig": ["tie_codebooks_embeddings"],
     "DeepseekV2Config": ["norm_topk_prob"],
+    "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
+    "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
     "SeamlessM4TConfig": True,
     "SeamlessM4Tv2Config": True,
     "ConditionalDetrConfig": True,
@@ -125,10 +137,21 @@ SPECIAL_CASES_TO_ALLOW = {
     "IdeficsPerceiverConfig": True,
     "GptOssConfig": True,
     "LwDetrConfig": True,
+    "NemotronHConfig": True,
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
 ATTRIBUTES_TO_ALLOW = (
+    # Attr in base `PreTrainedConfig`
+    "chunk_size_feed_forward",
+    "dtype",
+    "id2label",
+    "label2id",
+    "problem_type",
+    "tokenizer_class",
+    "is_encoder_decoder",
+    "output_hidden_states",
+    "return_dict",
     # Inits related
     "initializer_range",
     "init_std",
@@ -164,6 +187,10 @@ ATTRIBUTES_TO_ALLOW = (
     "pretraining_tp",
     "use_sliding_window",
     "max_window_layers",
+    # vision attributes that may be used indirectly via merge_with_config_defaults
+    "vision_feature_layer",
+    "vision_feature_select_strategy",
+    "vision_aspect_ratio",
 )
 
 
@@ -208,9 +235,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
     # Special cases to be allowed even if not found as used
     for attribute in attributes:
         # Allow if the default value in the configuration class is different from the one in `PreTrainedConfig`
-        if (attribute == "is_encoder_decoder" and default_value is True) or (
-            attribute == "tie_word_embeddings" and default_value is False
-        ):
+        if (attribute == "is_encoder_decoder" and default_value is True) or attribute == "tie_word_embeddings":
             return True
         # General exceptions for all models
         elif any(re.search(exception, attribute) for exception in ATTRIBUTES_TO_ALLOW):

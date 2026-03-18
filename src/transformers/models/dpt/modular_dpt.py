@@ -40,7 +40,7 @@ from .image_processing_dpt import DPTImageProcessorKwargs
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 
 def get_resize_output_image_size(
@@ -105,7 +105,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         antialias: bool = True,
         ensure_multiple_of: int | None = 1,
         keep_aspect_ratio: bool = False,
@@ -169,7 +169,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
         pad_top, pad_bottom = _get_pad(height, size_divisor)
         pad_left, pad_right = _get_pad(width, size_divisor)
         padding = (pad_left, pad_top, pad_right, pad_bottom)
-        return F.pad(image, padding)
+        return tvF.pad(image, padding)
 
     def _preprocess(
         self,
@@ -177,7 +177,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
         do_reduce_labels: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -218,12 +218,12 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
                 stacked_images = self.center_crop(stacked_images, crop_size)
-            if do_pad:
-                stacked_images = self.pad_image(stacked_images, size_divisor)
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
+            if do_pad:
+                stacked_images = self.pad_image(stacked_images, size_divisor)
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
