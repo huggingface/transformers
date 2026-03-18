@@ -306,7 +306,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
         task = "retrieval_query"
         model = AutoModel.from_pretrained(self.model_id, dtype=torch.float32)
         model.load_adapter(
-            self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": self.revision}
+            self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task}
         )
         model.set_adapter(task)
         model.eval()
@@ -333,7 +333,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
         task = "retrieval_passage"
         model = AutoModel.from_pretrained(self.model_id, dtype=torch.float32)
         model.load_adapter(
-            self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": self.revision}
+            self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task}
         )
         model.set_adapter(task)
         model.eval()
@@ -362,7 +362,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
         task = "separation"
         model = AutoModel.from_pretrained(self.model_id, dtype=torch.float32)
         model.load_adapter(
-            self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": self.revision}
+            self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task}
         )
         model.set_adapter(task)
         model.eval()
@@ -390,7 +390,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
         task = "classification"
         model = AutoModel.from_pretrained(self.model_id, dtype=torch.float32)
         model.load_adapter(
-            self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": self.revision}
+            self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task}
         )
         model.set_adapter(task)
         model.eval()
@@ -418,7 +418,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
         task = "text_matching"
         model = AutoModel.from_pretrained(self.model_id, dtype=torch.float32)
         model.load_adapter(
-            self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": self.revision}
+            self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task}
         )
         model.set_adapter(task)
         model.eval()
