@@ -731,6 +731,20 @@ class WhisperTokenizer(TokenizersBackend):
         if not token_ids:
             return token_ids
 
+        # handle batched input (list of lists)
+        if len(token_ids) > 0 and isinstance(token_ids[0], list):
+            return [
+                self._strip_prompt_single(seq, prompt_token_id, decoder_start_token_id) for seq in token_ids
+            ]
+
+        return self._strip_prompt_single(token_ids, prompt_token_id, decoder_start_token_id)
+
+    def _strip_prompt_single(self, token_ids: list[int], prompt_token_id: int, decoder_start_token_id: int):
+        """Strip prompt from a single sequence (not batched)."""
+        # handle case of empty token_ids for decoding with timestamps.
+        if not token_ids:
+            return token_ids
+
         has_prompt = token_ids[0] == prompt_token_id
         if has_prompt:
             if decoder_start_token_id in token_ids:
