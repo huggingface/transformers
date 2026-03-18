@@ -89,7 +89,7 @@ class MptAttention(nn.Module):
         position_bias: torch.Tensor,
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ):
         batch_size, seq_length = hidden_states.shape[:2]
 
@@ -103,8 +103,7 @@ class MptAttention(nn.Module):
         value_states = value_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1, 2)
 
         if past_key_values is not None:
-            cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2)) * self.softmax_scale
         query_length = seq_length if past_key_values is None else seq_length + past_key_values.get_seq_length()
@@ -185,7 +184,7 @@ class MptBlock(GradientCheckpointingLayer):
         layer_past: Cache | None = None,
         use_cache: bool = False,
         output_attentions: bool = False,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ):
         # hidden_states: [batch_size, seq_length, hidden_size]
         # Layer norm at the beginning of the transformer layer.
@@ -199,7 +198,6 @@ class MptBlock(GradientCheckpointingLayer):
             position_bias=position_bias,
             attention_mask=attention_mask,
             past_key_values=layer_past,
-            cache_position=cache_position,
         )
 
         hidden_states = self.resid_attn_dropout(attn_outputs) + residual
@@ -266,7 +264,6 @@ class MptModel(MptPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,  # NOOP kwargs, for now
     ) -> tuple[torch.Tensor, ...] | BaseModelOutputWithPastAndCrossAttentions:
         r"""
@@ -319,17 +316,10 @@ class MptModel(MptPreTrainedModel):
         # Compute alibi tensor: check build_alibi_tensor documentation
         alibi = self.build_mpt_alibi_tensor(self.num_heads, self.config.max_seq_len, device=hidden_states.device)
 
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
-            )
-
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
         ).to(torch.bool)
 
@@ -344,7 +334,6 @@ class MptModel(MptPreTrainedModel):
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 position_bias=alibi,
-                cache_position=cache_position,
             )
 
             hidden_states = outputs[0]
@@ -402,7 +391,6 @@ class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple[torch.Tensor] | CausalLMOutputWithCrossAttentions:
@@ -434,7 +422,6 @@ class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         hidden_states = transformer_outputs[0]
