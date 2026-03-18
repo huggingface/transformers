@@ -18,7 +18,6 @@ import unittest
 from pathlib import Path
 
 import pytest
-
 from doc_builder.testing import DocIntegrationTest
 
 from transformers import (

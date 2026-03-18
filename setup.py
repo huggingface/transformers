@@ -85,7 +85,7 @@ _deps = [
     "filelock",
     "fugashi>=1.0",
     "GitPython<3.1.19",
-    "hf-doc-builder @ git+https://github.com/huggingface/doc-builder.git@add-runnable-block-processing",
+    "hf-doc-builder @ git+https://github.com/huggingface/doc-builder.git@main",
     "huggingface-hub>=1.5.0,<2.0",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
