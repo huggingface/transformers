@@ -210,6 +210,17 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertTrue(tokenizer.__class__.__module__.startswith("transformers_modules."))
 
     @require_tokenizers
+    @slow
+    def test_remote_code_imports_removed_fast_submodule(self):
+        # BC v5: remote tokenizer code may import from a deprecated tokenization_*_fast
+        tokenizer = AutoTokenizer.from_pretrained(
+            "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+            trust_remote_code=True,
+            revision="a9af15a6372d7d6b25e9fb07c2ccb9e1fe645644",
+        )
+        self.assertGreater(len(tokenizer("hello world")["input_ids"]), 0)
+
+    @require_tokenizers
     def test_voxtral_tokenizer_converts_from_tekken(self):
         # Test that voxtral tokenizer loads correctly when falling back to TokenizersBackend
         # (i.e., when MistralCommonBackend is not available)
