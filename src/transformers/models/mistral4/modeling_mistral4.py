@@ -19,7 +19,6 @@
 # limitations under the License.
 import math
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -90,9 +89,9 @@ class Mistral4RotaryEmbedding(nn.Module):
     @staticmethod
     def compute_default_rope_parameters(
         config: Mistral4Config | None = None,
-        device: Optional["torch.device"] = None,
+        device=None,
         seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -109,7 +108,7 @@ class Mistral4RotaryEmbedding(nn.Module):
         base = config.rope_parameters["rope_theta"]
         partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        dim = int(dim * partial_rotary_factor) # Mixtral4 doesn't apply ROPE to the full attention head
+        dim = int(dim * partial_rotary_factor)  # Mixtral4 doesn't apply ROPE to the full attention head
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (
             base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
