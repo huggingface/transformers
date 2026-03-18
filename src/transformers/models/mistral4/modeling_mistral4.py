@@ -467,7 +467,7 @@ class Mistral4Attention(nn.Module):
         if position_ids is None:
             position_ids = torch.arange(query_states.shape[2], device=query_states.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
-        position_ids = position_ids.unsqueeze(1) # Broadcast positions for all attention heads
+        position_ids = position_ids.unsqueeze(1)  # Broadcast positions for all attention heads
 
         query_states = query_states * get_llama_4_attn_scale(
             position_ids,
