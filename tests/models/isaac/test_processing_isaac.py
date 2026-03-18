@@ -25,7 +25,6 @@ from huggingface_hub import is_offline_mode
 
 from transformers import IsaacConfig, PythonBackend
 from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
-from transformers.models.isaac.modeling_isaac import MM_TOKEN_TYPE_IMAGE, MM_TOKEN_TYPE_TEXT
 from transformers.models.isaac.processing_isaac import IsaacProcessor
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
@@ -198,7 +197,7 @@ def _assert_no_vision(outputs, batch_index=0):
     assert outputs["vision_token_offsets"][batch_index].sum().item() == 0
     assert outputs["vision_token_lengths"][batch_index].sum().item() == 0
     assert outputs["vision_image_attention_mask"][batch_index].sum().item() == 0
-    assert not outputs["mm_token_type_ids"][batch_index].eq(MM_TOKEN_TYPE_IMAGE).any()
+    assert not outputs["mm_token_type_ids"][batch_index].eq(1).any()
 
 
 def _assert_vision_segments(outputs, expected_segments, batch_index=0):
@@ -370,7 +369,7 @@ class IsaacProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         batch_ids = batch["input_ids"][0]
         self.assertTrue(torch.equal(batch_ids[-single_ids.size(0) :], single_ids))
 
-        image_positions = batch["mm_token_type_ids"][0].eq(MM_TOKEN_TYPE_IMAGE)
+        image_positions = batch["mm_token_type_ids"][0].eq(1)
         if image_positions.any():
             self.assertTrue(torch.all(batch_ids[image_positions] == self.image_pad_token_id))
             self.assertTrue(torch.all(batch["attention_mask"][0][image_positions] == 1))
@@ -503,7 +502,7 @@ def test_no_crop_when_total_below_max(isaac_processor):
     _assert_vision_segments(outputs, expected_segments=1)
 
     grid_tokens = torch.prod(_get_active_vision_grids(outputs), dim=-1)
-    text_tokens = _count_modality(outputs, MM_TOKEN_TYPE_TEXT)
+    text_tokens = _count_modality(outputs, 0)
     assert outputs["input_ids"].shape[1] == grid_tokens.item() + text_tokens
 
 
@@ -535,7 +534,7 @@ def test_crop_truncates_text_segment_only(isaac_processor, isaac_tokenizer, isaa
     image = _make_dummy_image()
 
     base_outputs = _assert_common(_run_processor(isaac_processor, text=text, images=[image]))
-    full_text_tokens = _count_modality(base_outputs, MM_TOKEN_TYPE_TEXT)
+    full_text_tokens = _count_modality(base_outputs, 0)
     vision_length = _get_active_vision_lengths(base_outputs).item()
 
     max_len = base_outputs["input_ids"].shape[1] - 4
@@ -544,7 +543,7 @@ def test_crop_truncates_text_segment_only(isaac_processor, isaac_tokenizer, isaa
 
     _assert_vision_segments(outputs, expected_segments=1)
     assert outputs["input_ids"].shape[1] == max_len
-    assert _count_modality(outputs, MM_TOKEN_TYPE_TEXT) == full_text_tokens - 4
+    assert _count_modality(outputs, 0) == full_text_tokens - 4
     torch.testing.assert_close(
         outputs["vision_token_offsets"][0, :1], torch.zeros_like(outputs["vision_token_offsets"][0, :1])
     )
@@ -578,7 +577,7 @@ def test_crop_cuts_through_image_segment(isaac_processor, isaac_tokenizer, isaac
     assert outputs["input_ids"].shape[1] == max_len
     assert outputs["vision_token_offsets"][0, 0].item() == expected_offset
     assert _get_active_vision_lengths(outputs).item() == expected_length
-    assert _count_modality(outputs, MM_TOKEN_TYPE_TEXT) == text_after_len
+    assert _count_modality(outputs, 0) == text_after_len
 
 
 @require_torch
@@ -594,7 +593,7 @@ def test_crop_removes_all_vision_when_window_excludes_images(isaac_processor, is
 
     _assert_no_vision(outputs)
     assert outputs["input_ids"].shape[1] == tail_tokens
-    assert _count_modality(outputs, MM_TOKEN_TYPE_TEXT) == tail_tokens
+    assert _count_modality(outputs, 0) == tail_tokens
 
 
 @require_torch

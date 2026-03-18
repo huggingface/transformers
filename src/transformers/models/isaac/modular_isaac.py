@@ -83,10 +83,6 @@ if is_torchvision_available():
     from ..pix2struct.image_processing_pix2struct_fast import torch_extract_patches
 
 
-MM_TOKEN_TYPE_TEXT = 0
-MM_TOKEN_TYPE_IMAGE = 1
-
-
 class SinglePoint(NamedTuple):
     x: int
     y: int
@@ -1133,7 +1129,7 @@ class IsaacModel(Qwen3PreTrainedModel):
         inputs_embeds: torch.FloatTensor,
         image_features: torch.FloatTensor,
     ) -> torch.BoolTensor:
-        image_token_mask = mm_token_type_ids.to(device=inputs_embeds.device, dtype=torch.long) == MM_TOKEN_TYPE_IMAGE
+        image_token_mask = mm_token_type_ids.to(device=inputs_embeds.device, dtype=torch.long) == 1
         n_image_tokens = image_token_mask.sum()
         image_token_mask = image_token_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         torch_compilable_check(
@@ -1210,7 +1206,7 @@ class IsaacModel(Qwen3PreTrainedModel):
                     group_end += 1
 
                 group_length = group_end - seq_pos
-                if modality_type == MM_TOKEN_TYPE_TEXT:
+                if modality_type == 0:
                     llm_pos_ids_list.append(
                         torch.arange(group_length, device=device, dtype=torch.long).view(1, -1).expand(3, -1)
                         + current_pos
@@ -1249,7 +1245,7 @@ class IsaacModel(Qwen3PreTrainedModel):
         past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
         can_compute_mrope = (
             mm_token_type_ids is not None
-            and mm_token_type_ids.eq(MM_TOKEN_TYPE_IMAGE).any()
+            and mm_token_type_ids.eq(1).any()
             and image_token_grids is not None
             and image_token_offsets is not None
             and image_token_lengths is not None
@@ -1355,13 +1351,11 @@ class IsaacModel(Qwen3PreTrainedModel):
 
         if mm_token_type_ids is None:
             batch_size, seq_len = inputs_embeds.shape[:2]
-            mm_token_type_ids = torch.full(
-                (batch_size, seq_len), MM_TOKEN_TYPE_TEXT, device=inputs_embeds.device, dtype=torch.long
-            )
+            mm_token_type_ids = torch.full((batch_size, seq_len), 0, device=inputs_embeds.device, dtype=torch.long)
         else:
             mm_token_type_ids = mm_token_type_ids.to(device=inputs_embeds.device, dtype=torch.long)
 
-        image_token_mask = mm_token_type_ids == MM_TOKEN_TYPE_IMAGE
+        image_token_mask = mm_token_type_ids == 1
         if created_inputs_embeds and torch.any(image_token_mask):
             image_outputs = self.get_image_features(
                 pixel_values=vision_patches,
