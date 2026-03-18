@@ -321,13 +321,174 @@ Peak memory: identical (15,376.4 MB). Sanity check: PASSED.
 
 ---
 
-## Plan
+## Integration Options: How `_static_sample` Can Live in `transformers`
 
-Benchmark each item (A, B, C) independently on CUDA:
-1. Implement item
-2. Run `test_compile_generate.py --mode both`
-3. Record result
-4. Decide: keep for general path or gate behind Neuron-only check
+The `generate()` method in `transformers` has several mechanisms for plugging in custom decoding
+strategies. Understanding these is key to deciding how `_static_sample` should be integrated.
 
-If all items show no CUDA improvement, `_static_sample` becomes a Neuron-specific path.
-If some items help, those go into the general path; the rest are Neuron-gated.
+### Mechanism 1: Inline method on `GenerationMixin` (current approach)
+
+`_static_sample` is defined directly on `GenerationMixin`, next to `_sample` and `_beam_search`.
+The auto-dispatch logic in `generate()` selects it when a `StaticCache` is detected:
+
+```python
+# generate(), line ~2524
+if custom_generate is None and generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
+    if isinstance(model_kwargs.get("past_key_values"), StaticCache):
+        decoding_method = getattr(type(self), "_static_sample")
+```
+
+All preparation (cache setup, logits processors, stopping criteria, input validation) still
+happens in `generate()` before `decoding_method` is called. The decoding method receives the
+same signature as `_sample`:
+
+```python
+result = decoding_method(
+    self, input_ids,
+    logits_processor=prepared_logits_processor,
+    stopping_criteria=prepared_stopping_criteria,
+    generation_config=generation_config,
+    **generation_mode_kwargs, **model_kwargs,
+)
+```
+
+**Pros:** Zero friction for users — just set `cache_implementation="static"` and it works.
+Testable with the existing generation test suite. Visible in the codebase for review.
+
+**Cons:** Adds ~240 lines to an already large `utils.py`. Must be maintained alongside `_sample`
+when the generation API evolves (e.g. PRs #44226, #44130, #44181 all changed `_sample`'s
+contract and would need mirrored changes in `_static_sample`).
+
+### Mechanism 2: `custom_generate` callable parameter
+
+Users can pass any callable as `custom_generate` to `generate()`:
+
+```python
+model.generate(..., custom_generate=my_static_sample_function)
+```
+
+At line 2366, this directly becomes the `decoding_method`:
+```python
+if isinstance(custom_generate, Callable):
+    decoding_method = custom_generate
+```
+
+The callable receives the same args as `_sample` (extracted by comparing signatures at
+line 2136). This is how the benchmark script forces `_sample` via
+`custom_generate=GenerationMixin._sample` to bypass auto-dispatch.
+
+**Pros:** No changes to `utils.py` at all — `_static_sample` could live in a separate module
+(or even in `optimum-neuron`) and be injected at call time.
+
+**Cons:** Requires users to explicitly pass it every time. No auto-dispatch. Not discoverable.
+
+### Mechanism 3: `custom_generate` Hub repo (string parameter)
+
+Deprecated generation modes (DOLA, contrastive search, group beam search, constrained beam
+search) were moved to Hub repos under `transformers-community/*`. Users invoke them via:
+
+```python
+model.generate(..., custom_generate='transformers-community/dola', trust_remote_code=True)
+```
+
+This fetches `generate.py` from the Hub repo and uses its `generate` function as the decoding
+method. The mapping is in `GENERATION_MODES_MAPPING`:
+
+```python
+GENERATION_MODES_MAPPING = {
+    GenerationMode.SAMPLE: "_sample",
+    GenerationMode.GREEDY_SEARCH: "_sample",
+    # Deprecated — fetched from Hub:
+    GenerationMode.DOLA_GENERATION: "transformers-community/dola",
+    GenerationMode.CONTRASTIVE_SEARCH: "transformers-community/contrastive-search",
+    ...
+}
+```
+
+**Important nuance:** When fetched from a Hub repo, the function replaces the decoding method,
+NOT the full `generate()`. All the preparation logic (cache, processors, stopping criteria)
+still runs in `generate()` first.
+
+`_static_sample` could be published as e.g. `transformers-community/static-sample` and invoked:
+```python
+model.generate(..., custom_generate='transformers-community/static-sample', trust_remote_code=True)
+```
+
+**Pros:** No changes to `utils.py`. Can be iterated on independently. Community-maintained.
+
+**Cons:** Requires `trust_remote_code=True`. Requires users to know the repo name. No
+auto-dispatch. The current Hub repo mechanism is positioned as a deprecation path
+(comment says "remove this in v4.62.0"), not as a first-class extension point.
+
+### Mechanism 4: `load_custom_generate` from model repo
+
+If a model's HuggingFace repo contains a `custom_generate/generate.py` file, it is
+automatically loaded at model instantiation time and **replaces the entire `generate()` method**:
+
+```python
+# from_pretrained(), line ~424
+if hasattr(self, "load_custom_generate") and trust_remote_code:
+    custom_generate = self.load_custom_generate(pretrained_model_name_or_path, ...)
+    self.generate = functools.partial(custom_generate, model=self)
+```
+
+This is the coarsest mechanism — it replaces `generate()` entirely, not just the decoding loop.
+The custom function must handle all preparation, cache setup, etc. on its own.
+
+**Not suitable for `_static_sample`** since we only want to replace the decode loop, not the
+full `generate()` pipeline. A Neuron-specific model repo could use this to ship a complete
+Neuron-optimized generate, but that's a much larger scope.
+
+### Recommendation
+
+| Option | Auto-dispatch | Maintenance burden | User friction | Best for |
+|---|---|---|---|---|
+| **1. Inline method** | Yes (StaticCache) | High (must track `_sample` changes) | None | General path |
+| **2. Callable param** | No | Low | High (manual each call) | Testing/development |
+| **3. Hub repo** | No | Medium | Medium (need repo name + trust_remote_code) | Neuron-only path |
+| **4. Model repo** | Yes (per model) | Low (self-contained) | None (if model ships it) | Model-specific overrides |
+
+**If `_static_sample` is a general-purpose improvement** (our benchmarks show +0.7-1.4% on CUDA,
+no regressions): **Option 1** is the right choice. Auto-dispatch gives the benefit to all users
+with zero friction.
+
+**If `_static_sample` is Neuron-only**: **Option 3** (Hub repo) would keep it out of core while
+still being usable. But the Hub mechanism is currently positioned as a deprecation path, so
+long-term viability is uncertain. **Option 2** (callable) is the pragmatic fallback — Neuron
+users can import it and pass it explicitly.
+
+**Hybrid approach:** Keep `_static_sample` as an inline method (Option 1) for auto-dispatch,
+but also make it importable so Neuron users can pass it via Option 2 with custom modifications:
+```python
+from transformers.generation.utils import GenerationMixin
+model.generate(..., custom_generate=GenerationMixin._static_sample)
+```
+This is already how the benchmark script works.
+
+---
+
+## Summary and Next Steps
+
+### Benchmark summary
+
+All optimizations from `neuron_sample` are now implemented in `_static_sample`. On CUDA:
+
+| Configuration | Speedup vs `_sample` |
+|---|---|
+| `_static_sample` baseline (items 1-7) | +0.8% |
+| + Item A (output_ids CPU + CPU EOS masking) | +1.4% |
+| + Item B (4D causal mask) | +0.7% (noise) |
+
+Run-to-run variance is ~0.5-1%, so all results are within noise. Key takeaway:
+**no Neuron optimization hurts CUDA**. This supports making `_static_sample` a general path.
+
+### What's done
+
+All 14 `neuron_sample` optimizations are implemented and benchmarked.
+
+### What's left
+
+1. **Test left-padding correctness** — batch_size>1 with variable-length prompts (untested)
+2. **Decide integration approach** — inline method with auto-dispatch (recommended) vs Hub repo
+3. **PR preparation** — organize commits, write PR description per AGENTS.md rules, coordinate on issue #44742
+4. **Verify `logits_processor` pad sensitivity** — full buffer includes trailing pads; check `RepetitionPenaltyLogitsProcessor` and others
