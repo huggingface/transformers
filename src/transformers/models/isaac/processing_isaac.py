@@ -131,15 +131,10 @@ class IsaacProcessor(ProcessorMixin):
 
         self.image_processor = image_processor
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
-
-        text_pad_token_id = getattr(self.tokenizer, "pad_token_id", None)
-        image_pad_token_id = self.tokenizer.convert_tokens_to_ids("<|image_pad|>")
-
-        self.text_pad_token_id = int(text_pad_token_id)
-        self.image_pad_token_id = int(image_pad_token_id)
-        self.image_token = "<|image_pad|>"
+        self.text_pad_token_id = self.pad_token_id = tokenizer.pad_token_id
+        self.image_pad_token_id = tokenizer.image_pad_token_id
+        self.image_token = tokenizer.image_pad_token
         self.image_token_id = self.image_pad_token_id
-        self.pad_token_id = self.text_pad_token_id
 
         self.vision_token = vision_token
         self.max_sequence_length = max_sequence_length
