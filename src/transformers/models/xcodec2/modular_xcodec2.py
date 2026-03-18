@@ -530,15 +530,15 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
     @can_return_tuple
     def decode(
         self,
-        quantized_representation: torch.Tensor | None = None,
         audio_codes: torch.Tensor | None = None,
+        quantized_representation: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Xcodec2DecoderOutput:
         r"""
-        quantized_representation (torch.Tensor of shape `(batch_size, dimension, time_steps)`, *optional*):
-            Quantized continuous representation of input.
         audio_codes (`torch.LongTensor`  of shape `(batch_size, 1, codes_length)`):
             Discrete code indices computed using `model.encode`.
+        quantized_representation (torch.Tensor of shape `(batch_size, dimension, time_steps)`, *optional*):
+            Quantized continuous representation of input.
         """
         if quantized_representation is None and audio_codes is None:
             raise ValueError("Either `quantized_representation` or `audio_codes` must be provided.")

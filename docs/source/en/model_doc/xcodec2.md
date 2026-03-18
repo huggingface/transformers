@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-02-06 and added to Hugging Face Transformers on 2025-04-29.*
+*This model was released on 2025-02-06 and added to Hugging Face Transformers on 2026-03-18.*
 
 # X-Codec2
 
@@ -28,49 +28,87 @@ The X-Codec2 model was proposed in [Llasa: Scaling Train-Time and Inference-Time
 
 X-Codec2 is a neural audio codec designed to improve speech synthesis and general audio generation for large language model (LLM) pipelines. It extends the original X-Codec by refining how semantic and acoustic information is integrated and tokenized, enabling efficient and high-fidelity audio representation.
 
-Its architecture is based on [X-Codec](./xcodec) with several major differences:
-
+About its architecture:
 - **Unified Semantic-Acoustic Tokenization**: X-Codec2 fuses outputs from a semantic encoder (e.g., Wav2Vec2-BERT) and an acoustic encoder into a single embedding, capturing both high-level meaning (e.g., text content, emotion) and low-level audio details (e.g., timbre).
-- **Single-Stage Vector Quantization (VQ)**: Unlike the multi-layer residual VQ in most approaches (e.g., [X-Codec](./xcodec), [DAC](./dac), [EnCodec](./encodec)), X-Codec2 uses a single-layer Feature-Space Quantization (FSQ) for stability and compatibility with causal, autoregressive LLMs.
-- **Semantic Supervision During Training**: It adds a semantic reconstruction loss, ensuring that the discrete tokens preserve meaningful linguistic and emotional information — crucial for TTS tasks.
+- **Single-Stage Vector Quantization (VQ)**: Unlike the multi-layer residual VQ in most approaches (e.g., [X-Codec](./xcodec), [DAC](./dac), [EnCodec](./encodec)), X-Codec2 uses a single-layer of Feature Scalar Quantization (FSQ) for stability and compatibility with causal, autoregressive LLMs.
 - **Transformer-Friendly Design**: The 1D token structure of X-Codec2 naturally aligns with the autoregressive modeling in LLMs like LLaMA, improving training efficiency and downstream compatibility.
+
+A model checkpoint is available at [bezzam/xcodec2](https://huggingface.co/bezzam/xcodec2).
+
+This model was contributed by [Eric Bezzam](https://huggingface.co/bezzam) and [Steven Zheng](https://huggingface.co/Steveeeeeeen).
+The original code can be found [here](https://github.com/zhenye234/X-Codec-2.0).
 
 ## Usage example 
 
 Here is a quick example of how to encode and decode an audio using this model:
 
 ```python 
->>> import torch
->>> from datasets import Audio, load_dataset
->>> from transformers import AutoFeatureExtractor, Xcodec2Model
+from datasets import Audio, load_dataset
+from transformers import AutoFeatureExtractor, Xcodec2Model
 
->>> torch_device = "cuda" if torch.cuda.is_available() else "cpu"
+model_id = "bezzam/xcodec2"
+model = Xcodec2Model.from_pretrained(model_id, device_map="auto")
+feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
->>> # load model and feature extractor
->>> model_id = "hf-audio/xcodec2"
->>> model = Xcodec2Model.from_pretrained(model_id).to(torch_device).eval()
->>> feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+dataset = dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
+audio = dataset[0]["audio"]["array"]
+inputs = feature_extractor(audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(
+    model.device, model.dtype
+)
+print("Input waveform shape:", inputs["audio"].shape)
+# Input waveform shape: torch.Size([1, 1, 94080])
 
->>> # load data
->>> dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
->>> dataset = dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
->>> audio = dataset[0]["audio"]["array"]
+# encoder and decoder
+audio_codes = model.encode(**inputs).audio_codes
+print("Audio codes shape:", audio_codes.shape)
+# Audio codes shape: torch.Size([1, 1, 294])
+audio_values = model.decode(audio_codes).audio_values
+print("Audio values shape:", audio_values.shape)
+# Audio values shape: torch.Size([1, 1, 94080])
 
->>> # prepare data
->>> inputs = feature_extractor(audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(torch_device)
-
->>> # encoder and decoder
->>> audio_codes = model.encode(**inputs).audio_codes
->>> audio_values = model.decode(audio_codes).audio_values
->>> # or the equivalent with a forward pass
->>> model_output = model(**inputs)
->>> audio_codes = model_output.audio_codes
->>> audio_values = model_output.audio_values
+# Equivalently, you can do encoding and decoding in one step
+model_output = model(**inputs)
+audio_codes = model_output.audio_codes
+audio_values = model_output.audio_values
 ```
 
-This model was contributed by [Steven Zheng](https://huggingface.co/Steveeeeeeen) and [Eric Bezzam](https://huggingface.co/bezzam).
-The original code can be found [here](https://github.com/zhenye234/X-Codec-2.0).
+### Batch processing
 
+The original [checkpoint](https://huggingface.co/HKUSTAudio/xcodec2) and code via PyPI does not support batch processing, but it is possible with this version!
+
+```python
+from datasets import Audio, load_dataset
+from transformers import AutoFeatureExtractor, Xcodec2Model
+
+batch_size = 2
+model_id = "bezzam/xcodec2"
+model = Xcodec2Model.from_pretrained(model_id, device_map="auto")
+feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+
+dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+dataset = dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
+audios = [dataset[i]["audio"]["array"] for i in range(batch_size)]
+inputs = feature_extractor(audio=audios, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(
+    model.device, model.dtype
+)
+print("Input waveform shape:", inputs["audio"].shape)
+# Input waveform shape: torch.Size([2, 1, 94080])
+
+# encoder and decoder
+encoder_output = model.encode(**inputs)
+audio_codes = encoder_output.audio_codes
+print("Audio codes shape:", audio_codes.shape)
+# Audio codes shape: torch.Size([2, 1, 294])
+audio_values = model.decode(audio_codes).audio_values
+print("Audio values shape:", audio_values.shape)
+# Audio values shape: torch.Size([2, 1, 94080])
+
+# Equivalently, you can do encoding and decoding in one step
+model_output = model(**inputs)
+audio_codes = model_output.audio_codes
+audio_values = model_output.audio_values
+```
 
 ## Xcodec2Config
 
