@@ -97,6 +97,7 @@ def pytest_configure(config):
     )
     config.addinivalue_line("markers", "training_ci: mark test for training CI validation")
     config.addinivalue_line("markers", "tensor_parallel_ci: mark test for tensor parallel CI validation")
+
     os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "true"
     register_network_debug_plugin(config)
 
