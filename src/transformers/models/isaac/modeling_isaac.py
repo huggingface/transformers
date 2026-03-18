@@ -1310,7 +1310,6 @@ class IsaacModel(PreTrainedModel):
 
     def get_rope_index(
         self,
-        *,
         mm_token_type_ids: torch.Tensor,
         image_token_grids: torch.Tensor,
         image_token_offsets: torch.Tensor,
@@ -1481,8 +1480,6 @@ class IsaacModel(PreTrainedModel):
                 follows the standard convention `0 -> text`, `1 -> image`. Treated as text-only when omitted.
             vision_patches (`torch.FloatTensor`, *optional*):
                 Padded per-image patch vectors of shape `(batch_size, max_images, max_patches, patch_dim)`.
-            pixel_values (`torch.FloatTensor`, *optional*):
-                Alias for `vision_patches` accepted by generic image-feature and generation helpers.
             vision_patch_attention_mask (`torch.LongTensor`, *optional*):
                 Mask for valid patch entries in `vision_patches`, shaped `(batch_size, max_images, max_patches)`.
             image_patch_attention_mask (`torch.LongTensor`, *optional*):
