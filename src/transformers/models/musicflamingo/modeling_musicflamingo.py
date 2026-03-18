@@ -104,7 +104,7 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
         batch_freqs = batch_positions.unsqueeze(-1) * self.inv_freq
         batch_freqs = torch.repeat_interleave(batch_freqs, 2, dim=-1)
 
-        # Broadcastin and apply time-based angle modulation
+        # Broadcasting and apply time-based angle modulation
         batch_freqs = batch_freqs[:, None, :]
         time_freqs = self.position_angles[:seq_len][None, :, :]
         batch_freqs, time_freqs = broadcast_tensors(batch_freqs, time_freqs)
