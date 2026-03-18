@@ -775,7 +775,9 @@ class FSDPTesterMixin(ABC):
                 self.assertGreater(count, 0, f"Block class {cls.__name__} has no instances in model")
             status = "PASS"
         finally:
-            logger.info("[FSDP] %s test: test_get_transformer_block_classes (%.1fs)", status, time.perf_counter() - start_time)
+            logger.info(
+                "[FSDP] %s test: test_get_transformer_block_classes (%.1fs)", status, time.perf_counter() - start_time
+            )
 
     @is_fsdp_test
     @require_fsdp
