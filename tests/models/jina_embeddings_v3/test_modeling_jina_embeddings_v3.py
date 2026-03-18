@@ -305,9 +305,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
     def test_inference_retrieval_query_adapter(self):
         task = "retrieval_query"
         model = AutoModel.from_pretrained(self.model_id, dtype=torch.float32)
-        model.load_adapter(
-            self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task}
-        )
+        model.load_adapter(self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task})
         model.set_adapter(task)
         model.eval()
         inputs = self._prepare_inputs()
@@ -332,9 +330,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
     def test_inference_retrieval_passage_adapter(self):
         task = "retrieval_passage"
         model = AutoModel.from_pretrained(self.model_id, dtype=torch.float32)
-        model.load_adapter(
-            self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task}
-        )
+        model.load_adapter(self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task})
         model.set_adapter(task)
         model.eval()
         inputs = self._prepare_inputs()
@@ -361,9 +357,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
     def test_inference_separation_adapter(self):
         task = "separation"
         model = AutoModel.from_pretrained(self.model_id, dtype=torch.float32)
-        model.load_adapter(
-            self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task}
-        )
+        model.load_adapter(self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task})
         model.set_adapter(task)
         model.eval()
 
@@ -389,9 +383,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
     def test_inference_classification_adapter(self):
         task = "classification"
         model = AutoModel.from_pretrained(self.model_id, dtype=torch.float32)
-        model.load_adapter(
-            self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task}
-        )
+        model.load_adapter(self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task})
         model.set_adapter(task)
         model.eval()
 
@@ -417,9 +409,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
     def test_inference_text_matching_adapter(self):
         task = "text_matching"
         model = AutoModel.from_pretrained(self.model_id, dtype=torch.float32)
-        model.load_adapter(
-            self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task}
-        )
+        model.load_adapter(self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task})
         model.set_adapter(task)
         model.eval()
 
