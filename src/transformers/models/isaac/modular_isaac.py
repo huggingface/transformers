@@ -618,30 +618,6 @@ class IsaacMultiModalProjector(nn.Module):
         return hidden_states
 
 
-class IsaacVisionEmbedding(nn.Module):
-    def __init__(self, config: IsaacConfig):
-        super().__init__()
-        vision_cfg = config.vision_config
-
-        self.vision_tower = IsaacVisionTransformer(vision_cfg)
-        self.multimodal_projector = IsaacMultiModalProjector(config)
-
-    def forward(
-        self,
-        vision_patches: torch.Tensor,
-        vision_token_grids: torch.Tensor,
-        vision_patch_attention_mask: torch.Tensor,
-    ) -> torch.Tensor:
-        vision_outputs = self.vision_tower(
-            vision_patches=vision_patches,
-            vision_token_grids=vision_token_grids,
-            vision_patch_attention_mask=vision_patch_attention_mask,
-            return_dict=True,
-        )
-        projected = self.multimodal_projector(vision_outputs.last_hidden_state)
-        return projected
-
-
 def get_scaled_image_size(
     scale: float,
     original_size: int,
@@ -1056,7 +1032,8 @@ class IsaacModel(Qwen3PreTrainedModel):
         Qwen3PreTrainedModel.__init__(self, config)
         self.text_model = IsaacTextModel._from_config(config.text_config)
 
-        self.vision_embedding = IsaacVisionEmbedding(config)
+        self.vision_tower = IsaacVisionTransformer(config.vision_config)
+        self.multimodal_projector = IsaacMultiModalProjector(config)
         self.max_sequence_length = config.max_sequence_length
         self.vision_rescale_factor = config.vision_rescale_factor
         self.vision_token = config.vision_token
@@ -1118,14 +1095,14 @@ class IsaacModel(Qwen3PreTrainedModel):
                 for key in ("output_hidden_states", "output_attentions")
                 if (value := kwargs.get(key)) is not None
             }
-            vision_outputs = self.vision_embedding.vision_tower(
+            vision_outputs = self.vision_tower(
                 vision_patches=pixel_values[image_attention_mask],
                 vision_token_grids=image_token_grids[image_attention_mask],
                 vision_patch_attention_mask=patch_attention_mask[image_attention_mask],
                 return_dict=True,
                 **vision_kwargs,
             )
-            flat_projected_features = self.vision_embedding.multimodal_projector(vision_outputs.last_hidden_state)
+            flat_projected_features = self.multimodal_projector(vision_outputs.last_hidden_state)
             max_tokens = flat_projected_features.shape[1]
             projected_features = flat_projected_features.new_zeros((batch_size, max_images, max_tokens, hidden_size))
             projected_features[image_attention_mask] = flat_projected_features

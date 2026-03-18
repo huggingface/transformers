@@ -582,7 +582,8 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         self.assertTrue(hasattr(model, "model"))
         self.assertTrue(hasattr(model, "lm_head"))
-        self.assertTrue(hasattr(model.model, "vision_embedding"))
+        self.assertTrue(hasattr(model.model, "vision_tower"))
+        self.assertTrue(hasattr(model.model, "multimodal_projector"))
 
         input_vocab_size = model.get_input_embeddings().num_embeddings
         output_vocab_size = model.get_output_embeddings().out_features
