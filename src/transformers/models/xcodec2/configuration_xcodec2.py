@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 
 import numpy as np
-
-from transformers import AutoConfig, Wav2Vec2BertConfig
-
+from transformers import Wav2Vec2BertConfig
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -67,10 +64,10 @@ class Xcodec2Config(PretrainedConfig):
             Epsilon for RMS normalization.
         head_dim (`int`, *optional*, defaults to 64):
             Head dimension for the model.
-        vq_dim (`int`, *optional*, defaults to 2048):
+        quantization_dim (`int`, *optional*, defaults to 2048):
             Dimension for the VQ codebook.
-        vq_levels (`list[int]`, *optional*, defaults to `[4, 4, 4, 4, 4, 4, 4, 4]`):
-            Levels for the VQ codebook.
+        quantization_levels (`list[int]`, *optional*, defaults to `[4, 4, 4, 4, 4, 4, 4, 4]`):
+            Levels for the codebook.
         max_position_embeddings (`int`, *optional*, defaults to 4096):
             The maximum sequence length that this model might ever be used with. Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
         rope_parameters (`RopeParameters`, *optional*):
@@ -87,7 +84,7 @@ class Xcodec2Config(PretrainedConfig):
 
     def __init__(
         self,
-        encoder_hidden_size=1024,
+        encoder_hidden_size=48,
         downsampling_ratios=[2, 2, 4, 4, 5],
         decoder_hidden_size=1024,
         semantic_model_config=None,
@@ -102,40 +99,25 @@ class Xcodec2Config(PretrainedConfig):
         hidden_act="silu",
         rms_norm_eps=1e-6,
         head_dim=64,
-        vq_dim=2048,
-        vq_levels=[4, 4, 4, 4, 4, 4, 4, 4],
+        quantization_dim=2048,
+        quantization_levels=[4, 4, 4, 4, 4, 4, 4, 4],
         max_position_embeddings=4096,
         rope_parameters=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
+
+        if isinstance(semantic_model_config, dict):
+            semantic_model_config["model_type"] = semantic_model_config.get("model_type", "wav2vec2-bert")
+            semantic_model_config = CONFIG_MAPPING[semantic_model_config["model_type"]](**semantic_model_config)
+        elif semantic_model_config is None:
+            semantic_model_config = CONFIG_MAPPING["wav2vec2-bert"]()
+        self.semantic_model_config = semantic_model_config
+
         self.encoder_hidden_size = encoder_hidden_size
         self.downsampling_ratios = downsampling_ratios
-
-        self.semantic_model_id = "facebook/w2v-bert-2.0"  # needed for feature extractor
-        if semantic_model_config is None:
-            self.semantic_model_config = Wav2Vec2BertConfig()
-        elif isinstance(semantic_model_config, dict):
-            if "_name_or_path" in semantic_model_config:
-                # If the config is a path, load it using AutoConfig
-                self.semantic_model_config = AutoConfig.from_pretrained(semantic_model_config["_name_or_path"])
-                self.semantic_model_id = semantic_model_config["_name_or_path"]
-            else:
-                # assume HubertConfig as probably created from scratch
-                logger.warning(
-                    "Could not determine semantic model type from config architecture. Defaulting to `Wav2Vec2BertConfig`."
-                )
-                self.semantic_model_config = Wav2Vec2BertConfig(**semantic_model_config)
-        elif isinstance(semantic_model_config, Wav2Vec2BertConfig):
-            self.semantic_model_config = semantic_model_config
-        else:
-            raise ValueError(
-                f"semantic_model_config must be a dict or Wav2Vec2BertConfig instance, but got {type(semantic_model_config)}"
-            )
-
         self.initializer_range = initializer_range
         self.sampling_rate = sampling_rate
-
         self.decoder_hidden_size = decoder_hidden_size
         self.head_dim = head_dim
         self.num_attention_heads = num_attention_heads
@@ -147,24 +129,11 @@ class Xcodec2Config(PretrainedConfig):
         self.hidden_act = hidden_act
         self.rms_norm_eps = rms_norm_eps
         self.max_position_embeddings = max_position_embeddings
-        self.rope_parameters = rope_parameters if rope_parameters is not None else {"rope_theta": 10000.0, "rope_type": "default"}
-
-        self.vq_dim = vq_dim
-        self.vq_levels = vq_levels
-
-    @property
-    def frame_rate(self) -> int:
-        return math.ceil(self.sampling_rate / self.hop_length)
-
-    @property
-    def semantic_hidden_size(self) -> int:
-        return self.semantic_model_config.hidden_size
-
-    @property
-    def intermediate_size(self) -> int:
-        # Semantic and acoustic features are combined for a "fused feature embedding"
-        # See Encoder section on p. 3 of https://arxiv.org/pdf/2502.04128
-        return self.encoder_hidden_size + self.semantic_hidden_size
+        self.rope_parameters = (
+            rope_parameters if rope_parameters is not None else {"rope_theta": 10000.0, "rope_type": "default"}
+        )
+        self.quantization_dim = quantization_dim
+        self.quantization_levels = quantization_levels
 
     @property
     def hop_length(self) -> int:
@@ -172,22 +141,12 @@ class Xcodec2Config(PretrainedConfig):
 
     @property
     def n_fft(self) -> int:
-        # For ISTFT in Vocos decoder
         return self.hop_length * 4
 
     @property
     def hidden_size(self) -> int:
-        # For Transformer used in decoder
-        # See Decoder > Acoustic Reconstruction on p. 3 of https://arxiv.org/pdf/2502.04128
+        # NOTE: for modular usage of LlamaAttention
         return self.decoder_hidden_size
-
-    @property
-    def codebook_size(self) -> int:
-        return int(np.prod(self.vq_levels))
-
-    @property
-    def codebook_dim(self) -> int:
-        return len(self.vq_levels)
-
+    
 
 __all__ = ["Xcodec2Config"]

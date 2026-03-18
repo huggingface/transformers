@@ -23,7 +23,7 @@ import os
 import warnings
 from collections.abc import Sequence
 from io import BytesIO
-from typing import TYPE_CHECKING, Any, Union, Optional
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import httpx
 import numpy as np
@@ -1053,20 +1053,20 @@ def spectrogram_torch(
     window: "torch.Tensor",
     frame_length: int,
     hop_length: int,
-    fft_length: Optional[int] = None,
+    fft_length: int | None = None,
     power: float = 1.0,
     center: bool = True,
     pad_mode: str = "reflect",
     onesided: bool = True,
     dither: float = 0.0,
-    preemphasis: Optional[float] = None,
+    preemphasis: float | None = None,
     mel_filters: Optional["torch.Tensor"] = None,
     mel_floor: float = 1e-10,
-    log_mel: Optional[str] = None,
+    log_mel: str | None = None,
     reference: float = 1.0,
     min_value: float = 1e-10,
-    db_range: Optional[float] = None,
-    remove_dc_offset: Optional[bool] = False,
+    db_range: float | None = None,
+    remove_dc_offset: bool | None = False,
     device: str = "cpu",
     dtype: str = "float32",
 ):

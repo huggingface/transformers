@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,7 @@
 """Feature extractor class for Xcodec2 model."""
 
 import copy
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 
@@ -202,12 +201,12 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
     def __call__(
         self,
         audio: AudioInput,
-        padding: Union[bool, str, PaddingStrategy] = True,
-        max_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = True,
+        max_length: int | None = None,
         truncation: bool = False,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        sampling_rate: Optional[int] = None,
-        do_normalize_per_mel_bins: Optional[bool] = True,
+        return_tensors: str | TensorType | None = None,
+        sampling_rate: int | None = None,
+        do_normalize_per_mel_bins: bool | None = True,
         use_torch: bool = False,
         device: str = "cpu",
         **kwargs,

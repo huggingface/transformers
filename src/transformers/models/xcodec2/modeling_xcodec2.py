@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_xcodec2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,11 +23,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional
 
+import numpy as np
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-from torch import int32, nn, sin, sinc
 from torch.amp import autocast
-from torch.nn import Module, Parameter
+from torch.nn import Parameter
 
 from transformers.activations import ACT2FN
 
@@ -39,21 +39,10 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    ModelOutput,
-    TransformersKwargs,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    can_return_tuple,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import maybe_autocast
 from ..auto import AutoModel
 from .configuration_xcodec2 import Xcodec2Config
-
-
-# General docstring
-_CONFIG_FOR_DOC = "Xcodec2Config"
 
 
 @dataclass
@@ -179,11 +168,9 @@ class Xcodec2RotaryEmbedding(nn.Module):
 class Xcodec2MLP(nn.Module):
     def __init__(self, config: Xcodec2Config):
         super().__init__()
-        dim = config.hidden_size
-
-        self.fc1 = nn.Linear(dim, 4 * dim, bias=False)
+        self.fc1 = nn.Linear(config.decoder_hidden_size, 4 * config.decoder_hidden_size, bias=False)
         self.activation = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(4 * dim, dim, bias=False)
+        self.fc2 = nn.Linear(4 * config.decoder_hidden_size, config.decoder_hidden_size, bias=False)
 
     def forward(self, hidden_states):
         hidden_states = self.fc1(hidden_states)
@@ -401,60 +388,94 @@ class Xcodec2DecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class Xcodec2SnakeBeta(nn.Module):
-    """A modified Snake function from https://arxiv.org/abs/2006.08195"""
+class SnakeBeta(nn.Module):
+    """
+    A modified Snake function which uses separate parameters for the magnitude of the periodic components
+    Shape:
+        - Input: (B, C, T)
+        - Output: (B, C, T), same shape as the input
+    Parameters:
+        - alpha - trainable parameter that controls frequency
+        - beta - trainable parameter that controls magnitude
+    References:
+        - This activation function is a modified version based on this paper by Liu Ziyin, Tilman Hartwig, Masahito Ueda:
+        https://huggingface.co/papers/2006.08195
+    """
 
-    def __init__(self, dim):
+    def __init__(self, in_features, alpha=1.0):
         super().__init__()
-        self.dim = dim
-        self.alpha = Parameter(torch.zeros(dim))
-        self.beta = Parameter(torch.zeros(dim))
+        self.in_features = in_features
+
+        # initialize alpha
+        self.alpha = Parameter(torch.zeros(in_features) * alpha)
+        self.beta = Parameter(torch.zeros(in_features) * alpha)
+
         self.no_div_by_zero = 0.000000001
 
     def forward(self, hidden_states):
-        alpha = torch.exp(self.alpha.unsqueeze(0).unsqueeze(-1))
-        beta = torch.exp(self.beta.unsqueeze(0).unsqueeze(-1))
-        hidden_states = hidden_states + (1.0 / (beta + self.no_div_by_zero)) * pow(sin(hidden_states * alpha), 2)
+        """
+        Forward pass of the function.
+        Applies the function to the input elementwise.
+        SnakeBeta ∶= x + 1/b * sin^2 (xa)
+        """
+        alpha = self.alpha.unsqueeze(0).unsqueeze(-1)  # line up with x to [B, C, T]
+        beta = self.beta.unsqueeze(0).unsqueeze(-1)
+        alpha = torch.exp(alpha)
+        beta = torch.exp(beta)
+        hidden_states = hidden_states + (1.0 / (beta + self.no_div_by_zero)) * torch.pow(
+            torch.sin(hidden_states * alpha), 2
+        )
 
         return hidden_states
 
 
 def kaiser_sinc_filter1d(cutoff, half_width, kernel_size):
-    """Creates a Kaiser-windowed sinc filter for low-pass filtering."""
-    even = kernel_size % 2 == 0
+    """Generates a 1D Kaiser-windowed sinc filter.
+
+    Args:
+        cutoff (float): Normalized cutoff frequency (0 to 0.5).
+        half_width (float): Transition bandwidth.
+        kernel_size (int): Number of filter taps.
+
+    Returns:
+        torch.Tensor: A tensor of shape (1, 1, kernel_size) representing the filter.
+    """
+    is_even = kernel_size % 2 == 0
     half_size = kernel_size // 2
 
-    # For kaiser window
+    # Compute Kaiser window parameters
     delta_f = 4 * half_width
-    A = 2.285 * (half_size - 1) * math.pi * delta_f + 7.95
-    if A > 50.0:
-        beta = 0.1102 * (A - 8.7)
-    elif A >= 21.0:
-        beta = 0.5842 * (A - 21) ** 0.4 + 0.07886 * (A - 21.0)
+    attenuation = 2.285 * (half_size - 1) * math.pi * delta_f + 7.95
+
+    if attenuation > 50.0:
+        beta = 0.1102 * (attenuation - 8.7)
+    elif attenuation >= 21.0:
+        beta = 0.5842 * (attenuation - 21) ** 0.4 + 0.07886 * (attenuation - 21.0)
     else:
         beta = 0.0
-    window = torch.kaiser_window(kernel_size, beta=beta, periodic=False)
 
-    # ratio = 0.5/cutoff -> 2 * cutoff = 1 / ratio
-    if even:
-        time = torch.arange(-half_size, half_size) + 0.5
+    kaiser_window = torch.kaiser_window(kernel_size, beta=beta, periodic=False, dtype=torch.float32)
+
+    # Compute time indices
+    if is_even:
+        time_indices = torch.arange(-half_size, half_size) + 0.5
     else:
-        time = torch.arange(kernel_size) - half_size
+        time_indices = torch.arange(kernel_size) - half_size
+
+    # Compute sinc filter
     if cutoff == 0:
-        filter_ = torch.zeros_like(time)
-    else:
-        filter_ = 2 * cutoff * window * sinc(2 * cutoff * time)
-        # Normalize filter to have sum = 1, otherwise we will have a small leakage
-        # of the constant component in the input signal.
-        filter_ /= filter_.sum()
-        filter = filter_.view(1, 1, kernel_size)
+        return torch.zeros((1, 1, kernel_size), dtype=torch.float32)  # Ensures correct shape
 
-    return filter
+    sinc_filter = torch.sinc(2 * cutoff * time_indices)
+    normalized_filter = 2 * cutoff * kaiser_window * sinc_filter
+
+    # Normalize to ensure sum = 1 (avoid leakage of constant component)
+    normalized_filter /= normalized_filter.sum()
+
+    return normalized_filter.view(1, 1, kernel_size)
 
 
 class UpSample1d(nn.Module):
-    """1D upsampling module using transposed convolution with a sinc filter."""
-
     def __init__(self, ratio=2, kernel_size=None):
         super().__init__()
         self.ratio = ratio
@@ -463,13 +484,12 @@ class UpSample1d(nn.Module):
         self.pad = self.kernel_size // ratio - 1
         self.pad_left = self.pad * self.stride + (self.kernel_size - self.stride) // 2
         self.pad_right = self.pad * self.stride + (self.kernel_size - self.stride + 1) // 2
-        self.cutoff = 0.5 / ratio
-        self.half_width = 0.6 / ratio
-        filter = kaiser_sinc_filter1d(cutoff=self.cutoff, half_width=self.half_width, kernel_size=self.kernel_size)
-        self.register_buffer("filter", filter)
+
+        filter = kaiser_sinc_filter1d(cutoff=0.5 / ratio, half_width=0.6 / ratio, kernel_size=self.kernel_size)
+        self.register_buffer("filter", filter, persistent=False)
 
     def forward(self, hidden_states):
-        _, channels, _ = hidden_states.shape
+        channels = hidden_states.shape[1]
 
         hidden_states = F.pad(hidden_states, (self.pad, self.pad), mode="replicate")
         hidden_states = self.ratio * F.conv_transpose1d(
@@ -481,62 +501,45 @@ class UpSample1d(nn.Module):
 
 
 class DownSample1d(nn.Module):
-    """1D downsampling module using a low-pass filter."""
-
     def __init__(self, ratio=2, kernel_size=None):
         super().__init__()
-        self.ratio = ratio
-        self.kernel_size = int(6 * ratio // 2) * 2 if kernel_size is None else kernel_size
-        self.stride = ratio
-
-        # Low-pass filter setup
         cutoff = 0.5 / ratio
         half_width = 0.6 / ratio
-        even = self.kernel_size % 2 == 0
-        self.pad_left = self.kernel_size // 2 - int(even)
-        self.pad_right = self.kernel_size // 2
+        self.cutoff = cutoff
+        self.half_width = half_width
+        self.kernel_size = kernel_size
 
-        filter = kaiser_sinc_filter1d(cutoff, half_width, self.kernel_size)
-        self.register_buffer("filter", filter)
+        if cutoff < 0.0:
+            raise ValueError("Minimum cutoff must be larger than zero.")
+        if cutoff > 0.5:
+            raise ValueError("A cutoff above 0.5 does not make sense.")
+
+        self.even = kernel_size % 2 == 0
+        self.pad_left = kernel_size // 2 - int(self.even)
+        self.pad_right = kernel_size // 2
+        self.stride = ratio
+        filter = kaiser_sinc_filter1d(cutoff, half_width, kernel_size)
+        self.register_buffer("filter", filter, persistent=False)
 
     def forward(self, hidden_states):
-        _, channels, _ = hidden_states.shape
-
+        channels = hidden_states.shape[1]
         hidden_states = F.pad(hidden_states, (self.pad_left, self.pad_right), mode="replicate")
-        hidden_states = F.conv1d(
-            hidden_states, self.filter.expand(channels, -1, -1), stride=self.stride, groups=channels
-        )
-
-        return hidden_states
+        out = F.conv1d(hidden_states, self.filter.expand(channels, -1, -1), stride=self.stride, groups=channels)
+        return out
 
 
-class Activation1d(nn.Module):
-    """
-    A module that applies activation function with up-sampling and down-sampling.
-
-    This module first up-samples the input signal, applies an activation function,
-    and then down-samples the result. This architecture allows for more complex
-    non-linear transformations of the signal.
-
-    Args:
-        activation (`torch.nn.Module`):
-            The activation function module to apply (e.g., nn.ReLU(), nn.LeakyReLU()).
-        up_ratio (`int`, *optional*, defaults to 2):
-            The up-sampling ratio for increasing temporal resolution before activation.
-        down_ratio (`int`, *optional*, defaults to 2):
-            The down-sampling ratio for decreasing temporal resolution after activation.
-        up_kernel_size (`int`, *optional*, defaults to 12):
-            The kernel size used in the up-sampling operation.
-        down_kernel_size (`int`, *optional*, defaults to 12):
-            The kernel size used in the down-sampling operation.
-    """
-
+class TorchActivation1d(nn.Module):
     def __init__(
-        self, activation, up_ratio: int = 2, down_ratio: int = 2, up_kernel_size: int = 12, down_kernel_size: int = 12
+        self,
+        activation,
+        up_ratio: int = 2,
+        down_ratio: int = 2,
+        up_kernel_size: int = 12,
+        down_kernel_size: int = 12,
     ):
         super().__init__()
-        self.up_ratio = up_ratio
-        self.down_ratio = down_ratio
+        if not callable(activation):
+            raise TypeError("Activation function must be callable")
         self.act = activation
         self.upsample = UpSample1d(up_ratio, up_kernel_size)
         self.downsample = DownSample1d(down_ratio, down_kernel_size)
@@ -549,380 +552,240 @@ class Activation1d(nn.Module):
         return hidden_states
 
 
-class ResidualUnit(nn.Module):
+class Xcodec2ResidualUnit(nn.Module):
     """
-    A residual unit that combines dilated convolutions with activation functions.
-
-    This unit performs a series of operations while maintaining a residual connection:
-    1. First activation with up/down-sampling
-    2. Dilated convolution with kernel size 7
-    3. Second activation with up/down-sampling
-    4. 1x1 convolution for channel mixing
-    5. Addition of the input (residual connection)
-
-    Args:
-        dim (`int`, *optional*, defaults to 16):
-            The number of channels in the input and output tensors.
-        dilation (`int`, *optional*, defaults to 1):
-            The dilation rate for the main convolution operation. Higher values
-            increase the receptive field without increasing parameter count.
+    A residual unit composed of Snake1d and weight-normalized Conv1d layers with dilations.
     """
 
-    def __init__(self, dim: int = 16, dilation: int = 1):
+    def __init__(self, dimension, dilation):
         super().__init__()
         pad = ((7 - 1) * dilation) // 2
-        self.activation1 = Activation1d(activation=Xcodec2SnakeBeta(dim))
-        self.conv1 = nn.Conv1d(dim, dim, kernel_size=7, dilation=dilation, padding=pad)
-        self.activation2 = Activation1d(activation=Xcodec2SnakeBeta(dim))
-        self.conv2 = nn.Conv1d(dim, dim, kernel_size=1)
+        self.snake1 = TorchActivation1d(activation=SnakeBeta(dimension))
+        self.conv1 = nn.Conv1d(dimension, dimension, kernel_size=7, dilation=dilation, padding=pad)
+        self.snake2 = TorchActivation1d(activation=SnakeBeta(dimension))
+        self.conv2 = nn.Conv1d(dimension, dimension, kernel_size=1)
 
-    def forward(self, hidden_states):
-        residual = hidden_states
-        hidden_states = self.activation1(hidden_states)
-        hidden_states = self.conv1(hidden_states)
-        hidden_states = self.activation2(hidden_states)
-        hidden_states = self.conv2(hidden_states)
-        return residual + hidden_states
-
-
-class EncoderBlock(nn.Module):
-    """
-    Encoder block for the Xcodec2 acoustic encoder.
-
-    This block consists of:
-    1. A series of residual units with different dilation rates
-    2. An activation function with upsampling and downsampling
-    3. A strided convolution to change the dimension and downsample if stride > 1
-
-    Args:
-        dim (int): Dimension of the output features. Input dimension is assumed to be dim // 2
-        stride (int): Stride for the final convolution, controls downsampling factor
-        dilations (tuple): Dilation rates for the residual units
-    """
-
-    def __init__(self, dim: int = 16, stride: int = 1, dilations=(1, 3, 9)):
-        super().__init__()
-        self.residual_units = nn.ModuleList([ResidualUnit(dim // 2, dilation=d) for d in dilations])
-        self.activation = Activation1d(activation=Xcodec2SnakeBeta(dim // 2))
-        self.conv = nn.Conv1d(
-            dim // 2,
-            dim,
-            kernel_size=2 * stride,
-            stride=stride,
-            padding=stride // 2 + stride % 2,
-        )
-
-    def forward(self, hidden_states):
-        for residual_unit in self.residual_units:
-            hidden_states = residual_unit(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.conv(hidden_states)
-        return hidden_states
-
-
-class Xcodec2AcousticEncoder(nn.Module):
-    """
-    The encoder component of the Xcodec2 model for audio encoding.
-
-    This encoder transforms raw audio waveforms into latent representations:
-    1. Initial convolution to process the raw audio input
-    2. Series of encoder blocks with progressively increasing feature dimensions and downsampling
-    3. Final activation and projection to the target hidden dimension
-
-    Args:
-        d_model (`int`, *optional*, defaults to 48):
-            Initial dimension of the model. This will be doubled at each encoder block.
-        downsampling_ratios (`List[int]`, *optional*, defaults to [2, 2, 4, 4, 5]):
-            List of downsampling ratios for each encoder block. The product of these values
-            determines the total temporal compression factor.
-        dilations (`tuple`, *optional*, defaults to (1, 3, 9)):
-            Tuple of dilation rates used in the residual units within each encoder block.
-        hidden_dim (`int`, *optional*, defaults to 1024):
-            Dimension of the final latent representation after encoding.
-    """
-
-    def __init__(
-        self,
-        d_model=48,
-        downsampling_ratios=[2, 2, 4, 4, 5],
-        dilations=(1, 3, 9),
-        hidden_dim=1024,
-    ):
-        super().__init__()
-
-        self.initial_conv = nn.Conv1d(1, d_model, kernel_size=7, padding=3)
-
-        self.encoder_blocks = nn.ModuleList()
-        for _, stride in enumerate(downsampling_ratios):
-            d_model *= 2
-            self.encoder_blocks.append(EncoderBlock(d_model, stride=stride, dilations=dilations))
-
-        self.final_activation = Activation1d(activation=Xcodec2SnakeBeta(d_model))
-        self.final_conv = nn.Conv1d(d_model, hidden_dim, kernel_size=3, padding=1)
-
-    def forward(self, hidden_states):
+    def forward(self, hidden_state):
         """
-        Forward pass of the Xcodec2 encoder.
+        Forward pass through the residual unit.
 
         Args:
-            hidden_states (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
-                Input audio waveform tensor. Expected to be a mono audio signal with shape
-                (batch_size, 1, sequence_length).
+            hidden_state (`torch.Tensor` of shape `(batch_size, channels, time_steps)`):
+                Input tensor .
 
         Returns:
-            `torch.Tensor` of shape `(batch_size, compressed_length, hidden_dim)`:
-                Encoded audio representation with temporal dimension compressed by the product
-                of all downsampling_ratios. The output tensor is transposed to have the
-                sequence dimension second (batch_size, seq_len, features) for compatibility
-                with transformer-based models.
+            output_tensor (`torch.Tensor` of shape `(batch_size, channels, time_steps)`):
+                Input tensor after passing through the residual unit.
         """
-        # Initial convolution
-        hidden_states = self.initial_conv(hidden_states)
+        output_tensor = hidden_state
+        output_tensor = self.conv1(self.snake1(output_tensor))
+        output_tensor = self.conv2(self.snake2(output_tensor))
 
-        # Apply all encoder blocks
-        for encoder_block in self.encoder_blocks:
-            hidden_states = encoder_block(hidden_states)
-
-        # Final processing
-        hidden_states = self.final_activation(hidden_states)
-        hidden_states = self.final_conv(hidden_states)
-        hidden_states = hidden_states.permute(0, 2, 1)
-        return hidden_states
+        padding = (hidden_state.shape[-1] - output_tensor.shape[-1]) // 2
+        if padding > 0:
+            hidden_state = hidden_state[..., padding:-padding]
+        output_tensor = hidden_state + output_tensor
+        return output_tensor
 
 
-class ResNetBlock(nn.Module):
-    """
-    A basic residual block for 1D convolutional networks.
+class Xcodec2EncoderBlock(nn.Module):
+    """Encoder block used in XCODEC2 encoder."""
 
-    This block consists of:
-    1. GroupNorm + SiLU-like activation (x * sigmoid(x)) + Conv1d
-    2. GroupNorm + SiLU-like activation + Dropout + Conv1d
-    3. Residual connection, with optional projection if input and output channels differ
-
-    Args:
-        in_channels: Number of input channels
-        out_channels: Number of output channels (defaults to in_channels if None)
-        dropout: Dropout probability (default: 0.1)
-    """
-
-    def __init__(self, *, in_channels, out_channels=None, dropout=0.1):
+    def __init__(self, config: Xcodec2Config, stride: int = 1, stride_index: int = 1):
         super().__init__()
-        self.in_channels = in_channels
-        out_channels = in_channels if out_channels is None else out_channels
-        self.out_channels = out_channels
+        dimension = config.encoder_hidden_size * 2**stride_index
+        self.res_unit1 = Xcodec2ResidualUnit(dimension // 2, dilation=1)
+        self.res_unit2 = Xcodec2ResidualUnit(dimension // 2, dilation=3)
+        self.res_unit3 = Xcodec2ResidualUnit(dimension // 2, dilation=9)
+        self.snake1 = TorchActivation1d(activation=SnakeBeta(dimension // 2))
+        self.conv1 = nn.Conv1d(
+            dimension // 2, dimension, kernel_size=2 * stride, stride=stride, padding=math.ceil(stride / 2)
+        )
 
-        self.norm1 = torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
-        self.conv1 = torch.nn.Conv1d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
-        self.norm2 = torch.nn.GroupNorm(num_groups=32, num_channels=out_channels, eps=1e-6, affine=True)
-        self.dropout = torch.nn.Dropout(dropout)
-        self.conv2 = torch.nn.Conv1d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
-        if self.in_channels != self.out_channels:
-            self.nin_shortcut = torch.nn.Conv1d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
+    def forward(self, hidden_state):
+        hidden_state = self.res_unit1(hidden_state)
+        hidden_state = self.res_unit2(hidden_state)
+        hidden_state = self.snake1(self.res_unit3(hidden_state))
+        hidden_state = self.conv1(hidden_state)
+
+        return hidden_state
+
+
+class Xcodec2Encoder(nn.Module):
+    """XCODEC2 Encoder"""
+
+    def __init__(self, config: Xcodec2Config):
+        super().__init__()
+
+        # Create first convolution
+        self.conv1 = nn.Conv1d(1, config.encoder_hidden_size, kernel_size=7, padding=3)
+
+        self.block = []
+        # Create EncoderBlocks that double channels as they downsample by `stride`
+        for stride_index, stride in enumerate(config.downsampling_ratios):
+            stride_index = stride_index + 1
+            self.block += [Xcodec2EncoderBlock(config, stride=stride, stride_index=stride_index)]
+
+        self.block = nn.ModuleList(self.block)
+        d_model = config.encoder_hidden_size * 2 ** len(config.downsampling_ratios)
+        self.snake1 = TorchActivation1d(activation=SnakeBeta(d_model))
+        self.conv2 = nn.Conv1d(d_model, config.hidden_size, kernel_size=3, padding=1)
+
+    def forward(self, hidden_state):
+        hidden_state = self.conv1(hidden_state)
+
+        for module in self.block:
+            hidden_state = module(hidden_state)
+
+        hidden_state = self.snake1(hidden_state)
+        hidden_state = self.conv2(hidden_state)
+
+        return hidden_state
+
+
+class Xcodec2ResNetBlock(nn.Module):
+    def __init__(self, config: Xcodec2Config):
+        super().__init__()
+        self.norm1 = nn.GroupNorm(num_groups=32, num_channels=config.decoder_hidden_size, eps=1e-6, affine=True)
+        self.activation1 = nn.SiLU()
+        self.conv1 = nn.Conv1d(
+            config.decoder_hidden_size, config.decoder_hidden_size, kernel_size=3, stride=1, padding=1
+        )
+        self.norm2 = nn.GroupNorm(num_groups=32, num_channels=config.decoder_hidden_size, eps=1e-6, affine=True)
+        self.activation2 = nn.SiLU()
+        self.dropout = nn.Dropout(config.resnet_dropout)
+        self.conv2 = nn.Conv1d(
+            config.decoder_hidden_size, config.decoder_hidden_size, kernel_size=3, stride=1, padding=1
+        )
 
     def forward(self, hidden_states):
         residual = hidden_states
         residual = self.norm1(residual)
-        residual = residual * torch.sigmoid(residual)
+        residual = self.activation1(residual)
         residual = self.conv1(residual)
         residual = self.norm2(residual)
-        residual = residual * torch.sigmoid(residual)
+        residual = self.activation2(residual)
         residual = self.dropout(residual)
         residual = self.conv2(residual)
-
-        if self.in_channels != self.out_channels:
-            hidden_states = self.nin_shortcut(hidden_states)
-
         return hidden_states + residual
 
 
-class Xcodec2FSQ(Module):
-    """
-    Finite Scalar Quantization module.
-
-    Based on https://github.com/lucidrains/vector-quantize-pytorch/blob/fe903ce2ae9c125ace849576aa6d09c5cec21fe4/vector_quantize_pytorch/finite_scalar_quantization.py#L61
-    """
-
-    def __init__(self, levels: list[int]):
+class Xcodec2FiniteScalarQuantization(nn.Module):
+    def __init__(self, config: Xcodec2Config):
         super().__init__()
 
-        self.levels = levels
-        self.codebook_dim = len(levels)
+        self.quantization_levels = config.quantization_levels
+        levels = torch.tensor(config.quantization_levels, dtype=torch.int32)
+        self.register_buffer("levels", levels, persistent=False)
 
-        _levels = torch.tensor(levels, dtype=int32)
-        self.register_buffer("_levels", _levels, persistent=False)
+        basis = torch.cumprod(torch.tensor([1] + config.quantization_levels[:-1]), dim=0, dtype=torch.int32)
+        self.register_buffer("basis", basis, persistent=False)
 
-        _basis = torch.cumprod(torch.tensor([1] + levels[:-1]), dim=0, dtype=int32)
-        self.register_buffer("_basis", _basis, persistent=False)
-
-        self.codebook_size = math.prod(levels)
-        implicit_codebook = self._indices_to_codes(torch.arange(self.codebook_size))
-        self.register_buffer("implicit_codebook", implicit_codebook, persistent=False)
-
-    def bound(self, hidden_states, eps: float = 1e-3):
-        half_l = (self._levels - 1) * (1 + eps) / 2
-        offset = torch.where(self._levels % 2 == 0, 0.5, 0.0)
-        shift = (offset / half_l).atanh()
-        return (hidden_states + shift).tanh() * half_l - offset
+        codebook = self._indices_to_codes(torch.arange(int(np.prod(config.quantization_levels))))
+        self.register_buffer("codebook", codebook, persistent=False)
 
     def _indices_to_codes(self, indices):
-        """Convert codebook indices to normalized codes."""
-        # Convert to level indices
         indices = indices.unsqueeze(-1)
-        level_indices = (indices // self._basis) % self._levels
-        # Scale and shift inverse to get normalized codes
-        half_width = self._levels // 2
+        level_indices = (indices // self.basis) % self.levels
+        half_width = self.levels // 2
         codes = (level_indices - half_width) / half_width
         return codes
 
-    def codes_to_indices(self, codes):
-        """Converts a `code` to an index in the codebook."""
-        if codes.shape[-1] != self.codebook_dim:
-            raise ValueError(f"Expected codes to have shape [-1, {self.codebook_dim}], but got {codes.shape}")
-        # Scale and shift codes
-        half_width = self._levels // 2
-        codes = (codes * half_width) + half_width
-        return (codes * self._basis).sum(dim=-1).to(int32)
+    def bound(self, hidden_states, eps: float = 1e-3):
+        half_range = (self.levels - 1) * (1 + eps) / 2
+        offset = torch.where(self.levels % 2 == 0, 0.5, 0.0)
+        shift = (offset / half_range).atanh()
+        return (hidden_states + shift).tanh() * half_range - offset
 
     def forward(self, hidden_states):
-        if hidden_states.shape[-1] != self.codebook_dim:
-            raise ValueError(
-                f"expected dimension of {self.codebook_dim} but found dimension of {hidden_states.shape[-1]}"
-            )
-
         with autocast("cuda", enabled=False):
             orig_dtype = hidden_states.dtype
-
             if orig_dtype not in (torch.float32, torch.float64):
                 hidden_states = hidden_states.float()
+            half_width = self.levels // 2
 
             # Quantize: bound and round with straight-through gradient
-            half_width = self._levels // 2
-            bounded = self.bound(hidden_states)
-            rounded = bounded.round()
-            codes = bounded + (rounded - bounded).detach()
+            hidden_states = self.bound(hidden_states)
+            rounded = hidden_states.round()
+            codes = hidden_states + (rounded - hidden_states).detach()
             codes = codes / half_width
 
-            indices = self.codes_to_indices(codes)
+            # Code to indices
+            code_scaled = (codes * half_width) + half_width
+            indices = (code_scaled * self.basis).sum(dim=-1).to(torch.int32)
             codes = codes.to(orig_dtype)
 
         return codes, indices
 
 
-class Xcodec2ISTFT(nn.Module):
-    """
-    Inverse Short-Time Fourier Transform (ISTFT) module.
-    """
-
-    def __init__(self, n_fft: int, hop_length: int, win_length: int):
-        super().__init__()
-        self.n_fft = n_fft
-        self.hop_length = hop_length
-        self.win_length = win_length
-        window = torch.hann_window(win_length)
-        self.register_buffer("window", window)
-
-    def forward(self, spectrogram_complex):
-        if spectrogram_complex.dim() != 3:
-            raise ValueError("Expected a 3D tensor as input")
-
-        pad = (self.win_length - self.hop_length) // 2
-        n_frames = spectrogram_complex.shape[-1]
-
-        # Inverse FFT
-        ifft = torch.fft.irfft(spectrogram_complex, self.n_fft, dim=1, norm="backward")
-        ifft = ifft * self.window[None, :, None]
-
-        # Overlap and Add
-        output_size = (n_frames - 1) * self.hop_length + self.win_length
-        audio = F.fold(
-            ifft,
-            output_size=(1, output_size),
-            kernel_size=(1, self.win_length),
-            stride=(1, self.hop_length),
-        )[:, 0, 0, pad:-pad]
-
-        # Window envelope
-        window_sq = self.window.square().expand(1, n_frames, -1).transpose(1, 2)
-        window_envelope = F.fold(
-            window_sq,
-            output_size=(1, output_size),
-            kernel_size=(1, self.win_length),
-            stride=(1, self.hop_length),
-        ).squeeze()[pad:-pad]
-
-        # Normalize
-        if not (window_envelope > 1e-11).all():
-            raise ValueError("Window envelope values are too small (<=1e-11)")
-        audio = audio / window_envelope
-
-        return audio.unsqueeze(1)
-
-
 class Xcodec2ISTFTHead(nn.Module):
     """
     Head for converting decoder outputs to waveform via STFT projection and ISTFT.
+
+    Uses custom "same" padding ISTFT from:
+    https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/spectral_ops.py#L47
     """
 
     def __init__(self, config: Xcodec2Config):
         super().__init__()
-        self.out = nn.Linear(config.hidden_size, config.n_fft + 2)
-        self.istft = Xcodec2ISTFT(
-            n_fft=config.n_fft,
-            hop_length=config.hop_length,
-            win_length=getattr(config, "win_length", config.n_fft),
-        )
+        self.linear = nn.Linear(config.decoder_hidden_size, config.n_fft + 2)
+        self.n_fft = config.n_fft
+        self.hop_length = config.hop_length
+        self.win_length = config.n_fft
+        self.padding = (self.win_length - self.hop_length) // 2
+        window = torch.hann_window(config.n_fft)
+        self.register_buffer("window", window, persistent=False)
 
     def forward(self, hidden_states):
-        stft_pred = self.out(hidden_states).transpose(1, 2)
-        mag, phase = stft_pred.chunk(2, dim=1)
-        mag = torch.exp(mag)
-        mag = torch.clip(mag, max=1e2)
-        spectrogram_complex = mag * (torch.cos(phase) + 1j * torch.sin(phase))
-        return self.istft(spectrogram_complex)
+        stft_pred = self.linear(hidden_states).transpose(1, 2)
+        magnitude, phase = stft_pred.chunk(2, dim=1)
+        magnitude = torch.exp(magnitude).clamp(max=1e2)
+        spectrogram_complex = torch.polar(magnitude, phase)
+
+        # Back to audio (ISTFT with "same" padding)
+        time_frames = torch.fft.irfft(spectrogram_complex, self.n_fft, dim=1, norm="backward")
+        time_frames = time_frames * self.window[None, :, None]
+        num_frames = spectrogram_complex.shape[-1]
+        output_size = (num_frames - 1) * self.hop_length + self.win_length
+        audio = F.fold(
+            time_frames,
+            output_size=(1, output_size),
+            kernel_size=(1, self.win_length),
+            stride=(1, self.hop_length),
+        )[:, 0, 0, self.padding : -self.padding]
+
+        # Normalize
+        window_envelope = F.fold(
+            self.window.square().expand(1, num_frames, -1).transpose(1, 2),
+            output_size=(1, output_size),
+            kernel_size=(1, self.win_length),
+            stride=(1, self.hop_length),
+        ).squeeze()[self.padding : -self.padding]
+        window_envelope = window_envelope.clamp(min=1e-11)
+        audio = audio / window_envelope
+        return audio.unsqueeze(1)
 
 
-class Xcodec2Quantizer(Module):
-    """
-    Finite Scalar Quantization wrapper with projection layers.
-
-    This module wraps `Xcodec2FSQ` and provides projection layers when the codebook
-    dimension differs from the model's hidden dimension. Xcodec2 uses only a single codebook.
-
-    Args:
-        levels: List of quantization levels for each dimension (e.g., [4, 4, 4, 4, 4, 4, 4, 4])
-        dim: Model hidden dimension. If None, uses codebook_dim (len(levels))
-
-    Based on https://github.com/lucidrains/vector-quantize-pytorch/blob/fe903ce2ae9c125ace849576aa6d09c5cec21fe4/vector_quantize_pytorch/residual_fsq.py#L49
-    """
-
-    def __init__(
-        self,
-        levels: list[int],
-        dim: int,
-    ):
+class Xcodec2Quantizer(nn.Module):
+    def __init__(self, config: Xcodec2Config):
         super().__init__()
-        self.project_in = nn.Linear(dim, len(levels))
-        self.project_out = nn.Linear(len(levels), dim)
-        self.fsq = Xcodec2FSQ(levels=levels)
+        self.finite_scalar_quantization = Xcodec2FiniteScalarQuantization(config)
+        self.project_in = nn.Linear(config.quantization_dim, len(config.quantization_levels))
+        self.project_out = nn.Linear(len(config.quantization_levels), config.quantization_dim)
 
-    def get_output_from_indices(self, indices):
-        """Convert codebook indices back to embeddings with projection applied."""
-        indices = indices.squeeze(-1)  # (batch, seq, 1) -> (batch, seq)
-        codes = self.fsq.implicit_codebook[indices]
+    def from_codes(self, indices):
+        indices = indices.squeeze(-1)  # Remove channel dimension
+        codes = self.finite_scalar_quantization.codebook[indices]
         return self.project_out(codes)
 
     def forward(self, hidden_states):
         hidden_states = self.project_in(hidden_states)
-        bounded = self.fsq.bound(hidden_states)
-
-        with autocast("cuda", enabled=False):
-            quantized_out, indices = self.fsq(bounded)
-
+        hidden_states = self.finite_scalar_quantization.bound(
+            hidden_states
+        )  # For consistency with original checkpoint
+        quantized_out, indices = self.finite_scalar_quantization(hidden_states)
         quantized_out = self.project_out(quantized_out.to(hidden_states.dtype))
-
-        # Add trailing dimension for single codebook: (batch, seq) -> (batch, seq, 1)
-        indices = indices.unsqueeze(-1)
-
+        indices = indices.unsqueeze(-1)  # Add channel dimension for single codebook
         return quantized_out, indices
 
 
@@ -931,313 +794,216 @@ class Xcodec2Decoder(nn.Module):
 
     def __init__(self, config: Xcodec2Config):
         super().__init__()
-        self.embed = nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=7, padding=3)
-        self.prior_blocks = nn.ModuleList(
-            [
-                ResNetBlock(
-                    in_channels=config.hidden_size, out_channels=config.hidden_size, dropout=config.resnet_dropout
-                ),
-                ResNetBlock(
-                    in_channels=config.hidden_size, out_channels=config.hidden_size, dropout=config.resnet_dropout
-                ),
-            ]
+        self.fc = nn.Linear(
+            config.decoder_hidden_size + config.semantic_model_config.hidden_size, config.decoder_hidden_size
         )
-
+        self.embed = nn.Conv1d(config.decoder_hidden_size, config.decoder_hidden_size, kernel_size=7, padding=3)
+        self.prior_resnet_block1 = Xcodec2ResNetBlock(config)
+        self.prior_resnet_block2 = Xcodec2ResNetBlock(config)
         self.num_attention_heads = config.num_attention_heads
         self.rotary_emb = Xcodec2RotaryEmbedding(config=config)
-        self.transformers = nn.ModuleList(
+        self.layers = nn.ModuleList(
             [Xcodec2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=1e-6)
-
-        self.post_blocks = nn.ModuleList(
-            [
-                ResNetBlock(
-                    in_channels=config.hidden_size, out_channels=config.hidden_size, dropout=config.resnet_dropout
-                ),
-                ResNetBlock(
-                    in_channels=config.hidden_size, out_channels=config.hidden_size, dropout=config.resnet_dropout
-                ),
-            ]
-        )
-
+        self.final_layer_norm = nn.LayerNorm(config.decoder_hidden_size, eps=1e-6)
+        self.post_resnet_block1 = Xcodec2ResNetBlock(config)
+        self.post_resnet_block2 = Xcodec2ResNetBlock(config)
         self.head = Xcodec2ISTFTHead(config)
 
     def forward(self, hidden_states):
+        hidden_states = self.fc(hidden_states)
         hidden_states = hidden_states.transpose(1, 2)
         hidden_states = self.embed(hidden_states)
-
-        for block in self.prior_blocks:
-            hidden_states = block(hidden_states)
-
+        hidden_states = self.prior_resnet_block1(hidden_states)
+        hidden_states = self.prior_resnet_block2(hidden_states)
         hidden_states = hidden_states.transpose(1, 2)  # [batch, seq_len, hidden_dim]
 
         position_ids = torch.arange(self.num_attention_heads).unsqueeze(0)
         position_embeddings = self.rotary_emb(hidden_states, position_ids.to(hidden_states.device))
-
-        for layer in self.transformers:
+        for layer in self.layers:
             hidden_states = layer(hidden_states, position_embeddings=position_embeddings)
-
         hidden_states = hidden_states.transpose(1, 2)
 
-        for block in self.post_blocks:
-            hidden_states = block(hidden_states)
-
+        hidden_states = self.post_resnet_block1(hidden_states)
+        hidden_states = self.post_resnet_block2(hidden_states)
         hidden_states = hidden_states.transpose(1, 2)
         hidden_states = self.final_layer_norm(hidden_states)
-
         return self.head(hidden_states)
 
 
 class Xcodec2SemanticAdapter(nn.Module):
-    def __init__(
-        self,
-        input_channels: int,
-        code_dim: int,
-        encode_channels: int,
-        kernel_size: int = 3,
-        bias: bool = True,
-    ):
+    def __init__(self, config: Xcodec2Config):
         super().__init__()
-
-        # Initial convolution, maps input_channels to encode_channels
-        self.initial_conv = nn.Conv1d(
-            in_channels=input_channels,
-            out_channels=encode_channels,
-            kernel_size=kernel_size,
-            stride=1,
-            padding=(kernel_size - 1) // 2,
+        self.conv1 = nn.Conv1d(
+            in_channels=config.semantic_model_config.hidden_size,
+            out_channels=config.semantic_model_config.hidden_size,
+            kernel_size=3,
+            padding=1,
             bias=False,
         )
-
-        # Residual block with two convolutional layers
         self.act1 = nn.ReLU(inplace=True)
-        self.conv1 = nn.Conv1d(
-            encode_channels,
-            encode_channels,
-            kernel_size=kernel_size,
-            stride=1,
-            padding=(kernel_size - 1) // 2,
-            bias=bias,
+        self.conv2 = nn.Conv1d(
+            config.semantic_model_config.hidden_size,
+            config.semantic_model_config.hidden_size,
+            kernel_size=3,
+            padding=1,
+            bias=True,
         )
         self.act2 = nn.ReLU(inplace=True)
-        self.conv2 = nn.Conv1d(
-            encode_channels,
-            encode_channels,
-            kernel_size=kernel_size,
-            stride=1,
-            padding=(kernel_size - 1) // 2,
-            bias=bias,
+        self.conv3 = nn.Conv1d(
+            config.semantic_model_config.hidden_size,
+            config.semantic_model_config.hidden_size,
+            kernel_size=3,
+            padding=1,
+            bias=True,
         )
-
-        # Final convolution, maps encode_channels to code_dim
-        self.final_conv = nn.Conv1d(
-            in_channels=encode_channels,
-            out_channels=code_dim,
-            kernel_size=kernel_size,
-            stride=1,
-            padding=(kernel_size - 1) // 2,
+        self.conv4 = nn.Conv1d(
+            in_channels=config.semantic_model_config.hidden_size,
+            out_channels=config.semantic_model_config.hidden_size,
+            kernel_size=3,
+            padding=1,
             bias=False,
         )
 
     def forward(self, hidden_states):
-        hidden_states = self.initial_conv(hidden_states)
+        hidden_states = self.conv1(hidden_states)
         residual = hidden_states
         hidden_states = self.act1(hidden_states)
-        hidden_states = self.conv1(hidden_states)
-        hidden_states = self.act2(hidden_states)
         hidden_states = self.conv2(hidden_states)
+        hidden_states = self.act2(hidden_states)
+        hidden_states = self.conv3(hidden_states)
         hidden_states = hidden_states + residual
-        hidden_states = self.final_conv(hidden_states)
+        hidden_states = self.conv4(hidden_states)
         return hidden_states
 
 
 class Xcodec2PreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
-    """
-
     config_class = Xcodec2Config
     base_model_prefix = "xcodec2"
     main_input_name = "audio"
 
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, Xcodec2SnakeBeta):
+        if isinstance(module, SnakeBeta):
             init.zeros_(module.alpha)
             init.zeros_(module.beta)
-        elif isinstance(module, Xcodec2FSQ):
-            levels = module.levels
-            init.copy_(module._levels, torch.tensor(levels, dtype=int32))
-            init.copy_(module._basis, torch.cumprod(torch.tensor([1] + levels[:-1]), dim=0, dtype=int32))
-            init.copy_(module.implicit_codebook, module._indices_to_codes(torch.arange(module.codebook_size)))
+        elif isinstance(module, Xcodec2ISTFTHead):
+            window = torch.hann_window(module.n_fft)
+            init.copy_(module.window, window)
+        elif isinstance(module, Xcodec2FiniteScalarQuantization):
+            quantization_levels = module.quantization_levels
+            init.copy_(module.levels, torch.tensor(quantization_levels, dtype=torch.int32))
+            init.copy_(
+                module.basis, torch.cumprod(torch.tensor([1] + quantization_levels[:-1]), dim=0, dtype=torch.int32)
+            )
+            init.copy_(module.codebook, module._indices_to_codes(torch.arange(math.prod(quantization_levels))))
+        elif isinstance(module, UpSample1d):
+            filter_tensor = kaiser_sinc_filter1d(0.5 / module.ratio, 0.6 / module.ratio, module.kernel_size)
+            init.copy_(module.filter, filter_tensor)
+        elif isinstance(module, DownSample1d):
+            filter_tensor = kaiser_sinc_filter1d(module.cutoff, module.half_width, module.kernel_size)
+            init.copy_(module.filter, filter_tensor)
 
 
-XCODEC2_INPUTS_DOCSTRING = r"""
-    args:
-        audio (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
-            Audio waveform.
-        audio_spectrogram (`torch.FloatTensor` of shape `(batch_size, mel_bins, time_steps)`):
-            Mel spectrogram.
-        return_dict (`bool`, *optional*):
-            whether to return a `Xcodec2Output` or a plain tuple.
-"""
-
-
-# Taking inspiration form modeling code of original authors: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py
-@add_start_docstrings(
-    "The Xcodec2 neural audio codec model.",
-    XCODEC2_INPUTS_DOCSTRING,
-)
+@auto_docstring(custom_intro="Xcodec2 neural audio codec model.")
 class Xcodec2Model(Xcodec2PreTrainedModel):
     config_class = Xcodec2Config
 
     def __init__(self, config: Xcodec2Config):
         super().__init__(config)
 
-        self.hop_length = config.hop_length  # needed for padding
+        self.hop_length = config.hop_length
         self.semantic_model = AutoModel.from_config(config.semantic_model_config).eval()
-        self.semantic_adapter = Xcodec2SemanticAdapter(
-            config.semantic_hidden_size, config.semantic_hidden_size, config.semantic_hidden_size
+        self.semantic_adapter = Xcodec2SemanticAdapter(config)
+        self.acoustic_encoder = Xcodec2Encoder(config)
+        self.fc_encoder = nn.Linear(
+            config.decoder_hidden_size + config.semantic_model_config.hidden_size,
+            config.decoder_hidden_size + config.semantic_model_config.hidden_size,
         )
-
-        self.acoustic_encoder = Xcodec2AcousticEncoder(
-            downsampling_ratios=config.downsampling_ratios, hidden_dim=config.encoder_hidden_size
-        )
-        self.decoder = Xcodec2Decoder(config=config)
-        self.quantizer = Xcodec2Quantizer(dim=config.vq_dim, levels=config.vq_levels)
-        self.fc_prior = nn.Linear(config.intermediate_size, config.intermediate_size)
-        self.fc_post_a = nn.Linear(config.intermediate_size, config.decoder_hidden_size)
+        self.quantizer = Xcodec2Quantizer(config)
+        self.decoder = Xcodec2Decoder(config)
 
         self.post_init()
-
-    def quantize(self, hidden_states):
-        """
-        Quantize input features using the vector quantizer.
-
-        Args:
-            hidden_states (torch.Tensor): Input tensor of shape (B, D, L) where B is batch size,
-                              D is feature dimension, and L is sequence length.
-
-        Returns:
-            Tuple of (quantized_tensor, quantization_indices)
-            - quantized_tensor: The quantized representation with shape (B, L, D)
-            - quantization_indices: The codebook indices with shape (B, L, 1)
-        """
-        hidden_states = hidden_states.permute(0, 2, 1)
-        hidden_states, codes = self.quantizer(hidden_states)
-        hidden_states = hidden_states.permute(0, 2, 1)
-        codes = codes.permute(0, 2, 1)
-        return hidden_states, codes
 
     def apply_weight_norm(self, legacy=True):
         weight_norm = nn.utils.weight_norm
         if hasattr(nn.utils.parametrizations, "weight_norm") and not legacy:
             weight_norm = nn.utils.parametrizations.weight_norm
 
-        # Weight norm was only applied in acoustic encoder of original model
-        # -- to initial_conv
-        weight_norm(self.acoustic_encoder.initial_conv)
-
-        # -- to encoder blocks
-        for encoder_block in self.acoustic_encoder.encoder_blocks:
-            # -- to each residual unit in the block
-            for residual_unit in encoder_block.residual_units:
-                weight_norm(residual_unit.conv1)
-                weight_norm(residual_unit.conv2)
-            # -- to the final conv in the encoder block
-            weight_norm(encoder_block.conv)
-
-        # -- to final_conv
-        weight_norm(self.acoustic_encoder.final_conv)
+        weight_norm(self.acoustic_encoder.conv1)
+        for encoder_block in self.acoustic_encoder.block:
+            weight_norm(encoder_block.res_unit1.conv1)
+            weight_norm(encoder_block.res_unit1.conv2)
+            weight_norm(encoder_block.res_unit2.conv1)
+            weight_norm(encoder_block.res_unit2.conv2)
+            weight_norm(encoder_block.res_unit3.conv1)
+            weight_norm(encoder_block.res_unit3.conv2)
+            weight_norm(encoder_block.conv1)
+        weight_norm(self.acoustic_encoder.conv2)
 
     def remove_weight_norm(self, legacy=True):
-        """Remove weight normalization from layers that have it applied via apply_weight_norm."""
         remove_weight_norm = nn.utils.remove_weight_norm
         if hasattr(nn.utils.parametrizations, "weight_norm") and not legacy:
-            remove_weight_norm = torch.nn.utils.parametrize.remove_parametrizations
+            remove_weight_norm = nn.utils.parametrize.remove_parametrizations
 
-        # Remove weight norm from acoustic_encoder
-        # -- from initial_conv
-        try:
-            remove_weight_norm(self.acoustic_encoder.initial_conv)
-        except (ValueError, RuntimeError):
-            raise ValueError("Not able to remove weight norm. Have you run `apply_weight_norm?`")
+        remove_weight_norm(self.acoustic_encoder.conv1)
+        for encoder_block in self.acoustic_encoder.block:
+            remove_weight_norm(encoder_block.res_unit1.conv1)
+            remove_weight_norm(encoder_block.res_unit1.conv2)
+            remove_weight_norm(encoder_block.res_unit2.conv1)
+            remove_weight_norm(encoder_block.res_unit2.conv2)
+            remove_weight_norm(encoder_block.res_unit3.conv1)
+            remove_weight_norm(encoder_block.res_unit3.conv2)
+            remove_weight_norm(encoder_block.conv1)
+        remove_weight_norm(self.acoustic_encoder.conv2)
 
-        # -- from encoder blocks
-        for encoder_block in self.acoustic_encoder.encoder_blocks:
-            # -- from each residual unit in the block
-            for residual_unit in encoder_block.residual_units:
-                remove_weight_norm(residual_unit.conv1)
-                remove_weight_norm(residual_unit.conv2)
-            # -- from the final conv in the encoder block
-            remove_weight_norm(encoder_block.conv)
-
-        # -- from final_conv
-        remove_weight_norm(self.acoustic_encoder.final_conv)
-
+    @auto_docstring
+    @can_return_tuple
     def encode(
         self,
         audio: torch.Tensor,
         audio_spectrogram: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
-        return_dict: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Xcodec2EncoderOutput:
         """
-        Encodes the input audio waveform into discrete codes.
-
-        Args:
-            audio (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
-                Input audio waveform.
-            audio_spectrogram (`torch.Tensor` of shape `(batch_size, mel_bins, time_steps)`):
-                Input audio mel spectrogram for semantic encoding.
-            padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
-                Padding mask used to pad `audio`.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
-        Returns:
-            `audio_codes` of shape `[batch_size, 1, frames]`, the discrete encoded codes for the input audio waveform.
-            `quantized_representation` of shape `[batch_size, hidden_size, frames]`, the continuous quantized
-                representation after quantization.
-            `codes_padding_mask` of shape `[batch_size, 1, frames]`, downsampled `padding_mask` for indicating valid
-                audio codes in `audio_codes`.
+        audio (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
+            Input audio waveform.
+        audio_spectrogram (`torch.Tensor` of shape `(batch_size, mel_bins, time_steps)`):
+            Input audio mel spectrogram for semantic encoding.
+        padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
+            Padding mask used to pad `audio`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        # 1) Semantic embedding: 16th layer of pretrained model: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L64
+        # Semantic embedding (16th layer of Wav2Vec2Bert)
         semantic_output = self.semantic_model(audio_spectrogram, output_hidden_states=True)
         semantic_hidden_16 = semantic_output.hidden_states[16]
         semantic_hidden_16 = semantic_hidden_16.transpose(1, 2)
-        semantic_encoded = self.semantic_adapter(semantic_hidden_16)
+        semantic_hidden_states = self.semantic_adapter(semantic_hidden_16)
 
-        # 2) Get acoustic embedding
-        vq_emb = self.acoustic_encoder(audio)
-        vq_emb = vq_emb.transpose(1, 2)
+        # Acoustic embedding
+        acoustic_hidden_states = self.acoustic_encoder(audio)
 
-        # 3) Concat embeddings and apply final layers
-        if vq_emb.shape[-1] != semantic_encoded.shape[-1]:
-            min_len = min(vq_emb.shape[-1], semantic_encoded.shape[-1])
-            vq_emb = vq_emb[:, :, :min_len]
-            semantic_encoded = semantic_encoded[:, :, :min_len]
-        concat_emb = torch.cat([semantic_encoded, vq_emb], dim=1)
-        concat_emb = self.fc_prior(concat_emb.transpose(1, 2)).transpose(1, 2)
+        # Concatenate embeddings
+        if acoustic_hidden_states.shape[-1] != semantic_hidden_states.shape[-1]:
+            min_len = min(acoustic_hidden_states.shape[-1], semantic_hidden_states.shape[-1])
+            acoustic_hidden_states = acoustic_hidden_states[:, :, :min_len]
+            semantic_hidden_states = semantic_hidden_states[:, :, :min_len]
+        hidden_states = torch.cat([semantic_hidden_states, acoustic_hidden_states], dim=1)
+        hidden_states = self.fc_encoder(hidden_states.transpose(1, 2))
 
-        # 4) Get codes for decoder
-        quantized_representation, audio_codes = self.quantize(concat_emb)
+        # Quantize
+        quantized_representation, audio_codes = self.quantizer(hidden_states)
+        quantized_representation = quantized_representation.transpose(1, 2)
+        audio_codes = audio_codes.transpose(1, 2)
 
         # If provided, compute corresponding padding mask for audio codes
         codes_padding_mask = None
         if padding_mask is not None:
-            # Expected token length, as in: https://github.com/zhenye234/X-Codec-2.0/blob/ccbbf340ff143dfa6a0ea7cd61ec34a8ba2f1c3d/inference_save_code.py#L89
-            audio_length = padding_mask.sum(dim=-1, keepdim=True).cpu()
+            audio_length = padding_mask.sum(dim=-1, keepdim=True)
             token_length = audio_length // self.hop_length
-            codes_padding_mask = torch.zeros(audio_codes.shape, dtype=padding_mask.dtype)
-            idx = torch.arange(audio_codes.shape[-1]).view(1, -1)
-            codes_padding_mask = (idx < token_length).to(padding_mask.dtype).to(padding_mask.device)
-
-        if not return_dict:
-            return audio_codes, quantized_representation, codes_padding_mask
+            idx = torch.arange(audio_codes.shape[-1], device=padding_mask.device).view(1, -1)
+            codes_padding_mask = (idx < token_length).to(padding_mask.dtype)
 
         return Xcodec2EncoderOutput(
             audio_codes=audio_codes,
@@ -1245,42 +1011,33 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
             codes_padding_mask=codes_padding_mask,
         )
 
+    @auto_docstring
+    @can_return_tuple
     def decode(
         self,
-        audio_codes,
-        return_dict: bool | None = None,
+        quantized_representation: torch.Tensor | None = None,
+        audio_codes: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Xcodec2DecoderOutput:
         """
-        Decodes the given frames into an output audio waveform.
-
-        Note that the output might be a bit bigger than the input. In that case, any extra steps at the end can be
-        trimmed.
-
-        Args:
-            audio_codes (`torch.LongTensor`  of shape `(batch_size, 1, codes_length)`):
-                Discrete code indices computed using `model.encode`.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
-        Returns:
-            Decoded audio values of shape `(batch_size, 1, num_samples)` obtained using the decoder part of Xcodec2.
+        quantized_representation (torch.Tensor of shape `(batch_size, dimension, time_steps)`, *optional*):
+            Quantized continuous representation of input.
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, 1, codes_length)`):
+            Discrete code indices computed using `model.encode`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        if quantized_representation is None and audio_codes is None:
+            raise ValueError("Either `quantized_representation` or `audio_codes` must be provided.")
 
-        vq_post_emb = self.quantizer.get_output_from_indices(audio_codes.transpose(1, 2))
-        vq_post_emb = self.fc_post_a(vq_post_emb)
-        recon_audio = self.decoder(vq_post_emb)
+        if audio_codes is not None:
+            quantized_representation = self.quantizer.from_codes(audio_codes.transpose(1, 2))
+        else:
+            quantized_representation = quantized_representation.transpose(1, 2)
 
-        if not return_dict:
-            return recon_audio
+        recon_audio = self.decoder(quantized_representation)
+        return Xcodec2DecoderOutput(audio_values=recon_audio)
 
-        return Xcodec2DecoderOutput(
-            audio_values=recon_audio,
-        )
-
+    @auto_docstring
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(XCODEC2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Xcodec2Output, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         audio: torch.Tensor,
@@ -1289,16 +1046,12 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Xcodec2Output:
         r"""
-        Returns:
-            `Xcodec2Output` or `tuple(torch.FloatTensor, torch.LongTensor, torch.FloatTensor)`:
-            - `audio_values` (`torch.FloatTensor` of shape `(batch_size, 1, num_samples)`):
-                Reconstructed audio waveform.
-            - `audio_codes` (`torch.LongTensor` of shape `(batch_size, 1, codes_length)`):
-                Discrete code indices computed using `model.encode`.
-            - `quantized_representation` (`torch.FloatTensor` of shape `(batch_size, hidden_size, frames)`):
-                The continuous quantized representation after quantization.
-            - `codes_padding_mask` (`torch.int32` of shape `(batch_size, 1, codes_length)`):
-                Downsampled `padding_mask` for indicating valid audio codes in `audio_codes`.
+        audio (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
+            Input audio waveform.
+        audio_spectrogram (`torch.Tensor` of shape `(batch_size, mel_bins, time_steps)`):
+            Input audio mel spectrogram for semantic encoding.
+        padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
+            Padding mask used to pad `audio`.
 
         Examples:
 
@@ -1309,7 +1062,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> audio = dataset["train"]["audio"][0]["array"]
 
-        >>> model_id = "hf-audio/xcodec2"
+        >>> model_id = "bezzam/xcodec2"
         >>> model = Xcodec2Model.from_pretrained(model_id)
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
@@ -1322,16 +1075,18 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         # for truncating output audio to original length
         length = audio.shape[-1]
 
-        audio_codes, quantized_representation, codes_padding_mask = self.encode(
-            audio, audio_spectrogram=audio_spectrogram, padding_mask=padding_mask, return_dict=False
+        encoder_outputs = self.encode(
+            audio, audio_spectrogram=audio_spectrogram, padding_mask=padding_mask, return_dict=True
         )
-        audio_values = self.decode(audio_codes, return_dict=False)[..., :length]
+        audio_values = self.decode(
+            quantized_representation=encoder_outputs.quantized_representation, return_dict=True
+        )[0][..., :length]
 
         return Xcodec2Output(
             audio_values=audio_values,
-            audio_codes=audio_codes,
-            quantized_representation=quantized_representation,
-            codes_padding_mask=codes_padding_mask,
+            audio_codes=encoder_outputs.audio_codes,
+            quantized_representation=encoder_outputs.quantized_representation,
+            codes_padding_mask=encoder_outputs.codes_padding_mask,
         )
 
 

@@ -445,18 +445,17 @@ class DacEncoder(nn.Module):
     def __init__(self, config: DacConfig):
         super().__init__()
 
-        strides = config.downsampling_ratios
         # Create first convolution
         self.conv1 = nn.Conv1d(1, config.encoder_hidden_size, kernel_size=7, padding=3)
 
         self.block = []
         # Create EncoderBlocks that double channels as they downsample by `stride`
-        for stride_index, stride in enumerate(strides):
+        for stride_index, stride in enumerate(config.downsampling_ratios):
             stride_index = stride_index + 1
             self.block += [DacEncoderBlock(config, stride=stride, stride_index=stride_index)]
 
         self.block = nn.ModuleList(self.block)
-        d_model = config.encoder_hidden_size * 2**stride_index
+        d_model = config.encoder_hidden_size * 2**len(config.downsampling_ratios)
         self.snake1 = Snake1d(d_model)
         self.conv2 = nn.Conv1d(d_model, config.hidden_size, kernel_size=3, padding=1)
 

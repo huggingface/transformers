@@ -1,5 +1,4 @@
-# coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert Xcodec2 checkpoints."""
 
 import argparse
 import json
@@ -39,54 +37,69 @@ logger = logging.get_logger("transformers.models.xcodec2")
 # fmt: off
 STATE_DICT_MAPPING = {
     # ── Acoustic encoder (CodecEnc -> acoustic_encoder) ──
-    r"^CodecEnc\.conv_blocks\.0\.":                                                 r"acoustic_encoder.initial_conv.",
-    r"^CodecEnc\.conv_final_block\.0\.":                                            r"acoustic_encoder.final_activation.",
-    r"^CodecEnc\.conv_final_block\.1\.":                                            r"acoustic_encoder.final_conv.",
-    r"^CodecEnc\.conv_blocks\.(\d+)\.":                                             r"acoustic_encoder.encoder_blocks.SHIFT_DOWN.\1.",
+    r"^CodecEnc\.conv_blocks\.0\.":                                                 r"acoustic_encoder.conv1.",
+    r"^CodecEnc\.conv_final_block\.0\.":                                            r"acoustic_encoder.snake1.",
+    r"^CodecEnc\.conv_final_block\.1\.":                                            r"acoustic_encoder.conv2.",
+    r"^CodecEnc\.conv_blocks\.(\d+)\.":                                             r"acoustic_encoder.block.SHIFT_DOWN.\1.",
     r"^CodecEnc\.":                                                                 r"acoustic_encoder.",
-    # -- ResidualUnit: block.X.block.{0,1,2,3} -> block.X.{activation1,conv1,activation2,conv2}
-    r"(\.block\.\d+)\.block\.0\.":                                                  r"\1.activation1.",
-    r"(\.block\.\d+)\.block\.1\.":                                                  r"\1.conv1.",
-    r"(\.block\.\d+)\.block\.2\.":                                                  r"\1.activation2.",
-    r"(\.block\.\d+)\.block\.3\.":                                                  r"\1.conv2.",
-    # -- EncoderBlock: block.{0,1,2} -> residual_units.{0,1,2}, block.3 -> activation, block.4 -> conv
-    r"(encoder_blocks\.\d+)\.block\.([012])\.":                                     r"\1.residual_units.\2.",
-    r"(encoder_blocks\.\d+)\.block\.3\.":                                           r"\1.activation.",
-    r"(encoder_blocks\.\d+)\.block\.4\.":                                           r"\1.conv.",
+    # -- EncoderBlock: block.{0,1,2} -> res_unit{1,2,3}, block.3 -> snake1, block.4 -> conv1
+    # NOTE: These must come BEFORE ResidualUnit mappings so keys are transformed first
+    r"(\.block\.\d+)\.block\.0\.":                                                 r"\1.res_unit1.",
+    r"(\.block\.\d+)\.block\.1\.":                                                 r"\1.res_unit2.",
+    r"(\.block\.\d+)\.block\.2\.":                                                 r"\1.res_unit3.",
+    r"(\.block\.\d+)\.block\.3\.":                                                 r"\1.snake1.",
+    r"(\.block\.\d+)\.block\.4\.":                                                 r"\1.conv1.",
+    # -- ResidualUnit: block.{0,1,2,3} -> {snake1,conv1,snake2,conv2}
+    r"(\.res_unit\d+)\.block\.0\.":                                                 r"\1.snake1.",
+    r"(\.res_unit\d+)\.block\.1\.":                                                 r"\1.conv1.",
+    r"(\.res_unit\d+)\.block\.2\.":                                                 r"\1.snake2.",
+    r"(\.res_unit\d+)\.block\.3\.":                                                 r"\1.conv2.",
+    # -- ResidualUnit nested structure: res_unit{1,2,3,4} -> {snake1,conv1,snake2,conv2}
+    r"(\.res_unit\d+)\.res_unit1\.":                                                r"\1.snake1.",
+    r"(\.res_unit\d+)\.res_unit2\.":                                                r"\1.conv1.",
+    r"(\.res_unit\d+)\.res_unit3\.":                                                r"\1.snake2.",
+    r"(\.res_unit\d+)\.res_unit4\.":                                                r"\1.conv2.",
     # -- DownSample1d: lowpass.filter -> filter (LowPassFilter1d inlined)
     r"\.downsample\.lowpass\.filter":                                               r".downsample.filter",
 
     # ── Quantizer: lives on main model, not inside decoder ──
-    r"^generator\.quantizer\.layers\.0\.":                                          r"quantizer.fsq.",
+    r"^generator\.quantizer\.layers\.0\.":                                          r"quantizer.finite_scalar_quantization.",
     r"^generator\.quantizer\.":                                                     r"quantizer.",
 
     # ── Decoder (generator -> decoder) ──
     # -- Handle backbone components: now directly in decoder (no backbone. prefix)
-    r"^generator\.backbone\.prior_net\.":                                           r"decoder.prior_blocks.",
-    r"^generator\.backbone\.post_net\.":                                            r"decoder.post_blocks.",
+    r"^generator\.backbone\.prior_net\.0\.":                                       r"decoder.prior_resnet_block1.",
+    r"^generator\.backbone\.prior_net\.1\.":                                       r"decoder.prior_resnet_block2.",
+    r"^generator\.backbone\.post_net\.0\.":                                        r"decoder.post_resnet_block1.",
+    r"^generator\.backbone\.post_net\.1\.":                                        r"decoder.post_resnet_block2.",
     r"^generator\.backbone\.":                                                      r"decoder.",
     # -- General generator mapping
     r"^generator\.":                                                                r"decoder.",
-    # -- Transformer layers
+    # -- ISTFT head: out -> linear
+    r"decoder\.head\.out\.":                                                        r"decoder.head.linear.",
+    # -- Transformer layers: transformers -> layers
+    r"\.transformers\.":                                                            r".layers.",
     r"\.att\.c_proj\.":                                                             r".self_attn.o_proj.",
     r"\.att_norm\.":                                                                r".input_layernorm.",
     r"\.ffn_norm\.":                                                                r".post_attention_layernorm.",
 
     # ── Semantic adapter (SemanticEncoder_module -> semantic_adapter) ──
     r"^SemanticEncoder_module\.":                                                   r"semantic_adapter.",
+    r"semantic_adapter\.initial_conv\.":                                            r"semantic_adapter.conv1.",
+    r"semantic_adapter\.final_conv\.":                                              r"semantic_adapter.conv4.",
     r"semantic_adapter\.residual_blocks\.0\.":                                      r"semantic_adapter.act1.",
-    r"semantic_adapter\.residual_blocks\.1\.":                                      r"semantic_adapter.conv1.",
+    r"semantic_adapter\.residual_blocks\.1\.":                                      r"semantic_adapter.conv2.",
     r"semantic_adapter\.residual_blocks\.2\.":                                      r"semantic_adapter.act2.",
-    r"semantic_adapter\.residual_blocks\.3\.":                                      r"semantic_adapter.conv2.",
+    r"semantic_adapter\.residual_blocks\.3\.":                                      r"semantic_adapter.conv3.",
+
+    # ── Linear layers (fc_prior -> fc_encoder, fc_post_a -> decoder.fc) ──
+    r"^fc_prior\.":                                                                 r"fc_encoder.",
+    r"^fc_post_a\.":                                                                r"decoder.fc.",
 }
 # fmt: on
 
 
 def permute_for_rope(input_tensor, n_heads, dim1, dim2):
-    """
-    When you go from the complex ROPE formulation to sin and cos one, you need
-    to permute the query and key weights (to avoid doing it on the fly)
-    """
     input_tensor = input_tensor.reshape(dim1, dim2)
     input_tensor = input_tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
     input_tensor = input_tensor.transpose(1, 2).reshape(dim1, dim2)
@@ -122,6 +135,7 @@ def convert_state_dict(state_dict, n_heads):
             continue
 
         new_key = map_old_key_to_new(old_key)
+        
         new_state_dict[new_key] = tensor
         if old_key != new_key:
             logger.debug(f"Converted: {old_key} -> {new_key}")
@@ -129,9 +143,19 @@ def convert_state_dict(state_dict, n_heads):
     return new_state_dict
 
 
-def _convert_model(state_dict, hf_model):
+def convert_state_dict(state_dict, hf_model):
     n_heads = hf_model.config.num_attention_heads
     state_dict = convert_state_dict(state_dict, n_heads)
+
+    # Filter out non-persistent buffers - they're recomputed in _init_weights
+    state_dict = {k: v for k, v in state_dict.items() if not (
+        k.endswith("upsample.filter") or 
+        k.endswith("downsample.filter") or 
+        k.endswith(".window") or
+        k.endswith(".levels") or
+        k.endswith(".basis") or
+        k.endswith(".codebook")
+    )}
 
     extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
     missing_keys = set(hf_model.state_dict().keys()) - set(state_dict.keys())
@@ -155,38 +179,20 @@ def convert_checkpoint(
     config_path=None,
     repo_id=None,
 ):
-    """
-    Copy/paste/tweak model's weights to transformers design.
-    """
-
-    semantic_model_id = "facebook/w2v-bert-2.0"
-
-    # load json
     if config_path is not None:
         with open(config_path, "r") as f:
             model_config = json.load(f)
-        # # NOTE: `semantic_hidden_size` not needed as inside `semantic_model_config.hidden_size` (below)
-        # semantic_hidden_size = model_config["semantic_hidden_size"]
-        encoder_hidden_size = model_config["codec_encoder_hidden_size"]
         decoder_hidden_size = model_config["codec_decoder_hidden_size"]
-        # # NOTE: not needed as always used: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L35
-        # use_vocos = model_config["use_vocos"]
     else:
-        # default to https://huggingface.co/HKUSTAudio/xcodec2/blob/main/config.json
-        encoder_hidden_size = 1024
-        decoder_hidden_size = 1024
-
-    # create config
-    # -- use hardcoded semantic model: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L19
-    semantic_model_config = AutoConfig.from_pretrained(semantic_model_id, output_hidden_states=True)
+        decoder_hidden_size = 1024  # default to https://huggingface.co/HKUSTAudio/xcodec2/blob/main/config.json
 
     config = Xcodec2Config(
-        encoder_hidden_size=encoder_hidden_size,
+        encoder_hidden_size=48, # https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/codec_encoder.py#L21, like in DAC
         decoder_hidden_size=decoder_hidden_size,
-        semantic_model_config=semantic_model_config,
+        # use hardcoded semantic model: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L19
+        semantic_model_config=AutoConfig.from_pretrained("facebook/w2v-bert-2.0", output_hidden_states=True),
     )
 
-    # create model
     if not torch.cuda.is_available():
         raise ValueError("Run this script on a machine with a GPU for weight norm layers to be correctly copied.")
     torch_device = "cuda"
@@ -197,16 +203,12 @@ def convert_checkpoint(
         # we might have a training state saved, in which case discard the yaml results and just retain the weights
         original_checkpoint = original_checkpoint["best_state"]
 
-    # add weight norm, convert, and remove weight norm
     model.apply_weight_norm()
-    model = _convert_model(original_checkpoint, model)
+    model = convert_state_dict(original_checkpoint, model)
     model.remove_weight_norm()
 
-    # create feature extractor
-    dac_id = "descript/dac_16khz"
-    semantic_model_id = "facebook/w2v-bert-2.0"
-    dac_fe = AutoFeatureExtractor.from_pretrained(dac_id)
-    semantic_fe = AutoFeatureExtractor.from_pretrained(semantic_model_id)
+    dac_fe = AutoFeatureExtractor.from_pretrained("descript/dac_16khz")
+    semantic_fe = AutoFeatureExtractor.from_pretrained("facebook/w2v-bert-2.0")
     if semantic_fe.sampling_rate != dac_fe.sampling_rate:
         raise ValueError(
             f"Sampling rates for DAC and semantic feature extractor must match, got {dac_fe.sampling_rate} and {semantic_fe.sampling_rate}."
@@ -222,7 +224,6 @@ def convert_checkpoint(
         pre_padding_value=dac_fe.padding_value,
     )
 
-    # save and upload
     if pytorch_dump_folder_path is not None:
         model.save_pretrained(pytorch_dump_folder_path)
         feature_extractor.save_pretrained(pytorch_dump_folder_path)
@@ -247,10 +248,10 @@ wget https://huggingface.co/HKUSTAudio/xcodec2/resolve/main/config.json -P /raid
 wget https://huggingface.co/HKUSTAudio/xcodec2/resolve/main/model.safetensors -P /raid/eric/xcodec2_original
 
 # run conversion
-python src/transformers/models/xcodec2/convert_xcodec2_checkpoint_to_pytorch.py \
+python src/transformers/models/xcodec2/convert_xcodec2_checkpoint.py \
     --checkpoint_path /raid/eric/xcodec2_original/model.safetensors \
     --config_path /raid/eric/xcodec2_original/config.json \
-    --push_to_hub hf-audio/xcodec2
+    --push_to_hub bezzam/xcodec2
 ```
 
 """
