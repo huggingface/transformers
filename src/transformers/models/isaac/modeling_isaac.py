@@ -21,7 +21,7 @@
 
 import copy
 from collections.abc import Callable
-from typing import Any, Optional
+from typing import Any, NamedTuple, Optional
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -56,6 +56,20 @@ if is_torch_available():
     import torch
     import torch.nn as nn
     import torch.nn.functional as F
+
+
+class SinglePoint(NamedTuple):
+    x: int
+    y: int
+    mention: str | None = None
+    t: float | None = None
+
+
+class BoundingBox(NamedTuple):
+    top_left: SinglePoint
+    bottom_right: SinglePoint
+    mention: str | None = None
+    t: float | None = None
 
 
 class IsaacImageProcessorFastKwargs(ImagesKwargs, total=False):
@@ -1292,9 +1306,33 @@ class IsaacModel(PreTrainedModel):
         )
         return image_token_mask
 
+    def get_vision_position_ids(
+        self,
+        start_position: int,
+        grid_hw: torch.LongTensor,
+        token_offset: int,
+        token_length: int,
+    ) -> torch.LongTensor:
+        height, width = grid_hw[0].item(), grid_hw[1].item()
+        token_positions = torch.arange(height * width, device=grid_hw.device, dtype=torch.long)
+        vision_position_ids = torch.stack(
+            (
+                torch.full((token_positions.shape[0],), start_position, device=grid_hw.device, dtype=torch.long),
+                token_positions.div(width, rounding_mode="floor"),
+                token_positions.remainder(width),
+            ),
+            dim=0,
+        )
+        return vision_position_ids[:, token_offset : token_offset + token_length]
+
     def get_rope_index(
         self,
         *,
+        mm_token_type_ids: torch.Tensor | None = None,
+        image_token_grids: torch.Tensor | None = None,
+        image_token_offsets: torch.Tensor | None = None,
+        image_token_lengths: torch.Tensor | None = None,
+        image_attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor,
@@ -1311,6 +1349,77 @@ class IsaacModel(PreTrainedModel):
         batch_size, seq_len = inputs_embeds.shape[:2]
         if attention_mask is not None:
             attention_mask = attention_mask.to(device=device, dtype=torch.long)
+
+        has_multimodal_positions = (
+            mm_token_type_ids is not None
+            and image_token_grids is not None
+            and image_token_offsets is not None
+            and image_token_lengths is not None
+            and image_attention_mask is not None
+            and mm_token_type_ids.eq(MM_TOKEN_TYPE_IMAGE).any()
+        )
+
+        if has_multimodal_positions:
+            mm_token_type_ids = mm_token_type_ids.to(device=device, dtype=torch.long)
+            image_token_grids = image_token_grids.to(device=device, dtype=torch.long)
+            image_token_offsets = image_token_offsets.to(device=device, dtype=torch.long)
+            image_token_lengths = image_token_lengths.to(device=device, dtype=torch.long)
+            image_attention_mask = image_attention_mask.to(device=device, dtype=torch.bool)
+
+            position_ids = torch.zeros((batch_size, seq_len, 3), device=device, dtype=torch.long)
+            rope_deltas = torch.zeros((batch_size, 1), device=device, dtype=torch.long)
+            pixel_shuffle_scale = self.config.vision_config.pixel_shuffle_scale_factor
+
+            for batch_idx in range(batch_size):
+                sample_attention_mask = attention_mask[batch_idx].bool() if attention_mask is not None else None
+                sample_token_types = (
+                    mm_token_type_ids[batch_idx][sample_attention_mask]
+                    if sample_attention_mask is not None
+                    else mm_token_type_ids[batch_idx]
+                )
+
+                sample_image_mask = image_attention_mask[batch_idx]
+                sample_grids = image_token_grids[batch_idx][sample_image_mask]
+                sample_offsets = image_token_offsets[batch_idx][sample_image_mask]
+                sample_lengths = image_token_lengths[batch_idx][sample_image_mask]
+
+                current_pos = 0
+                image_idx = 0
+                seq_pos = 0
+                llm_pos_ids_list = []
+
+                while seq_pos < sample_token_types.shape[0]:
+                    modality_type = int(sample_token_types[seq_pos].item())
+                    group_end = seq_pos + 1
+                    while group_end < sample_token_types.shape[0] and sample_token_types[group_end] == modality_type:
+                        group_end += 1
+
+                    group_length = group_end - seq_pos
+                    if modality_type == MM_TOKEN_TYPE_TEXT:
+                        text_position_ids = torch.arange(group_length, device=device, dtype=torch.long) + current_pos
+                        zero_axis = torch.zeros_like(text_position_ids)
+                        llm_pos_ids_list.append(torch.stack((text_position_ids, zero_axis, zero_axis), dim=0))
+                        current_pos += group_length
+                    else:
+                        grid_hw = sample_grids[image_idx].div(pixel_shuffle_scale, rounding_mode="floor")
+                        token_offset = int(sample_offsets[image_idx].item())
+                        token_length = int(sample_lengths[image_idx].item())
+                        llm_pos_ids_list.append(
+                            self.get_vision_position_ids(current_pos, grid_hw, token_offset, token_length)
+                        )
+                        current_pos += 1
+                        image_idx += 1
+
+                    seq_pos = group_end
+
+                llm_positions = torch.cat(llm_pos_ids_list, dim=1)
+                if sample_attention_mask is not None:
+                    position_ids[batch_idx, sample_attention_mask] = llm_positions.transpose(0, 1)
+                else:
+                    position_ids[batch_idx] = llm_positions.transpose(0, 1)
+                rope_deltas[batch_idx, 0] = llm_positions.max() + 1 - sample_token_types.shape[0]
+
+            return position_ids, rope_deltas
 
         if position_ids is None:
             if attention_mask is not None:
@@ -1347,12 +1456,22 @@ class IsaacModel(PreTrainedModel):
         input_ids: torch.Tensor,
         inputs_embeds: torch.Tensor,
         attention_mask: torch.Tensor | None,
+        mm_token_type_ids: torch.Tensor | None = None,
+        image_token_grids: torch.Tensor | None = None,
+        image_token_offsets: torch.Tensor | None = None,
+        image_token_lengths: torch.Tensor | None = None,
+        image_attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         past_key_values: torch.Tensor | None = None,
     ) -> torch.Tensor:
         past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
         if past_seen_tokens == 0:
             position_ids, rope_deltas = self.get_rope_index(
+                mm_token_type_ids=mm_token_type_ids,
+                image_token_grids=image_token_grids,
+                image_token_offsets=image_token_offsets,
+                image_token_lengths=image_token_lengths,
+                image_attention_mask=image_attention_mask,
                 position_ids=position_ids,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
@@ -1479,6 +1598,11 @@ class IsaacModel(PreTrainedModel):
         position_ids = self.compute_3d_position_ids(
             input_ids=input_ids,
             inputs_embeds=inputs_embeds,
+            mm_token_type_ids=mm_token_type_ids,
+            image_token_grids=vision_token_grids,
+            image_token_offsets=vision_token_offsets,
+            image_token_lengths=vision_token_lengths,
+            image_attention_mask=vision_image_attention_mask,
             position_ids=position_ids,
             attention_mask=attention_mask,
             past_key_values=past_key_values,

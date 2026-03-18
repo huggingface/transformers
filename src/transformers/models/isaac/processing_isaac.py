@@ -18,15 +18,84 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ProcessorMixin
 from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import is_torch_available
+from .modeling_isaac import BoundingBox, SinglePoint
 
 
 if is_torch_available():
     import torch
+
+
+_POINT_OR_BOX_TAG = re.compile(
+    r"<(?P<tag>point|point_box)(?P<attrs>[^>]*)>(?P<body>[\s\S]*?)</(?P=tag)>", re.IGNORECASE
+)
+_ATTR_RE = re.compile(r"(\w+)\s*=\s*(?:\"([^\"]*)\"|([^\s>]+))")
+_COORD_RE = re.compile(r"\(\s*(\d+)\s*,\s*(\d+)\s*\)")
+
+
+def _maybe_float(value: str | None) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
+def _parse_attrs(attr_text: str) -> dict[str, str]:
+    attrs = {}
+    for match in _ATTR_RE.finditer(attr_text or ""):
+        key = match.group(1)
+        value = match.group(2) or match.group(3) or ""
+        attrs[key] = value
+    return attrs
+
+
+def _parse_point_body(body: str, mention: str | None = None, t: str | None = None) -> SinglePoint:
+    match = _COORD_RE.search(body)
+    if not match:
+        raise ValueError(f"Malformed <point> tag: {body!r}")
+    x, y = int(match.group(1)), int(match.group(2))
+    return SinglePoint(x=x, y=y, mention=mention, t=_maybe_float(t))
+
+
+def _parse_box_body(body: str, mention: str | None = None, t: str | None = None) -> BoundingBox:
+    coords = list(_COORD_RE.finditer(body))
+    if len(coords) < 2:
+        raise ValueError(f"Malformed <point_box> tag: {body!r}")
+
+    top_left = SinglePoint(x=int(coords[0].group(1)), y=int(coords[0].group(2)))
+    bottom_right = SinglePoint(x=int(coords[1].group(1)), y=int(coords[1].group(2)))
+    return BoundingBox(top_left=top_left, bottom_right=bottom_right, mention=mention, t=_maybe_float(t))
+
+
+def clean_text_and_extract_points(
+    text: str,
+    expected: str | None = None,
+) -> tuple[str, list[SinglePoint | BoundingBox]]:
+    results = []
+    for match in _POINT_OR_BOX_TAG.finditer(text or ""):
+        tag = match.group("tag").lower()
+        attrs = _parse_attrs(match.group("attrs"))
+        mention = attrs.get("mention")
+        t = attrs.get("t")
+        if tag == "point":
+            if expected not in (None, "point"):
+                continue
+            results.append(_parse_point_body(match.group("body"), mention=mention, t=t))
+        else:
+            if expected not in (None, "box"):
+                continue
+            results.append(_parse_box_body(match.group("body"), mention=mention, t=t))
+
+    clean_text = re.sub(r"\s+", " ", _POINT_OR_BOX_TAG.sub("", text or "")).strip()
+    return clean_text, results
 
 
 @auto_docstring
@@ -222,6 +291,30 @@ class IsaacProcessor(ProcessorMixin):
             "vision_token_lengths": vision_token_lengths,
             "vision_image_attention_mask": vision_image_attention_mask,
         }
+
+    def post_process_generation(
+        self,
+        text: str,
+        expected: str | None = None,
+        cleanup_and_extract: bool = True,
+    ) -> str | tuple[str, list[SinglePoint | BoundingBox]]:
+        if cleanup_and_extract:
+            return clean_text_and_extract_points(text, expected=expected)
+        return text
+
+    def post_process_image_text_to_text(
+        self,
+        generated_outputs,
+        skip_special_tokens: bool = True,
+        cleanup_and_extract: bool = False,
+        expected: str | None = None,
+        **kwargs,
+    ):
+        generated_texts = self.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
+        return [
+            self.post_process_generation(text, expected=expected, cleanup_and_extract=cleanup_and_extract)
+            for text in generated_texts
+        ]
 
     def __call__(
         self,
