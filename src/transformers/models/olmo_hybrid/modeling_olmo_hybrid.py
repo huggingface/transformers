@@ -767,26 +767,15 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         k = self.k_proj(hidden_states)
         v = self.v_proj(hidden_states)
 
-        if cu_seqlens is not None:
-            q, new_conv_state_q = self.q_conv1d(
-                q, cache=conv_state_q, output_final_state=use_cache, cu_seqlens=cu_seqlens
-            )
-            k, new_conv_state_k = self.k_conv1d(
-                k, cache=conv_state_k, output_final_state=use_cache, cu_seqlens=cu_seqlens
-            )
-            v, new_conv_state_v = self.v_conv1d(
-                v, cache=conv_state_v, output_final_state=use_cache, cu_seqlens=cu_seqlens
-            )
-        else:
-            q, new_conv_state_q = self.q_conv1d(
-                q, cache=conv_state_q, use_precomputed=use_precomputed, output_final_state=use_cache
-            )
-            k, new_conv_state_k = self.k_conv1d(
-                k, cache=conv_state_k, use_precomputed=use_precomputed, output_final_state=use_cache
-            )
-            v, new_conv_state_v = self.v_conv1d(
-                v, cache=conv_state_v, use_precomputed=use_precomputed, output_final_state=use_cache
-            )
+        q, new_conv_state_q = self.q_conv1d(
+            q, cache=conv_state_q, use_precomputed=use_precomputed, output_final_state=use_cache, cu_seqlens=cu_seqlens
+        )
+        k, new_conv_state_k = self.k_conv1d(
+            k, cache=conv_state_k, use_precomputed=use_precomputed, output_final_state=use_cache, cu_seqlens=cu_seqlens
+        )
+        v, new_conv_state_v = self.v_conv1d(
+            v, cache=conv_state_v, use_precomputed=use_precomputed, output_final_state=use_cache, cu_seqlens=cu_seqlens
+        )
 
         if cache_params is not None:
             cache_params.conv_states_q[self.layer_idx] = new_conv_state_q
