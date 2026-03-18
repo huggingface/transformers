@@ -63,9 +63,9 @@ TEST_METHODS=(
 #  23. flex_olmo              —    allenai/FlexOlmo (gated)
 #  24. minimax              1.2K   MiniMaxAI/MiniMax-Text-01
 
-# Entries ordered by download rank. Top 7 are active; rest are commented out.
+# Entries ordered by download rank. Top 10 are active; rest are commented out.
 TEST_ENTRIES=(
-    # --- Top 7 (active) ---
+    # --- Top 10 (active) ---
     "tests/models/gpt_oss/test_modeling_gpt_oss.py::GptOssModelTest"                                                #  1. gpt_oss              7.4M
     "tests/models/glm_moe_dsa/test_modeling_glm_moe_dsa.py::GlmMoeDsaModelTest"                                     #  2. glm_moe_dsa          4.0M
     "tests/models/qwen3_moe/test_modeling_qwen3_moe.py::Qwen3MoeModelTest"                                          #  3. qwen3_moe            2.2M
@@ -73,10 +73,10 @@ TEST_ENTRIES=(
     "tests/models/qwen3_5_moe/test_modeling_qwen3_5_moe.py::Qwen3_5MoeTextModelTest"                                #  5. qwen3_5_moe          1.5M
     "tests/models/deepseek_v2/test_modeling_deepseek_v2.py::DeepseekV2ModelTest"                                     #  6. deepseek_v2          1.3M
     "tests/models/qwen3_next/test_modeling_qwen3_next.py::Qwen3NextModelTest"                                        #  7. qwen3_next           1.2M
-    # --- Remaining (commented out, by download rank) ---
     "tests/models/mixtral/test_modeling_mixtral.py::MixtralModelTest"                                                #  8. mixtral              764K
     "tests/models/qwen2_moe/test_modeling_qwen2_moe.py::Qwen2MoeModelTest"                                          #  9. qwen2_moe            103K
     "tests/models/phimoe/test_modeling_phimoe.py::PhimoeModelTest"                                                   # 10. phimoe                89K
+    # --- Remaining (commented out, by download rank) ---
     # "tests/models/glm4_moe/test_modeling_glm4_moe.py::Glm4MoeModelTest"                                           # 11. glm4_moe              73K
     # "tests/models/minimax_m2/test_modeling_minimax_m2.py::MiniMaxM2ModelTest"                                      # 12. minimax_m2            63K
     # "tests/models/lfm2_moe/test_modeling_lfm2_moe.py::Lfm2MoeModelTest"                                           # 13. lfm2_moe              50K

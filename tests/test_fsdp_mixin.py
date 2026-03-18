@@ -65,6 +65,30 @@ SEQ_LEN = 64
 NUM_STEPS = 20
 LR = 3e-4
 SEED = 42
+FSDP_TOP_MODEL_NAMES = {
+    # Dense
+    "gpt2",
+    "qwen3",
+    "phi",
+    "llama",
+    "modernbert_decoder",
+    "olmo3",
+    "phi3",
+    "mistral",
+    "lfm2",
+    "gemma2",
+    # MoE
+    "gpt_oss",
+    "glm_moe_dsa",
+    "qwen3_moe",
+    "glm4_moe_lite",
+    "qwen3_5_moe",
+    "deepseek_v2",
+    "qwen3_next",
+    "mixtral",
+    "qwen2_moe",
+    "phimoe",
+}
 
 
 # =============================================================================
@@ -658,6 +682,21 @@ class FSDPTesterMixin(ABC):
         if available_workers < self.fsdp_nproc_per_node:
             self.skipTest(f"Need at least {self.fsdp_nproc_per_node} FSDP workers, have {available_workers}")
 
+    def _get_fsdp_model_name(self):
+        module_parts = self.__class__.__module__.split(".")
+        if len(module_parts) >= 3 and module_parts[0] == "tests" and module_parts[1] == "models":
+            return module_parts[2]
+        return None
+
+    def _skip_if_fsdp_model_not_selected(self):
+        model_name = self._get_fsdp_model_name()
+        if model_name not in FSDP_TOP_MODEL_NAMES:
+            model_label = model_name or self.__class__.__module__
+            self.skipTest(
+                "FSDP mixin coverage is currently limited to the top-10 dense and top-10 MoE model suites "
+                f"(skipping {model_label})."
+            )
+
     def _create_model_on_meta(self, config):
         """Instantiate a model on the meta device (no memory allocated)."""
         auto_classes = [AutoModelForCausalLM, AutoModelForSeq2SeqLM]
@@ -726,6 +765,7 @@ class FSDPTesterMixin(ABC):
     def test_get_transformer_block_classes(self):
         """get_transformer_block_classes() finds >= 1 block class for the model."""
         self._skip_if_fsdp_disabled()
+        self._skip_if_fsdp_model_not_selected()
         config = self.model_tester.get_config()
         model = self._create_model_on_meta(config)
 
@@ -747,6 +787,7 @@ class FSDPTesterMixin(ABC):
         This amortizes the mp.spawn + process-group init overhead across all
         distributed tests instead of paying it once per test method.
         """
+        self._skip_if_fsdp_model_not_selected()
         self._skip_if_insufficient_devices()
 
         config_class, config_dict = self._get_tiny_config()
