@@ -1285,7 +1285,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         input_ids, model_kwargs = self._expand_inputs_for_generation(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            expand_size=generation_config.num_return_sequences,
+            expand_size=generation_config.num_return_sequences or 1,
             **model_kwargs,
         )
 
@@ -1315,7 +1315,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 # batch_size should account for both conditional/unconditional input; hence multiplied by 2.
                 batch_size=batch_size * 2,
                 # we should have at least a cache len of seq_len + num_image_tokens.
-                max_cache_len=max(generation_config.max_length, num_image_tokens + seq_len),
+                max_cache_len=max(generation_config.max_length or 0, num_image_tokens + seq_len),
                 model_kwargs=model_kwargs,
             )
 
