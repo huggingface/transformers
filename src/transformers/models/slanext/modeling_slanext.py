@@ -479,15 +479,18 @@ class SLANeXtVisionEncoder(SLANeXtPreTrainedModel):
 class SLANeXtBackbone(nn.Module):
     def __init__(
         self,
-        config: SLANeXtConfig,
-        post_conv_in_channels: int = 256,
-        post_conv_out_channels: int = 512,
+        config: dict | None = None,
+        **kwargs,
     ):
         super().__init__()
 
-        self.vision_tower = SLANeXtVisionEncoder(config)
+        self.vision_config = config.vision_config
+        self.post_conv_in_channels = config.post_conv_in_channels
+        self.post_conv_out_channels = config.post_conv_out_channels
+
+        self.vision_tower = SLANeXtVisionEncoder(self.vision_config)
         self.post_conv = nn.Conv2d(
-            post_conv_in_channels, post_conv_out_channels, kernel_size=3, stride=2, padding=1, bias=False
+            self.post_conv_in_channels, self.post_conv_out_channels, kernel_size=3, stride=2, padding=1, bias=False
         )
 
     def forward(self, hidden_states):
@@ -556,27 +559,21 @@ class SLANeXtLocationMLP(nn.Module):
 class SLANeXtSLAHead(nn.Module):
     def __init__(
         self,
-        in_channels=512,
-        hidden_size=512,
-        out_channels=30,
-        max_text_length=500,
-        loc_reg_num=4,
-        fc_decay=0.0,
+        config: dict | None = None,
         **kwargs,
     ):
         super().__init__()
 
-        self.hidden_size = hidden_size
-        self.max_text_length = max_text_length
+        self.in_channels = config.post_conv_out_channels
+        self.hidden_size = config.hidden_size
+        self.max_text_length = config.max_text_length
+        self.out_channels = config.out_channels
+        self.loc_reg_num = config.loc_reg_num
         self.emb = self._char_to_onehot
-        self.num_embeddings = out_channels
-        self.loc_reg_num = loc_reg_num
-        self.eos = self.num_embeddings - 1
 
-        self.structure_attention_cell = SLANeXtAttentionGRUCell(in_channels, hidden_size, self.num_embeddings)
-        self.structure_generator = SLANeXtStructureMLP(hidden_size, out_channels)
-
-        self.loc_generator = SLANeXtLocationMLP(hidden_size, loc_reg_num)
+        self.structure_attention_cell = SLANeXtAttentionGRUCell(self.in_channels, self.hidden_size, self.out_channels)
+        self.structure_generator = SLANeXtStructureMLP(self.hidden_size, self.out_channels)
+        self.loc_generator = SLANeXtLocationMLP(self.hidden_size, self.loc_reg_num)
 
     def forward(self, features, targets=None):
         batch_size = features.shape[0]
@@ -590,7 +587,7 @@ class SLANeXtSLAHead(nn.Module):
             pre_chars = structure_step.argmax(dim=1)
             structure_preds_list.append(structure_step)
             structure_ids_list.append(pre_chars)
-            if torch.stack(structure_ids_list, dim=1).eq(self.eos).any(-1).all():
+            if torch.stack(structure_ids_list, dim=1).eq(self.out_channels - 1).any(-1).all():
                 break
         structure_preds = F.softmax(torch.stack(structure_preds_list, dim=1), dim=-1)
 
@@ -605,7 +602,7 @@ class SLANeXtSLAHead(nn.Module):
         return hidden, structure_step, loc_step
 
     def _char_to_onehot(self, input_char):
-        return F.one_hot(input_char, self.num_embeddings).float()
+        return F.one_hot(input_char, self.out_channels).float()
 
 
 @auto_docstring
@@ -617,17 +614,8 @@ class SLANeXtModel(SLANeXtPreTrainedModel):
 
     def __init__(self, config: SLANeXtConfig):
         super().__init__(config)
-        self.backbone = SLANeXtBackbone(
-            config=config.vision_config,
-            post_conv_in_channels=config.post_conv_in_channels,
-            post_conv_out_channels=config.post_conv_out_channels,
-        )
-        self.head = SLANeXtSLAHead(
-            out_channels=config.out_channels,
-            hidden_size=config.hidden_size,
-            max_text_length=config.max_text_length,
-            loc_reg_num=config.loc_reg_num,
-        )
+        self.backbone = SLANeXtBackbone(config=config)
+        self.head = SLANeXtSLAHead(config=config)
         self.post_init()
 
     @can_return_tuple

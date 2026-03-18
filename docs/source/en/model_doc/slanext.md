@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-**SLANeXt_wired** and **SLANeXt_wireless** are part of a series of dedicated lightweight models for table structure recognition, focusing on accurately recognizing table structures in documents and natural scenes.
+**SLANeXt_wired** and **SLANeXt_wireless** are part of a series of dedicated lightweight models for table structure recognition, focusing on accurately recognizing table structures in documents and natural scenes. For more details about the SLANeXt series model, please refer to the [official documentation](https://www.paddleocr.ai/latest/en/version3.x/module_usage/table_structure_recognition.html).
 
 ## Model Architecture
 
@@ -46,7 +46,7 @@ from transformers import AutoImageProcessor, AutoModel
 
 model_path="PaddlePaddle/SLANeXt_wired_safetensors"
 model = AutoModel.from_pretrained(model_path, dtype=torch.float32)
-image_processor = AutoImageProcessor.from_pretrained(model_path, use_fast=True)
+image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/table_recognition.jpg", stream=True).raw).convert("RGB")
 inputs = image_processor(images=image, return_tensors="pt")

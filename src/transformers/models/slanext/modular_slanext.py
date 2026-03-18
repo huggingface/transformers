@@ -24,6 +24,7 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_transforms import normalize, pad, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -39,6 +40,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import TensorType
+from ...utils.import_utils import requires
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2VisionConfig
 from ..got_ocr2.modeling_got_ocr2 import (
     GotOcr2VisionAttention,
@@ -148,15 +150,18 @@ class SLANeXtVisionEncoder(GotOcr2VisionEncoder):
 class SLANeXtBackbone(nn.Module):
     def __init__(
         self,
-        config: SLANeXtConfig,
-        post_conv_in_channels: int = 256,
-        post_conv_out_channels: int = 512,
+        config: dict | None = None,
+        **kwargs,
     ):
         super().__init__()
 
-        self.vision_tower = SLANeXtVisionEncoder(config)
+        self.vision_config = config.vision_config
+        self.post_conv_in_channels = config.post_conv_in_channels
+        self.post_conv_out_channels = config.post_conv_out_channels
+
+        self.vision_tower = SLANeXtVisionEncoder(self.vision_config)
         self.post_conv = nn.Conv2d(
-            post_conv_in_channels, post_conv_out_channels, kernel_size=3, stride=2, padding=1, bias=False
+            self.post_conv_in_channels, self.post_conv_out_channels, kernel_size=3, stride=2, padding=1, bias=False
         )
 
     def forward(self, hidden_states):
@@ -225,27 +230,21 @@ class SLANeXtLocationMLP(nn.Module):
 class SLANeXtSLAHead(nn.Module):
     def __init__(
         self,
-        in_channels=512,
-        hidden_size=512,
-        out_channels=30,
-        max_text_length=500,
-        loc_reg_num=4,
-        fc_decay=0.0,
+        config: dict | None = None,
         **kwargs,
     ):
         super().__init__()
 
-        self.hidden_size = hidden_size
-        self.max_text_length = max_text_length
+        self.in_channels = config.post_conv_out_channels
+        self.hidden_size = config.hidden_size
+        self.max_text_length = config.max_text_length
+        self.out_channels = config.out_channels
+        self.loc_reg_num = config.loc_reg_num
         self.emb = self._char_to_onehot
-        self.num_embeddings = out_channels
-        self.loc_reg_num = loc_reg_num
-        self.eos = self.num_embeddings - 1
 
-        self.structure_attention_cell = SLANeXtAttentionGRUCell(in_channels, hidden_size, self.num_embeddings)
-        self.structure_generator = SLANeXtStructureMLP(hidden_size, out_channels)
-
-        self.loc_generator = SLANeXtLocationMLP(hidden_size, loc_reg_num)
+        self.structure_attention_cell = SLANeXtAttentionGRUCell(self.in_channels, self.hidden_size, self.out_channels)
+        self.structure_generator = SLANeXtStructureMLP(self.hidden_size, self.out_channels)
+        self.loc_generator = SLANeXtLocationMLP(self.hidden_size, self.loc_reg_num)
 
     def forward(self, features, targets=None):
         batch_size = features.shape[0]
@@ -259,7 +258,7 @@ class SLANeXtSLAHead(nn.Module):
             pre_chars = structure_step.argmax(dim=1)
             structure_preds_list.append(structure_step)
             structure_ids_list.append(pre_chars)
-            if torch.stack(structure_ids_list, dim=1).eq(self.eos).any(-1).all():
+            if torch.stack(structure_ids_list, dim=1).eq(self.out_channels - 1).any(-1).all():
                 break
         structure_preds = F.softmax(torch.stack(structure_preds_list, dim=1), dim=-1)
 
@@ -274,7 +273,7 @@ class SLANeXtSLAHead(nn.Module):
         return hidden, structure_step, loc_step
 
     def _char_to_onehot(self, input_char):
-        return F.one_hot(input_char, self.num_embeddings).float()
+        return F.one_hot(input_char, self.out_channels).float()
 
 
 @auto_docstring
@@ -286,17 +285,8 @@ class SLANeXtModel(SLANeXtPreTrainedModel):
 
     def __init__(self, config: SLANeXtConfig):
         super().__init__(config)
-        self.backbone = SLANeXtBackbone(
-            config=config.vision_config,
-            post_conv_in_channels=config.post_conv_in_channels,
-            post_conv_out_channels=config.post_conv_out_channels,
-        )
-        self.head = SLANeXtSLAHead(
-            out_channels=config.out_channels,
-            hidden_size=config.hidden_size,
-            max_text_length=config.max_text_length,
-            loc_reg_num=config.loc_reg_num,
-        )
+        self.backbone = SLANeXtBackbone(config=config)
+        self.head = SLANeXtSLAHead(config=config)
         self.post_init()
 
     @can_return_tuple
@@ -656,6 +646,143 @@ class SLANeXtImageProcessor(BaseImageProcessor):
         return {"structure": structure, "structure_score": structure_score}
 
 
+@auto_docstring
+@requires(backends=("torch",))
+class SLANeXtImageProcessorFast(BaseImageProcessorFast):
+    r"""
+    Constructs a fast SLANeXt image processor.
+
+    Args:
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the image's long edge to the specified `size`. Can be overridden by the `do_resize`
+            parameter in the `preprocess` method.
+        size (`dict[str, int]`, *optional*, defaults to `{"height": 512, "width": 512}`):
+            Size of the image after resizing. The image is resized such that the long edge matches
+            `max(size["height"], size["width"])` while preserving the aspect ratio. Can be overridden by the `size`
+            parameter in the `preprocess` method.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
+            `do_rescale` parameter in the `preprocess` method.
+        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+            Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
+            `preprocess` method.
+        do_normalize (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
+            method.
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
+            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
+            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
+        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
+            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
+            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess`
+            method.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Whether to pad the image to a square of size `max(size["height"], size["width"])` after resizing. Padding
+            is applied to the bottom and right edges with zeros. Can be overridden by the `do_pad` parameter in the
+            `preprocess` method.
+    """
+
+    resample = 2  # PILImageResampling.BILINEAR
+    image_mean = IMAGENET_DEFAULT_MEAN
+    image_std = IMAGENET_DEFAULT_STD
+    size = {"height": 512, "width": 512}
+    pad_size = {"height": 512, "width": 512}
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
+    do_pad = True
+    valid_kwargs = ImagesKwargs
+    model_input_names = ["pixel_values"]
+
+    def __init__(self, **kwargs: Unpack[ImagesKwargs]):
+        super().__init__(**kwargs)
+        self.init_decoder()
+
+    def init_decoder(self):
+        """
+        Initialize the decoder vocabulary for table structure recognition.
+
+        Builds a character dictionary mapping HTML table structure tokens (e.g., `<thead>`, `<tr>`, `<td>`, colspan/
+        rowspan attributes) to integer indices. The dictionary includes special `"sos"` (start-of-sequence) and
+        `"eos"` (end-of-sequence) tokens. Merged `<td></td>` tokens are used in place of standalone `<td>` tokens
+        when applicable.
+        """
+        dict_character = [
+            "<thead>",
+            "</thead>",
+            "<tbody>",
+            "</tbody>",
+            "<tr>",
+            "</tr>",
+            "<td>",
+            "<td",
+            ">",
+            "</td>",
+        ]
+        dict_character += [f' colspan="{i + 2}"' for i in range(19)]
+        dict_character += [f' rowspan="{i + 2}"' for i in range(19)]
+
+        if "<td></td>" not in dict_character:
+            dict_character.append("<td></td>")
+        if "<td>" in dict_character:
+            dict_character.remove("<td>")
+
+        dict_character = ["sos"] + dict_character + ["eos"]
+        self.dict = {char: i for i, char in enumerate(dict_character)}
+        self.character = dict_character
+        self.td_token = ["<td>", "<td", "<td></td>"]
+        self.bos_id = np.array(self.dict["sos"])
+        self.eos_id = np.array(self.dict["eos"])
+
+    def post_process_table_recognition(self, outputs):
+        """
+        Post-process the raw model outputs to decode the predicted table structure into an HTML token sequence.
+
+        Converts the model's predicted probability distributions over the structure vocabulary into a sequence of
+        HTML tokens representing the table structure. The decoded tokens are wrapped with `<html>`, `<body>`, and
+        `<table>` tags to form a complete HTML table structure.
+
+        Args:
+            outputs ([`BaseModelOutputWithNoAttention`]):
+                Raw outputs from the SLANeXt model. The `last_hidden_state` field contains the predicted probability
+                distributions over the structure vocabulary at each decoding step, with shape
+                `(batch_size, max_text_length, num_classes)`.
+
+        Returns:
+            `dict`: A dictionary containing:
+                - **structure** (`list[str]`): The predicted HTML table structure as a list of tokens, wrapped with
+                  `<html>`, `<body>`, and `<table>` tags.
+                - **structure_score** (`float`): The mean confidence score across all predicted tokens.
+        """
+        self.pred = outputs.last_hidden_state
+        structure_probs = self.pred[0:1]
+        ignored_tokens = [int(self.bos_id), int(self.eos_id)]
+        end_idx = int(self.eos_id)
+
+        structure_idx = structure_probs.argmax(dim=2)
+        structure_probs = structure_probs.max(dim=2).values
+
+        structure_str_list = []
+        batch_size = structure_idx.shape[0]
+        for batch_index in range(batch_size):
+            structure_list = []
+            score_list = []
+            for position in range(structure_idx.shape[1]):
+                char_idx = int(structure_idx[batch_index, position])
+                if position > 0 and char_idx == end_idx:
+                    break
+                if char_idx in ignored_tokens:
+                    continue
+                text = self.character[char_idx]
+                structure_list.append(text)
+                score_list.append(structure_probs[batch_index, position])
+            structure_str_list.append(structure_list)
+            structure_score = torch.stack(score_list).mean().item()
+
+        structure = ["<html>", "<body>", "<table>"] + structure_str_list[0] + ["</table>", "</body>", "</html>"]
+        return {"structure": structure, "structure_score": structure_score}
+
+
 @auto_docstring(
     custom_intro="""
     SLANeXt model for table structure recognition tasks. Wraps the core SLANeXtModel
@@ -689,6 +816,7 @@ class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
 __all__ = [
     "SLANeXtForTableRecognition",
     "SLANeXtImageProcessor",
+    "SLANeXtImageProcessorFast",
     "SLANeXtConfig",
     "SLANeXtModel",
     "SLANeXtPreTrainedModel",
