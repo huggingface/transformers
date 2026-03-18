@@ -1328,13 +1328,12 @@ class IsaacModel(PreTrainedModel):
     def get_rope_index(
         self,
         *,
-        mm_token_type_ids: torch.Tensor | None = None,
-        image_token_grids: torch.Tensor | None = None,
-        image_token_offsets: torch.Tensor | None = None,
-        image_token_lengths: torch.Tensor | None = None,
-        image_attention_mask: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
+        mm_token_type_ids: torch.Tensor,
+        image_token_grids: torch.Tensor,
+        image_token_offsets: torch.Tensor,
+        image_token_lengths: torch.Tensor,
+        image_attention_mask: torch.Tensor,
+        attention_mask: torch.Tensor,
         inputs_embeds: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Prepare multimodal RoPE positions for the current prefill sequence.
@@ -1347,108 +1346,58 @@ class IsaacModel(PreTrainedModel):
 
         device = inputs_embeds.device
         batch_size, seq_len = inputs_embeds.shape[:2]
-        if attention_mask is not None:
-            attention_mask = attention_mask.to(device=device, dtype=torch.long)
+        mm_token_type_ids = mm_token_type_ids.to(device=device, dtype=torch.long)
+        image_token_grids = image_token_grids.to(device=device, dtype=torch.long)
+        image_token_offsets = image_token_offsets.to(device=device, dtype=torch.long)
+        image_token_lengths = image_token_lengths.to(device=device, dtype=torch.long)
+        image_attention_mask = image_attention_mask.to(device=device, dtype=torch.bool)
+        attention_mask = attention_mask.to(device=device, dtype=torch.long)
 
-        has_multimodal_positions = (
-            mm_token_type_ids is not None
-            and image_token_grids is not None
-            and image_token_offsets is not None
-            and image_token_lengths is not None
-            and image_attention_mask is not None
-            and mm_token_type_ids.eq(MM_TOKEN_TYPE_IMAGE).any()
-        )
+        position_ids = torch.zeros((3, batch_size, seq_len), device=device, dtype=torch.long)
+        rope_deltas = torch.zeros((batch_size, 1), device=device, dtype=torch.long)
+        pixel_shuffle_scale = self.config.vision_config.pixel_shuffle_scale_factor
 
-        if has_multimodal_positions:
-            mm_token_type_ids = mm_token_type_ids.to(device=device, dtype=torch.long)
-            image_token_grids = image_token_grids.to(device=device, dtype=torch.long)
-            image_token_offsets = image_token_offsets.to(device=device, dtype=torch.long)
-            image_token_lengths = image_token_lengths.to(device=device, dtype=torch.long)
-            image_attention_mask = image_attention_mask.to(device=device, dtype=torch.bool)
+        for batch_idx in range(batch_size):
+            sample_attention_mask = attention_mask[batch_idx].bool()
+            sample_token_types = mm_token_type_ids[batch_idx][sample_attention_mask]
+            sample_grids = image_token_grids[batch_idx][image_attention_mask[batch_idx]]
+            sample_offsets = image_token_offsets[batch_idx][image_attention_mask[batch_idx]]
+            sample_lengths = image_token_lengths[batch_idx][image_attention_mask[batch_idx]]
 
-            position_ids = torch.zeros((batch_size, seq_len, 3), device=device, dtype=torch.long)
-            rope_deltas = torch.zeros((batch_size, 1), device=device, dtype=torch.long)
-            pixel_shuffle_scale = self.config.vision_config.pixel_shuffle_scale_factor
+            current_pos = 0
+            image_idx = 0
+            seq_pos = 0
+            llm_pos_ids_list = []
 
-            for batch_idx in range(batch_size):
-                sample_attention_mask = attention_mask[batch_idx].bool() if attention_mask is not None else None
-                sample_token_types = (
-                    mm_token_type_ids[batch_idx][sample_attention_mask]
-                    if sample_attention_mask is not None
-                    else mm_token_type_ids[batch_idx]
-                )
+            while seq_pos < sample_token_types.shape[0]:
+                modality_type = int(sample_token_types[seq_pos].item())
+                group_end = seq_pos + 1
+                while group_end < sample_token_types.shape[0] and sample_token_types[group_end] == modality_type:
+                    group_end += 1
 
-                sample_image_mask = image_attention_mask[batch_idx]
-                sample_grids = image_token_grids[batch_idx][sample_image_mask]
-                sample_offsets = image_token_offsets[batch_idx][sample_image_mask]
-                sample_lengths = image_token_lengths[batch_idx][sample_image_mask]
-
-                current_pos = 0
-                image_idx = 0
-                seq_pos = 0
-                llm_pos_ids_list = []
-
-                while seq_pos < sample_token_types.shape[0]:
-                    modality_type = int(sample_token_types[seq_pos].item())
-                    group_end = seq_pos + 1
-                    while group_end < sample_token_types.shape[0] and sample_token_types[group_end] == modality_type:
-                        group_end += 1
-
-                    group_length = group_end - seq_pos
-                    if modality_type == MM_TOKEN_TYPE_TEXT:
-                        text_position_ids = torch.arange(group_length, device=device, dtype=torch.long) + current_pos
-                        zero_axis = torch.zeros_like(text_position_ids)
-                        llm_pos_ids_list.append(torch.stack((text_position_ids, zero_axis, zero_axis), dim=0))
-                        current_pos += group_length
-                    else:
-                        grid_hw = sample_grids[image_idx].div(pixel_shuffle_scale, rounding_mode="floor")
-                        token_offset = int(sample_offsets[image_idx].item())
-                        token_length = int(sample_lengths[image_idx].item())
-                        llm_pos_ids_list.append(
-                            self.get_vision_position_ids(current_pos, grid_hw, token_offset, token_length)
-                        )
-                        current_pos += 1
-                        image_idx += 1
-
-                    seq_pos = group_end
-
-                llm_positions = torch.cat(llm_pos_ids_list, dim=1)
-                if sample_attention_mask is not None:
-                    position_ids[batch_idx, sample_attention_mask] = llm_positions.transpose(0, 1)
+                group_length = group_end - seq_pos
+                if modality_type == MM_TOKEN_TYPE_TEXT:
+                    llm_pos_ids_list.append(
+                        torch.arange(group_length, device=device, dtype=torch.long).view(1, -1).expand(3, -1)
+                        + current_pos
+                    )
+                    current_pos += group_length
                 else:
-                    position_ids[batch_idx] = llm_positions.transpose(0, 1)
-                rope_deltas[batch_idx, 0] = llm_positions.max() + 1 - sample_token_types.shape[0]
+                    grid_hw = sample_grids[image_idx].div(pixel_shuffle_scale, rounding_mode="floor")
+                    token_offset = int(sample_offsets[image_idx].item())
+                    token_length = int(sample_lengths[image_idx].item())
+                    llm_pos_ids_list.append(
+                        self.get_vision_position_ids(current_pos, grid_hw, token_offset, token_length)
+                    )
+                    current_pos += 1
+                    image_idx += 1
 
-            return position_ids, rope_deltas
+                seq_pos = group_end
 
-        if position_ids is None:
-            if attention_mask is not None:
-                rope_position = attention_mask.cumsum(dim=-1) - 1
-                rope_position = rope_position.masked_fill(attention_mask == 0, 0)
-                rope_position = rope_position[:, -seq_len:]
-            else:
-                rope_position = (
-                    torch.arange(seq_len, device=device, dtype=torch.long).view(1, -1).expand(batch_size, -1)
-                )
-            pos_3d = rope_position.unsqueeze(-1).expand(-1, -1, 3)
-            rope_deltas = torch.zeros((batch_size, 1), device=device, dtype=torch.long)
-            return pos_3d, rope_deltas
+            llm_positions = torch.cat(llm_pos_ids_list, dim=1)
+            position_ids[:, batch_idx, sample_attention_mask] = llm_positions
+            rope_deltas[batch_idx, 0] = llm_positions.max() + 1 - sample_token_types.shape[0]
 
-        position_ids = position_ids.to(device=device)
-        if position_ids.ndim == 2:
-            position_ids = position_ids.unsqueeze(-1).expand(-1, -1, 3)
-
-        if position_ids.shape[1] != seq_len:
-            start_positions = position_ids[:, :1, 0]
-            position_ids = torch.arange(seq_len, device=position_ids.device).view(1, -1) + start_positions
-            position_ids = position_ids.unsqueeze(-1).expand(-1, -1, 3)
-
-        m_per_batch = position_ids.amax(dim=(1, 2))
-        if attention_mask is not None:
-            seq_lens = attention_mask.eq(1).sum(dim=-1).to(dtype=m_per_batch.dtype, device=device)
-        else:
-            seq_lens = torch.full((batch_size,), seq_len, device=device, dtype=m_per_batch.dtype)
-        rope_deltas = (m_per_batch + 1 - seq_lens).to(dtype=position_ids.dtype).unsqueeze(1)
         return position_ids, rope_deltas
 
     def compute_3d_position_ids(
@@ -1465,18 +1414,34 @@ class IsaacModel(PreTrainedModel):
         past_key_values: torch.Tensor | None = None,
     ) -> torch.Tensor:
         past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
-        if past_seen_tokens == 0:
+        can_compute_mrope = (
+            mm_token_type_ids is not None
+            and mm_token_type_ids.eq(MM_TOKEN_TYPE_IMAGE).any()
+            and image_token_grids is not None
+            and image_token_offsets is not None
+            and image_token_lengths is not None
+            and image_attention_mask is not None
+        )
+
+        if can_compute_mrope and past_seen_tokens == 0:
             position_ids, rope_deltas = self.get_rope_index(
                 mm_token_type_ids=mm_token_type_ids,
                 image_token_grids=image_token_grids,
                 image_token_offsets=image_token_offsets,
                 image_token_lengths=image_token_lengths,
                 image_attention_mask=image_attention_mask,
-                position_ids=position_ids,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
             )
             self.rope_deltas = rope_deltas
+            return position_ids
+
+        if position_ids is not None and past_seen_tokens == 0:
+            position_ids = position_ids.to(device=inputs_embeds.device)
+            if position_ids.ndim == 2:
+                return position_ids.view(1, position_ids.shape[0], -1).expand(3, -1, -1)
+            if position_ids.ndim == 3 and position_ids.shape[-1] == 3:
+                return position_ids.permute(2, 0, 1).contiguous()
             return position_ids
 
         if self.rope_deltas is None:
@@ -1502,7 +1467,8 @@ class IsaacModel(PreTrainedModel):
             ).view(1, -1)
             rope_position = rope_position.expand(inputs_embeds.shape[0], -1)
 
-        return rope_position.unsqueeze(-1).expand(-1, -1, 3) + rope_deltas.unsqueeze(-1)
+        position_ids = rope_position.view(1, inputs_embeds.shape[0], -1).expand(3, -1, -1)
+        return position_ids + rope_deltas.to(device=inputs_embeds.device).unsqueeze(0)
 
     @auto_docstring
     @can_return_tuple
@@ -1557,43 +1523,39 @@ class IsaacModel(PreTrainedModel):
             image_attention_mask (`torch.LongTensor`, *optional*):
                 Alias for `vision_image_attention_mask`.
         """
-        has_vision_inputs = vision_patches is not None
-        if inputs_embeds is None:
-            if mm_token_type_ids is not None or has_vision_inputs:
-                if mm_token_type_ids is None:
-                    mm_token_type_ids = torch.full_like(input_ids, MM_TOKEN_TYPE_TEXT)
-                mm_token_type_ids = mm_token_type_ids.to(device=input_ids.device, dtype=torch.long)
-                inputs_embeds = self.text_model.embed_tokens(input_ids)
-                image_token_mask = mm_token_type_ids == MM_TOKEN_TYPE_IMAGE
-                if torch.any(image_token_mask) and (vision_patches is None or vision_token_grids is None):
-                    raise ValueError("Image placeholders require `vision_patches` and `vision_token_grids`.")
-                if torch.any(image_token_mask):
-                    image_outputs = self.get_image_features(
-                        pixel_values=vision_patches,
-                        image_token_grids=vision_token_grids,
-                        image_patch_attention_mask=vision_patch_attention_mask,
-                        image_token_offsets=vision_token_offsets,
-                        image_token_lengths=vision_token_lengths,
-                        image_attention_mask=vision_image_attention_mask,
-                        return_dict=True,
-                    )
-                    image_features = image_outputs.pooler_output.to(
-                        device=inputs_embeds.device, dtype=inputs_embeds.dtype
-                    )
-                    scatter_mask = self.get_placeholder_mask(
-                        mm_token_type_ids=mm_token_type_ids,
-                        inputs_embeds=inputs_embeds,
-                        image_features=image_features,
-                    )
-                    inputs_embeds = inputs_embeds.masked_scatter(scatter_mask, image_features)
-            else:
-                inputs_embeds = self.text_model.embed_tokens(input_ids)
+        created_inputs_embeds = inputs_embeds is None
+        if created_inputs_embeds:
+            inputs_embeds = self.text_model.embed_tokens(input_ids)
 
         if mm_token_type_ids is None:
             batch_size, seq_len = inputs_embeds.shape[:2]
             mm_token_type_ids = torch.full(
                 (batch_size, seq_len), MM_TOKEN_TYPE_TEXT, device=inputs_embeds.device, dtype=torch.long
             )
+        else:
+            mm_token_type_ids = mm_token_type_ids.to(device=inputs_embeds.device, dtype=torch.long)
+
+        image_token_mask = mm_token_type_ids == MM_TOKEN_TYPE_IMAGE
+        if created_inputs_embeds and torch.any(image_token_mask):
+            image_outputs = self.get_image_features(
+                pixel_values=vision_patches,
+                image_token_grids=vision_token_grids,
+                image_patch_attention_mask=vision_patch_attention_mask,
+                image_token_offsets=vision_token_offsets,
+                image_token_lengths=vision_token_lengths,
+                image_attention_mask=vision_image_attention_mask,
+                return_dict=True,
+            )
+            image_features = image_outputs.pooler_output.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+            scatter_mask = self.get_placeholder_mask(
+                mm_token_type_ids=mm_token_type_ids,
+                inputs_embeds=inputs_embeds,
+                image_features=image_features,
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(scatter_mask, image_features)
+
+        if isinstance(attention_mask, dict):
+            attention_mask = attention_mask.get("full_attention", next(iter(attention_mask.values())))
 
         position_ids = self.compute_3d_position_ids(
             input_ids=input_ids,
@@ -1608,22 +1570,9 @@ class IsaacModel(PreTrainedModel):
             past_key_values=past_key_values,
         )
 
-        if position_ids is None:
-            text_position_ids = None
-        else:
-            rope_position_ids = position_ids.clone()
-            text_mask = mm_token_type_ids == MM_TOKEN_TYPE_TEXT
-            text_positions = rope_position_ids[text_mask][..., :1]
-            rope_position_ids[text_mask] = text_positions.expand(-1, rope_position_ids.shape[-1])
-            rope_position_ids = rope_position_ids.permute(2, 0, 1).contiguous()
-            text_position_ids = torch.cat((position_ids[..., 0].unsqueeze(0), rope_position_ids), dim=0)
-
-        if isinstance(attention_mask, dict):
-            attention_mask = attention_mask.get("full_attention", next(iter(attention_mask.values())))
-
         text_model_outputs = self.text_model(
             attention_mask=attention_mask,
-            position_ids=text_position_ids,
+            position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
