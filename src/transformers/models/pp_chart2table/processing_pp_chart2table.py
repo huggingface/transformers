@@ -30,6 +30,7 @@ from ...utils import auto_docstring
 class PPChart2TableProcessor(ProcessorMixin):
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
+    model_input_names = ["input_ids", "pixel_values"]
 
     def __call__(
         self,
@@ -37,13 +38,14 @@ class PPChart2TableProcessor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
-        if images is not None:
-            image_inputs = self.image_processor(images=images, return_tensors="pt")
-        else:
-            image_inputs = {}
+        output_kwargs = self._merge_kwargs(
+            ProcessingKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
 
-        batch_size, _, height, _ = image_inputs["pixel_values"].shape
-        num_patches = height // self.image_processor.patch_size // self.image_processor.merge_size
+        image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
+        batch_size = image_inputs["pixel_values"].shape[0]
 
         messages = [
             {
@@ -51,7 +53,7 @@ class PPChart2TableProcessor(ProcessorMixin):
             },
             {
                 "role": "user",
-                "image": {"num_patches": num_patches},
+                "image": {"num_patches": self.image_processor.num_patches},
             },
         ]
 
@@ -60,7 +62,8 @@ class PPChart2TableProcessor(ProcessorMixin):
             messages,
             tokenize=True,
             add_generation_prompt=True,
-            return_tensors="pt",
+            truncation=True,
+            **output_kwargs["text_kwargs"],
         )
 
         # Prepare input ids for batch

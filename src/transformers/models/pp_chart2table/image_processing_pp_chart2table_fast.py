@@ -29,7 +29,7 @@ class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
     image_std = [0.26862954, 0.26130258, 0.27577711]
     size = {"height": 1024, "width": 1024}
     patch_size = 16
-    merge_size = 4
+    num_patches = 16
     do_resize = True
     do_rescale = True
     do_normalize = True

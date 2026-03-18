@@ -83,7 +83,7 @@ class PPChart2TableConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "p_p_chart2_table"
+    model_type = "pp_chart2table"
     attribute_map = {
         "image_token_id": "image_token_index",
     }
