@@ -28,6 +28,19 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="swiss-ai/Apertus-8B-Instruct-2509")
 @strict(accept_kwargs=True)
 class ApertusConfig(PreTrainedConfig):
+    r"""
+    ```python
+    >>> from transformers import ApertusModel, ApertusConfig
+
+    >>> # Initializing a Apertus-8B style configuration
+    >>> configuration = ApertusConfig()
+
+    >>> # Initializing a model from the Apertus-8B style configuration
+    >>> model = ApertusModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "apertus"
     keys_to_ignore_at_inference = ["past_key_values"]

@@ -32,8 +32,6 @@ class VaultGemmaConfig(Gemma2Config):
         scaling factor when applying tanh softcapping on the logits.
     attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
         scaling factor when applying tanh softcapping on the attention scores.
-    use_bidirectional_attention (`bool`, *optional*):
-        If True, the model will attend to all text tokens instead of using a causal mask.
 
     ```python
     >>> from transformers import VaultGemmaModel, VaultGemmaConfig

@@ -139,7 +139,6 @@ class Glm4vConfig(PreTrainedConfig):
     video_end_token_id (`int`, *optional*, defaults to 151342):
         The video end token index to encode the end of video.
 
-
     ```python
     >>> from transformers import Glm4vForConditionalGeneration, Glm4vConfig
 
@@ -151,7 +150,7 @@ class Glm4vConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    """
+    ```"""
 
     model_type = "glm4v"
     sub_configs = {"vision_config": Glm4vVisionConfig, "text_config": Glm4vTextConfig}

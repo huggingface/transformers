@@ -46,6 +46,7 @@ class Qwen2MoeConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
+    ```
     """
 
     model_type = "qwen2_moe"

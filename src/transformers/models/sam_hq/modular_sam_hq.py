@@ -57,8 +57,6 @@ class SamHQVisionConfig(SamVisionConfig):
 @strict(accept_kwargs=True)
 class SamHQMaskDecoderConfig(SamMaskDecoderConfig):
     r"""
-    vit_dim (`int`, *optional*, defaults to 768):
-        Dimensionality of the Vision Transformer (ViT) used in the `SamHQMaskDecoder` module.
     mlp_dim (`int`, *optional*, defaults to 2048):
         Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
     attention_downsample_rate (`int`, *optional*, defaults to 2):
@@ -69,6 +67,8 @@ class SamHQMaskDecoderConfig(SamMaskDecoderConfig):
         The number of layers in the IoU head module.
     iou_head_hidden_dim (`int`, *optional*, defaults to 256):
         The dimensionality of the hidden states in the IoU head module.
+    vit_dim (`int`, *optional*, defaults to 768):
+        Dimensionality of the Vision Transformer (ViT) used in the `SamHQMaskDecoder` module.
     """
 
     vit_dim: int = 768

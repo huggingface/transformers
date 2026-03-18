@@ -125,6 +125,13 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
 @strict(accept_kwargs=True)
 class Qwen3_5VisionConfig(Qwen3VLVisionConfig):
+    r"""
+    out_hidden_size (`int`, *optional*, defaults to 3584):
+        The output hidden size of the vision model.
+    num_position_embeddings (`int`, *optional*, defaults to 2304):
+        The maximum sequence length that this model might ever be used with
+    """
+
     deepstack_visual_indexes = AttributeError()
 
 

@@ -77,6 +77,7 @@ class NemotronHConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
+    ```
     """
 
     model_type = "nemotron_h"

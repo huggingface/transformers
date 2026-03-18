@@ -115,6 +115,7 @@ class CsmConfig(PreTrainedConfig):
 
      >>> # Accessing the model configuration
      >>> configuration = model.config
+    ```
     """
 
     model_type = "csm"

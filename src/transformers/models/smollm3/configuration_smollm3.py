@@ -37,7 +37,6 @@ class SmolLM3Config(PreTrainedConfig):
         If `no_rope_layers` is `None`, it will be created using a NoPE layer every
         `no_rope_layer_interval` layers.
 
-
     ```python
     >>> from transformers import SmolLM3Model, SmolLM3Config
 
@@ -49,7 +48,7 @@ class SmolLM3Config(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    """
+    ```"""
 
     model_type = "smollm3"
     keys_to_ignore_at_inference = ["past_key_values"]

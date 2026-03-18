@@ -37,6 +37,8 @@ class YoutuConfig(PreTrainedConfig):
     r"""
     rope_interleave (`bool`, *optional*, defaults to `True`):
         Whether to interleave the rotary position embeddings.
+    embedding_initializer_range (`float`, *optional*):
+        The standard deviation of the truncated_normal_initializer for initializing all embedding matrices.
 
     ```python
     >>> from transformers import YoutuModel, YoutuConfig
@@ -44,9 +46,7 @@ class YoutuConfig(PreTrainedConfig):
     >>> configuration = YoutuConfig()
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    embedding_initializer_range (`float`, *optional*):
-        The standard deviation of the truncated_normal_initializer for initializing all embedding matrices.
-    """
+    ```"""
 
     model_type = "youtu"
     keys_to_ignore_at_inference = ["past_key_values"]

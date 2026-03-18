@@ -53,10 +53,10 @@ logger = logging.get_logger(__name__)
 @strict(accept_kwargs=True)
 class EomtConfig(ViTConfig):
     r"""
-    num_upscale_blocks (`int`, *optional*, defaults to 2):
-        Number of upsampling blocks used in the decoder or segmentation head.
     layerscale_value (`float`, *optional*, defaults to 1.0):
         Initial value for the LayerScale parameter.
+    num_upscale_blocks (`int`, *optional*, defaults to 2):
+        Number of upsampling blocks used in the decoder or segmentation head.
     use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
         Whether to use the SwiGLU feedforward neural network.
     num_blocks (`int`, *optional*, defaults to 4):

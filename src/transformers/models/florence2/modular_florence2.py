@@ -53,8 +53,6 @@ logger = logging.get_logger(__name__)
 @strict(accept_kwargs=True)
 class Florence2VisionConfig(PreTrainedConfig):
     r"""
-    window_size (`int`, *optional*, defaults to 12):
-        The window size of the model.
     depths (`Tuple[int]`, *optional*, defaults to `(1, 1, 9, 1)`):
         The depth of the model.
     patch_stride (`Tuple[int]`, *optional*, defaults to `(4, 2, 2, 2)`):
@@ -65,6 +63,8 @@ class Florence2VisionConfig(PreTrainedConfig):
         Whether to apply layer normalization before the patch embedding layer.
     num_groups (`Tuple[int]`, *optional*, defaults to `(4, 8, 16, 32)`):
         The number of groups.
+    window_size (`int`, *optional*, defaults to 12):
+        The window size of the model.
     max_temporal_embeddings (`int`, *optional*, defaults to 100):
         The configuration of the visual temporal embedding.
 

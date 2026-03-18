@@ -51,6 +51,7 @@ class Emu3VQVAEConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
+    ```
     """
 
     model_type = "emu3_vqgan"

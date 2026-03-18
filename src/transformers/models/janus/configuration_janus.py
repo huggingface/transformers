@@ -75,6 +75,8 @@ class JanusVQVAEConfig(PreTrainedConfig):
         Num of patches the input images can be divided into.
     out_channels (`int`, *optional*, defaults to 3):
         Number of out channels.
+    image_token_embed_dim (`int`, *optional*, defaults to 2048):
+        Dimension of image embeddings. It should be same as the dimensionality of text embeddings.
     """
 
     model_type = "janus_vqgan"
@@ -95,7 +97,7 @@ class JanusVQVAEConfig(PreTrainedConfig):
     projection_dim: int = 2048
     num_hidden_layers: int = 2
     hidden_act: str = "gelu"
-    image_token_embed_dim = 2048
+    image_token_embed_dim: int = 2048
 
 
 @auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")

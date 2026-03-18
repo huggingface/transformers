@@ -42,7 +42,7 @@ logger = logging.get_logger(__name__)
 class Dinov2WithRegistersConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     layerscale_value (`float`, *optional*, defaults to 1.0):
-       Initial value to use for layer scale.
+        Initial value to use for layer scale.
     use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
         Whether to use the SwiGLU feedforward neural network.
     num_register_tokens (`int`, *optional*, defaults to 4):

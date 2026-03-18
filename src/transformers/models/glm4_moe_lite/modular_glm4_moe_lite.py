@@ -38,12 +38,12 @@ from ..glm4_moe.modeling_glm4_moe import (
 @strict(accept_kwargs=True)
 class Glm4MoeLiteConfig(PreTrainedConfig):
     r"""
+    n_group (`int`, *optional*, defaults to 1):
+        Number of groups for routed experts.
     rope_interleave (`bool`, *optional*, defaults to `True`):
         Whether to interleave the rotary position embeddings.
     mlp_layer_types (`list`, *optional*):
         MLP (Moe vs Dense) pattern for each layer.
-    n_group (`int`, *optional*, defaults to 1):
-        Number of groups for routed experts.
 
     Example:
 

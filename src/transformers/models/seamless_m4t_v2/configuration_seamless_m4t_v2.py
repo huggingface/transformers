@@ -155,6 +155,7 @@ class SeamlessM4Tv2Config(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
+    ```
     """
 
     model_type = "seamless_m4t_v2"

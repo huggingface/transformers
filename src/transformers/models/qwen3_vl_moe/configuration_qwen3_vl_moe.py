@@ -46,7 +46,7 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    """
+    ```"""
 
     model_type = "qwen3_vl_moe_text"
     keys_to_ignore_at_inference = ["past_key_values"]

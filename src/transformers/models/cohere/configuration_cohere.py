@@ -43,6 +43,7 @@ class CohereConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config # doctest: +SKIP
+    ```
     """
 
     model_type = "cohere"

@@ -31,6 +31,10 @@ class LongcatFlashConfig(PreTrainedConfig):
         The total dimension of query/key heads. If not specified, set to `qk_nope_head_dim + qk_rope_head_dim`.
     moe_topk (`int`, *optional*, defaults to 12):
         Number of experts to route to for each token in the MoE layer.
+    zero_expert_num (`int`, *optional*, defaults to 256):
+        Number of zero experts (identity function) to add to the expert pool.
+    expert_ffn_hidden_size (`int`, *optional*, defaults to 2048):
+        Hidden size of individual expert FFN layers.
 
     ```python
     >>> from transformers import LongcatFlashModel, LongcatFlashConfig
@@ -43,10 +47,7 @@ class LongcatFlashConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    zero_expert_num (`int`, *optional*, defaults to 256):
-        Number of zero experts (identity function) to add to the expert pool.
-    expert_ffn_hidden_size (`int`, *optional*, defaults to 2048):
-        Hidden size of individual expert FFN layers.
+    ```
     """
 
     model_type = "longcat_flash"

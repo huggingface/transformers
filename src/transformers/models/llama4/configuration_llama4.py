@@ -222,6 +222,7 @@ class Llama4Config(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
+    ```
     """
 
     model_type = "llama4"

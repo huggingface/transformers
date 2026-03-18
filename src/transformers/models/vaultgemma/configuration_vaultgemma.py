@@ -36,7 +36,16 @@ class VaultGemmaConfig(PreTrainedConfig):
         scaling factor when applying tanh softcapping on the logits.
     attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
         scaling factor when applying tanh softcapping on the attention scores.
-    """
+
+    ```python
+    >>> from transformers import VaultGemmaModel, VaultGemmaConfig
+    >>> # Initializing a VaultGemma vaultgemma-7b style configuration
+    >>> configuration = VaultGemmaConfig()
+    >>> # Initializing a model from the vaultgemma-7b style configuration
+    >>> model = VaultGemmaModel(configuration)
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "vaultgemma"
     keys_to_ignore_at_inference = ["past_key_values"]

@@ -63,11 +63,6 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="zai-org/GLM-Image")
 @strict(accept_kwargs=True)
 class GlmImageVQVAEConfig(PreTrainedConfig):
-    r"""
-    num_embeddings (`int`, *optional*, defaults to 16384):
-        Number of codebook embeddings.
-    """
-
     model_type = "glm_image_vqmodel"
     base_config_key = "vq_config"
 
@@ -81,6 +76,22 @@ class GlmImageVQVAEConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="zai-org/GLM-Image")
 @strict(accept_kwargs=True)
 class GlmImageVisionConfig(Glm4vVisionConfig):
+    r"""
+    Example:
+
+    ```python
+    >>> from transformers import GlmImageVisionConfig, GlmImageVisionModel
+
+    >>> # Initializing a GlmImageVisionConfig GLM-4.1V-9B style configuration
+    >>> configuration = GlmImageVisionConfig()
+
+    >>> # Initializing a model (with random weights) from the GLM-4.1V-9B configuration
+    >>> model = GlmImageVisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "glm_image_vision"
     base_config_key = "vision_config"
 
@@ -297,8 +308,6 @@ class GlmImageVisionBlock(Glm4vVisionBlock):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         r"""
-        position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
-            The cosine and sine position embeddings for vision attention.
         cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
             The cumulative sequence lengths of each image or video feature.
         """

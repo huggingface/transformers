@@ -39,7 +39,7 @@ from ..rt_detr.modeling_rt_detr_resnet import RTDetrResNetConvLayer
 @auto_docstring(checkpoint="ustc-community/dfine_x_coco")
 @strict(accept_kwargs=True)
 class HGNetV2Config(BackboneConfigMixin, PreTrainedConfig):
-    """
+    r"""
     stem_channels (`list[int]`, *optional*, defaults to `[3, 32, 48]`):
         Channel dimensions for the stem layers:
         - First number (3) is input image channels

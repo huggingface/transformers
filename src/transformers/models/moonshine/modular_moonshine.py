@@ -51,10 +51,6 @@ logger = logging.get_logger(__name__)
 @strict(accept_kwargs=True)
 class MoonshineConfig(PreTrainedConfig):
     r"""
-    encoder_hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-        The non-linear activation function (function or string) in the encoder.
-    decoder_hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-        The non-linear activation function (function or string) in the decoder.
     encoder_num_key_value_heads (`int`, *optional*):
         This is the number of key_value heads that should be used to implement Grouped Query Attention. If
         `encoder_num_key_value_heads=encoder_num_attention_heads`, the model will use Multi Head Attention (MHA), if
@@ -74,6 +70,10 @@ class MoonshineConfig(PreTrainedConfig):
     pad_head_dim_to_multiple_of (`int`, *optional*):
         Pad head dimension in encoder and decoder to the next multiple of this value. Necessary for using certain
         optimized attention implementations.
+    encoder_hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function (function or string) in the encoder.
+    decoder_hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+        The non-linear activation function (function or string) in the decoder.
 
     Example:
 

@@ -45,10 +45,10 @@ logger = logging.get_logger(__name__)
 @strict(accept_kwargs=True)
 class YoutuConfig(DeepseekV3Config):
     r"""
-    embedding_initializer_range (`float`, *optional*):
-        The standard deviation of the truncated_normal_initializer for initializing all embedding matrices.
     rope_interleave (`bool`, *optional*, defaults to `True`):
         Whether to interleave the rotary position embeddings.
+    embedding_initializer_range (`float`, *optional*):
+        The standard deviation of the truncated_normal_initializer for initializing all embedding matrices.
 
     ```python
     >>> from transformers import YoutuModel, YoutuConfig

@@ -172,7 +172,7 @@ class Glm4vMoeConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    """
+    ```"""
 
     model_type = "glm4v_moe"
     sub_configs = {"vision_config": Glm4vMoeVisionConfig, "text_config": Glm4vMoeTextConfig}
