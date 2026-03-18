@@ -621,6 +621,24 @@ is_fast_path_available = all(
 )
 
 
+def _cu_seqlens_from_packed_mask(attention_mask: torch.Tensor) -> torch.Tensor:
+    """Derive ``cu_seqlens`` from a packed attention mask with unique sequence IDs.
+
+    For a mask like ``[1, 1, 1, 2, 2, 0, 0]``, returns ``cu_seqlens = [0, 3, 5]``
+    (ignoring padding).  For a standard ``0/1`` mask, returns ``[0, num_ones]``.
+    """
+    flat = attention_mask.flatten()
+    non_pad = flat > 0
+    non_pad_ids = flat[non_pad]
+    if len(non_pad_ids) == 0:
+        return torch.tensor([0], dtype=torch.int32, device=attention_mask.device)
+    boundaries = torch.where(non_pad_ids[1:] != non_pad_ids[:-1])[0] + 1
+    cu_seqlens = torch.zeros(len(boundaries) + 2, dtype=torch.int32, device=attention_mask.device)
+    cu_seqlens[1:-1] = boundaries
+    cu_seqlens[-1] = len(non_pad_ids)
+    return cu_seqlens
+
+
 class OlmoHybridGatedDeltaNet(nn.Module):
     """
     GatedDeltaNet linear attention for OLMo Hybrid.
@@ -719,13 +737,26 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        # Requires LEFT padding to work correctly
-        hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
-
         batch_size, seq_len, _ = hidden_states.shape
 
         use_cache = cache_params is not None
         use_precomputed = use_cache and getattr(cache_params, "has_previous_state", False) and seq_len == 1
+
+        # For packed sequences (attention_mask with unique sequence IDs > 1), derive
+        # cu_seqlens and unpad so recurrent state doesn't leak across sequence boundaries.
+        # Requires the FLA fast path; torch fallbacks don't support cu_seqlens.
+        cu_seqlens = None
+        unpad_indices = None
+        if attention_mask is not None and not use_precomputed and is_fast_path_available and attention_mask.max() > 1:
+            cu_seqlens = _cu_seqlens_from_packed_mask(attention_mask)
+            flat_mask = attention_mask.flatten()
+            unpad_indices = torch.nonzero(flat_mask > 0, as_tuple=False).flatten()
+            hidden_states = hidden_states.reshape(batch_size * seq_len, -1)[unpad_indices].unsqueeze(0)
+        else:
+            # Requires LEFT padding to work correctly
+            hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+
+        effective_batch, effective_len, _ = hidden_states.shape
 
         conv_state_q = cache_params.conv_states_q[self.layer_idx] if cache_params else None
         conv_state_k = cache_params.conv_states_k[self.layer_idx] if cache_params else None
@@ -736,24 +767,35 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         k = self.k_proj(hidden_states)
         v = self.v_proj(hidden_states)
 
-        q, new_conv_state_q = self.q_conv1d(
-            q, cache=conv_state_q, use_precomputed=use_precomputed, output_final_state=use_cache
-        )
-        k, new_conv_state_k = self.k_conv1d(
-            k, cache=conv_state_k, use_precomputed=use_precomputed, output_final_state=use_cache
-        )
-        v, new_conv_state_v = self.v_conv1d(
-            v, cache=conv_state_v, use_precomputed=use_precomputed, output_final_state=use_cache
-        )
+        if cu_seqlens is not None:
+            q, new_conv_state_q = self.q_conv1d(
+                q, cache=conv_state_q, output_final_state=use_cache, cu_seqlens=cu_seqlens
+            )
+            k, new_conv_state_k = self.k_conv1d(
+                k, cache=conv_state_k, output_final_state=use_cache, cu_seqlens=cu_seqlens
+            )
+            v, new_conv_state_v = self.v_conv1d(
+                v, cache=conv_state_v, output_final_state=use_cache, cu_seqlens=cu_seqlens
+            )
+        else:
+            q, new_conv_state_q = self.q_conv1d(
+                q, cache=conv_state_q, use_precomputed=use_precomputed, output_final_state=use_cache
+            )
+            k, new_conv_state_k = self.k_conv1d(
+                k, cache=conv_state_k, use_precomputed=use_precomputed, output_final_state=use_cache
+            )
+            v, new_conv_state_v = self.v_conv1d(
+                v, cache=conv_state_v, use_precomputed=use_precomputed, output_final_state=use_cache
+            )
 
         if cache_params is not None:
             cache_params.conv_states_q[self.layer_idx] = new_conv_state_q
             cache_params.conv_states_k[self.layer_idx] = new_conv_state_k
             cache_params.conv_states_v[self.layer_idx] = new_conv_state_v
 
-        q = q.view(batch_size, seq_len, -1, self.head_k_dim)
-        k = k.view(batch_size, seq_len, -1, self.head_k_dim)
-        v = v.view(batch_size, seq_len, -1, self.head_v_dim)
+        q = q.view(effective_batch, effective_len, -1, self.head_k_dim)
+        k = k.view(effective_batch, effective_len, -1, self.head_k_dim)
+        v = v.view(effective_batch, effective_len, -1, self.head_v_dim)
 
         if self.num_v_heads > self.num_k_heads:
             expand_ratio = self.num_v_heads // self.num_k_heads
@@ -778,6 +820,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
                 use_qk_l2norm_in_kernel=True,
             )
         else:
+            chunk_extra_kwargs = {"cu_seqlens": cu_seqlens} if cu_seqlens is not None else {}
             output, new_recurrent_state = self.chunk_gated_delta_rule(
                 q,
                 k,
@@ -787,6 +830,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
                 initial_state=recurrent_state,
                 output_final_state=use_cache,
                 use_qk_l2norm_in_kernel=True,
+                **chunk_extra_kwargs,
             )
 
         if cache_params is not None:
@@ -796,9 +840,15 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         output = output.reshape(-1, self.head_v_dim)
         gate = gate.reshape(-1, self.head_v_dim)
         output = self.o_norm(output, gate)
-        output = output.reshape(batch_size, seq_len, -1)
+        output = output.reshape(effective_batch, effective_len, -1)
 
         output = self.o_proj(output)
+
+        # Re-pad output to original shape for packed sequences
+        if unpad_indices is not None:
+            output_padded = output.new_zeros(batch_size * seq_len, output.shape[-1])
+            output_padded[unpad_indices] = output.squeeze(0)
+            output = output_padded.reshape(batch_size, seq_len, -1)
 
         return output
 
