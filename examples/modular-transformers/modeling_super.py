@@ -359,7 +359,6 @@ class SuperModel(SuperPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
     ) -> tuple | CausalLMOutputWithPast:
         out = super().forward(
             input_ids,
@@ -371,7 +370,6 @@ class SuperModel(SuperPreTrainedModel):
             output_attentions,
             output_hidden_states,
             return_dict,
-            cache_position,
         )
         out.logits *= 2**4
         return out
