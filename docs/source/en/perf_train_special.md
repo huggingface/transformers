@@ -20,7 +20,7 @@ Apple Silicon (M-series) chips have a unified memory architecture where the CPU 
 This requires macOS 12.3 or later and PyTorch built with MPS support.
 
 > [!WARNING]
-> MPS doesn't support all PyTorch operations yet. Set `PYTORCH_ENABLE_MPS_FALLBACK=1` to fall back to CPU kernels for unsupported operations. Open an issue in the [PyTorch](https://github.com/pytorch/pytorch/issues) repository for any other unexpected behavior.
+> MPS doesn't support all PyTorch operations yet (see this [GitHub issue](https://github.com/pytorch/pytorch/issues/77764) for more details about missing ops). Set `PYTORCH_ENABLE_MPS_FALLBACK=1` to fall back to CPU kernels for unsupported operations. Open an issue in the [PyTorch](https://github.com/pytorch/pytorch/issues) repository for any other unexpected behavior.
 
 ## Model loading and device selection
 
