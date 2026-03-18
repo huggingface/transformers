@@ -57,5 +57,8 @@ class SarvamMLAConfig(DeepseekV3Config):
     first_k_dense_replace: int | None = 1
     initializer_range: float = 0.006
 
+    def convert_rope_params_to_dict(self, **kwargs):
+        raise AttributeError("No BC behavior needed!")
+
 
 __all__ = ["SarvamMLAConfig"]
