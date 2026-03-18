@@ -1274,10 +1274,10 @@
         title: PP-DocLayoutV3
       - local: model_doc/pp_ocrv5_mobile_det
         title: PP-OCRv5_mobile_det
-      - local: model_doc/pp_ocrv5_server_det
-        title: PP-OCRv5_server_det
       - local: model_doc/pp_ocrv5_mobile_rec
         title: PP-OCRv5_mobile_rec
+      - local: model_doc/pp_ocrv5_server_det
+        title: PP-OCRv5_server_det
       - local: model_doc/pp_ocrv5_server_rec
         title: PP-OCRv5_server_rec
       - local: model_doc/pp_lcnet
