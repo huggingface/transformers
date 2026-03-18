@@ -13,9 +13,10 @@
 # limitations under the License.
 import unittest
 
-from transformers import AutoTokenizer, is_torch_available
+from transformers import AutoModel, AutoTokenizer, is_torch_available
 from transformers.models.jina_embeddings_v3 import JinaEmbeddingsV3Config
 from transformers.testing_utils import (
+    cleanup,
     require_torch,
     slow,
     torch_device,
@@ -266,6 +267,12 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
     revision = "refs/pr/137"
     prompt = "Jina Embeddings V3 is great for semantic search."
 
+    def setup(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     def _prepare_inputs(self):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
         inputs = tokenizer(self.prompt, return_tensors="pt", padding=True)
@@ -273,7 +280,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = JinaEmbeddingsV3Model.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
+        model = AutoModel.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
         model.eval()
         inputs = self._prepare_inputs()
 
@@ -298,7 +305,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_retrieval_query_adapter(self):
         task = "retrieval_query"
-        model = JinaEmbeddingsV3Model.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
+        model = AutoModel.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
         model.load_adapter(
             self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": self.revision}
         )
@@ -325,7 +332,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_retrieval_passage_adapter(self):
         task = "retrieval_passage"
-        model = JinaEmbeddingsV3Model.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
+        model = AutoModel.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
         model.load_adapter(
             self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": self.revision}
         )
@@ -354,7 +361,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_separation_adapter(self):
         task = "separation"
-        model = JinaEmbeddingsV3Model.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
+        model = AutoModel.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
         model.load_adapter(
             self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": self.revision}
         )
@@ -382,7 +389,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_classification_adapter(self):
         task = "classification"
-        model = JinaEmbeddingsV3Model.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
+        model = AutoModel.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
         model.load_adapter(
             self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": self.revision}
         )
@@ -410,7 +417,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_text_matching_adapter(self):
         task = "text_matching"
-        model = JinaEmbeddingsV3Model.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
+        model = AutoModel.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
         model.load_adapter(
             self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": self.revision}
         )
