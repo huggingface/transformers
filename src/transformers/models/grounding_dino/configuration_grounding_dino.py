@@ -13,6 +13,8 @@
 # limitations under the License.
 """Grounding DINO model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
@@ -23,6 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="IDEA-Research/grounding-dino-tiny")
+@strict(accept_kwargs=True)
 class GroundingDinoConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 900):
@@ -84,116 +87,68 @@ class GroundingDinoConfig(PreTrainedConfig):
         "num_attention_heads": "encoder_attention_heads",
     }
 
-    def __init__(
-        self,
-        backbone_config=None,
-        text_config=None,
-        num_queries=900,
-        encoder_layers=6,
-        encoder_ffn_dim=2048,
-        encoder_attention_heads=8,
-        decoder_layers=6,
-        decoder_ffn_dim=2048,
-        decoder_attention_heads=8,
-        is_encoder_decoder=True,
-        activation_function="relu",
-        d_model=256,
-        dropout=0.1,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        auxiliary_loss=False,
-        position_embedding_type="sine",
-        num_feature_levels=4,
-        encoder_n_points=4,
-        decoder_n_points=4,
-        two_stage=True,
-        class_cost=1.0,
-        bbox_cost=5.0,
-        giou_cost=2.0,
-        bbox_loss_coefficient=5.0,
-        giou_loss_coefficient=2.0,
-        focal_alpha=0.25,
-        disable_custom_kernels=False,
-        # other parameters
-        max_text_len=256,
-        text_enhancer_dropout=0.0,
-        fusion_droppath=0.1,
-        fusion_dropout=0.0,
-        embedding_init_target=True,
-        query_dim=4,
-        decoder_bbox_embed_share=True,
-        two_stage_bbox_embed_share=False,
-        positional_embedding_temperature=20,
-        init_std=0.02,
-        layer_norm_eps=1e-5,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+    backbone_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    num_queries: int = 900
+    encoder_layers: int = 6
+    encoder_ffn_dim: int = 2048
+    encoder_attention_heads: int = 8
+    decoder_layers: int = 6
+    decoder_ffn_dim: int = 2048
+    decoder_attention_heads: int = 8
+    is_encoder_decoder: bool = True
+    activation_function: str = "relu"
+    d_model: int = 256
+    dropout: float | int = 0.1
+    attention_dropout: float | int = 0.0
+    activation_dropout: float | int = 0.0
+    auxiliary_loss: bool = False
+    position_embedding_type: str = "sine"
+    num_feature_levels: int = 4
+    encoder_n_points: int = 4
+    decoder_n_points: int = 4
+    two_stage: int = True
+    class_cost: float = 1.0
+    bbox_cost: float = 5.0
+    giou_cost: float = 2.0
+    bbox_loss_coefficient: float = 5.0
+    giou_loss_coefficient: float = 2.0
+    focal_alpha: float = 0.25
+    disable_custom_kernels: bool = False
+    max_text_len: int = 256
+    text_enhancer_dropout: float | int = 0.0
+    fusion_droppath: float = 0.1
+    fusion_dropout: float | int = 0.0
+    embedding_init_target: bool = True
+    query_dim: int = 4
+    decoder_bbox_embed_share: bool = True
+    two_stage_bbox_embed_share: bool = False
+    positional_embedding_temperature: int = 20
+    init_std: float = 0.02
+    layer_norm_eps: float = 1e-5
+    tie_word_embeddings: bool = True
+
+    def __post_init__(self, **kwargs):
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_config_type="swin",
             default_config_kwargs={"out_indices": [2, 3, 4]},
             **kwargs,
         )
 
-        self.backbone_config = backbone_config
-        self.num_queries = num_queries
-        self.d_model = d_model
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.encoder_layers = encoder_layers
-        self.encoder_attention_heads = encoder_attention_heads
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.activation_function = activation_function
-        self.auxiliary_loss = auxiliary_loss
-        self.position_embedding_type = position_embedding_type
-        # deformable attributes
-        self.num_feature_levels = num_feature_levels
-        self.encoder_n_points = encoder_n_points
-        self.decoder_n_points = decoder_n_points
-        self.two_stage = two_stage
-        # Hungarian matcher
-        self.class_cost = class_cost
-        self.bbox_cost = bbox_cost
-        self.giou_cost = giou_cost
-        # Loss coefficients
-        self.bbox_loss_coefficient = bbox_loss_coefficient
-        self.giou_loss_coefficient = giou_loss_coefficient
-        self.focal_alpha = focal_alpha
-        self.disable_custom_kernels = disable_custom_kernels
-        # Text backbone
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "bert")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["bert"]()
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "bert")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["bert"]()
             logger.info("text_config is None. Initializing the text config with default values (`BertConfig`).")
 
-        self.text_config = text_config
-        self.max_text_len = max_text_len
+        super().__post_init__(**kwargs)
 
-        # Text Enhancer
-        self.text_enhancer_dropout = text_enhancer_dropout
-        # Fusion
-        self.fusion_droppath = fusion_droppath
-        self.fusion_dropout = fusion_dropout
-        # Others
-        self.embedding_init_target = embedding_init_target
-        self.query_dim = query_dim
-        self.decoder_bbox_embed_share = decoder_bbox_embed_share
-        self.two_stage_bbox_embed_share = two_stage_bbox_embed_share
-        if two_stage_bbox_embed_share and not decoder_bbox_embed_share:
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.two_stage_bbox_embed_share and not self.decoder_bbox_embed_share:
             raise ValueError("If two_stage_bbox_embed_share is True, decoder_bbox_embed_share must be True.")
-        self.positional_embedding_temperature = positional_embedding_temperature
-        self.init_std = init_std
-        self.layer_norm_eps = layer_norm_eps
-        self.tie_word_embeddings = tie_word_embeddings
-
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["GroundingDinoConfig"]

@@ -13,14 +13,14 @@
 # limitations under the License.
 """Bloom configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="bigscience/bloom")
+@strict(accept_kwargs=True)
 class BloomConfig(PreTrainedConfig):
     r"""
     apply_residual_connection_post_layernorm (`bool`, *optional*, defaults to `False`):
@@ -55,47 +55,28 @@ class BloomConfig(PreTrainedConfig):
         "num_attention_heads": "n_head",
     }
 
-    def __init__(
-        self,
-        vocab_size=250880,
-        hidden_size=64,
-        n_layer=2,
-        n_head=8,
-        layer_norm_epsilon=1e-5,
-        initializer_range=0.02,
-        use_cache=True,
-        bos_token_id=1,
-        eos_token_id=2,
-        pad_token_id=None,
-        apply_residual_connection_post_layernorm=False,
-        hidden_dropout=0.0,
-        attention_dropout=0.0,
-        pretraining_tp=1,  # TP rank used when training with megatron
-        slow_but_exact=False,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
+    vocab_size: int = 250880
+    hidden_size: int = 64
+    n_layer: int = 2
+    n_head: int = 8
+    layer_norm_epsilon: float = 1e-5
+    initializer_range: float = 0.02
+    use_cache: bool = True
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    pad_token_id: int | None = None
+    apply_residual_connection_post_layernorm: bool = False
+    hidden_dropout: float | int = 0.0
+    attention_dropout: float | int = 0.0
+    pretraining_tp: int = 1  # TP rank used when training with megatro
+    slow_but_exact: bool = False
+    tie_word_embeddings: bool = True
+
+    def __post_init__(self, **kwargs):
         # Backward compatibility with n_embed kwarg
         n_embed = kwargs.pop("n_embed", None)
-        self.hidden_size = hidden_size if n_embed is None else n_embed
-        self.n_layer = n_layer
-        self.n_head = n_head
-        self.layer_norm_epsilon = layer_norm_epsilon
-        self.initializer_range = initializer_range
-        self.use_cache = use_cache
-        self.pretraining_tp = pretraining_tp
-        self.apply_residual_connection_post_layernorm = apply_residual_connection_post_layernorm
-        self.hidden_dropout = hidden_dropout
-        self.attention_dropout = attention_dropout
-
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.slow_but_exact = slow_but_exact
-        self.tie_word_embeddings = tie_word_embeddings
-
-        super().__init__(**kwargs)
+        self.hidden_size = self.hidden_size if n_embed is None else n_embed
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["BloomConfig"]

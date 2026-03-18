@@ -353,7 +353,7 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def setUp(self):
         self.model_tester = Zamba2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Zamba2Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Zamba2Config, hidden_size=32)
 
     @unittest.skip("We need at leat 3 layers to test weight tying!")
     def test_num_layers_is_small(self):

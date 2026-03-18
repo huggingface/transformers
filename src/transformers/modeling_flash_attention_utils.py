@@ -74,7 +74,7 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
         "flash_attn_version": 2,
         "general_availability_check": is_flash_attn_2_available,
         "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn") is not None
-        and "flash_attn" in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"],
+        and "flash-attn" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]],
         "supported_devices": (
             (is_torch_cuda_available, "cuda"),
             (is_torch_mlu_available, "mlu"),
@@ -92,7 +92,8 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
     3: {
         "flash_attn_version": 3,
         "general_availability_check": is_flash_attn_3_available,
-        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn_3") is not None,
+        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn_interface") is not None
+        and "flash-attn-3" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn_interface"]],
         "supported_devices": ((is_torch_cuda_available, "cuda"),),
         "cuda_min_major_version": 8,  # Ampere
     },
@@ -100,7 +101,7 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
         "flash_attn_version": 4,
         "general_availability_check": is_flash_attn_4_available,
         "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn") is not None
-        and importlib.util.find_spec("flash_attn.cute") is not None,
+        and "flash-attn-4" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]],
         "supported_devices": ((is_torch_cuda_available, "cuda"),),
         "cuda_min_major_version": 9,  # Hopper
     },
@@ -170,8 +171,10 @@ def _lazy_imports(
         else:
             from .integrations.hub_kernels import load_and_register_attn_kernel
 
+            # Map standard attention names to hub kernel repos
+            kernel_repo = FLASH_ATTN_KERNEL_FALLBACK.get(implementation, implementation)
             # We want to explicitly register the name with `paged|` if found
-            kernel_implementation = f"paged|{implementation}" if is_paged else implementation
+            kernel_implementation = f"paged|{implementation}" if is_paged else kernel_repo
             kernel = load_and_register_attn_kernel(
                 kernel_implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
             )

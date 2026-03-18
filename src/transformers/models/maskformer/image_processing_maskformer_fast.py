@@ -14,7 +14,7 @@
 """Fast Image processor class for MaskFormer."""
 
 import math
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import Any, Optional, Union
 
 import torch
 import torchvision.transforms.v2.functional as tvF
@@ -53,10 +53,6 @@ from .image_processing_maskformer import (
 
 
 logger = logging.get_logger(__name__)
-
-
-if TYPE_CHECKING:
-    pass
 
 
 def convert_segmentation_map_to_binary_masks_fast(
