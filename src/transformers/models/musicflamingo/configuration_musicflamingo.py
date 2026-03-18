@@ -63,6 +63,7 @@ class MusicFlamingoConfig(PreTrainedConfig):
     audio_token_id: int = 151669
     projector_hidden_act: str = "gelu"
     projector_bias: bool = True
+
     audio_bos_token_id: int = 151670
     audio_eos_token_id: int = 151671
     head_dim: int = 256
