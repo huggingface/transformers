@@ -50,7 +50,6 @@ pip install torch
 | 텍스트 분류      | 텍스트에 알맞은 레이블 붙이기                                         | 자연어 처리(NLP) | pipeline(task="sentiment-analysis")           |
 | 텍스트 생성      | 주어진 문자열 입력과 이어지는 텍스트 생성하기                       | 자연어 처리(NLP) | pipeline(task="text-generation")              |
 | 개체명 인식      | 문자열의 각 토큰마다 알맞은 레이블 붙이기 (인물, 조직, 장소 등등)     | 자연어 처리(NLP) | pipeline(task="ner")                          |
-| 질의응답         | 주어진 문맥과 질문에 따라 올바른 대답하기                           | 자연어 처리(NLP) | pipeline(task="question-answering")           |
 | 빈칸 채우기      | 문자열의 빈칸에 알맞은 토큰 맞추기                                  | 자연어 처리(NLP) | pipeline(task="fill-mask")                    |
 | 이미지 분류      | 이미지에 알맞은 레이블 붙이기                                         | 컴퓨터 비전(CV)  | pipeline(task="image-classification")         |
 | 이미지 분할      | 이미지의 픽셀마다 레이블 붙이기(시맨틱, 파놉틱 및 인스턴스 분할 포함) | 컴퓨터 비전(CV)  | pipeline(task="image-segmentation")           |

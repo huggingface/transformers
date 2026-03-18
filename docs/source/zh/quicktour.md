@@ -44,7 +44,6 @@ pip install torch
 | 文本分类                      | 为给定的文本序列分配一个标签                    | NLP             | pipeline(task="sentiment-analysis")           |
 | 文本生成                      | 根据给定的提示生成文本                       | NLP             | pipeline(task="text-generation")              |
 | 命名实体识别                  | 为序列里的每个 token 分配一个标签（人, 组织, 地址等等） | NLP             | pipeline(task="ner")                          |
-| 问答系统                      | 通过给定的上下文和问题, 在文本中提取答案             | NLP             | pipeline(task="question-answering")           |
 | 掩盖填充                      | 预测出正确的在序列中被掩盖的token               | NLP             | pipeline(task="fill-mask")                    |
 | 图像分类                      | 为图像分配一个标签                         | Computer vision | pipeline(task="image-classification")         |
 | 图像分割                      | 为图像中每个独立的像素分配标签（支持语义、全景和实例分割）     | Computer vision | pipeline(task="image-segmentation")           |
