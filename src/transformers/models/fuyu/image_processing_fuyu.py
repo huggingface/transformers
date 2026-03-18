@@ -114,13 +114,13 @@ class FuyuBatchFeature(BatchFeature):
         def _safe_convert_tensor(elem):
             try:
                 return _convert_tensor(elem)
-            except:  # noqa E722
+            except Exception as e:
                 if key == "overflowing_values":
-                    raise ValueError("Unable to create tensor returning overflowing values of different lengths. ")
+                    raise ValueError("Unable to create tensor returning overflowing values of different lengths. ") from e
                 raise ValueError(
                     "Unable to create tensor, you should probably activate padding "
                     "with 'padding=True' to have batched tensors with the same length."
-                )
+                ) from e
 
         # Do the tensor conversion in batch
         for key, value in self.items():
