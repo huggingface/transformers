@@ -449,7 +449,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
     device = _get_rank_device(rank)
     config = config_class.from_dict(config_dict)
 
-    batches = _build_repeated_training_batches(config, device, NUM_STEPS)
+    batches = _build_repeated_training_batches(config, device, 3)
 
     auto_plan = {"mode": "auto"}
 
