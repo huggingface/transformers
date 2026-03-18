@@ -49,9 +49,10 @@ pipe = pipeline(
     device_map="auto",
 )
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", stream=True).raw)
+# text is empty - processor uses hardcoded "Chart to table" instruction internally via chat template
 result = pipe(
     images=image, 
-    text="", 
+    text="",
     do_sample=False, 
     max_new_tokens=256
 )
@@ -106,6 +107,7 @@ pipe = pipeline(
     device_map="auto",
 )
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", stream=True).raw)
+# text is empty - processor uses hardcoded "Chart to table" instruction internally via chat template
 result = pipe(
     images=[image, image],
     text="",

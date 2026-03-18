@@ -80,7 +80,7 @@ class PPChart2TableImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class PPChart2TableProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class PPChart2TableImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     test_slow_image_processor = False
     fast_image_processing_class = PPChart2TableImageProcessorFast if is_torchvision_available() else None
 

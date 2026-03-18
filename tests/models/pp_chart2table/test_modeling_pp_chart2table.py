@@ -20,7 +20,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import cleanup, require_torch, slow, torch_device, require_vision
 
 
 if is_torch_available():
@@ -34,6 +34,7 @@ if is_vision_available():
 
 
 @slow
+@require_vision
 @require_torch
 class PPChart2TableIntegrationTest(unittest.TestCase):
     def setUp(self):

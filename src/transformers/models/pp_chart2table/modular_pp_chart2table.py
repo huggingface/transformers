@@ -32,10 +32,6 @@ from ..got_ocr2.modeling_got_ocr2 import (
 )
 
 
-if is_vision_available():
-    pass
-
-
 logger = logging.get_logger(__name__)
 
 
@@ -104,45 +100,8 @@ class PPChart2TableProcessor(ProcessorMixin):
         return BatchFeature(data={"input_ids": input_ids, **image_inputs})
 
 
-class PPChart2TableVisionPreTrainedModel(GotOcr2PreTrainedModel):
-    pass
-
-
-class PPChart2TableVisionEncoder(GotOcr2VisionEncoder, PPChart2TableVisionPreTrainedModel):
-    pass
-
-
-@dataclass
-class PPChart2TableModelOutputWithPast(GotOcr2ModelOutputWithPast):
-    pass
-
-
-@auto_docstring
-class PPChart2TablePreTrainedModel(GotOcr2PreTrainedModel):
-    pass
-
-
-@auto_docstring
-class PPChart2TableModel(GotOcr2Model):
-    pass
-
-
-@auto_docstring(
-    custom_intro="""
-    PP-Chart2Table model for conditional generation (table text generation from chart images),
-    extending the core model with a language modeling (LM) head and generation utilities.
-    """
-)
-class PPChart2TableForConditionalGeneration(GotOcr2ForConditionalGeneration):
-    pass
-
-
 __all__ = [
-    "PPChart2TableForConditionalGeneration",
-    "PPChart2TableModel",
     "PPChart2TableConfig",
-    "PPChart2TableVisionPreTrainedModel",
-    "PPChart2TablePreTrainedModel",
     "PPChart2TableImageProcessorFast",
     "PPChart2TableProcessor",
 ]
