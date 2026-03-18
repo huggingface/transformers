@@ -94,9 +94,9 @@ def with_flush_memory(func):
         generation_config = kwargs.get("generation_config")
         if isinstance(cb_config, ContinuousBatchingConfig):
             flush_compile = (
-                cb_config.use_default_compile_configs or
-                cb_config.varlen_compile_config is not None or
-                cb_config.decode_compile_config is not None
+                cb_config.use_default_compile_configs
+                or cb_config.varlen_compile_config is not None
+                or cb_config.decode_compile_config is not None
             )
         elif isinstance(generation_config, GenerationConfig):
             flush_compile = generation_config.compile_config is not None
