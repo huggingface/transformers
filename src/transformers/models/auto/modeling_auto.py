@@ -679,6 +679,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("ministral", "MinistralForCausalLM"),
         ("ministral3", "Ministral3ForCausalLM"),
         ("mistral", "MistralForCausalLM"),
+        ("mistral4", "Mistral4ForCausalLM"),
         ("mixtral", "MixtralForCausalLM"),
         ("mllama", "MllamaForCausalLM"),
         ("modernbert-decoder", "ModernBertDecoderForCausalLM"),
