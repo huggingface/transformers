@@ -4762,13 +4762,11 @@ class ModelTesterMixin:
                 # reverting ops from `from_pretrained` and from `__init__`
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     # The model was instantiated from __init__ before being saved
-                    print("SAVE")
                     model.save_pretrained(tmpdirname)
                     state_dict_saved_from_init = load_file(os.path.join(tmpdirname, "model.safetensors"))
 
                     # Now reload it
                     model_reloaded = model_class.from_pretrained(tmpdirname)
-                    print("SAVE DONE")
 
                     # Make sure both loaded state_dict are identical
                     self.assertTrue(compare_state_dicts(model_reloaded.state_dict(), model.state_dict()))

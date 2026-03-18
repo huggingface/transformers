@@ -321,6 +321,24 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("out_proj", "o_proj"),
             WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
             WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
+            # `DetrForSegmentation`
+            WeightRenaming("bbox_attention.q_linear", "bbox_attention.q_proj"),
+            WeightRenaming("bbox_attention.k_linear", "bbox_attention.k_proj"),
+            # Mask head refactor
+            WeightRenaming("mask_head.lay1", "mask_head.conv1.conv"),
+            WeightRenaming("mask_head.gn1", "mask_head.conv1.norm"),
+            WeightRenaming("mask_head.lay2", "mask_head.conv2.conv"),
+            WeightRenaming("mask_head.gn2", "mask_head.conv2.norm"),
+            WeightRenaming("mask_head.adapter1", "mask_head.fpn_stages.0.fpn_adapter"),
+            WeightRenaming("mask_head.lay3", "mask_head.fpn_stages.0.refine.conv"),
+            WeightRenaming("mask_head.gn3", "mask_head.fpn_stages.0.refine.norm"),
+            WeightRenaming("mask_head.adapter2", "mask_head.fpn_stages.1.fpn_adapter"),
+            WeightRenaming("mask_head.lay4", "mask_head.fpn_stages.1.refine.conv"),
+            WeightRenaming("mask_head.gn4", "mask_head.fpn_stages.1.refine.norm"),
+            WeightRenaming("mask_head.adapter3", "mask_head.fpn_stages.2.fpn_adapter"),
+            WeightRenaming("mask_head.lay5", "mask_head.fpn_stages.2.refine.conv"),
+            WeightRenaming("mask_head.gn5", "mask_head.fpn_stages.2.refine.norm"),
+            WeightRenaming("mask_head.out_lay", "mask_head.output_conv"),
         ],
         "rt_detr": [
             WeightRenaming("out_proj", "o_proj"),
@@ -488,10 +506,6 @@ def register_checkpoint_conversion_mapping(
     _checkpoint_conversion_mapping_cache[model_type] = mapping
 
 
-# TODO: move detr to `_build_checkpoint_conversion_mapping`
-VLMS = ["detr"]
-
-
 def extract_weight_conversions_for_model(model: PreTrainedModel) -> list[WeightConverter | WeightRenaming] | None:
     model_type = getattr(model.config, "model_type", None)
     if model_type is not None:
@@ -541,15 +555,6 @@ def get_model_conversion_mapping(
     # Load models with explicit, user-provided key mapping
     if key_mapping is not None:
         weight_conversions = [WeightRenaming(source_patterns=k, target_patterns=v) for k, v in key_mapping.items()]
-    elif any(
-        allowed_name in class_name.__name__.lower()
-        for class_name in model.__class__.__mro__[:-1]
-        for allowed_name in VLMS
-    ):
-        weight_conversions = [
-            WeightRenaming(source_patterns=k, target_patterns=v)
-            for k, v in model._checkpoint_conversion_mapping.items()
-        ]
 
     # Model have several `PreTrainedModel` within with the same model type
     # For ex: XForConditionalGeneration -> XModel. We don't want to apply the same

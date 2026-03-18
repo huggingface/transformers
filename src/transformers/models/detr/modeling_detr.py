@@ -1435,26 +1435,6 @@ class DetrForObjectDetection(DetrPreTrainedModel):
     """
 )
 class DetrForSegmentation(DetrPreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        "bbox_attention.q_linear": "bbox_attention.q_proj",
-        "bbox_attention.k_linear": "bbox_attention.k_proj",
-        # Mask head refactor
-        "mask_head.lay1": "mask_head.conv1.conv",
-        "mask_head.gn1": "mask_head.conv1.norm",
-        "mask_head.lay2": "mask_head.conv2.conv",
-        "mask_head.gn2": "mask_head.conv2.norm",
-        "mask_head.adapter1": "mask_head.fpn_stages.0.fpn_adapter",
-        "mask_head.lay3": "mask_head.fpn_stages.0.refine.conv",
-        "mask_head.gn3": "mask_head.fpn_stages.0.refine.norm",
-        "mask_head.adapter2": "mask_head.fpn_stages.1.fpn_adapter",
-        "mask_head.lay4": "mask_head.fpn_stages.1.refine.conv",
-        "mask_head.gn4": "mask_head.fpn_stages.1.refine.norm",
-        "mask_head.adapter3": "mask_head.fpn_stages.2.fpn_adapter",
-        "mask_head.lay5": "mask_head.fpn_stages.2.refine.conv",
-        "mask_head.gn5": "mask_head.fpn_stages.2.refine.norm",
-        "mask_head.out_lay": "mask_head.output_conv",
-    }
-
     def __init__(self, config: DetrConfig):
         super().__init__(config)
 
