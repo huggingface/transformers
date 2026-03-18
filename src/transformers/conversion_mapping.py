@@ -84,12 +84,10 @@ _MODEL_TO_CONVERSION_PATTERN = {
 def _build_checkpoint_conversion_mapping():
     mapping = {
         "llava": [
-            WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
+            WeightRenaming(source_patterns=r"language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"vision_tower", target_patterns="model.vision_tower"),
+            WeightRenaming(source_patterns=r"multi_modal_projector", target_patterns="model.multi_modal_projector"),
             WeightRenaming(source_patterns=r"language_model.lm_head", target_patterns="lm_head"),
-        ],
-        "colpali": [
-            WeightRenaming(source_patterns=r"vlm(?!\.model)", target_patterns="vlm.model"),
-            WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
         ],
         "emu3": [
             WeightRenaming(source_patterns=r"text_model.model", target_patterns="text_model"),
@@ -105,12 +103,6 @@ def _build_checkpoint_conversion_mapping():
         "qwen2_vl": [
             WeightRenaming(
                 source_patterns=r"(?<!_)model(?!\.(language_model|visual))", target_patterns="model.language_model"
-            ),
-        ],
-        "colqwen2": [
-            WeightRenaming(
-                source_patterns=r"vlm.model(?!\.(language_model|visual))",
-                target_patterns="vlm.model.language_model",
             ),
         ],
         "gemma3n_text": [
@@ -145,7 +137,6 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="model.vlm.language_model.embed_tokens",
             ),
         ],
-        "chmv2": [WeightRenaming(r"backbone.layer.", r"backbone.model.layer.")],
         "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
         "dinov3_vit": [WeightRenaming(r"(?<!model\.)layer.", r"model.layer.")],
         "timesfm2_5": [
@@ -560,8 +551,13 @@ def get_model_conversion_mapping(
             for k, v in model._checkpoint_conversion_mapping.items()
         ]
 
+    # Model have several `PreTrainedModel` within with the same model type
+    # For ex: XForConditionalGeneration -> XModel. We don't want to apply the same
+    # conversion pattern twice because of that
+    seen_model_types = set()
     if (conversions := extract_weight_conversions_for_model(model)) is not None:
         weight_conversions.extend(conversions)
+        seen_model_types.add(model.config.model_type)
 
     # Recurse over submodules and collect all conversions
     for name, submodule in model.named_modules():
@@ -569,11 +565,13 @@ def get_model_conversion_mapping(
             submodule is not model
             and isinstance(submodule, PreTrainedModel)
             and submodule.config.__class__ != model.config.__class__
+            and submodule.config.model_type not in seen_model_types
         ):
             conversions = extract_weight_conversions_for_model(submodule)
             if conversions is not None:
                 new_conversions = add_prefix_to_conversion(conversions, prefix=name)
                 weight_conversions.extend(new_conversions)
+                seen_model_types.add(submodule.config.model_type)
 
     if add_legacy:
         weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))
