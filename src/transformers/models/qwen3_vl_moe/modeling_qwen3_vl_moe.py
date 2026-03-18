@@ -1213,8 +1213,16 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
         for batch_idx, current_input_ids in enumerate(input_ids):
             input_token_type = mm_token_type_ids[batch_idx]
             if attention_mask is not None:
-                current_input_ids = current_input_ids[attention_mask[batch_idx].bool()]
-                input_token_type = input_token_type[attention_mask[batch_idx].bool()]
+                # Handle shape mismatch between attention_mask and mm_token_type_ids
+                mask_row = attention_mask[batch_idx]
+                if mask_row.shape[0] != input_token_type.shape[0]:
+                    # Truncate tensors to the minimum length before indexing
+                    min_len = min(mask_row.shape[0], input_token_type.shape[0])
+                    mask_row = mask_row[:min_len]
+                    current_input_ids = current_input_ids[:min_len]
+                    input_token_type = input_token_type[:min_len]
+                current_input_ids = current_input_ids[mask_row.bool()]
+                input_token_type = input_token_type[mask_row.bool()]
 
             input_type_group = []
             for key, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):

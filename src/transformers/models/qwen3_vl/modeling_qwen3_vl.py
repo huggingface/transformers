@@ -1084,8 +1084,16 @@ class Qwen3VLModel(Qwen3VLPreTrainedModel):
         for batch_idx, current_input_ids in enumerate(input_ids):
             input_token_type = mm_token_type_ids[batch_idx]
             if attention_mask is not None:
-                current_input_ids = current_input_ids[attention_mask[batch_idx].bool()]
-                input_token_type = input_token_type[attention_mask[batch_idx].bool()]
+                # Handle shape mismatch between attention_mask and mm_token_type_ids
+                mask_row = attention_mask[batch_idx]
+                if mask_row.shape[0] != input_token_type.shape[0]:
+                    # Truncate tensors to the minimum length before indexing
+                    min_len = min(mask_row.shape[0], input_token_type.shape[0])
+                    mask_row = mask_row[:min_len]
+                    current_input_ids = current_input_ids[:min_len]
+                    input_token_type = input_token_type[:min_len]
+                current_input_ids = current_input_ids[mask_row.bool()]
+                input_token_type = input_token_type[mask_row.bool()]
 
             input_type_group = []
             for key, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
@@ -1235,12 +1243,13 @@ class Qwen3VLModel(Qwen3VLPreTrainedModel):
             self.rope_deltas = rope_deltas
         # Use pre-calculated rope-deltas to infer correct 3D position ids
         elif self.rope_deltas is not None:
-            batch_size, seq_length, _ = inputs_embeds.shape
             if attention_mask is not None:
+                batch_size, seq_length = attention_mask.shape
                 position_ids = attention_mask.long().cumsum(-1) - 1
                 position_ids = position_ids.masked_fill(attention_mask == 0, 0)
                 position_ids = position_ids.view(1, batch_size, -1).repeat(3, 1, 1).to(inputs_embeds.device)
             else:
+                batch_size, seq_length, _ = inputs_embeds.shape
                 position_ids = torch.arange(past_key_values_length, past_key_values_length + seq_length)
                 position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1).to(inputs_embeds.device)
             delta = self.rope_deltas.repeat_interleave(batch_size // self.rope_deltas.shape[0], dim=0)
