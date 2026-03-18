@@ -88,13 +88,11 @@ benchmark:
 	python3 benchmark/benchmark.py --config-dir benchmark/config --config-name generation --commit=diff backend.model=google/gemma-2b backend.cache_implementation=null,static backend.torch_compile=false,true --multirun
 
 codex:
-	ln -snf .ai/AGENTS.md AGENTS.md
 	mkdir -p .agents
 	rm -rf .agents/skills
 	ln -snf ../.ai/skills .agents/skills
 
 claude:
-	ln -snf .ai/AGENTS.md CLAUDE.md
 	mkdir -p .claude
 	rm -rf .claude/skills
 	ln -snf ../.ai/skills .claude/skills
