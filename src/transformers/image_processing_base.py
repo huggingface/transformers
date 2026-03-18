@@ -31,7 +31,7 @@ from .utils import (
     logging,
     safe_load_json_file,
 )
-from .utils.hub import cached_file
+from .utils.hub import cached_file, get_session
 
 
 ImageProcessorType = TypeVar("ImageProcessorType", bound="ImageProcessingMixin")
@@ -276,6 +276,22 @@ class ImageProcessingMixin(PushToHubMixin):
             resolved_image_processor_file = pretrained_model_name_or_path
             resolved_processor_file = None
             is_local = True
+        elif pretrained_model_name_or_path.startswith("http://") or pretrained_model_name_or_path.startswith("https://"):
+            # Handle URL case: download the file directly
+            if local_files_only:
+                raise OSError(
+                    f"Cannot load from URL '{pretrained_model_name_or_path}' when local_files_only=True."
+                )
+            try:
+                session = get_session()
+                response = session.get(pretrained_model_name_or_path, follow_redirects=True)
+                response.raise_for_status()
+                image_processor_dict = response.json()
+                return image_processor_dict, kwargs
+            except Exception as e:
+                raise OSError(
+                    f"Failed to download image processor config from URL '{pretrained_model_name_or_path}'."
+                ) from e
         else:
             image_processor_file = image_processor_filename
             try:

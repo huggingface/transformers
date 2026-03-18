@@ -37,6 +37,7 @@ from ...utils import (
 from ...utils.import_utils import requires
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
+    CONFIG_MAPPING,
     CONFIG_MAPPING_NAMES,
     AutoConfig,
     model_type_to_module_name,
@@ -540,16 +541,35 @@ class AutoImageProcessor:
 
         # If we don't find the image processor class in the image processor config, let's try the model config.
         if image_processor_type is None and image_processor_auto_map is None:
-            if not isinstance(config, PreTrainedConfig):
+            # Check if this is a URL to a model config file
+            is_url = pretrained_model_name_or_path.startswith("http://") or pretrained_model_name_or_path.startswith("https://")
+            if is_url:
+                # For URLs, the config_dict may contain model_type directly
+                # Use it to look up the image processor from IMAGE_PROCESSOR_MAPPING
+                model_type = config_dict.get("model_type", None)
+                if model_type is not None and model_type in CONFIG_MAPPING:
+                    config_class = CONFIG_MAPPING[model_type]
+                    if config_class in IMAGE_PROCESSOR_MAPPING:
+                        image_processor_tuple = IMAGE_PROCESSOR_MAPPING[config_class]
+                        # Select the appropriate processor based on use_fast
+                        image_processor_class_py, image_processor_class_fast = image_processor_tuple
+                        if use_fast is None:
+                            use_fast = is_torchvision_available()
+                        if use_fast and image_processor_class_fast is not None:
+                            return image_processor_class_fast.from_pretrained(pretrained_model_name_or_path, **kwargs)
+                        elif image_processor_class_py is not None:
+                            return image_processor_class_py.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            elif not isinstance(config, PreTrainedConfig):
                 config = AutoConfig.from_pretrained(
                     pretrained_model_name_or_path,
                     trust_remote_code=trust_remote_code,
                     **kwargs,
                 )
             # It could be in `config.image_processor_type``
-            image_processor_type = getattr(config, "image_processor_type", None)
-            if hasattr(config, "auto_map") and "AutoImageProcessor" in config.auto_map:
-                image_processor_auto_map = config.auto_map["AutoImageProcessor"]
+            if config is not None:
+                image_processor_type = getattr(config, "image_processor_type", None)
+                if hasattr(config, "auto_map") and "AutoImageProcessor" in config.auto_map:
+                    image_processor_auto_map = config.auto_map["AutoImageProcessor"]
 
         image_processor_class = None
         if image_processor_type is not None:
