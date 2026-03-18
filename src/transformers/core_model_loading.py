@@ -805,9 +805,32 @@ class WeightConverter(WeightTransform):
 GLOBAL_WORKERS = min(4, os.cpu_count() or 4)
 
 
+def _is_strix_halo() -> bool:
+    """Check if running on AMD Strix Halo APU which has issues with mmap.
+
+    Strix Halo uses unified memory architecture where mmap doesn't work well
+    with the current amdgpu driver, causing OOM errors even with sufficient
+    memory available. See https://github.com/huggingface/transformers/issues/44756
+    """
+    if not torch.cuda.is_available():
+        return False
+    try:
+        device_name = torch.cuda.get_device_name()
+        # Strix Halo APUs have Radeon 8060S or 8050S GPUs
+        return "Radeon 8060S" in device_name or "Radeon 8050S" in device_name
+    except Exception:
+        return False
+
+
 def _materialize_copy(tensor: torch.Tensor, device=None, dtype=None) -> torch.Tensor:
     # This slicing is what actually loads the tensor from the safetensors slice object
     tensor = tensor[...]
+
+    # Strix Halo has issues with mmap - force a copy on CPU before any device/dtype conversion
+    # to avoid OOM errors. See https://github.com/huggingface/transformers/issues/44756
+    if isinstance(tensor, torch.Tensor) and tensor.device.type == "cpu" and _is_strix_halo():
+        tensor = tensor.to(device="cpu", copy=True)
+
     if dtype is not None or device is not None:
         tensor = tensor.to(device=device, dtype=dtype)
     return tensor
