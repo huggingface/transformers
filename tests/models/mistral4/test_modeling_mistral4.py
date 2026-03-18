@@ -44,12 +44,21 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class Mistral4ModelTester(CausalLMModelTester):
+    hidden_act = "silu"
+    q_lora_rank = 8
+    kv_lora_rank = 8
+    qk_rope_head_dim = 8
+    qk_nope_head_dim = 8
+    v_head_dim = 8
+    n_routed_experts = 8
+    n_group = 2
+    topk_group = 1
+
     if is_torch_available():
         base_model_class = Mistral4Model
 
 
 @require_torch
-@unittest.skip("Causing a lot of failures on CI")
 class Mistral4ModelTest(CausalLMModelTest, unittest.TestCase):
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
