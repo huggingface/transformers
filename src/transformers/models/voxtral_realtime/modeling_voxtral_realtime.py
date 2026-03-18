@@ -1024,6 +1024,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         num_delay_tokens: int | torch.Tensor = None,
+        audio_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> VoxtralRealtimeCausalLMOutputWithPast:
         r"""
@@ -1035,6 +1036,11 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
             Optionally, instead of passing `input_features` you can choose to directly pass an embedded representation for the encoder.
         num_delay_tokens (`int` or `torch.Tensor`, *optional*):
             Number of delay tokens used when preparing inputs, see [`~VoxtralRealtimeProcessor`] for more details.
+        audio_embeds (`torch.FloatTensor`, *optional*):
+            Pre-computed audio embeddings (after encoder and projector). When provided, the audio encoder is
+            skipped and these embeddings are added directly to the text input embeddings. This is used internally
+            by `generate` when `precompute_audio_embeds=True` (the default) to avoid running the encoder
+            iteratively.
 
         Example:
 
@@ -1060,13 +1066,16 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if (input_features is None) ^ (encoder_inputs_embeds is not None):
+        if audio_embeds is None and (input_features is None) ^ (encoder_inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_features or encoder_inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if input_features is not None or encoder_inputs_embeds is not None:
+        audio_outputs = None
+        if audio_embeds is not None:
+            inputs_embeds += audio_embeds.to(inputs_embeds.device)
+        elif input_features is not None or encoder_inputs_embeds is not None:
             audio_outputs = self.get_audio_features(
                 input_features=input_features,
                 encoder_inputs_embeds=encoder_inputs_embeds,
@@ -1111,19 +1120,25 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            encoder_past_key_values=audio_outputs.past_key_values if use_cache else None,
-            padding_cache=audio_outputs.padding_cache if use_cache else None,
+            encoder_past_key_values=audio_outputs.past_key_values if use_cache and audio_outputs is not None else None,
+            padding_cache=audio_outputs.padding_cache if use_cache and audio_outputs is not None else None,
         )
 
     def prepare_inputs_for_generation(
         self,
         *args,
         encoder_inputs_embeds: torch.Tensor | None = None,
+        audio_embeds: torch.Tensor | None = None,
+        precompute_audio_embeds: bool = True,
         **kwargs,
     ):
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
-        if encoder_inputs_embeds is not None:
+        if audio_embeds is not None:
+            start_idx = model_inputs["cache_position"][0]
+            end_idx = model_inputs["cache_position"][-1] + 1
+            model_inputs["audio_embeds"] = audio_embeds[:, start_idx:end_idx, :]
+        elif encoder_inputs_embeds is not None:
             start_idx = model_inputs["cache_position"][0] * self.config.downsample_factor
             end_idx = (model_inputs["cache_position"][-1] + 1) * self.config.downsample_factor
             model_inputs["encoder_inputs_embeds"] = encoder_inputs_embeds[:, start_idx:end_idx, :]
@@ -1138,9 +1153,18 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
     ) -> tuple[torch.Tensor, str | None, dict[str, torch.Tensor]]:
         inputs, input_name, model_kwargs = super()._prepare_model_inputs(inputs, bos_token_id, model_kwargs)
 
+        precompute_audio_embeds = model_kwargs.pop("precompute_audio_embeds", True)
+
         input_features = model_kwargs.get("input_features")
         if input_features is not None and not isinstance(input_features, GeneratorType):
-            model_kwargs["encoder_inputs_embeds"] = self.audio_tower.embedder(model_kwargs.pop("input_features"))
+            if precompute_audio_embeds:
+                audio_outputs = self.get_audio_features(
+                    input_features=model_kwargs.pop("input_features"),
+                    return_dict=True,
+                )
+                model_kwargs["audio_embeds"] = audio_outputs.pooler_output
+            else:
+                model_kwargs["encoder_inputs_embeds"] = self.audio_tower.embedder(model_kwargs.pop("input_features"))
 
         elif isinstance(input_features, GeneratorType):
             input_features_generator = model_kwargs.pop("input_features")
@@ -1237,6 +1261,8 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         generation_config,
         **kwargs,
     ):
+        precompute_audio_embeds = kwargs.pop("precompute_audio_embeds", True)
+
         # Check if user explicitly provided max_length or max_new_tokens BEFORE
         # the base class applies defaults
         user_set_max_length = kwargs.get("max_length") is not None or (
@@ -1247,6 +1273,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         )
 
         generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
+        model_kwargs["precompute_audio_embeds"] = precompute_audio_embeds
 
         input_features = model_kwargs.get("input_features")
         if input_features is not None and not isinstance(input_features, GeneratorType):

@@ -77,6 +77,12 @@ for decoded_output in decoded_outputs:
     print(decoded_output)
 ```
 
+### Audio encoder precomputation
+
+By default, when the full audio is available (i.e. not streaming), the audio encoder and projector are run once before generation begins. The resulting embeddings are then simply sliced at each decoding step, which is much faster than running the encoder repeatedly.
+
+This is the default behavior (`precompute_audio_embeds=True`). You can disable it if needed. Note that the default vLLM implementation runs the encoder at every step since it relies on a different optimization paradigm.
+
 ### Streaming Transcription
 > [!NOTE]
 > This is an experimental feature and the API is subject to change.
