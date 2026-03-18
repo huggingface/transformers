@@ -1525,6 +1525,12 @@ class TrainingArguments:
         elif not isinstance(self.report_to, list):
             self.report_to = [self.report_to]
 
+        # Auto-enable Kubeflow integration when running inside a Kubeflow TrainJob
+        from .integrations import is_kubeflow_available
+
+        if is_kubeflow_available() and "kubeflow" not in self.report_to:
+            self.report_to = list(self.report_to) + ["kubeflow"]
+
         # ── 4. Validation ──
         self._validate_args()
 
