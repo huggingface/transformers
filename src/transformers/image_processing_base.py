@@ -15,7 +15,9 @@
 import copy
 import json
 import os
+import tempfile
 from typing import Any, TypeVar
+from urllib.parse import urlparse
 
 import numpy as np
 from huggingface_hub import create_repo, is_offline_mode
@@ -276,6 +278,24 @@ class ImageProcessingMixin(PushToHubMixin):
             resolved_image_processor_file = pretrained_model_name_or_path
             resolved_processor_file = None
             is_local = True
+        elif urlparse(pretrained_model_name_or_path).scheme in ("http", "https"):
+            image_processor_file = pretrained_model_name_or_path
+            resolved_processor_file = None
+            try:
+                import requests
+
+                response = requests.get(pretrained_model_name_or_path, proxies=proxies)
+                response.raise_for_status()
+                content = response.content
+            except Exception as e:
+                raise OSError(
+                    f"Can't load image processor from URL '{pretrained_model_name_or_path}'. "
+                    f"Error: {e}"
+                )
+            tmp_fd, tmp_file = tempfile.mkstemp()
+            with os.fdopen(tmp_fd, "wb") as f:
+                f.write(content)
+            resolved_image_processor_file = tmp_file
         else:
             image_processor_file = image_processor_filename
             try:

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import sys
 import tempfile
 import unittest
@@ -54,6 +55,26 @@ class ImageProcessorUtilTester(unittest.TestCase):
             _ = ViTImageProcessorFast.from_pretrained("hf-internal-testing/tiny-random-vit")
             # This check we did call the fake head request
             mock_head.assert_called()
+
+    def test_image_processor_from_pretrained_url(self):
+        # Test that AutoImageProcessor.from_pretrained works with a URL (issue #44821)
+        image_processor_config = {
+            "image_processor_type": "ViTImageProcessor",
+            "size": {"height": 224, "width": 224},
+            "do_resize": True,
+        }
+        fake_response = mock.Mock()
+        fake_response.status_code = 200
+        fake_response.content = json.dumps(image_processor_config).encode("utf-8")
+        fake_response.raise_for_status = mock.Mock()
+
+        with mock.patch("requests.get", return_value=fake_response) as mock_get:
+            processor = AutoImageProcessor.from_pretrained(
+                "https://huggingface.co/some-user/some-model/raw/main/preprocessor_config.json"
+            )
+            mock_get.assert_called()
+            self.assertIsNotNone(processor)
+            self.assertEqual(processor.size, {"height": 224, "width": 224})
 
     def test_image_processor_from_pretrained_subfolder(self):
         with self.assertRaises(OSError):
