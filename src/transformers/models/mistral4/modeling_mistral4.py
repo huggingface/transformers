@@ -463,10 +463,14 @@ class Mistral4Attention(nn.Module):
         key_states = torch.cat((k_pass, k_rot), dim=-1)
 
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        cache_position = torch.arange(query_states.shape[2], device=query_states.device) + past_seen_tokens
+        position_ids = kwargs.get("position_ids")
+        if position_ids is None:
+            position_ids = torch.arange(query_states.shape[2], device=query_states.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
+        position_ids = position_ids.unsqueeze(1) # Broadcast positions for all attention heads
 
         query_states = query_states * get_llama_4_attn_scale(
-            cache_position,
+            position_ids,
             self.config.rope_parameters.get("llama_4_scaling_beta"),
             self.config.rope_parameters.get("original_max_position_embeddings"),
         ).to(query_states.dtype)
