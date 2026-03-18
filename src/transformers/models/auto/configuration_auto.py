@@ -355,7 +355,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("plbart", "PLBartConfig"),
         ("poolformer", "PoolFormerConfig"),
         ("pop2piano", "Pop2PianoConfig"),
-        ("pp_chart2table", "PPChart2TableConfig"),
+        ("pp_chart2table", "GotOcr2Config"),
         ("pp_doclayout_v2", "PPDocLayoutV2Config"),
         ("pp_doclayout_v3", "PPDocLayoutV3Config"),
         ("pp_lcnet", "PPLCNetConfig"),
