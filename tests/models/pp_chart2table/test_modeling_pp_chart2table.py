@@ -20,7 +20,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device, require_vision
+from transformers.testing_utils import cleanup, require_torch, require_vision, slow, torch_device
 
 
 if is_torch_available():

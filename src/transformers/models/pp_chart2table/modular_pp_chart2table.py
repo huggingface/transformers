@@ -53,7 +53,7 @@ class PPChart2TableProcessor(ProcessorMixin):
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
-        
+
         # PPChart2TableProcessor uses hardcoded "Chart to table" instruction internally via chat template
         self.messages = [
             {
@@ -64,7 +64,6 @@ class PPChart2TableProcessor(ProcessorMixin):
                 "image": {"num_patches": self.image_processor.num_patches},
             },
         ]
-
 
     def __call__(
         self,
