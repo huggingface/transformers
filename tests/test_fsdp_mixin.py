@@ -659,6 +659,7 @@ def _test_fsdp2_plan_vs_ddp_impl(
 class FSDPTesterMixin(ABC):
     fsdp_nproc_per_node: int = 2
     skip_fsdp_tests: bool = False
+    fsdp_attn_implementation: str | None = "eager"
 
     @property
     @abstractmethod
@@ -722,7 +723,10 @@ class FSDPTesterMixin(ABC):
             config.vocab_size_per_layer_input = config.vocab_size
         # `to_diff_dict()` avoids nested config pollution (e.g. DBRX ffn_config receiving
         # generic PretrainedConfig keys that its constructor rejects).
-        return type(config), config.to_diff_dict()
+        config_dict = config.to_diff_dict()
+        if self.fsdp_attn_implementation is not None:
+            config_dict["attn_implementation"] = self.fsdp_attn_implementation
+        return type(config), config_dict
 
     def _run_fsdp2_distributed_test(self, test_name, test_impl, *test_args, **test_kwargs):
         self._skip_if_fsdp_model_not_selected()
