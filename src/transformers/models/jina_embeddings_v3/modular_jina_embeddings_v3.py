@@ -18,8 +18,8 @@ from collections.abc import Callable
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
+from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
@@ -53,6 +53,8 @@ from ..xlm_roberta.modeling_xlm_roberta import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="jinaai/jina-embeddings-v3")
+@strict(accept_kwargs=True)
 class JinaEmbeddingsV3Config(XLMRobertaConfig):
     r"""
     This is the configuration class to store the configuration of a [`JinaEmbeddingsV3Model`]. It
@@ -125,48 +127,15 @@ class JinaEmbeddingsV3Config(XLMRobertaConfig):
     model_type = "jina_embeddings_v3"
     default_theta = 20000.0
 
-    def __init__(
-        self,
-        vocab_size: int | None = 250002,
-        hidden_size: int | None = 1024,
-        num_hidden_layers: int | None = 24,
-        num_attention_heads: int | None = 16,
-        intermediate_size: int | None = 4096,
-        hidden_act: str | None = "gelu",
-        hidden_dropout_prob: float | None = 0.1,
-        attention_probs_dropout_prob: float | None = 0.1,
-        max_position_embeddings: int | None = 8194,
-        type_vocab_size: int | None = 1,
-        initializer_range: float | None = 0.02,
-        layer_norm_eps: float | None = 1e-5,
-        pad_token_id: int | None = 1,
-        bos_token_id: int | None = 0,
-        eos_token_id: int | None = 2,
-        rope_parameters: RopeParameters | dict | None = None,
-        classifier_dropout: float | None = None,
-        tie_word_embeddings: bool | None = True,
-        **kwargs,
-    ):
-        self.rope_parameters = rope_parameters
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
-        self.intermediate_size = intermediate_size
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.classifier_dropout = classifier_dropout
-
-        PreTrainedConfig.__init__(self, **kwargs)
+    vocab_size: int = 250002
+    hidden_size: int = 1024
+    num_hidden_layers: int = 24
+    num_attention_heads: int = 16
+    intermediate_size: int = 4096
+    max_position_embeddings: int = 8194
+    type_vocab_size: int = 1
+    layer_norm_eps: float = 1e-5
+    rope_parameters: RopeParameters | dict | None = None
 
 
 class JinaEmbeddingsV3Embeddings(XLMRobertaEmbeddings):
