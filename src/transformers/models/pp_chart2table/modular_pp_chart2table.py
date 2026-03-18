@@ -78,6 +78,8 @@ class PPChart2TableProcessor(ProcessorMixin):
             **kwargs,
         )
 
+        if images is None:
+            raise ValueError("At least one of `images` must be provided")
         image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
         batch_size = image_inputs["pixel_values"].shape[0]
 
