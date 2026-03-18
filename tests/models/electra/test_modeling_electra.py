@@ -126,6 +126,7 @@ class ElectraModelTester:
     def get_config(self):
         return ElectraConfig(
             vocab_size=self.vocab_size,
+            embedding_size=self.hidden_size,  # Match hidden_size to avoid dimension expansion amplifying BF16 rounding errors
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
