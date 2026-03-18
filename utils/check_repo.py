@@ -480,7 +480,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Ernie4_5_VL_MoeForConditionalGeneration",  # BC Alias
     "Ernie4_5_VL_MoeModel",  # BC Alias
     "Ernie4_5_VL_MoeTextModel",  # BC Alias
-    "PPOCRV5MobileRecModel", # Building part of bigger model
+    "PPOCRV5MobileRecModel",  # Building part of bigger model
     "PPOCRV5ServerRecModel",  # Building part of bigger model
 ]
 
