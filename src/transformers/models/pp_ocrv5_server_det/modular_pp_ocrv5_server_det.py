@@ -57,7 +57,7 @@ if is_cv2_available():
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5-server-det")
+@auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5_server_det_safetensors")
 @strict(accept_kwargs=True)
 class PPOCRV5ServerDetConfig(PreTrainedConfig):
     r"""
@@ -179,7 +179,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
                     stacked_images[0], limit_side_len, limit_type, max_side_limit
                 )
                 target_shape_per_shape[shape] = target_shape
-                stacked_images = self.resize(image=stacked_images, size=resize_size, interpolation=interpolation)
+                stacked_images = self.resize(image=stacked_images.float(), size=resize_size, interpolation=interpolation)
             resized_images_grouped[shape] = stacked_images
 
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
