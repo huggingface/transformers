@@ -13,15 +13,15 @@
 # limitations under the License.
 """GPTNeoX Japanese model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring
 
 
-logger = logging.get_logger(__name__)
-
-
-@auto_docstring(checkpoint="EleutherAI/gpt-neox-japanese-2.7b")
+@auto_docstring(checkpoint="abeja/gpt-neox-japanese-2.7b")
+@strict(accept_kwargs=True)
 class GPTNeoXJapaneseConfig(PreTrainedConfig):
     r"""
     intermediate_multiple_size (`int`, *optional*, defaults to 4):
@@ -45,50 +45,26 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
 
     model_type = "gpt_neox_japanese"
 
-    def __init__(
-        self,
-        vocab_size: int | None = 32000,
-        hidden_size: int | None = 2560,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 32,
-        intermediate_multiple_size: int | None = 4,
-        hidden_act: str | None = "gelu",
-        max_position_embeddings: int | None = 2048,
-        initializer_range: float | None = 0.02,
-        layer_norm_eps: int | None = 1e-5,
-        use_cache: bool | None = True,
-        bos_token_id: int | None = 31996,
-        eos_token_id: int | None = 31999,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_dropout: float | None = 0.1,
-        hidden_dropout: float | None = 0.0,
-        is_decoder: bool | None = False,
-        pad_token_id: int | None = None,
-        tie_word_embeddings: bool | None = True,
-        **kwargs,
-    ):
-        self.is_decoder = is_decoder
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_multiple_size = intermediate_multiple_size
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        self.attention_dropout = attention_dropout
-        self.hidden_dropout = hidden_dropout
-        self.rope_parameters = rope_parameters
+    vocab_size: int = 32000
+    hidden_size: int = 2560
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    intermediate_multiple_size: int = 4
+    hidden_act: str = "gelu"
+    max_position_embeddings: int = 2048
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-5
+    use_cache: bool = True
+    bos_token_id: int | None = 31996
+    eos_token_id: int | list[int] | None = 31999
+    rope_parameters: RopeParameters | dict | None = None
+    attention_dropout: float | int = 0.1
+    hidden_dropout: float | int = 0.0
+    is_decoder: bool = False
+    pad_token_id: int | None = None
+    tie_word_embeddings: bool = True
 
-        super().__init__(**kwargs)
-
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
+    def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
@@ -98,7 +74,6 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
         self.rope_parameters.setdefault("rope_theta", kwargs.pop("rotary_emb_base", self.default_theta))
         self.rope_parameters["partial_rotary_factor"] = kwargs.pop("rotary_pct", 1.0)
         self.standardize_rope_params()
-        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
 
 

@@ -21,6 +21,7 @@ _import_structure = {
     "configuration_utils": [
         "BaseWatermarkingConfig",
         "CompileConfig",
+        "ContinuousBatchingConfig",
         "GenerationConfig",
         "GenerationMode",
         "SynthIDTextWatermarkingConfig",
@@ -112,6 +113,7 @@ if TYPE_CHECKING:
     from .configuration_utils import (
         BaseWatermarkingConfig,
         CompileConfig,
+        ContinuousBatchingConfig,
         GenerationConfig,
         GenerationMode,
         SynthIDTextWatermarkingConfig,
