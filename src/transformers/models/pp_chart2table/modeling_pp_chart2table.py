@@ -300,7 +300,7 @@ class PPChart2TableVisionLayer(GradientCheckpointingLayer):
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for pp_chart2table vision model's outputs that also contains image embeddings obtained by applying the projection
+    Base class for p_p_chart2_table vision model's outputs that also contains image embeddings obtained by applying the projection
     layer to the pooler_output.
     """
 )
@@ -519,10 +519,6 @@ class PPChart2TableMultiModalProjector(nn.Module):
 
 @auto_docstring
 class PPChart2TableModel(PPChart2TablePreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        r"^language_model.model": "language_model",
-    }
-
     def __init__(self, config: PPChart2TableConfig):
         super().__init__(config)
         self.vision_tower = PPChart2TableVisionEncoder(config.vision_config)
@@ -661,12 +657,6 @@ class PPChart2TableCausalLMOutputWithPast(ModelOutput):
     """
 )
 class PPChart2TableForConditionalGeneration(PPChart2TablePreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        r"^language_model.model": "model.language_model",
-        r"^vision_tower": "model.vision_tower",
-        r"^multi_modal_projector": "model.multi_modal_projector",
-        r"^language_model.lm_head": "lm_head",
-    }
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: PPChart2TableConfig):

@@ -14,7 +14,7 @@
 
 from dataclasses import dataclass
 
-import torch
+from huggingface_hub.dataclasses import strict
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
@@ -36,6 +36,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-Chart2Table_safetensors")
+@strict(accept_kwargs=True)
 class PPChart2TableConfig(GotOcr2Config):
     pass
 
