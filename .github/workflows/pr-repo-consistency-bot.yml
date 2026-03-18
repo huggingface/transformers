@@ -93,16 +93,25 @@ jobs:
         id: init_comment
         env:
           PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
-          COMMENT_BODY: ${{ github.event.comment.body }}
         uses: actions/github-script@v6
         with:
           script: |
             const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
-            const COMMENT_BODY = process.env.COMMENT_BODY;
             const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
             
-            // Determine which command was used
-            const isStyleFix = COMMENT_BODY.startsWith('@bot /style');
+            // Determine which command was used by checking the event context directly
+            const commentBody = context.payload.comment.body;
+            
+            // Validate the comment body format strictly
+            const validCommands = ['@bot /repo', '@bot /style'];
+            const isValidCommand = validCommands.some(cmd => commentBody.startsWith(cmd));
+            
+            if (!isValidCommand) {
+              core.setFailed('Invalid command format');
+              return;
+            }
+            
+            const isStyleFix = commentBody.startsWith('@bot /style');
             const messagePrefix = isStyleFix ? 'Style fix' : 'Repo. Consistency fix';
 
             const { data: botComment } = await github.rest.issues.createComment({
@@ -290,8 +299,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Add fork as remote with token
-          git remote add origin https://x-access-token:${GITHUB_TOKEN}@github.com/${PR_HEAD_REPO_FULL_NAME}.git
+          # Configure git credential helper to avoid token in URL
+          git config credential.helper store
+          echo "https://x-access-token:${GITHUB_TOKEN}@github.com" > ~/.git-credentials
+          
+          # Add fork as remote without token in URL
+          git remote add origin https://github.com/${PR_HEAD_REPO_FULL_NAME}.git
           
           # Fetch only the specific branch
           git fetch origin ${PR_HEAD_REF}
@@ -322,43 +335,4 @@ jobs:
           if [ -n "$(git status --porcelain)" ]; then
             git add .
             git commit -m "Apply repo consistency fixes"
-            git push origin HEAD:${PR_HEAD_REF}
-            echo "✅ Changes pushed successfully"
-          else
-            echo "No changes to commit"
-          fi
-
-      - name: Prepare final comment message
-        id: prepare_final_comment
-        if: needs.init_comment_with_url.result == 'success'
-        env:
-          CHANGES_DETECTED: ${{ needs.run-repo-consistency-checks.outputs.changes_detected }}
-          COMMENT_BODY: ${{ github.event.comment.body }}
-        run: |
-          # Determine which command was used
-          if [[ "$COMMENT_BODY" == "@bot /style"* ]]; then
-            MESSAGE_PREFIX="Style fix"
-          else
-            MESSAGE_PREFIX="Repo. Consistency"
-          fi
-          
-          if [ "$CHANGES_DETECTED" = 'true' ]; then
-            echo "final_comment=${MESSAGE_PREFIX} bot fixed some files and pushed the changes." >> $GITHUB_OUTPUT
-          else
-            echo "final_comment=${MESSAGE_PREFIX} fix runs successfully without any file modified." >> $GITHUB_OUTPUT
-          fi
-
-      - name: Comment on PR
-        if: needs.init_comment_with_url.result == 'success'
-        uses: actions/github-script@v6
-        env:
-          PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
-        with:
-          script: |
-            const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
-            await github.rest.issues.updateComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: ${{ needs.init_comment_with_url.outputs.comment_id }},
-              body: `${{ steps.prepare_final_comment.outputs.final_comment }}`
-            });
+            git push origin HEAD:${PR_HEAD_
