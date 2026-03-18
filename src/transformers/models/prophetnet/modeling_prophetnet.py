@@ -408,7 +408,7 @@ class ProphetNetAttention(nn.Module):
         attention_mask: Tensor | None = None,
         past_key_values: Cache | None = None,
         output_attentions: bool | None = False,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple[Tensor, Tensor | None]:
         batch_size, tgt_len, hidden_size = hidden_states.size()
 
@@ -449,10 +449,7 @@ class ProphetNetAttention(nn.Module):
 
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
@@ -567,7 +564,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
         main_relative_position_buckets=None,
         predict_relative_position_buckets=None,
         position_ids=None,
-        cache_position=None,
+        **kwargs,
     ):
         batch_size, ngram_sequence_length, hidden_size = hidden_states.size()
         assert list(hidden_states.size()) == [batch_size, ngram_sequence_length, hidden_size], (
@@ -611,9 +608,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
                 curr_past_key_values = past_key_values.self_attention_cache
             else:
                 curr_past_key_values = past_key_values
-            main_key_states, main_value_states = curr_past_key_values.update(
-                main_key_states, main_value_states, self.layer_idx, {"cache_position": cache_position}
-            )
+            main_key_states, main_value_states = curr_past_key_values.update(main_key_states, main_value_states, self.layer_idx)
 
         # get seq_length of main stream only
         sequence_length = ngram_sequence_length // (1 + self.ngram)
@@ -900,7 +895,7 @@ class ProphetNetDecoderLayer(GradientCheckpointingLayer):
         past_key_values=None,
         use_cache: bool | None = True,
         output_attentions: bool | None = False,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ):
         # 1st residual block
         ngram_attention_output, self_attn_weights, self_attn_weights_ngram = self.self_attn(
@@ -1092,7 +1087,6 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | ProphetNetDecoderModelOutput:
         r"""
@@ -1223,7 +1217,6 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
 
             hidden_states = layer_outputs[0]
@@ -1396,7 +1389,6 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | ProphetNetSeq2SeqModelOutput:
         r"""
@@ -1461,7 +1453,6 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         if not return_dict:
@@ -1520,8 +1511,6 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | ProphetNetSeq2SeqLMOutput:
         r"""
@@ -1580,7 +1569,6 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
         batch_size, sequence_length = (
             decoder_input_ids.shape if decoder_input_ids is not None else decoder_inputs_embeds.shape[:2]
@@ -1820,30 +1808,6 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
             loss = (1.0 - self.config.eps) * loss + eps_i * smooth_loss
 
         return loss
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        use_cache=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- Prophetnet does not support cache_position
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        model_inputs.pop("cache_position", None)
-
-        return model_inputs
 
 
 class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
