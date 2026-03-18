@@ -1207,6 +1207,25 @@ class IsaacModel(Qwen3PreTrainedModel):
         )
         return image_token_mask
 
+    def get_vision_position_ids(
+        self,
+        start_position: int,
+        grid_hw: torch.LongTensor,
+        token_offset: int,
+        token_length: int,
+    ) -> torch.LongTensor:
+        height, width = grid_hw[0].item(), grid_hw[1].item()
+        token_positions = torch.arange(height * width, device=grid_hw.device, dtype=torch.long)
+        vision_position_ids = torch.stack(
+            (
+                torch.full((token_positions.shape[0],), start_position, device=grid_hw.device, dtype=torch.long),
+                token_positions.div(width, rounding_mode="floor"),
+                token_positions.remainder(width),
+            ),
+            dim=0,
+        )
+        return vision_position_ids[:, token_offset : token_offset + token_length]
+
     def get_rope_index(
         self,
         *,
