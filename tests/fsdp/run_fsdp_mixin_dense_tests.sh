@@ -1,9 +1,8 @@
 #!/bin/bash
 
 # Script to run all FSDP mixin tests for dense models in parallel.
-# Work in tandem with a special test_fsdp_mixin.py that batches all 11 distributed tests in a single mp.spawn. (will not be committed)
 # Uses concurrency-limited dispatch: multiple models share GPU pairs since test models are tiny (~7 MiB).
-# Each model runs test_fsdp2_all which batches all 11 distributed tests in a single mp.spawn.
+# Each model runs the independent FSDP mixin test methods.
 
 # Usage: ./run_fsdp_mixin_dense_tests.sh [/path/to/results]
 #        ./run_fsdp_mixin_dense_tests.sh --model <model_name> [/path/to/results]
@@ -30,7 +29,7 @@
 # Results directory: /fsx/ferdinandmom/ferdinand-hf/transformers_pr/work/v5-distributed-training-ci/results_fsdp_dense
 # ==========================================
 #   FSDP Mixin Dense Tests
-#   (11 models, 12 tests each)
+#   (11 models, 8 tests each)
 #   (Memory-gated parallel execution across 4 GPU pairs)
 # ==========================================
 
@@ -60,16 +59,16 @@ NC='\033[0m'
 
 GPUS_PER_TEST=2
 
-# Batched test method that runs all 11 distributed FSDP tests in a single mp.spawn.
-# Individual methods are still available for debugging via --test:
-#   test_get_transformer_block_classes, test_fsdp2_sharding_structure_untied,
-#   test_fsdp2_sharding_structure_tied, test_fsdp2_auto_plan_vs_ddp_float32_untied,
-#   test_fsdp2_auto_plan_vs_ddp_bfloat16_untied, test_fsdp2_auto_plan_vs_ddp_float32_tied,
-#   test_fsdp2_auto_plan_vs_ddp_bfloat16_tied, test_fsdp2_manual_plan_vs_ddp_float32_untied,
-#   test_fsdp2_manual_plan_vs_ddp_bfloat16_untied, test_fsdp2_manual_plan_vs_ddp_float32_tied,
-#   test_fsdp2_manual_plan_vs_ddp_bfloat16_tied, test_fsdp2_save_load
+# Independent FSDP mixin test methods.
 TEST_METHODS=(
-    "test_fsdp2_all"
+    "test_get_transformer_block_classes"
+    "test_fsdp2_sharding_structure_untied"
+    "test_fsdp2_sharding_structure_tied"
+    "test_fsdp2_auto_plan_vs_ddp_untied"
+    "test_fsdp2_auto_plan_vs_ddp_tied"
+    "test_fsdp2_manual_plan_vs_ddp_untied"
+    "test_fsdp2_manual_plan_vs_ddp_tied"
+    "test_fsdp2_save_load"
 )
 
 # Dense models that inherit from CausalLMModelTest
