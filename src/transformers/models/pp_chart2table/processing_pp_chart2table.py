@@ -30,8 +30,6 @@ from ...utils.import_utils import requires
 @auto_docstring
 @requires(backends=("torch",))
 class PPChart2TableProcessor(ProcessorMixin):
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
     model_input_names = ["input_ids", "pixel_values"]
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):

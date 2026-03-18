@@ -17,7 +17,7 @@ from huggingface_hub.dataclasses import strict
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 from ...utils.import_utils import requires
@@ -49,6 +49,18 @@ class PPChart2TableConfig(GotOcr2Config):
     ```"""
 
 
+class PPChart2TableImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    patch_size (`int`, *optional*, defaults to `16`):
+        The expected patch size out of the image processor.
+    num_patches (`int`, *optional*, defaults to `16`):
+        Alias for `patch_size`.
+    """
+
+    patch_size: int
+    num_patches: int
+
+
 @auto_docstring
 class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
     resample = 3
@@ -60,13 +72,12 @@ class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
     do_rescale = True
     do_normalize = True
+    valid_kwargs = PPChart2TableImageProcessorKwargs
 
 
 @auto_docstring
 @requires(backends=("torch",))
 class PPChart2TableProcessor(ProcessorMixin):
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
     model_input_names = ["input_ids", "pixel_values"]
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):

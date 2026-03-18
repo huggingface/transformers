@@ -18,23 +18,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...image_processing_utils_fast import BaseImageProcessorFast
-from ...utils import auto_docstring
-from .image_processing_pp_chart2table import PPChart2TableImageProcessorKwargs
+from ...processing_utils import ImagesKwargs
 
 
-@auto_docstring
-class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
-    resample = 3
-    image_mean = [0.48145466, 0.4578275, 0.40821073]
-    image_std = [0.26862954, 0.26130258, 0.27577711]
-    size = {"height": 1024, "width": 1024}
-    patch_size = 16
-    num_patches = 16
-    do_resize = True
-    do_rescale = True
-    do_normalize = True
-    valid_kwargs = PPChart2TableImageProcessorKwargs
+class PPChart2TableImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    patch_size (`int`, *optional*, defaults to `16`):
+        The expected patch size out of the image processor.
+    num_patches (`int`, *optional*, defaults to `16`):
+        Alias for `patch_size`.
+    """
 
-
-__all__ = ["PPChart2TableImageProcessorFast"]
+    patch_size: int
+    num_patches: int
