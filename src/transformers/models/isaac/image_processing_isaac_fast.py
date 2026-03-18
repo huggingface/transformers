@@ -273,8 +273,6 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
                 raise ValueError(
                     f"Token grid (h={height_tokens}, w={width_tokens}) must be divisible by pixel_shuffle_scale={pixel_shuffle_scale}; adjust resize/patch parameters or disable pixel shuffle."
                 )
-            virtual_height = height_tokens // pixel_shuffle_scale
-            virtual_width = width_tokens // pixel_shuffle_scale
 
             grouped_outputs[shape] = (
                 patches.reshape(grouped_batch_size, -1, patch_dim),
