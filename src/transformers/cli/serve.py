@@ -718,9 +718,7 @@ class Serve:
                         await asyncio.to_thread(method, model_id_and_revision, enqueue)
                     except Exception as e:
                         logger.error(f"Failed to load {model_id_and_revision}: {e}", exc_info=True)
-                        enqueue(
-                            {"status": "error", "model": model_id_and_revision, "message": str(e)}
-                        )
+                        enqueue({"status": "error", "model": model_id_and_revision, "message": str(e)})
                     finally:
                         logging.set_tqdm_hook(previous_hook)
                         loop.call_soon_threadsafe(queue.put_nowait, None)

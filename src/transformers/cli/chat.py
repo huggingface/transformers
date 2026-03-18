@@ -207,16 +207,27 @@ class RichInterface:
                 if task.fields.get("unit") == "bytes":
                     done, tot = filesize.decimal(int(task.completed)), filesize.decimal(int(task.total))
                     speed = f"  {filesize.decimal(int(task.speed))}/s" if task.speed else ""
-                    eta = f"  {int(task.time_remaining // 60)}:{int(task.time_remaining % 60):02d}" if task.time_remaining is not None else ""
+                    eta = (
+                        f"  {int(task.time_remaining // 60)}:{int(task.time_remaining % 60):02d}"
+                        if task.time_remaining is not None
+                        else ""
+                    )
                     return Text(f"{done}/{tot}{speed}{eta}", style="progress.download")
                 return Text(f"{int(task.completed)}/{int(task.total)}")
 
-        stage_labels = {"processor": "Loading processor", "config": "Loading config",
-                        "download": "Downloading files", "weights": "Loading into memory"}
+        stage_labels = {
+            "processor": "Loading processor",
+            "config": "Loading config",
+            "download": "Downloading files",
+            "weights": "Loading into memory",
+        }
 
         progress = Progress(
             TextColumn("[bold]{task.description}", table_column=Column(width=50, no_wrap=True)),
-            BarColumn(bar_width=40), _StatsColumn(), TimeElapsedColumn(), console=self._console,
+            BarColumn(bar_width=40),
+            _StatsColumn(),
+            TimeElapsedColumn(),
+            console=self._console,
         )
         task_id = progress.add_task(f"{model}  →  Starting", total=None)
         cached = False
@@ -242,8 +253,9 @@ class RichInterface:
 
                     if prog:
                         unit = "bytes" if stage == "download" else "items"
-                        progress.update(task_id, description=label, completed=prog["current"],
-                                        total=prog.get("total"), unit=unit)
+                        progress.update(
+                            task_id, description=label, completed=prog["current"], total=prog.get("total"), unit=unit
+                        )
                     else:
                         progress.update(task_id, description=label, completed=0, total=None)
 
