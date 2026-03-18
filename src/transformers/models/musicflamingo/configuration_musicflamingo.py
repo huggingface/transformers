@@ -19,12 +19,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="nvidia/music-flamingo-2601-hf")
+@strict(accept_kwargs=True)
 class MusicFlamingoConfig(PreTrainedConfig):
     r"""
     audio_bos_token_id (`int`, *optional*, defaults to 151670):
@@ -60,7 +63,6 @@ class MusicFlamingoConfig(PreTrainedConfig):
     audio_token_id: int = 151669
     projector_hidden_act: str = "gelu"
     projector_bias: bool = True
-
     audio_bos_token_id: int = 151670
     audio_eos_token_id: int = 151671
     head_dim: int = 256

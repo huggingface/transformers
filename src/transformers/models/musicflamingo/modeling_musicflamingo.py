@@ -25,7 +25,6 @@ from typing import Optional
 
 import torch
 from torch import Tensor, broadcast_tensors, nn
-from torch.amp import autocast
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -42,9 +41,7 @@ from .configuration_musicflamingo import MusicFlamingoConfig
 
 class MusicFlamingoRotaryEmbedding(nn.Module):
     """Rotary time embedding module for computing 2D axial rotary embeddings for batch and time dimensions,
-    with time-based angle modulation.
-
-    See (Goel et al., 2024) for more details: https://arxiv.org/abs/2410.12109
+    with time-based angle modulation. See (Goel et al., 2024) for more details: https://arxiv.org/abs/2410.12109
     """
 
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
@@ -97,18 +94,9 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
         )
         return inv_freq, attention_factor
 
-    @autocast("cuda", enabled=False)
+    @torch.no_grad()
     def forward(self, timestamps: Tensor, seq_len: int) -> tuple[Tensor, Tensor]:
-        """Compute 2D axial rotary embeddings for batch and time dimensions.
-
-        Args:
-            timestamps: Tensor of shape (batch_size, seq_len) containing audio timestamps in seconds.
-            seq_len: Sequence length after pooling.
-
-        Returns:
-            Tuple of (cos, sin) tensors, each of shape (batch_size, seq_len, 2 * head_dim),
-            computed in float64 for numerical precision.
-        """
+        """Compute 2D axial rotary embeddings for batch and time dimensions."""
 
         # Compute frequencies for the window axis
         batch_positions = torch.arange(timestamps.shape[0], device=self.inv_freq.device, dtype=self.inv_freq.dtype)
@@ -116,13 +104,11 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
         batch_freqs = batch_positions.unsqueeze(-1) * self.inv_freq
         batch_freqs = torch.repeat_interleave(batch_freqs, 2, dim=-1)
 
-        # Broadcasting: batch_freqs (batch, 1, D), time_freqs (1, seq, D)
+        # Broadcastin and apply time-based angle modulation
         batch_freqs = batch_freqs[:, None, :]
         time_freqs = self.position_angles[:seq_len][None, :, :]
         batch_freqs, time_freqs = broadcast_tensors(batch_freqs, time_freqs)
         freqs = torch.cat((batch_freqs, time_freqs), dim=-1)
-
-        # Apply time-based angle modulation
         angle = (-timestamps * 2 * pi).to(freqs)
         freqs = freqs * angle.unsqueeze(-1)
         return freqs.cos(), freqs.sin()
@@ -141,7 +127,7 @@ class MusicFlamingoPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["MusicFlamingoAttention"]
+    _no_split_modules = None
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -184,7 +170,6 @@ def rotate_half(x):
     return x.flatten(-2)
 
 
-@autocast("cuda", enabled=False)
 def apply_rotary_time_emb(hidden_states, cos, sin):
     original_dtype = hidden_states.dtype
     hidden_states = hidden_states.to(torch.float64)
@@ -347,7 +332,7 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
         >>>     outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True
         >>> )
         >>> print(decoded_outputs)
-        ["This track is an uplifting Eurodance‑style Trance‑Pop anthem..."]
+        ["This track is an uplifting Eurodance-style Trance-Pop anthem..."]
         ```"""
 
         if inputs_embeds is None:

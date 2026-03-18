@@ -499,15 +499,12 @@ class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
         return outputs
 
     def prepare_inputs_for_generation(self, *args, is_first_iteration: bool = False, **kwargs):
-        # Overwritten -- we should not pass input_features when we are in cached decoding stage
-
         input_features = kwargs.pop("input_features", None)
         input_features_mask = kwargs.pop("input_features_mask", None)
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
-        if is_first_iteration or not model_inputs.get("use_cache", False):
-            # input_features should only be passed when we are not in cached decoding stage
+        if is_first_iteration:
             if input_features is not None:
                 model_inputs["input_features"] = input_features
             if input_features_mask is not None:
