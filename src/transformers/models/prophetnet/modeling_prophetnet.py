@@ -608,7 +608,9 @@ class ProphetNetNgramSelfAttention(nn.Module):
                 curr_past_key_values = past_key_values.self_attention_cache
             else:
                 curr_past_key_values = past_key_values
-            main_key_states, main_value_states = curr_past_key_values.update(main_key_states, main_value_states, self.layer_idx)
+            main_key_states, main_value_states = curr_past_key_values.update(
+                main_key_states, main_value_states, self.layer_idx
+            )
 
         # get seq_length of main stream only
         sequence_length = ngram_sequence_length // (1 + self.ngram)
@@ -1511,6 +1513,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | ProphetNetSeq2SeqLMOutput:
         r"""
