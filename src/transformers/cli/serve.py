@@ -2122,7 +2122,7 @@ class Serve:
                 data_processor = AutoTokenizer.from_pretrained(
                     model_id,
                     revision=revision,
-                    trust_remote_code=self.rust_remote_code,
+                    trust_remote_code=self.trust_remote_code,
                 )
             except OSError:
                 raise OSError("Failed to load processor with `AutoProcessor` and `AutoTokenizer`.")

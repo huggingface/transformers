@@ -206,7 +206,7 @@ class RichInterface:
                     return Text("")
 
                 if task.fields.get("unit") == "bytes":
-                    done = (filesize.decimal(int(task.completed)),)
+                    done = filesize.decimal(int(task.completed))
                     tot = filesize.decimal(int(task.total))
                     speed = f"  {filesize.decimal(int(task.speed))}/s" if task.speed else ""
 

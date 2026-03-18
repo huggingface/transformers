@@ -27,6 +27,7 @@ The `transformers serve` command spawns a local server compatible with the [Open
 - `/v1/responses` supports the [Responses API](https://platform.openai.com/docs/api-reference/responses)
 - `/v1/audio/transcriptions` for audio transcriptions
 - `/v1/models` lists available models for third-party integrations
+- `/load_model` streams model loading progress via SSE
 
 Install the serving dependencies.
 
@@ -372,6 +373,83 @@ curl http://localhost:8000/v1/models
 ```
 
 This command returns a JSON object containing the list of models.
+
+## Loading models
+
+The `/load_model` endpoint pre-loads a model and streams progress via [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) (SSE). The `transformers chat` CLI uses it automatically so users see download and loading progress instead of a hanging prompt. It's also useful for warming up a model before sending inference requests.
+
+### Request
+
+```shell
+curl -N -X POST http://localhost:8000/load_model \
+  -H "Content-Type: application/json" \
+  -d '{"model": "Qwen/Qwen2.5-0.5B-Instruct"}'
+```
+
+The `model` field is a Hugging Face model identifier, optionally with an `@revision` suffix (e.g., `meta-llama/Llama-3.2-1B-Instruct@main`). If no revision is specified, `main` is assumed.
+
+### Response
+
+The response is an SSE stream (`Content-Type: text/event-stream`). Each frame is a JSON object on a `data:` line:
+
+```
+data: {"status": "loading", "model": "Qwen/Qwen2.5-0.5B-Instruct@main", "stage": "processor"}
+```
+
+Every event contains at minimum a `status` and `model` field. Additional fields depend on the status:
+
+| Field | Present when | Description |
+|-------|-------------|-------------|
+| `status` | Always | `loading`, `ready`, or `error` |
+| `model` | Always | Canonical `model_id@revision` |
+| `stage` | `status == "loading"` | Current loading stage |
+| `progress` | `download` and `weights` stages | Object with `current` and `total` (integer or null) |
+| `cached` | `status == "ready"` | `true` if the model was already in memory |
+| `message` | `status == "error"` | Error description |
+
+### Stages
+
+Loading progresses through these stages in order. Some may be skipped (e.g., `download` is skipped when files are already cached locally).
+
+| Stage | Has progress? | Description |
+|-------|---------------|-------------|
+| `processor` | No | Loading the tokenizer/processor |
+| `config` | No | Loading model configuration |
+| `download` | Yes (bytes) | Downloading model files |
+| `weights` | Yes (items) | Loading weight tensors into memory |
+
+The stream ends with exactly one terminal event: `ready` (success) or `error` (failure).
+
+### Examples
+
+**Fresh load with download:**
+
+```
+data: {"status": "loading", "model": "org/model@main", "stage": "processor"}
+data: {"status": "loading", "model": "org/model@main", "stage": "config"}
+data: {"status": "loading", "model": "org/model@main", "stage": "download", "progress": {"current": 0, "total": 269100000}}
+data: {"status": "loading", "model": "org/model@main", "stage": "download", "progress": {"current": 134600000, "total": 269100000}}
+data: {"status": "loading", "model": "org/model@main", "stage": "download", "progress": {"current": 269100000, "total": 269100000}}
+data: {"status": "loading", "model": "org/model@main", "stage": "weights", "progress": {"current": 1, "total": 272}}
+data: {"status": "loading", "model": "org/model@main", "stage": "weights", "progress": {"current": 272, "total": 272}}
+data: {"status": "ready", "model": "org/model@main", "cached": false}
+```
+
+**Files already cached locally (no download stage):**
+
+```
+data: {"status": "loading", "model": "org/model@main", "stage": "processor"}
+data: {"status": "loading", "model": "org/model@main", "stage": "config"}
+data: {"status": "loading", "model": "org/model@main", "stage": "weights", "progress": {"current": 1, "total": 272}}
+data: {"status": "loading", "model": "org/model@main", "stage": "weights", "progress": {"current": 272, "total": 272}}
+data: {"status": "ready", "model": "org/model@main", "cached": false}
+```
+
+**Model already in memory:**
+
+```
+data: {"status": "ready", "model": "org/model@main", "cached": true}
+```
 
 ## Tool calling
 
