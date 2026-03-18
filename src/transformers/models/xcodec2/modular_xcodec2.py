@@ -102,25 +102,6 @@ class Xcodec2DecoderOutput(ModelOutput):
 
 # RoPE is applied on the attention head rather than sequence dimension
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=2):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 2):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
@@ -135,9 +116,9 @@ class Xcodec2RotaryEmbedding(LlamaRotaryEmbedding):
 class Xcodec2MLP(nn.Module):
     def __init__(self, config: Xcodec2Config):
         super().__init__()
-        self.fc1 = nn.Linear(config.decoder_hidden_size, 4 * config.decoder_hidden_size, bias=False)
+        self.fc1 = nn.Linear(config.hidden_size, 4 * config.hidden_size, bias=False)
         self.activation = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(4 * config.decoder_hidden_size, config.decoder_hidden_size, bias=False)
+        self.fc2 = nn.Linear(4 * config.hidden_size, config.hidden_size, bias=False)
 
     def forward(self, hidden_states):
         hidden_states = self.fc1(hidden_states)
@@ -182,17 +163,13 @@ class Xcodec2Encoder(DacEncoder):
 class Xcodec2ResNetBlock(nn.Module):
     def __init__(self, config: Xcodec2Config):
         super().__init__()
-        self.norm1 = nn.GroupNorm(num_groups=32, num_channels=config.decoder_hidden_size, eps=1e-6, affine=True)
+        self.norm1 = nn.GroupNorm(num_groups=32, num_channels=config.hidden_size, eps=1e-6, affine=True)
         self.activation1 = nn.SiLU()
-        self.conv1 = nn.Conv1d(
-            config.decoder_hidden_size, config.decoder_hidden_size, kernel_size=3, stride=1, padding=1
-        )
-        self.norm2 = nn.GroupNorm(num_groups=32, num_channels=config.decoder_hidden_size, eps=1e-6, affine=True)
+        self.conv1 = nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=3, stride=1, padding=1)
+        self.norm2 = nn.GroupNorm(num_groups=32, num_channels=config.hidden_size, eps=1e-6, affine=True)
         self.activation2 = nn.SiLU()
         self.activation_dropout = config.activation_dropout
-        self.conv2 = nn.Conv1d(
-            config.decoder_hidden_size, config.decoder_hidden_size, kernel_size=3, stride=1, padding=1
-        )
+        self.conv2 = nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=3, stride=1, padding=1)
 
     def forward(self, hidden_states):
         residual = hidden_states
@@ -264,7 +241,7 @@ class Xcodec2ISTFTHead(nn.Module):
 
     def __init__(self, config: Xcodec2Config):
         super().__init__()
-        self.linear = nn.Linear(config.decoder_hidden_size, config.n_fft + 2)
+        self.linear = nn.Linear(config.hidden_size, config.n_fft + 2)
         self.n_fft = config.n_fft
         self.hop_length = config.hop_length
         self.win_length = config.n_fft
@@ -330,10 +307,8 @@ class Xcodec2Decoder(nn.Module):
 
     def __init__(self, config: Xcodec2Config):
         super().__init__()
-        self.fc = nn.Linear(
-            config.decoder_hidden_size + config.semantic_model_config.hidden_size, config.decoder_hidden_size
-        )
-        self.embed = nn.Conv1d(config.decoder_hidden_size, config.decoder_hidden_size, kernel_size=7, padding=3)
+        self.fc = nn.Linear(config.hidden_size + config.semantic_model_config.hidden_size, config.hidden_size)
+        self.embed = nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=7, padding=3)
         self.prior_resnet_block1 = Xcodec2ResNetBlock(config)
         self.prior_resnet_block2 = Xcodec2ResNetBlock(config)
         self.num_attention_heads = config.num_attention_heads
@@ -341,7 +316,7 @@ class Xcodec2Decoder(nn.Module):
         self.layers = nn.ModuleList(
             [Xcodec2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.final_layer_norm = nn.LayerNorm(config.decoder_hidden_size, eps=1e-6)
+        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=1e-6)
         self.post_resnet_block1 = Xcodec2ResNetBlock(config)
         self.post_resnet_block2 = Xcodec2ResNetBlock(config)
         self.head = Xcodec2ISTFTHead(config)
@@ -428,11 +403,15 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
             init.copy_(module.window, window)
         elif isinstance(module, Xcodec2FiniteScalarQuantization):
             quantization_levels = module.quantization_levels
+            device = module.levels.device
             init.copy_(module.levels, torch.tensor(quantization_levels, dtype=torch.int32))
             init.copy_(
                 module.basis, torch.cumprod(torch.tensor([1] + quantization_levels[:-1]), dim=0, dtype=torch.int32)
             )
-            init.copy_(module.codebook, module._indices_to_codes(torch.arange(math.prod(quantization_levels))))
+            init.copy_(
+                module.codebook,
+                module._indices_to_codes(torch.arange(math.prod(quantization_levels), device=device)),
+            )
         elif isinstance(module, UpSample1d):
             filter_tensor = kaiser_sinc_filter1d(0.5 / module.ratio, 0.6 / module.ratio, module.kernel_size)
             init.copy_(module.filter, filter_tensor)
@@ -453,8 +432,8 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         self.semantic_adapter = Xcodec2SemanticAdapter(config)
         self.acoustic_encoder = Xcodec2Encoder(config)
         self.fc_encoder = nn.Linear(
-            config.decoder_hidden_size + config.semantic_model_config.hidden_size,
-            config.decoder_hidden_size + config.semantic_model_config.hidden_size,
+            config.hidden_size + config.semantic_model_config.hidden_size,
+            config.hidden_size + config.semantic_model_config.hidden_size,
         )
         self.quantizer = Xcodec2Quantizer(config)
         self.decoder = Xcodec2Decoder(config)

@@ -181,13 +181,13 @@ def convert_checkpoint(
     if config_path is not None:
         with open(config_path, "r") as f:
             model_config = json.load(f)
-        decoder_hidden_size = model_config["codec_decoder_hidden_size"]
+        hidden_size = model_config["codec_decoder_hidden_size"]
     else:
-        decoder_hidden_size = 1024  # default to https://huggingface.co/HKUSTAudio/xcodec2/blob/main/config.json
+        hidden_size = 1024  # default to https://huggingface.co/HKUSTAudio/xcodec2/blob/main/config.json
 
     config = Xcodec2Config(
         encoder_hidden_size=48,  # https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/codec_encoder.py#L21, like in DAC
-        decoder_hidden_size=decoder_hidden_size,
+        hidden_size=hidden_size,
         # use hardcoded semantic model: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L19
         semantic_model_config=AutoConfig.from_pretrained("facebook/w2v-bert-2.0", output_hidden_states=True),
     )

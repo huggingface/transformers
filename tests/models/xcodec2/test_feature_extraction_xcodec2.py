@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for the Xcodec2 feature extractor."""
 
 import itertools
 import json
@@ -84,8 +83,6 @@ class Xcodec2FeatureExtractionTester:
             "hop_length": self.hop_length,
             "spec_hop_length": self.spec_hop_length,
             "n_channels": self.n_channels,
-            # Model usses 1.0, but 0.0 needed to pass `test_padding_from_array`
-            # -- SeamlessM4TFeatureExtractionTester does the same
             "padding_value": 0.0,
         }
 

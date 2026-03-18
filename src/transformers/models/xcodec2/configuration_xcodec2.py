@@ -55,7 +55,7 @@ class Xcodec2Config(PreTrainedConfig):
 
     encoder_hidden_size: int = 48
     downsampling_ratios: list[int] | tuple[int, ...] = (2, 2, 4, 4, 5)
-    decoder_hidden_size: int = 1024
+    hidden_size: int = 1024
     semantic_model_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
     sampling_rate: int = 16000
@@ -94,11 +94,6 @@ class Xcodec2Config(PreTrainedConfig):
     @property
     def n_fft(self) -> int:
         return self.hop_length * 4
-
-    @property
-    def hidden_size(self) -> int:
-        # NOTE: for modular usage of LlamaAttention
-        return self.decoder_hidden_size
 
 
 __all__ = ["Xcodec2Config"]
