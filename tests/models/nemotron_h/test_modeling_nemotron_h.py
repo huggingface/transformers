@@ -17,6 +17,7 @@ import tempfile
 import unittest
 
 import pytest
+from huggingface_hub.errors import StrictDataclassClassValidationError
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, NemotronHConfig, NemotronHForCausalLM, is_torch_available
@@ -626,7 +627,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         self.assertEqual(config.num_hidden_layers, 4)
 
         # Invalid layer type - should raise error
-        with self.assertRaises(ValueError):
+        with self.assertRaises(StrictDataclassClassValidationError):
             NemotronHConfig(
                 vocab_size=100,
                 hidden_size=32,
