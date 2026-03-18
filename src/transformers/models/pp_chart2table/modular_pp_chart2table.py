@@ -72,37 +72,28 @@ class PPChart2TableProcessor(ProcessorMixin):
         batch_size, _, height, _ = image_inputs["pixel_values"].shape
         num_patches = height // self.image_processor.patch_size // self.image_processor.merge_size
 
-        input_ids = {"input_ids": None}
-        if text is None or text == "":
-            query = "Chart to table"
-        else:
-            raise ValueError("PPChart2Table processor does not support text inputs")
-
         messages = [
             {
                 "role": "system",
-                "content": "You should follow the instructions carefully and explain your answers in detail.",
             },
             {
                 "role": "user",
                 "image": {"num_patches": num_patches},
-                "content": query,
             },
         ]
 
         # Use tokenizer's apply_chat_template instead of manually loading template
-        prompt = self.tokenizer.apply_chat_template(
+        inputs = self.tokenizer.apply_chat_template(
             messages,
-            tokenize=False,
+            tokenize=True,
             add_generation_prompt=True,
+            return_tensors="pt",
         )
 
-        # Tokenize and prepare input ids for batch
-        input_ids = torch.tensor(self.tokenizer([prompt]).input_ids)
-        input_ids = input_ids.repeat(batch_size, 1)
-        input_ids = {"input_ids": input_ids}
+        # Prepare input ids for batch
+        input_ids = inputs["input_ids"].repeat(batch_size, 1)
 
-        return BatchFeature(data={**input_ids, **image_inputs})
+        return BatchFeature(data={"input_ids": input_ids, **image_inputs})
 
 
 class PPChart2TableVisionPreTrainedModel(GotOcr2PreTrainedModel):
