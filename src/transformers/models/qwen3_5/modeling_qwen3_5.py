@@ -32,7 +32,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernelized_func
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, find_packed_sequence_indices
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -513,6 +513,8 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         hidden_states: torch.Tensor,
         cache_params: Qwen3_5DynamicCache | None = None,
         attention_mask: torch.Tensor | None = None,
+        seq_idx: torch.IntTensor | None = None,
+        cu_seqlens: torch.IntTensor | None = None,
     ):
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
 
@@ -555,7 +557,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
                     weight=self.conv1d.weight.squeeze(1),
                     bias=self.conv1d.bias,
                     activation=self.activation,
-                    seq_idx=None,
+                    seq_idx=seq_idx,
                 )
             else:
                 mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, :seq_len])
@@ -583,6 +585,10 @@ class Qwen3_5GatedDeltaNet(nn.Module):
             key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 
         if not use_precomputed_states:
+            chunk_kwargs = {}
+            if getattr(self.chunk_gated_delta_rule, "__module__", "").startswith("fla."):
+                chunk_kwargs["cu_seqlens"] = cu_seqlens
+
             core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
                 query,
                 key,
@@ -592,6 +598,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
                 initial_state=None,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
+                **chunk_kwargs,
             )
 
         else:
@@ -847,6 +854,8 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
                 attention_mask=attention_mask,
+                seq_idx=kwargs.pop("seq_idx", None),
+                cu_seqlens=kwargs.pop("cu_seqlens", None),
             )
         elif self.layer_type == "full_attention":
             # Self Attention
@@ -1293,6 +1302,23 @@ class Qwen3_5ModelOutputWithPast(ModelOutput):
     rope_deltas: torch.LongTensor | None = None
 
 
+def _prepare_linear_attention_packed_kwargs(
+    position_ids: torch.LongTensor | None,
+    past_key_values: Cache | None,
+) -> dict[str, torch.Tensor]:
+    if position_ids is None or past_key_values is not None or position_ids.shape[0] != 1:
+        return {}
+
+    seq_idx = find_packed_sequence_indices(position_ids)
+    if seq_idx is None:
+        return {}
+
+    seq_idx = seq_idx.to(device=position_ids.device, dtype=torch.int32)
+    lengths = torch.bincount(seq_idx[0].to(torch.int64))
+    cu_seqlens = torch.cat([lengths.new_zeros(1), lengths.cumsum(0)]).to(device=position_ids.device, dtype=torch.int32)
+    return {"seq_idx": seq_idx, "cu_seqlens": cu_seqlens}
+
+
 class Qwen3_5TextModel(Qwen3_5PreTrainedModel):
     config: Qwen3_5TextConfig
 
@@ -1352,6 +1378,7 @@ class Qwen3_5TextModel(Qwen3_5PreTrainedModel):
             position_ids=text_position_ids,
         )
         linear_attn_mask = self._update_linear_attn_mask(attention_mask, past_key_values)
+        linear_attn_kwargs = _prepare_linear_attention_packed_kwargs(text_position_ids, past_key_values)
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -1366,6 +1393,7 @@ class Qwen3_5TextModel(Qwen3_5PreTrainedModel):
                 position_ids=text_position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
+                **linear_attn_kwargs,
                 **kwargs,
             )
 

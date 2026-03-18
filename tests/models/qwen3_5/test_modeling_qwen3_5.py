@@ -46,7 +46,10 @@ if is_torch_available():
         Qwen3_5TextConfig,
         Qwen3_5TextModel,
     )
-    from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5DynamicCache
+    from transformers.models.qwen3_5.modeling_qwen3_5 import (
+        Qwen3_5DynamicCache,
+        _prepare_linear_attention_packed_kwargs,
+    )
 
 
 class Qwen3_5TextModelTester(CausalLMModelTester):
@@ -156,6 +159,40 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("Intentionally not reversable (no changes) as only load time within a VLM depends on this")
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
+
+    def test_prepare_linear_attention_packed_kwargs(self):
+        position_ids = torch.tensor([[0, 1, 2, 0, 1, 2, 3]])
+
+        packed_kwargs = _prepare_linear_attention_packed_kwargs(position_ids, past_key_values=None)
+
+        self.assertEqual(packed_kwargs["seq_idx"].tolist(), [[0, 0, 0, 1, 1, 1, 1]])
+        self.assertEqual(packed_kwargs["seq_idx"].dtype, torch.int32)
+        self.assertEqual(packed_kwargs["cu_seqlens"].tolist(), [0, 3, 7])
+        self.assertEqual(packed_kwargs["cu_seqlens"].dtype, torch.int32)
+
+        self.assertDictEqual(
+            _prepare_linear_attention_packed_kwargs(torch.arange(4).unsqueeze(0), past_key_values=None), {}
+        )
+
+    def test_prepare_linear_attention_packed_kwargs_multi_segment(self):
+        position_ids = torch.tensor([[0, 1, 0, 1, 2, 0]])
+
+        packed_kwargs = _prepare_linear_attention_packed_kwargs(position_ids, past_key_values=None)
+
+        self.assertEqual(packed_kwargs["seq_idx"].tolist(), [[0, 0, 1, 1, 1, 2]])
+        self.assertEqual(packed_kwargs["cu_seqlens"].tolist(), [0, 2, 5, 6])
+
+    def test_prepare_linear_attention_packed_kwargs_ignored_with_cache_or_batch(self):
+        position_ids = torch.tensor([[0, 1, 2, 0, 1, 2, 3]])
+
+        self.assertDictEqual(
+            _prepare_linear_attention_packed_kwargs(position_ids, past_key_values=object()),
+            {},
+        )
+        self.assertDictEqual(
+            _prepare_linear_attention_packed_kwargs(position_ids.expand(2, -1), past_key_values=None),
+            {},
+        )
 
 
 class Qwen3_5VisionText2TextModelTester:
