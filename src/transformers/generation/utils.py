@@ -2906,9 +2906,14 @@ class GenerationMixin(ContinuousMixin):
 
         # --- Static pre-allocations ---
 
-        # 1. Output buffer: pre-allocated to full max_length, prompt copied in
-        output_ids = input_ids.new_full((batch_size, max_length), pad_id)
-        output_ids[:, :prefill_len] = input_ids
+        # 1. Output buffer: pre-allocated on CPU to full max_length, prompt copied in.
+        # Keeping output_ids on CPU avoids device-side bookkeeping ops (scatter/index-put)
+        # that would trigger recompilation on Neuron. On CUDA this also avoids a D2H sync
+        # for the EOS masking path — all token bookkeeping runs on CPU.
+        output_ids = torch.full(
+            (batch_size, max_length), pad_id, dtype=input_ids.dtype, device="cpu"
+        )
+        output_ids[:, :prefill_len] = input_ids.cpu()
 
         # 2. Attention mask: pre-allocated to max_length, prompt positions = 1, future = 0
         if (attention_mask := model_kwargs.get("attention_mask")) is not None:
@@ -2916,8 +2921,9 @@ class GenerationMixin(ContinuousMixin):
             static_attn_mask[:, :prefill_len] = attention_mask
             model_kwargs["attention_mask"] = static_attn_mask
 
-        # 3. Current-token buffer for decode steps: always shape [batch, 1], no growth
-        current_ids = input_ids.new_empty(batch_size, 1)
+        # 3. Current-token buffer for decode steps: always shape [batch, 1], stays on device.
+        # Updated via .copy_() from CPU tokens each step — the only device-side token tensor.
+        current_ids = torch.zeros(batch_size, 1, dtype=input_ids.dtype, device=device)
 
         # CPU-side EOS tracking: unfinished_sequences and EOS checks run on CPU to
         # avoid the blocking max() reduction that forces a device→host sync each step.
@@ -2947,7 +2953,7 @@ class GenerationMixin(ContinuousMixin):
         # --- Process first token from prefill output ---
         # Copy is needed to avoid keeping a hanging ref to outputs.logits
         next_token_logits = outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=device)
-        next_token_scores = logits_processor(input_ids, next_token_logits)
+        next_token_scores = logits_processor(output_ids, next_token_logits)
 
         if return_dict_in_generate:
             if output_scores:
@@ -2961,25 +2967,27 @@ class GenerationMixin(ContinuousMixin):
         else:
             next_tokens = torch.argmax(next_token_scores, dim=-1)
 
-        if has_eos_stopping_criteria:
-            unfinished_device = unfinished_sequences.to(device)
-            next_tokens = next_tokens * unfinished_device + pad_id * (1 - unfinished_device)
+        # Move tokens to CPU — all bookkeeping below runs on CPU
+        next_tokens_cpu = next_tokens.cpu()
 
-        # In-place write of first generated token (no torch.cat)
-        output_ids[:, prefill_len] = next_tokens
-        current_ids[:, 0] = next_tokens
+        # EOS masking on CPU: finished sequences get pad token
+        if has_eos_stopping_criteria:
+            next_tokens_cpu = next_tokens_cpu * unfinished_sequences + pad_id * (1 - unfinished_sequences)
+
+        # Write to CPU output buffer and update device-side input tensor via .copy_()
+        output_ids[:, prefill_len] = next_tokens_cpu
+        current_ids.copy_(next_tokens_cpu.unsqueeze(1))
 
         if streamer is not None:
-            streamer.put(next_tokens.cpu())
+            streamer.put(next_tokens_cpu)
 
-        # CPU-side EOS check: async D2H copy + torch.isin avoids blocking device reduction
+        # CPU-side EOS check
         if eos_token_id_cpu is not None:
-            next_tokens_cpu = next_tokens.cpu()
             unfinished_sequences = unfinished_sequences & ~torch.isin(next_tokens_cpu, eos_token_id_cpu).long()
         else:
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(
                 output_ids[:, : prefill_len + 1], scores
-            ).cpu()
+            )
 
         del outputs
 
@@ -3036,9 +3044,9 @@ class GenerationMixin(ContinuousMixin):
             # Copy is needed to avoid keeping a hanging ref to outputs.logits
             next_token_logits = outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=device)
 
-            # Use loop index to derive current length (avoids .item() device→host sync)
-            cur_len = prefill_len + i + 2
-            next_token_scores = logits_processor(output_ids[:, :cur_len], next_token_logits)
+            # Pass full output buffer to logits_processor (static shape, no growing slice).
+            # output_ids is on CPU; logits_processor handles the device mismatch internally.
+            next_token_scores = logits_processor(output_ids, next_token_logits)
 
             if return_dict_in_generate:
                 if output_scores:
@@ -3056,29 +3064,32 @@ class GenerationMixin(ContinuousMixin):
             else:
                 next_tokens = torch.argmax(next_token_scores, dim=-1)
 
-            if has_eos_stopping_criteria:
-                unfinished_device = unfinished_sequences.to(device)
-                next_tokens = next_tokens * unfinished_device + pad_id * (1 - unfinished_device)
+            # Move tokens to CPU — all bookkeeping runs on CPU
+            next_tokens_cpu = next_tokens.cpu()
 
-            # 1. In-place write to pre-allocated output buffer (no torch.cat)
-            output_ids[:, prefill_len + i + 1] = next_tokens
-            # Update current token buffer for next decode step
-            current_ids[:, 0] = next_tokens
+            # EOS masking on CPU: finished sequences get pad token
+            if has_eos_stopping_criteria:
+                next_tokens_cpu = next_tokens_cpu * unfinished_sequences + pad_id * (1 - unfinished_sequences)
+
+            # 1. Write to CPU output buffer (no device-side scatter/index-put)
+            output_ids[:, prefill_len + i + 1] = next_tokens_cpu
+            # Update device-side input tensor for next decode step via .copy_()
+            current_ids.copy_(next_tokens_cpu.unsqueeze(1))
 
             if streamer is not None:
-                streamer.put(next_tokens.cpu())
+                streamer.put(next_tokens_cpu)
 
             # 4. cache_position scalar increment (no torch.cat) — updated AFTER forward pass
             cache_position = cache_position + 1
 
-            # CPU-side EOS tracking: async D2H copy + torch.isin avoids blocking max() reduction
+            # CPU-side EOS tracking
             if eos_token_id_cpu is not None:
-                next_tokens_cpu = next_tokens.cpu()
                 unfinished_sequences = unfinished_sequences & ~torch.isin(next_tokens_cpu, eos_token_id_cpu).long()
             else:
+                cur_len = prefill_len + i + 2
                 unfinished_sequences = unfinished_sequences & ~stopping_criteria(
                     output_ids[:, :cur_len], scores
-                ).cpu()
+                )
             if unfinished_sequences.max() == 0:
                 break
 
@@ -3086,6 +3097,9 @@ class GenerationMixin(ContinuousMixin):
 
         if streamer is not None:
             streamer.end()
+
+        # Move output_ids back to device for the return value
+        output_ids = output_ids.to(device)
 
         if return_dict_in_generate:
             cache = past_key_values
