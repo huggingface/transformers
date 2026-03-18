@@ -524,9 +524,8 @@ class OlmoHybridGatedDeltaNet(nn.Module):
             and attention_mask.max() > 1
         ):
             cu_seqlens = _cu_seqlens_from_packed_mask(attention_mask)
-            flat_mask = attention_mask.flatten()
-            unpad_indices = torch.nonzero(flat_mask > 0, as_tuple=False).flatten()
-            hidden_states = hidden_states.reshape(batch_size * seq_len, -1)[unpad_indices].unsqueeze(0)
+            unpad_indices = attention_mask.flatten() > 0
+            hidden_states = hidden_states[:, unpad_indices, :]
         else:
             # Requires LEFT padding to work correctly
             hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
@@ -610,9 +609,9 @@ class OlmoHybridGatedDeltaNet(nn.Module):
 
         # Re-pad output to original shape for packed sequences
         if unpad_indices is not None:
-            output_padded = output.new_zeros(batch_size * seq_len, output.shape[-1])
-            output_padded[unpad_indices] = output.squeeze(0)
-            output = output_padded.reshape(batch_size, seq_len, -1)
+            output_padded = output.new_zeros(batch_size, seq_len, output.shape[-1])
+            output_padded[:, unpad_indices, :] = output
+            output = output_padded
 
         return output
 
