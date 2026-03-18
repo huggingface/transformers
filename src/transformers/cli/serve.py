@@ -231,46 +231,6 @@ class Modality(enum.Enum):
     TTS = "TTS"
 
 
-class _DownloadAggregator:
-    """Aggregates byte-progress across multiple concurrent download tqdm bars into a single SSE stream.
-
-    huggingface_hub opens one tqdm bar per file shard. This class tracks them all and emits
-    a single aggregate ``{"stage": "download", "progress": {"current": ..., "total": ...}}``
-    event whenever any bar updates.
-    """
-
-    def __init__(self, enqueue: Callable[[dict], None], model_id_and_revision: str):
-        self._enqueue = enqueue
-        self._model = model_id_and_revision
-        self._bars: dict[int, tuple[int, int | None]] = {}  # id -> (current, total)
-        self._last_emitted_current: int | None = None
-
-    def register(self, bar_id: int, total: int | None):
-        self._bars[bar_id] = (0, total)
-        self._emit()
-
-    def update(self, bar_id: int, current: int, total: int | None):
-        self._bars[bar_id] = (current, total)
-        self._emit()
-
-    def close(self, bar_id: int):
-        pass  # keep the bar in _bars so totals remain correct
-
-    def _emit(self):
-        agg_current = sum(c for c, _ in self._bars.values())
-        if agg_current == self._last_emitted_current:
-            return
-        self._last_emitted_current = agg_current
-        totals = [t for _, t in self._bars.values() if t is not None]
-        agg_total = sum(totals) if totals else None
-        self._enqueue(
-            {
-                "status": "loading",
-                "model": self._model,
-                "stage": "download",
-                "progress": {"current": agg_current, "total": agg_total},
-            }
-        )
 
 
 def create_generation_config_from_req(
@@ -330,6 +290,153 @@ def create_generation_config_from_req(
         set_torch_seed(req["seed"])
 
     return generation_config
+
+
+class DownloadAggregator:
+    """Aggregates byte-progress across multiple concurrent download tqdm bars into a single SSE stream.
+
+    huggingface_hub opens one tqdm bar per file shard. This class tracks them all and emits
+    a single aggregate ``{"stage": "download", "progress": {"current": ..., "total": ...}}``
+    event whenever any bar updates.
+    """
+
+    def __init__(self, enqueue: Callable[[dict], None], model_id_and_revision: str):
+        self.enqueue = enqueue
+        self.model = model_id_and_revision
+        self.bars: dict[int, tuple[int, int | None]] = {}  # id -> (current, total)
+        self.last_emitted_current: int | None = None
+
+    def register(self, bar_id: int, total: int | None):
+        self.bars[bar_id] = (0, total)
+        self._emit()
+
+    def update(self, bar_id: int, current: int, total: int | None):
+        self.bars[bar_id] = (current, total)
+        self._emit()
+
+    def close(self, bar_id: int):
+        pass  # keep the bar in _bars so totals remain correct
+
+    def _emit(self):
+        agg_current = sum(c for c, _ in self.bars.values())
+        if agg_current == self.last_emitted_current:
+            return
+        self._last_emitted_current = agg_current
+        totals = [t for _, t in self.bars.values() if t is not None]
+        agg_total = sum(totals) if totals else None
+        self.enqueue(
+            {
+                "status": "loading",
+                "model": self.model,
+                "stage": "download",
+                "progress": {"current": agg_current, "total": agg_total},
+            }
+        )
+
+class _DlProxy:
+    """
+    Leverages the DownloadAggregator in order to have a coherent tqdm wrapper.
+    """
+
+    def __init__(self, wrapped_bar, download_aggregator):
+        self.wrapped_bar = wrapped_bar
+        self.bar_id = id(wrapped_bar)
+        self.download_aggregator = download_aggregator
+
+        self.n = 0
+        self.total = wrapped_bar.total
+
+    def __getattr__(self, name):
+        return getattr(self.wrapped, name)
+
+    def update(self, n=1):
+        if n is None:
+            n = 1
+
+        self.n += n
+        self.download_aggregator.update(self.bar_id, self.n, getattr(self.wrapped_bar, "total", self.total))
+
+        return self.wrapped_bar.update(n)
+
+    def close(self):
+        self._dl_agg.close(self.bar_id)
+        return self.wrapped_bar.close()
+
+    def __enter__(self):
+        self.wrapped_bar.__enter__()
+        return self
+
+    def __exit__(self, *a):
+        return self.wrapped_bar.__exit__(*a)
+
+    def __iter__(self):
+        count = 0
+        for item in self.wrapped_bar:
+            count += 1
+            self._dl_agg.update(self.bar_id, count, getattr(self.wrapped_bar, "total", self.total))
+
+            yield item
+
+
+class _WeightsProxy:
+    """
+    Wraps the weight-loading tqdm bar to have finer control over how we emit them to the clinet.
+    """
+
+    def __init__(self, wrapped_bar, _callable, model_id_and_revision):
+        self.wrapped_bar = wrapped_bar
+        self.last_emitted = -1
+        self.callable = _callable
+        self.model_id_and_revision = model_id_and_revision
+
+        self.n = 0
+        self.total = wrapped_bar.total
+
+    def __getattr__(self, name):
+        return getattr(self.wrapped_bar, name)
+
+    def _emit(self):
+        if self.n == self.last_emitted:
+            return
+        self.last_emitted = self.n
+
+        self.callable(
+            {
+                "status": "loading",
+                "model": self.model_id_and_revision,
+                "stage": "weights",
+                "progress": {
+                    "current": self._n,
+                    "total": getattr(self.wrapped_bar, "total", self.total),
+                },
+            }
+        )
+
+    def update(self, n=1):
+        if n is None:
+            n = 1
+
+        self.n += n
+        self._emit()
+
+        return self.wrapped_bar.update(n)
+
+    def close(self):
+        return self.wrapped_bar.close()
+
+    def __enter__(self):
+        self.wrapped_bar.__enter__()
+        return self
+
+    def __exit__(self, *a):
+        return self.wrapped_bar.__exit__(*a)
+
+    def __iter__(self):
+        for item in self.wrapped_bar:
+            self.n += 1
+            self._emit()
+
+            yield item
 
 
 class ToolState:
@@ -602,7 +709,7 @@ class Serve:
                 def enqueue(payload: dict):
                     loop.call_soon_threadsafe(queue.put_nowait, f"data: {json.dumps(payload)}\n\n")
 
-                dl_agg = _DownloadAggregator(enqueue, model_id_and_revision)
+                download_aggregator = _DownloadAggregator(enqueue, model_id_and_revision)
 
                 def streaming_tqdm_hook(factory, args, kwargs):
                     bar = factory(*args, **kwargs)
@@ -612,102 +719,12 @@ class Serve:
 
                     # Only forward byte-progress bars (file downloads) — skip noise like "Fetching N files"
                     if unit == "B":
-                        bar_id = id(bar)
-                        dl_agg.register(bar_id, total)
-
-                        class _DlProxy:
-                            """Wraps a download tqdm bar to feed the aggregate tracker."""
-
-                            def __init__(self, wrapped):
-                                self._wrapped = wrapped
-                                self._n = 0
-                                self._bar_id = bar_id
-
-                            def __getattr__(self, name):
-                                return getattr(self._wrapped, name)
-
-                            def update(self, n=1):
-                                if n is None:
-                                    n = 1
-                                self._n += n
-                                dl_agg.update(self._bar_id, self._n, getattr(self._wrapped, "total", total))
-                                return self._wrapped.update(n)
-
-                            def close(self):
-                                dl_agg.close(self._bar_id)
-                                return self._wrapped.close()
-
-                            def __enter__(self):
-                                self._wrapped.__enter__()
-                                return self
-
-                            def __exit__(self, *a):
-                                return self._wrapped.__exit__(*a)
-
-                            def __iter__(self):
-                                count = 0
-                                for item in self._wrapped:
-                                    count += 1
-                                    dl_agg.update(self._bar_id, count, getattr(self._wrapped, "total", total))
-                                    yield item
-
-                        return _DlProxy(bar)
+                        download_aggregator.register(id(bar), total)
+                        return _DlProxy(bar, download_aggregator=download_aggregator)
 
                     # "Loading weights" bar — emit as stage: "weights" with item-count progress
                     if desc == "Loading weights":
-
-                        class _WeightsProxy:
-                            """Wraps the weight-loading tqdm bar to emit weights stage events."""
-
-                            def __init__(self, wrapped):
-                                self._wrapped = wrapped
-                                self._n = 0
-                                self._last_emitted = -1
-                                self._total = total
-
-                            def __getattr__(self, name):
-                                return getattr(self._wrapped, name)
-
-                            def _emit(self):
-                                if self._n == self._last_emitted:
-                                    return
-                                self._last_emitted = self._n
-                                enqueue(
-                                    {
-                                        "status": "loading",
-                                        "model": model_id_and_revision,
-                                        "stage": "weights",
-                                        "progress": {
-                                            "current": self._n,
-                                            "total": getattr(self._wrapped, "total", self._total),
-                                        },
-                                    }
-                                )
-
-                            def update(self, n=1):
-                                if n is None:
-                                    n = 1
-                                self._n += n
-                                self._emit()
-                                return self._wrapped.update(n)
-
-                            def close(self):
-                                return self._wrapped.close()
-
-                            def __enter__(self):
-                                self._wrapped.__enter__()
-                                return self
-
-                            def __exit__(self, *a):
-                                return self._wrapped.__exit__(*a)
-
-                            def __iter__(self):
-                                for item in self._wrapped:
-                                    self._n += 1
-                                    self._emit()
-                                    yield item
-
-                        return _WeightsProxy(bar)
+                        return _WeightsProxy(bar, enqueue, model_id_and_revision)
 
                     # Other non-byte, non-weights bars (noise) — return unmodified
                     return bar
