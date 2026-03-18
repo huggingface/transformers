@@ -1531,8 +1531,7 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         use_cache=True,
         **kwargs,
     ) -> dict[str, Any]:
-        if vision_patches is None and pixel_values is not None:
-            vision_patches = pixel_values
+        if vision_patches is None:
             vision_patch_attention_mask = (
                 image_patch_attention_mask if vision_patch_attention_mask is None else vision_patch_attention_mask
             )
@@ -1648,10 +1647,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             **model_kwargs,
         )
         if position_ids is not None:
-            if position_ids.ndim == 3:
-                position_ids = position_ids.repeat_interleave(expand_size, dim=1)
-            else:
-                position_ids = position_ids.repeat_interleave(expand_size, dim=0)
             model_kwargs["position_ids"] = position_ids
         return input_ids, model_kwargs
 
