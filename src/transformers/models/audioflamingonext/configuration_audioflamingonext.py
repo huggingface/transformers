@@ -68,7 +68,6 @@ class AudioFlamingoNextConfig(PreTrainedConfig):
     audio_eos_token_id: int = 151671
     head_dim: int = 256
     rope_parameters: dict | None = None
-    max_position_embeddings: int | None = None
 
     def __post_init__(self, **kwargs):
         if self.rope_parameters is None:

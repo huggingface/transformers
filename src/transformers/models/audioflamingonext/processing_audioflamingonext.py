@@ -28,7 +28,7 @@ import torch
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTrainedTokenizerBase, TextInput
+from ...tokenization_utils_base import TextInput
 from ...utils import logging
 
 
@@ -42,7 +42,6 @@ class AudioFlamingoNextProcessorKwargs(ProcessingKwargs, total=False):
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
-            "chunk_length": 30.0,
             "return_attention_mask": True,
             "padding": "max_length",
         },
@@ -98,12 +97,7 @@ class AudioFlamingoNextProcessor(ProcessorMixin):
         self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(audio_bos_token)
         self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(audio_eos_token)
 
-    def check_argument_for_proper_class(self, argument_name, argument):
-        if argument_name == "tokenizer" and isinstance(argument, PreTrainedTokenizerBase):
-            return PreTrainedTokenizerBase
-        return super().check_argument_for_proper_class(argument_name, argument)
-
-    def _get_audio_token_length(self, audio_lengths: "torch.Tensor") -> "torch.Tensor":
+    def _get_audio_token_length(self, audio_lengths):
         conv_output_lengths = (audio_lengths - 1) // 2 + 1  # After conv2 downsampling
         audio_tokens_lengths = (conv_output_lengths - 2) // 2 + 1  # After avg pooling
         return audio_tokens_lengths
@@ -158,16 +152,13 @@ class AudioFlamingoNextProcessor(ProcessorMixin):
             if len(text) != len(audio):
                 raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
 
-            window_size = int(audio_kwargs["sampling_rate"] * audio_kwargs["chunk_length"])
-            max_windows = int(self.max_audio_len // audio_kwargs["chunk_length"])
-            frames_per_window = int(
-                self._get_audio_token_length(torch.tensor([self.feature_extractor.nb_max_frames], dtype=torch.long))
-            )
-            time_step = audio_kwargs["chunk_length"] / frames_per_window
+            # Determine number of chunks per sample, and flatten
+            window_size = int(audio_kwargs["sampling_rate"] * self.feature_extractor.chunk_length)
+            max_windows = int(self.max_audio_len // self.feature_extractor.chunk_length)
 
             per_sample_windows: list[int] = []
             flat_chunks: list[np.ndarray] = []
-            chunk_start_times: list[float] = []
+            chunk_start_times: list[float] = []  # For computing rotary time embedding timestamps
 
             for audio_el in audio:
                 n_samples = int(audio_el.shape[0])
@@ -186,23 +177,30 @@ class AudioFlamingoNextProcessor(ProcessorMixin):
                     flat_chunks.append(audio_el[start:end])
                     chunk_start_times.append(start / audio_kwargs["sampling_rate"])
 
+            # Feature extraction
             audio_inputs = self.feature_extractor(flat_chunks, **audio_kwargs)
             padding_mask = audio_inputs.pop("attention_mask")
             audio_inputs["input_features_mask"] = padding_mask
-            frame_offsets = torch.arange(frames_per_window, dtype=torch.float32) * time_step
-            audio_inputs["rote_timestamps"] = (
-                torch.as_tensor(chunk_start_times, dtype=torch.float32).unsqueeze(1) + frame_offsets
-            )
 
+            # Compute sequence lengths token counting
             audio_lengths = torch.stack([s.sum() for s in torch.split(padding_mask.sum(-1), per_sample_windows)])
             audio_tokens_lengths = self._get_audio_token_length(audio_lengths)
 
+            # expand audio tokens in text
             for i, audio_length in enumerate(audio_tokens_lengths):
                 text[i] = re.sub(
                     re.escape(self.audio_token),
                     self.audio_bos_token + self.audio_token * audio_length + self.audio_eos_token,
                     text[i],
                 )
+
+            # Compute timestamps for rotary time embeddings
+            frames_per_window = self._get_audio_token_length(self.feature_extractor.nb_max_frames)
+            time_step = self.feature_extractor.chunk_length / frames_per_window
+            frame_offsets = torch.arange(frames_per_window, dtype=torch.float32) * time_step
+            audio_inputs["rote_timestamps"] = (
+                torch.as_tensor(chunk_start_times, dtype=torch.float32).unsqueeze(1) + frame_offsets
+            )
 
         text_inputs = self.tokenizer(text, **text_kwargs)
 
