@@ -20,6 +20,7 @@ import os
 import socket
 import sys
 import tempfile
+import time
 import traceback
 from abc import ABC, abstractmethod
 
@@ -157,6 +158,9 @@ def _fsdp_global_wrapper_batched(rank, test_specs, world_size, port, results_fil
 
     results = {}
     for test_name, func, func_args, func_kwargs in test_specs:
+        if rank == 0:
+            subtest_start = time.perf_counter()
+            print(f"[FSDP] Starting subtest: {test_name}", flush=True)
         error = None
         try:
             func(rank, *func_args, **func_kwargs)
@@ -170,9 +174,13 @@ def _fsdp_global_wrapper_batched(rank, test_specs, world_size, port, results_fil
         if any_failed:
             results[test_name] = error if error else "Failed on another rank"
             if rank == 0:
-                print(f"  [FAIL] {test_name}", file=sys.stderr, flush=True)
+                elapsed = time.perf_counter() - subtest_start
+                print(f"  [FAIL] {test_name} ({elapsed:.1f}s)", file=sys.stderr, flush=True)
         else:
             results[test_name] = None
+            if rank == 0:
+                elapsed = time.perf_counter() - subtest_start
+                print(f"  [PASS] {test_name} ({elapsed:.1f}s)", flush=True)
 
         backend_empty_cache(_get_distributed_device_type())
         dist.barrier()
