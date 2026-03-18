@@ -2028,15 +2028,6 @@ class ModelArgs:
         "shape": None,
     }
 
-    cache_position = {
-        "description": """
-    Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-    this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-    the complete sequence length.
-    """,
-        "shape": "of shape `(sequence_length)`",
-    }
-
     hidden_states = {
         "description": """ input to the layer of shape `(batch, seq_len, embed_dim)""",
         "shape": None,

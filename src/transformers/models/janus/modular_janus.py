@@ -1113,7 +1113,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             )
             if "attention_mask" in model_inputs:
                 model_inputs["attention_mask"] = model_inputs["attention_mask"].to(inputs_embeds.device)
-            model_inputs["cache_position"] = model_inputs["cache_position"].to(inputs_embeds.device)
 
             outputs = self.model.language_model(
                 **model_inputs,
