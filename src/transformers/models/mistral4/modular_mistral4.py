@@ -31,6 +31,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3MoE,
     DeepseekV3NaiveMoe,
     apply_rotary_pos_emb_interleave,
+    yarn_get_mscale,
 )
 from ..llama.modeling_llama import (
     LlamaForCausalLM,
@@ -53,7 +54,21 @@ class Mistral4RMSNorm(LlamaRMSNorm):
 
 
 class Mistral4RotaryEmbedding(LlamaRotaryEmbedding):
-    pass
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Mistral4Config | None = None,
+        device=None,
+        seq_len: int | None = None,
+    ) -> tuple[torch.Tensor, float]:
+        base = config.rope_parameters["rope_theta"]
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+        attention_factor = 1.0
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
 
 class Mistral4MLP(Qwen2MoeMLP):
@@ -145,6 +160,12 @@ class Mistral4Attention(DeepseekV3Attention):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
+        if self.config.rope_parameters.get("rope_type", "default") == "yarn":
+            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
+            scaling_factor = self.config.rope_parameters["factor"]
+            if mscale_all_dim:
+                mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
+                self.scaling = self.scaling * mscale * mscale
 
     def forward(
         self,
@@ -247,7 +268,7 @@ class Mistral4PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    _can_compile_fullgraph = True
+    _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Mistral4DecoderLayer,

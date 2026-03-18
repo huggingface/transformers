@@ -17,8 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -89,9 +89,9 @@ class Mistral4RotaryEmbedding(nn.Module):
     @staticmethod
     def compute_default_rope_parameters(
         config: Mistral4Config | None = None,
-        device: Optional["torch.device"] = None,
+        device=None,
         seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -106,11 +106,10 @@ class Mistral4RotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        # Compute the inverse frequencies
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+        attention_factor = 1.0
         inv_freq = 1.0 / (
             base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
         )
@@ -363,6 +362,12 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
     return q_embed, k_embed
 
 
+def yarn_get_mscale(scale=1, mscale=1):
+    if scale <= 1:
+        return 1.0
+    return 0.1 * mscale * math.log(scale) + 1.0
+
+
 def get_llama_4_attn_scale(positions_ids: torch.Tensor, beta: float, max_position_embeddings: int) -> torch.Tensor:
     scaling = 1 + beta * torch.log(1 + torch.floor(positions_ids / max_position_embeddings))
     return scaling.unsqueeze(-1)
@@ -413,6 +418,12 @@ class Mistral4Attention(nn.Module):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
+        if self.config.rope_parameters.get("rope_type", "default") == "yarn":
+            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
+            scaling_factor = self.config.rope_parameters["factor"]
+            if mscale_all_dim:
+                mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
+                self.scaling = self.scaling * mscale * mscale
 
     def forward(
         self,
@@ -546,7 +557,7 @@ class Mistral4PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    _can_compile_fullgraph = True
+    _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Mistral4DecoderLayer,
