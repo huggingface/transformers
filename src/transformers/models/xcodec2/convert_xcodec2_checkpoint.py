@@ -119,15 +119,15 @@ def map_old_key_to_new(old_key):
     return new_key
 
 
-def convert_state_dict(state_dict, n_heads):
+def convert_state_dict(state_dict, hf_model):
     new_state_dict = {}
 
     for old_key, tensor in state_dict.items():
         # Special case: c_attn is a fused QKV projection that must be split into 3 tensors
         if ".att.c_attn." in old_key:
             w_q, w_k, w_v = torch.chunk(tensor, chunks=3, dim=0)
-            w_q = permute_for_rope(w_q, n_heads, w_q.shape[0], w_q.shape[1])
-            w_k = permute_for_rope(w_k, n_heads, w_k.shape[0], w_k.shape[1])
+            w_q = permute_for_rope(w_q, hf_model.config.num_attention_heads, w_q.shape[0], w_q.shape[1])
+            w_k = permute_for_rope(w_k, hf_model.config.num_attention_heads, w_k.shape[0], w_k.shape[1])
             base_key = map_old_key_to_new(old_key.replace(".att.c_attn.", ".self_attn.PROJ."))
             new_state_dict[base_key.replace("PROJ", "q_proj")] = w_q
             new_state_dict[base_key.replace("PROJ", "k_proj")] = w_k
@@ -135,27 +135,26 @@ def convert_state_dict(state_dict, n_heads):
             continue
 
         new_key = map_old_key_to_new(old_key)
-        
+
         new_state_dict[new_key] = tensor
         if old_key != new_key:
             logger.debug(f"Converted: {old_key} -> {new_key}")
 
-    return new_state_dict
-
-
-def convert_state_dict(state_dict, hf_model):
-    n_heads = hf_model.config.num_attention_heads
-    state_dict = convert_state_dict(state_dict, n_heads)
+    state_dict = new_state_dict
 
     # Filter out non-persistent buffers - they're recomputed in _init_weights
-    state_dict = {k: v for k, v in state_dict.items() if not (
-        k.endswith("upsample.filter") or 
-        k.endswith("downsample.filter") or 
-        k.endswith(".window") or
-        k.endswith(".levels") or
-        k.endswith(".basis") or
-        k.endswith(".codebook")
-    )}
+    state_dict = {
+        k: v
+        for k, v in state_dict.items()
+        if not (
+            k.endswith("upsample.filter")
+            or k.endswith("downsample.filter")
+            or k.endswith(".window")
+            or k.endswith(".levels")
+            or k.endswith(".basis")
+            or k.endswith(".codebook")
+        )
+    }
 
     extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
     missing_keys = set(hf_model.state_dict().keys()) - set(state_dict.keys())
@@ -187,7 +186,7 @@ def convert_checkpoint(
         decoder_hidden_size = 1024  # default to https://huggingface.co/HKUSTAudio/xcodec2/blob/main/config.json
 
     config = Xcodec2Config(
-        encoder_hidden_size=48, # https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/codec_encoder.py#L21, like in DAC
+        encoder_hidden_size=48,  # https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/codec_encoder.py#L21, like in DAC
         decoder_hidden_size=decoder_hidden_size,
         # use hardcoded semantic model: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L19
         semantic_model_config=AutoConfig.from_pretrained("facebook/w2v-bert-2.0", output_hidden_states=True),

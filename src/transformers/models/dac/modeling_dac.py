@@ -455,7 +455,7 @@ class DacEncoder(nn.Module):
             self.block += [DacEncoderBlock(config, stride=stride, stride_index=stride_index)]
 
         self.block = nn.ModuleList(self.block)
-        d_model = config.encoder_hidden_size * 2**len(config.downsampling_ratios)
+        d_model = config.encoder_hidden_size * 2 ** len(config.downsampling_ratios)
         self.snake1 = Snake1d(d_model)
         self.conv2 = nn.Conv1d(d_model, config.hidden_size, kernel_size=3, padding=1)
 

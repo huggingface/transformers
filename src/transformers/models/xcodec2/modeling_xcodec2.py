@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_xcodec2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -305,7 +305,6 @@ class Xcodec2Attention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -319,9 +318,7 @@ class Xcodec2Attention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -361,7 +358,6 @@ class Xcodec2DecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -374,7 +370,6 @@ class Xcodec2DecoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -653,20 +648,20 @@ class Xcodec2ResNetBlock(nn.Module):
         )
         self.norm2 = nn.GroupNorm(num_groups=32, num_channels=config.decoder_hidden_size, eps=1e-6, affine=True)
         self.activation2 = nn.SiLU()
-        self.dropout = nn.Dropout(config.resnet_dropout)
+        self.activation_dropout = config.activation_dropout
         self.conv2 = nn.Conv1d(
             config.decoder_hidden_size, config.decoder_hidden_size, kernel_size=3, stride=1, padding=1
         )
 
     def forward(self, hidden_states):
         residual = hidden_states
-        residual = self.norm1(residual)
-        residual = self.activation1(residual)
-        residual = self.conv1(residual)
-        residual = self.norm2(residual)
-        residual = self.activation2(residual)
-        residual = self.dropout(residual)
-        residual = self.conv2(residual)
+        hidden_states = self.norm1(hidden_states)
+        hidden_states = self.activation1(hidden_states)
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.activation2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.conv2(hidden_states)
         return hidden_states + residual
 
 
@@ -674,14 +669,14 @@ class Xcodec2FiniteScalarQuantization(nn.Module):
     def __init__(self, config: Xcodec2Config):
         super().__init__()
 
-        self.quantization_levels = config.quantization_levels
-        levels = torch.tensor(config.quantization_levels, dtype=torch.int32)
+        self.quantization_levels = list(config.quantization_levels)
+        levels = torch.tensor(self.quantization_levels, dtype=torch.int32)
         self.register_buffer("levels", levels, persistent=False)
 
-        basis = torch.cumprod(torch.tensor([1] + config.quantization_levels[:-1]), dim=0, dtype=torch.int32)
+        basis = torch.cumprod(torch.tensor([1] + self.quantization_levels[:-1]), dim=0, dtype=torch.int32)
         self.register_buffer("basis", basis, persistent=False)
 
-        codebook = self._indices_to_codes(torch.arange(int(np.prod(config.quantization_levels))))
+        codebook = self._indices_to_codes(torch.arange(int(np.prod(self.quantization_levels))))
         self.register_buffer("codebook", codebook, persistent=False)
 
     def _indices_to_codes(self, indices):
@@ -966,7 +961,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         padding_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Xcodec2EncoderOutput:
-        """
+        r"""
         audio (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
             Input audio waveform.
         audio_spectrogram (`torch.Tensor` of shape `(batch_size, mel_bins, time_steps)`):
@@ -1019,7 +1014,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         audio_codes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Xcodec2DecoderOutput:
-        """
+        r"""
         quantized_representation (torch.Tensor of shape `(batch_size, dimension, time_steps)`, *optional*):
             Quantized continuous representation of input.
         audio_codes (`torch.LongTensor`  of shape `(batch_size, 1, codes_length)`):
