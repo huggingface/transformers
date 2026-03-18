@@ -28,7 +28,6 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="ibm-granite/granite-speech-3.2-8b")
 @strict(accept_kwargs=True)
 class GraniteMoeConfig(PreTrainedConfig):
-
     model_type = "granitemoe"
     keys_to_ignore_at_inference = ["past_key_values"]
 

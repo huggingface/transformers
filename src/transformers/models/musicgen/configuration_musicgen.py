@@ -25,7 +25,6 @@ from ..auto.configuration_auto import AutoConfig
 @auto_docstring(checkpoint="facebook/musicgen-small")
 @strict(accept_kwargs=True)
 class MusicgenDecoderConfig(PreTrainedConfig):
-
     model_type = "musicgen_decoder"
     base_config_key = "decoder_config"
     keys_to_ignore_at_inference = ["past_key_values"]
