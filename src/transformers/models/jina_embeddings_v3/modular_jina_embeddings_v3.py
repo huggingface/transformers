@@ -16,9 +16,9 @@
 from collections.abc import Callable
 
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 from torch.nn import CrossEntropyLoss
-from huggingface_hub.dataclasses import strict
 
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask
