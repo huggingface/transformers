@@ -2915,11 +2915,9 @@ class GenerationMixin(ContinuousMixin):
         )
         output_ids[:, :prefill_len] = input_ids.cpu()
 
-        # 2. Attention mask: pre-allocated to max_length, prompt positions = 1, future = 0
-        if (attention_mask := model_kwargs.get("attention_mask")) is not None:
-            static_attn_mask = attention_mask.new_zeros(batch_size, max_length)
-            static_attn_mask[:, :prefill_len] = attention_mask
-            model_kwargs["attention_mask"] = static_attn_mask
+        # 2. Attention mask: save the 2D mask for position_offset computation, then keep
+        # it as-is for prefill. The static 4D mask is built after prefill for the decode loop.
+        attention_mask_2d = model_kwargs.get("attention_mask")
 
         # 3. Current-token buffer for decode steps: always shape [batch, 1], stays on device.
         # Updated via .copy_() from CPU tokens each step — the only device-side token tensor.
@@ -2999,10 +2997,10 @@ class GenerationMixin(ContinuousMixin):
         # With left-padding, cache_position != position_id:
         #   position_id = cache_position - position_offset
         # where position_offset = num_padding_tokens = prefill_len - actual_prompt_len.
+        # We use attention_mask_2d (saved before 4D conversion) to compute the offset.
         if model_kwargs.get("position_ids") is not None:
-            original_attention_mask = model_kwargs.get("attention_mask")
-            if original_attention_mask is not None:
-                position_offset = prefill_len - original_attention_mask[:, :prefill_len].sum(dim=-1, keepdim=True)
+            if attention_mask_2d is not None:
+                position_offset = prefill_len - attention_mask_2d.sum(dim=-1, keepdim=True)
             else:
                 position_offset = torch.zeros(batch_size, 1, dtype=torch.long, device=device)
             position_ids = cache_position.unsqueeze(0).expand(batch_size, 1) - position_offset
@@ -3013,21 +3011,50 @@ class GenerationMixin(ContinuousMixin):
         # StaticCache updates in-place (index_copy_), so the object reference never changes.
         # We grab it once and reuse it — no need to re-read outputs.past_key_values each step.
         past_key_values = model_kwargs["past_key_values"]
-        attention_mask = model_kwargs.get("attention_mask")
+
+        # Build static attention mask for the decode loop (after prefill, which used 2D mask).
+        # The mask dimension must match the cache's KV length (max_cache_len), not max_length.
+        # For models with sliding window layers, use a static 2D mask (model handles per-layer 4D).
+        # For standard models, pre-build a 4D additive mask to skip create_causal_mask each step.
+        has_sliding_layers = (
+            hasattr(past_key_values, "is_sliding") and any(past_key_values.is_sliding)
+        )
+        max_cache_len = past_key_values.get_max_cache_shape()
+        if attention_mask_2d is not None:
+            if has_sliding_layers:
+                attention_mask = torch.ones(
+                    batch_size, max_cache_len, dtype=torch.long, device=device
+                )
+                attention_mask[:, :prefill_len] = attention_mask_2d
+            else:
+                min_dtype = torch.finfo(self.dtype).min
+                attention_mask = torch.full(
+                    (batch_size, 1, 1, max_cache_len), min_dtype,
+                    device=device, dtype=self.dtype,
+                )
+                # Unmask prompt positions where the 2D mask is 1
+                attention_mask[:, 0, 0, :prefill_len].masked_fill_(
+                    attention_mask_2d.bool(), 0.0
+                )
+        else:
+            attention_mask = None
 
         # --- Static decode loop (for loop, no while, no growing tensors) ---
         # Build model_inputs directly instead of calling prepare_inputs_for_generation,
         # which clones input_ids and position_ids every step (unnecessary overhead).
-        # The 2D attention mask is kept as-is; the model's forward pass handles the
-        # 2D→4D conversion internally when using a compileable cache.
         for i in range(max_new_tokens - 1):
             # 3. position_ids: derived from cache_position minus left-padding offset (not concatenated)
             if position_ids is not None:
                 position_ids = cache_position.unsqueeze(0).expand(batch_size, 1) - position_offset
 
-            # 2. attention_mask: in-place update at cache_position (no torch.cat)
+            # 2. attention_mask: unmask the current decode position in-place (no torch.cat).
+            # 4D mask: scatter_ on dim 3 with 0.0 (unmask). 2D mask: scatter_ on dim 1 with 1.
             if attention_mask is not None:
-                attention_mask.scatter_(1, cache_position.view(1, 1).expand(batch_size, 1), 1)
+                if attention_mask.ndim == 4:
+                    mask_idx = cache_position.view(1, 1, 1, 1).expand(batch_size, 1, 1, 1)
+                    attention_mask.scatter_(3, mask_idx, 0.0)
+                else:
+                    attention_mask.scatter_(1, cache_position.view(1, 1).expand(batch_size, 1), 1)
 
             model_inputs = {
                 "input_ids": current_ids,
