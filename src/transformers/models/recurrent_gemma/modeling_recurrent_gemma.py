@@ -582,6 +582,14 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
                 layer.temporal_block._setup_cache(batch, device, dtype)
 
 
+def _get_seq_length(self, layer_idx: int = 0) -> int:
+    return self.layers[self.first_attention_layer].get_seq_length()
+
+
+def _get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
+    return self.layers[self.first_attention_layer].get_mask_sizes(query_length)
+
+
 @auto_docstring
 class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
     def __init__(self, config: RecurrentGemmaConfig):
@@ -639,11 +647,16 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             self._setup_cache(self.config, hidden_states.shape[0], hidden_states.device, hidden_states.dtype)
             past_key_values = DynamicCache(config=self.config)
 
+        # Hack because the mamba layer indices will stay empty in `past_key_values`, and we want `get_seq_length` and
+        # `get_mask_sizes` to use the first attention layer by default for the mask function to create correct masks
+        if past_key_values is not None:
+            past_key_values.first_attention_layer = self.config.layers_block_type.index("attention")
+            # bound new methods to this instance only
+            past_key_values.get_seq_length = _get_seq_length.__get__(past_key_values)
+            past_key_values.get_mask_sizes = _get_mask_sizes.__get__(past_key_values)
+
         if position_ids is None:
-            first_attention_layer = self.config.layers_block_type.index("attention")
-            past_seen_tokens = (
-                past_key_values.get_seq_length(first_attention_layer) if past_key_values is not None else 0
-            )
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
