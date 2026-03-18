@@ -190,28 +190,17 @@ class FalconHybridMambaAttentionDynamicCache:
         return self.key_cache[layer_idx].shape[-2]
 
     def update_conv_state(
-        self,
-        layer_idx: int,
-        new_conv_state: torch.Tensor,
-        seq_len: int,
+        self, layer_idx: int, new_conv_state: torch.Tensor, cache_init: bool = False
     ) -> torch.Tensor:
-        # Note: we may or may not have to substract the current seq_len here as the cache may or may not have beem already updated
-        past_seen_tokens = self.get_seq_length()
-        # In this case, the cache was already updated and we need to subtract seq_len to get the correct past length
-        if any(x < layer_idx for x in self.transformer_layers):
-            past_seen_tokens = past_seen_tokens - seq_len
-
-        conv_state = self.conv_states[layer_idx]
-        positions = torch.arange(seq_len, device=conv_state.device) + past_seen_tokens
-        positions = positions.clamp(0, self.conv_kernel_size - 1)
-
-        conv_state = conv_state.roll(shifts=-1, dims=-1)
-        if len(positions) > 1:
-            conv_state[:, :, :] = new_conv_state.to(conv_state.device)
+        # Technically, those update are not logically correct if the prefill is smaller than `conv_kernel_size`,
+        # as it will `roll` anyway in the first decoding step even though it should `roll` ONLY if the cache is already full.
+        # But since `conv_kernel_size=4` in practice, it's almost impossible to have a smaller prefill so it's mostly fine for now
+        if cache_init:
+            self.conv_states[layer_idx] = new_conv_state.to(self.conv_states[layer_idx].device)
         else:
-            conv_state[:, :, -1] = new_conv_state[:, :, -1].to(conv_state.device)
-        self.conv_states[layer_idx].zero_()
-        self.conv_states[layer_idx] += conv_state
+            self.conv_states[layer_idx] = self.conv_states[layer_idx].roll(shifts=-1, dims=-1)
+            self.conv_states[layer_idx][:, :, -1] = new_conv_state[:, 0, :].to(self.conv_states[layer_idx].device)
+
         return self.conv_states[layer_idx]
 
     def reset(self):
@@ -774,7 +763,7 @@ class FalconH1Mixer(nn.Module):
                         hidden_states_B_C.permute(0, 2, 1),
                         (self.conv_kernel_size - hidden_states_B_C.shape[-2], 0),
                     )
-                    cache_params.update_conv_state(self.layer_idx, conv_states, seq_len)
+                    cache_params.update_conv_state(self.layer_idx, conv_states, cache_init=True)
 
                 time_step = nn.functional.softplus(dt + self.dt_bias)
                 # 1D Convolution
@@ -862,11 +851,9 @@ class FalconH1Mixer(nn.Module):
 
         # 2. Convolution sequence transformation
         if use_precomputed_states:
-            cache_params.conv_states[self.layer_idx] = cache_params.conv_states[self.layer_idx].roll(shifts=-1, dims=-1)
-            cache_params.conv_states[self.layer_idx][:, :, -1] = hidden_states_B_C[:, 0, :].to(cache_params.conv_states[self.layer_idx].device)
-
+            conv_states = cache_params.update_conv_state(self.layer_idx, hidden_states_B_C, cache_init=False)
             # We need to guarantee that anything regarding the cache is on the same device
-            conv_states = cache_params.conv_states[self.layer_idx].to(device=self.conv1d.weight.device)
+            conv_states = conv_states.to(device=self.conv1d.weight.device)
 
             hidden_states_B_C = torch.sum(
                 conv_states * self.conv1d.weight.squeeze(1), dim=-1
@@ -881,7 +868,7 @@ class FalconH1Mixer(nn.Module):
                 conv_states = nn.functional.pad(
                     hidden_states_B_C_transposed, (self.conv_kernel_size - hidden_states_B_C_transposed.shape[-1], 0)
                 )
-                cache_params.conv_states[self.layer_idx].copy_(conv_states)
+                conv_states = cache_params.update_conv_state(self.layer_idx, conv_states, cache_init=True)
 
             hidden_states_B_C = self.act(self.conv1d(hidden_states_B_C.transpose(1, 2))[..., :seq_len].transpose(1, 2))
 
