@@ -1658,11 +1658,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
 
         model_kwargs = _expand_dict_for_generation(model_kwargs)
 
-        if is_encoder_decoder:
-            if model_kwargs.get("encoder_outputs") is None:
-                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
-            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
-
         return input_ids, model_kwargs
 
     def get_input_embeddings(self) -> nn.Module:
