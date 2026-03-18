@@ -4,6 +4,83 @@ from ..generation.continuous_batching import PagedAttentionCache
 from ..modeling_flash_attention_utils import lazy_import_paged_flash_attention
 
 
+"""
+This file contains the paged attention forward function used in continuous batching. It is essentially a wrapper
+around two versions of the flash attention kernel:
+
+1. `flash_attn_varlen_func` for variable length batches, also called the "varlen" path.
+
+1.a Cache behavior:
+    This version of flash attention has no mechanism to interact with the paged cache, so we manually read and write
+    from `PagedAttentionCache` using the `update` method. This can become a significant bottlenect when sequence length
+    grows large, so this path is recommended for batches with a large number of request in prefill.
+
+1.b Indexing mechanism:
+    This version of flash attention uses max sequence length (max_seqlen_q or _kv) and cumulative sequence lengths
+    (cu_seq_lens_q or _k) to compute the attention for each sequence.
+
+1.c Example
+    For a batch of 3 sequences, with query length [10, 3, 1] and key length [0, 1, 7], you get:
+        cu_seq_lens_q = [0, 10, 13, 14]
+        cu_seq_lens_k = [0, 0, 1, 8]
+        max_seqlen_q = 10
+        max_seqlen_k = 7
+
+    And inputs shapes:
+        Q:      [1, 10+3+1, num_heads, head_dim] = [1, 14, num_heads, head_dim]
+        K or V: [1, 0+1+7, num_kv_heads, head_dim] = [1, 8, num_kv_heads, head_dim]
+
+    The kernel is capable of assigning each query and key / value token to a sequence using the cumulative sequence
+    lengths:
+
+        Q request index: [r0, r0, r0, r0, r0, r0, r0, r0, r0, r0, r1, r1, r1, r2]
+        cu_seq_lens_q:  0_____________________________________10__________13__14
+
+        K request index: [r1, r2, r2, r2, r2, r2, r2, r2]
+        cu_seq_lens_k:  0__1___________________________8
+
+2. `flash_attn_with_kvcache` for decode-only batches, also called the "decode" path.
+
+2.a Cache behavior:
+    This version of flash attention has a mechanism to interact with the paged cache, so we can use the `block_table`
+    to index into the cache and directly update it in-place. This is more efficient than calling `update` as in the
+    varlen path, but assumes that each sequence in the batch only has one token. Hence this is not viable for batches
+    where some requests are still prefilling.
+    The block table is a tensor of shape (batch_size, max_blocks_per_seq), where batch_size is the number of sequences
+    in the batch, and max_blocks_per_seq is the maximum number of blocks per sequence. For each request, the block table
+    is a vector containing the physical location of the request's cache in the KV cache tensor.
+
+2.b Indexing mechanism:
+    This version of flash attention uses `cache_seqlens` to retrieve the length of the cache for each sequence. It has
+    no mechanism to retrieve which query token belongs to which sequence, because it assumes each query token belongs to
+    a different sequence.
+
+2.c Example:
+    Consider a batch of 3 sequences, with query lengths [1, 1, 1] and key lengths [30, 32, 70]. As stated in 2.a, each
+    sequence has only one query token, which is needed to use this kernel. We also set the cache block size to 32: this
+    is the number of tokens in a KV cache block. Also, we set the maximum number of blocks allocated per sequence to 4.
+
+    The cache seqlens is easy to compute: for each sequence, it is the number of key tokens in the sequence. So:
+        cache_seqlens = [30, 32, 70]
+
+    Since there are 3 sequences and 4 block max per sequence, the shape of the block table is (3, 4). Using random
+    adresses for this example, the block table looks like this:
+        block table: [[2, -1, -1, -1],
+                      [0,  1, -1, -1],
+                      [3,  5,  6, -1]]
+    -1 means that there is no block allocated for this index.
+
+    Sequence 0, with 30 cached tokens, has its cache located in KV_cache[2]. There is enough space to write the
+    new KV cache token: 30 + 1 = 31 < 32 (block size).
+    Sequence 1, with 32 cached tokens, has its cache located in KV_cache[0] and KV_cache[1]. Since the
+    new KV cache token produced will not fit in the first block (KV_cache[0]), there needs to be a second block
+    (KV_cache[1]) already allocated before the kernel is called.
+    Sequence 2, with 70 cached tokens, has its cache located in KV_cache[3], KV_cache[5], and KV_cache[6]. Note that the
+    blocks are not necessarily contiguous, which is no problem for the kernel, and the real advantage of paged cache.
+    Since the new KV cache token fits in the third block (KV_cache[6]), there is no need to allocated fourth block.
+"""
+
+
 @torch.compiler.disable
 def paged_attention_forward(
     module: torch.nn.Module,
@@ -103,7 +180,6 @@ def paged_attention_forward(
         if "s_aux" in kwargs:
             flash_kwargs["s_aux"] = kwargs["s_aux"]  # this is only available in VLLM's FA3
         # Call flash_attn_with_kvcache - this updates cache in-place and computes attention
-        # Use wrapper to prevent dynamo from tracing into the flash attention kernel
         attn_output = flash_attn_with_kvcache(
             q=q,
             k_cache=k_cache,
