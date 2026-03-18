@@ -66,6 +66,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("albert", "AlbertTokenizer" if is_tokenizers_available() else None),
         ("align", "BertTokenizer" if is_tokenizers_available() else None),
         ("audioflamingo3", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("audioflamingonext", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("aya_vision", "CohereTokenizer" if is_tokenizers_available() else None),
         ("bark", "BertTokenizer" if is_tokenizers_available() else None),
         ("bart", "RobertaTokenizer" if is_tokenizers_available() else None),
