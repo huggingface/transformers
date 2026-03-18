@@ -213,7 +213,6 @@ class Olmo2Attention(OlmoAttention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
@@ -230,10 +229,8 @@ class Olmo2Attention(OlmoAttention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+        if past_key_values is not None:n}
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -287,7 +284,6 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
         past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
@@ -301,7 +297,6 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -495,7 +490,6 @@ class LlamaForCausalLM(nn.Module):
       output_attentions: Optional[bool] = None,
       output_hidden_states: Optional[bool] = None,
       return_dict: Optional[bool] = None,
-      cache_position: Optional[torch.LongTensor] = None,
       num_logits_to_keep: int = 0,
       **kwargs: Unpack[KwargsForCausalLM],
   ) -> Union[Tuple, CausalLMOutputWithPast]:
@@ -521,7 +515,6 @@ class NewModelForCausalLM(LlamaForCausalLM):    |    class LlamaForCausalLM(nn.M
                                                 |         output_attentions: Optional[bool] = None,
                                                 |         output_hidden_states: Optional[bool] = None,
                                                 |         return_dict: Optional[bool] = None,
-                                                |         cache_position: Optional[torch.LongTensor] = None,
                                                 |         num_logits_to_keep: int = 0,
                                                 |         **kwargs: Unpack[KwargsForCausalLM],
                                                 |     ) -> Union[Tuple, CausalLMOutputWithPast]:
