@@ -21,6 +21,8 @@ The only purpose of this class is to override ``spawn_materialize`` so that
 
 from __future__ import annotations
 
+import os
+
 from .base import HfQuantizer
 
 
