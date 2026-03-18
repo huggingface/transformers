@@ -458,6 +458,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
         _, device_mesh, _ = initialize_fsdp(fsdp_plan=auto_plan)
         _set_determinism(SEED)
         model = AutoModelForCausalLM.from_pretrained(init_tmpdir, fsdp_plan=auto_plan, fsdp_device_mesh=device_mesh)
+        dist.barrier()
     finally:
         if rank == 0 and init_tmpdir_obj is not None:
             init_tmpdir_obj.cleanup()
