@@ -47,6 +47,7 @@ class PPOCRV5ServerRecConfig(PreTrainedConfig):
     qkv_bias: bool = True
     num_attention_heads: int = 8
     attention_dropout: float = 0.0
+    layer_norm_eps: float = 1e-6
 
     def __post_init__(self, **kwargs):
         if self.conv_kernel_size is None:
@@ -63,6 +64,7 @@ class PPOCRV5ServerRecConfig(PreTrainedConfig):
                 "lr_mult_list": [1.0, 1.0, 1.0, 1.0, 1.0],
                 "out_features": ["stage1", "stage2", "stage3", "stage4"],
                 "stage_downsample": [True, True, True, True],
+                "stem_strides": [2, 1, 1, 1, 1],
                 "stage_downsample_strides": [[2, 1], [1, 2], [2, 1], [2, 1]],
             },
             **kwargs,

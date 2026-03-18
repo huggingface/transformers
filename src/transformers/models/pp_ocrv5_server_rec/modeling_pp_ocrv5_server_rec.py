@@ -28,34 +28,48 @@ from torch import Tensor
 
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.output_capturing import capture_outputs
 from .configuration_pp_ocrv5_server_rec import PPOCRV5ServerRecConfig
 
 
-class PPOCRV5ServerRecBlock(nn.Module):
-    def __init__(
-        self,
-        config,
-    ):
+class PPOCRV5ServerRecBlock(GradientCheckpointingLayer):
+    def __init__(self, config):
         super().__init__()
-        hidden_size = config.hidden_size
-        mlp_ratio = config.mlp_ratio
-
-        self.mixer = PPOCRV5ServerRecAttention(config)
-        self.mlp = PPOCRV5ServerRecMlp(
+        self.embed_dim = config.hidden_size
+        self.self_attn = PPOCRV5ServerRecAttention(config)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.mlp = PPOCRV5ServerRecMLP(
             config=config,
-            in_features=hidden_size,
-            hidden_features=int(hidden_size * mlp_ratio),
+            in_features=self.embed_dim,
+            hidden_features=int(self.embed_dim * config.mlp_ratio),
         )
-        self.norm1 = nn.LayerNorm(hidden_size, eps=1e-5)
-        self.norm2 = nn.LayerNorm(hidden_size, eps=1e-5)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states):
-        hidden_states = hidden_states + self.mixer(self.norm1(hidden_states))[0]
-        hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.FloatTensor:
+        residual = hidden_states
+
+        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
 
         return hidden_states
 
@@ -124,6 +138,7 @@ class PPOCRV5ServerRecAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
@@ -186,23 +201,45 @@ class PPOCRV5ServerRecConvLayer(nn.Module):
         return hidden_state
 
 
+@auto_docstring
+class PPOCRV5ServerRecPreTrainedModel(PreTrainedModel):
+    config: PPOCRV5ServerRecConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["PPOCRV5ServerRecBlock"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": [PPOCRV5ServerRecConvLayer, PPOCRV5ServerRecBlock],
+    }
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
+
 class PPOCRV5ServerRecHead(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        in_channels = config.backbone_config.stage_out_channels[-1]
-        self.ctc_encoder = PPOCRV5ServerRecEncoderWithSVTR(in_channels, config)
-        self.ctc_head = nn.Linear(config.hidden_size, config.head_out_channels)
+        self.encoder = PPOCRV5ServerRecEncoderWithSVTR(config)
+        self.head = nn.Linear(config.hidden_size, config.head_out_channels)
 
-    def forward(self, hidden_states):
-        hidden_states = self.ctc_encoder(hidden_states)
-        hidden_states = self.ctc_head(hidden_states)
+    def forward(self, hidden_states: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+        outputs = self.encoder(hidden_states, **kwargs)
+        hidden_states = self.head(outputs.last_hidden_state)
         hidden_states = F.softmax(hidden_states.float(), dim=2)
 
-        return hidden_states
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=outputs.hidden_states)
 
 
-class PPOCRV5ServerRecMlp(nn.Module):
+class PPOCRV5ServerRecMLP(nn.Module):
     def __init__(self, config, in_features, hidden_features=None, out_features=None, drop=0.0):
         super().__init__()
         out_features = out_features or in_features
@@ -221,42 +258,45 @@ class PPOCRV5ServerRecMlp(nn.Module):
         return hidden_state
 
 
-class PPOCRV5ServerRecEncoderWithSVTR(nn.Module):
+class PPOCRV5ServerRecEncoderWithSVTR(PPOCRV5ServerRecPreTrainedModel):
+    """
+    SVTR: Scene Text Recognition with a Single Visual Model
+    https://www.paddleocr.ai/v2.10.0/en/algorithm/text_recognition/algorithm_rec_svtr.html
+    """
+
     def __init__(
         self,
-        in_channels,
         config,
     ):
-        super().__init__()
+        super().__init__(config)
+        in_channels = config.backbone_config.stage_out_channels[-1]
         hidden_size = config.hidden_size
 
         self.conv_block = nn.ModuleList(
             [
-            PPOCRV5ServerRecConvLayer(
-                in_channels=in_channels,
-                out_channels=in_channels // 8,
-                kernel_size=config.conv_kernel_size,
-            ),
-            PPOCRV5ServerRecConvLayer(
-                in_channels=in_channels // 8, out_channels=hidden_size, kernel_size=(1, 1)
-            ),
-            PPOCRV5ServerRecConvLayer(in_channels=hidden_size, out_channels=in_channels, kernel_size=(1, 1)),
-            PPOCRV5ServerRecConvLayer(
-                in_channels=2 * in_channels,
-                out_channels=in_channels // 8,
-                kernel_size=config.conv_kernel_size,
-            ),
-            PPOCRV5ServerRecConvLayer(
-                in_channels=in_channels // 8, out_channels=hidden_size, kernel_size=(1, 1)
-            )]
+                PPOCRV5ServerRecConvLayer(
+                    in_channels=in_channels,
+                    out_channels=in_channels // 8,
+                    kernel_size=config.conv_kernel_size,
+                ),
+                PPOCRV5ServerRecConvLayer(in_channels=in_channels // 8, out_channels=hidden_size, kernel_size=(1, 1)),
+                PPOCRV5ServerRecConvLayer(in_channels=hidden_size, out_channels=in_channels, kernel_size=(1, 1)),
+                PPOCRV5ServerRecConvLayer(
+                    in_channels=2 * in_channels,
+                    out_channels=in_channels // 8,
+                    kernel_size=config.conv_kernel_size,
+                ),
+                PPOCRV5ServerRecConvLayer(in_channels=in_channels // 8, out_channels=hidden_size, kernel_size=(1, 1)),
+            ]
         )
         self.svtr_block = nn.ModuleList()
         for _ in range(config.depth):
             self.svtr_block.append(PPOCRV5ServerRecBlock(config=config))
 
-        self.norm = nn.LayerNorm(hidden_size, eps=1e-6)
+        self.norm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states):
+    @capture_outputs
+    def forward(self, hidden_states: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
         residual = hidden_states
 
         hidden_states = self.conv_block[0](hidden_states)
@@ -265,7 +305,7 @@ class PPOCRV5ServerRecEncoderWithSVTR(nn.Module):
         batch_size, channels, height, width = hidden_states.shape
         hidden_states = hidden_states.flatten(2).permute(0, 2, 1)
         for blk in self.svtr_block:
-            hidden_states = blk(hidden_states)
+            hidden_states = blk(hidden_states=hidden_states, attention_mask=None)
 
         hidden_states = self.norm(hidden_states)
         hidden_states = hidden_states.view(batch_size, height, width, channels).permute(0, 3, 1, 2)
@@ -273,20 +313,8 @@ class PPOCRV5ServerRecEncoderWithSVTR(nn.Module):
         hidden_states = self.conv_block[3](torch.cat((residual, hidden_states), dim=1))
         hidden_states = self.conv_block[4](hidden_states)
         hidden_states = hidden_states.squeeze(2).permute(0, 2, 1)
-        return hidden_states
 
-
-class PPOCRV5ServerRecPreTrainedModel(PreTrainedModel):
-    """
-    Base class for all PPOCRV5 Server Det pre-trained models. Handles model initialization,
-    configuration, and loading of pre-trained weights, following the Transformers library conventions.
-    """
-
-    config: PPOCRV5ServerRecConfig
-    base_model_prefix = "pp_ocrv5_server_rec"
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    _can_compile_fullgraph = True
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states)
 
 
 @auto_docstring(custom_intro="PPOCRV5ServerRec model, consisting of Backbone and Head networks.")
@@ -294,11 +322,8 @@ class PPOCRV5ServerRecModel(PPOCRV5ServerRecPreTrainedModel):
     def __init__(self, config: PPOCRV5ServerRecConfig):
         super().__init__(config)
         self.backbone = load_backbone(config)
-        # PP-OCRv5_server_rec needs to modify the stride for the HGNetV2 layers
-        self.backbone.embedder.stem3.convolution.stride = (1, 1)
-        for idx, stride in enumerate(self.backbone.config.stage_downsample_strides):
-            self.backbone.encoder.stages[idx].downsample.convolution.stride = stride
 
+        self.gradient_checkpointing = False
         self.post_init()
 
     @can_return_tuple
@@ -336,7 +361,7 @@ class PPOCRV5ServerRecForTextRecognition(PPOCRV5ServerRecPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
         outputs = self.model(pixel_values, **kwargs)
-        logits = self.head(outputs.last_hidden_state)
+        logits = self.head(outputs.last_hidden_state, **kwargs)
 
         return BaseModelOutputWithNoAttention(
             last_hidden_state=logits,

@@ -27,7 +27,7 @@ import torchvision.transforms.v2.functional as tvF
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
-from ...utils import auto_docstring
+from ...utils import auto_docstring, requires_backends
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD  # noqa: F401
 from ...utils.generic import TensorType
 from ...utils.import_utils import requires
@@ -148,6 +148,8 @@ class PPOCRV5ServerRecImageProcessorFast(BaseImageProcessorFast):
                 - "text" (str): The decoded text string.
                 - "score" (float): The average confidence score of the characters in the decoded text.
         """
+        requires_backends(self, ["torch"])
+
         logits = predictions.last_hidden_state
         batch_size = logits.shape[0]
 

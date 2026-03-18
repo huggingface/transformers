@@ -105,6 +105,7 @@ class PPOCRV5ServerRecModelTester:
             "lr_mult_list": [1.0, 1.0, 1.0, 1.0, 1.0],
             "out_features": ["stage1", "stage2", "stage3", "stage4"],
             "stage_downsample": [True, True, True, True],
+            "stem_strides": [2, 1, 1, 1, 1],
             "stage_downsample_strides": [[2, 1], [1, 2], [2, 1], [2, 1]],
         }
 
@@ -147,36 +148,28 @@ class PPOCRV5ServerRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="PPOCRV5ServerRec does not use inputs_embeds")
-    def test_inputs_embeds(self):
+    @unittest.skip("PPOCRV5ServerRec does not has no attribute `hf_device_map`")
+    def test_cpu_offload(self):
         pass
 
-    @unittest.skip(reason="PPOCRV5ServerRec does not use inputs_embeds")
-    def test_inputs_embeds_matches_input_ids(self):
+    @unittest.skip("PPOCRV5ServerRec does not has no attribute `hf_device_map`")
+    def test_disk_offload_bin(self):
         pass
 
-    @unittest.skip(reason="PPOCRV5ServerRec does not support input and output embeddings")
+    @unittest.skip("PPOCRV5ServerRec does not has no attribute `hf_device_map`")
+    def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip("PPOCRV5ServerRec does not has no attribute `hf_device_map`")
+    def test_model_parallelism(self):
+        pass
+
+    @unittest.skip("PPOCRV5ServerRec does not has no function `get_input_embeddings`")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="PPOCRV5ServerRec does not support input and output embeddings")
-    def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(reason="Feed forward chunking is not implemented")
-    def test_feed_forward_chunking(self):
         pass
 
     @unittest.skip(reason="PPOCRV5ServerRec does not support attention")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(reason="PPOCRV5ServerRec does not support attention")
-    def test_attention_outputs(self):
-        pass
-
-    @unittest.skip(reason="PPOCRV5ServerRec does not support train")
-    def test_problem_types(self):
         pass
 
     def test_forward_signature(self):
