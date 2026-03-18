@@ -19,6 +19,8 @@
 # limitations under the License.
 
 
+from collections.abc import Sequence
+
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import BackboneConfigMixin
@@ -37,6 +39,10 @@ class HGNetV2Config(BackboneConfigMixin, PreTrainedConfig):
         - First number (3) is input image channels
         - Second number (32) is intermediate stem channels
         - Third number (48) is output stem channels
+    stem_strides (`Sequence[int | list[int] | tuple[int, ...]]`, *optional*, defaults to `(2, 1, 1, 2, 1)`):
+        Stride patterns for the stem layers.
+    stage_downsample_strides (`Sequence[int | list[int] | tuple[int, ...]]`, *optional*, defaults to `(2, 2, 2, 2)`):
+        Stride patterns for each stage layer.
     stage_in_channels (`list[int]`, *optional*, defaults to `[48, 128, 512, 1024]`):
         Input channel dimensions for each stage of the backbone.
         This defines how many channels the input to each stage will have.
@@ -74,11 +80,13 @@ class HGNetV2Config(BackboneConfigMixin, PreTrainedConfig):
     _out_features: list[str] | None = None
     _out_indices: list[int] | None = None
     stem_channels: list[int] | tuple[int, ...] = (3, 32, 48)
+    stem_strides: Sequence[int | list[int] | tuple[int, ...]] = (2, 1, 1, 2, 1)
     stage_in_channels: list[int] | tuple[int, ...] = (48, 128, 512, 1024)
     stage_mid_channels: list[int] | tuple[int, ...] = (48, 96, 192, 384)
     stage_out_channels: list[int] | tuple[int, ...] = (128, 512, 1024, 2048)
     stage_num_blocks: list[int] | tuple[int, ...] = (1, 1, 3, 1)
     stage_downsample: list[bool] | tuple[bool, ...] = (False, True, True, True)
+    stage_downsample_strides: Sequence[int | list[int] | tuple[int, ...]] = (2, 2, 2, 2)
     stage_light_block: list[bool] | tuple[bool, ...] = (False, False, True, True)
     stage_kernel_size: list[int] | tuple[int, ...] = (3, 3, 5, 5)
     stage_numb_of_layers: list[int] | tuple[int, ...] = (6, 6, 6, 6)

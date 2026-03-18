@@ -350,6 +350,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("plbart", "PLBartModel"),
         ("poolformer", "PoolFormerModel"),
         ("pp_doclayout_v3", "PPDocLayoutV3Model"),
+        ("pp_ocrv5_mobile_rec", "PPOCRV5MobileRecModel"),
+        ("pp_ocrv5_server_rec", "PPOCRV5ServerRecModel"),
         ("prophetnet", "ProphetNetModel"),
         ("pvt", "PvtModel"),
         ("pvt_v2", "PvtV2Model"),
@@ -1123,6 +1125,16 @@ MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES = OrderedDict(
         ("zoedepth", "ZoeDepthForDepthEstimation"),
     ]
 )
+
+
+MODEL_FOR_TEXT_RECOGNITION_MAPPING_NAMES = OrderedDict(
+    [
+        ("pp_ocrv5_mobile_rec", "PPOCRV5MobileRecForTextRecognition"),
+        ("pp_ocrv5_server_rec", "PPOCRV5ServerRecForTextRecognition"),
+    ]
+)
+
+
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
@@ -1839,6 +1851,7 @@ MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES
 )
 MODEL_FOR_DEPTH_ESTIMATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES)
+MODEL_FOR_TEXT_RECOGNITION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_TEXT_RECOGNITION_MAPPING_NAMES)
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
 )
@@ -2126,6 +2139,13 @@ class AutoModelForDepthEstimation(_BaseAutoModelClass):
 AutoModelForDepthEstimation = auto_class_update(AutoModelForDepthEstimation, head_doc="depth estimation")
 
 
+class AutoModelForTextRecognition(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_TEXT_RECOGNITION_MAPPING
+
+
+AutoModelForTextRecognition = auto_class_update(AutoModelForTextRecognition, head_doc="text recognition")
+
+
 class AutoModelForVideoClassification(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING
 
@@ -2235,6 +2255,7 @@ __all__ = [
     "MODEL_FOR_CTC_MAPPING",
     "MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING",
     "MODEL_FOR_DEPTH_ESTIMATION_MAPPING",
+    "MODEL_FOR_TEXT_RECOGNITION_MAPPING",
     "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
     "MODEL_FOR_IMAGE_MAPPING",
     "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
@@ -2280,6 +2301,7 @@ __all__ = [
     "AutoModelForCausalLM",
     "AutoModelForCTC",
     "AutoModelForDepthEstimation",
+    "AutoModelForTextRecognition",
     "AutoModelForImageClassification",
     "AutoModelForImageSegmentation",
     "AutoModelForImageToImage",
