@@ -26,7 +26,7 @@ jobs:
       fail-fast: false
       matrix:
         split_keys: ${{ fromJson(inputs.split_keys) }}
-    runs-on: 
+    runs-on:
       group: aws-g5-4xlarge-cache
     container:
       image: huggingface/transformers-all-latest-gpu
@@ -80,3 +80,44 @@ jobs:
         with:
           name: doc_tests_gpu_test_reports_${{ env.split_keys }}
           path: /transformers/reports/doc_tests_gpu_${{ env.split_keys }}
+
+  run_runnable_doc_tests:
+    name: "Runnable doc tests"
+    runs-on:
+      group: aws-g5-4xlarge-cache
+    container:
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[flax]
+
+      - name: GPU visibility
+        working-directory: /transformers
+        run: |
+          python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        run: pip freeze
+
+      - name: Run runnable doc tests
+        working-directory: /transformers
+        run: |
+          python3 -m pytest -v --make-reports doc_runnable_gpu -p no:doctest docs/source/en -sv
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/doc_runnable_gpu/failures_short.txt
+
+      - name: "Test suite reports artifacts: doc_runnable_gpu_test_reports"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: doc_runnable_gpu_test_reports
+          path: /transformers/reports/doc_runnable_gpu
