@@ -17,19 +17,46 @@ rendered properly in your Markdown viewer.
 
 # CPMAnt
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[CPMAnt](https://github.com/OpenBMB/CPM-Live/tree/cpm-ant/cpm-live) is a 10B-parameter open-source Chinese pre-trained language model and the first milestone of the CPM-Live open training project. It achieves strong results with delta tuning on the CUGE benchmark, and compressed variants are available for different hardware configurations.
 
-## Overview
+The example below demonstrates how to generate text with [`Pipeline`] or the [`CpmAntForCausalLM`] class.
 
-CPM-Ant is an open-source Chinese pre-trained language model (PLM) with 10B parameters. It is also the first milestone of the live training process of CPM-Live. The training process is cost-effective and environment-friendly. CPM-Ant also achieves promising results with delta tuning on the CUGE benchmark. Besides the full model, we also provide various compressed versions to meet the requirements of different hardware configurations. [See more](https://github.com/OpenBMB/CPM-Live/tree/cpm-ant/cpm-live)
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-This model was contributed by [OpenBMB](https://huggingface.co/openbmb). The original code can be found [here](https://github.com/OpenBMB/CPM-Live/tree/cpm-ant/cpm-live).
+```py
+import torch
+from transformers import pipeline
 
-## Resources
+pipe = pipeline(
+    task="text-generation",
+    model="openbmb/cpm-ant-10b",
+    dtype=torch.bfloat16,
+)
+pipe("今天天气很好，")
+```
 
-- A tutorial on [CPM-Live](https://github.com/OpenBMB/CPM-Live/tree/cpm-ant/cpm-live).
+</hfoption>
+<hfoption id="CpmAntForCausalLM">
+
+```py
+import torch
+from transformers import CpmAntForCausalLM, CpmAntTokenizer
+
+tokenizer = CpmAntTokenizer.from_pretrained("openbmb/cpm-ant-10b")
+model = CpmAntForCausalLM.from_pretrained(
+    "openbmb/cpm-ant-10b",
+    dtype=torch.bfloat16,
+    device_map="auto",
+)
+input_ids = tokenizer("今天天气很好，", return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids, max_new_tokens=50)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+</hfoption>
+</hfoptions>
 
 ## CpmAntConfig
 

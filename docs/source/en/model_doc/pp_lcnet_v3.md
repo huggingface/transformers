@@ -15,20 +15,18 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2023-04-14 and added to Hugging Face Transformers on 2026-03-13.*
 
-# PP-LCNetV3
+# PPLCNetV3
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[PPLCNetV3](https://huggingface.co/papers/2109.15099) is a lightweight CPU-optimized convolutional backbone designed for efficient image classification and downstream vision tasks. It builds on the PP-LCNet architecture with improved training strategies and structural refinements for better accuracy-latency tradeoffs on CPU hardware.
 
-## Overview
+## Notes
 
-PPLCNetV3 is provided as a backbone network only. A pre-trained model for direct use in image classification has not been officially released.
-
-## PPLCNetV3Backbone
-
-[[autodoc]] PPLCNetV3Backbone
+- PPLCNetV3 is provided as a backbone network only. No pre-trained image classification checkpoint has been officially released.
 
 ## PPLCNetV3Config
 
 [[autodoc]] PPLCNetV3Config
+
+## PPLCNetV3Backbone
+
+[[autodoc]] PPLCNetV3Backbone
