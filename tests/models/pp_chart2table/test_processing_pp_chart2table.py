@@ -63,14 +63,20 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
-    @unittest.skip(reason="PPChart2Table uses predetermined input - chat template usage not intended + image input cannot be None")
+    @unittest.skip(
+        reason="PPChart2Table uses predetermined input - chat template usage not intended + image input cannot be None"
+    )
     def test_apply_chat_template_assistant_mask(self):
         pass
 
-    @unittest.skip(reason="PPChart2Table uses predetermined input - chat template usage not intended + image input cannot be None")
+    @unittest.skip(
+        reason="PPChart2Table uses predetermined input - chat template usage not intended + image input cannot be None"
+    )
     def test_apply_chat_template_image_0(self):
         pass
 
-    @unittest.skip(reason="PPChart2Table uses predetermined input - chat template usage not intended + image input cannot be None")
+    @unittest.skip(
+        reason="PPChart2Table uses predetermined input - chat template usage not intended + image input cannot be None"
+    )
     def test_apply_chat_template_image_1(self):
         pass
