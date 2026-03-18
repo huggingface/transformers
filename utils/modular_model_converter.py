@@ -1199,9 +1199,7 @@ def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) ->
     return usual_import_nodes + protected_import_nodes
 
 
-def _ensure_utils_availability_imports(
-    imports: list[cst.CSTNode], needed: set[str]
-) -> list[cst.CSTNode]:
+def _ensure_utils_availability_imports(imports: list[cst.CSTNode], needed: set[str]) -> list[cst.CSTNode]:
     """Add is_torch_available and/or is_torchvision_available to the utils import if needed."""
     if not needed:
         return imports
@@ -1241,9 +1239,7 @@ def _ensure_utils_availability_imports(
             new_node = node.with_changes(body=[new_import_from])
             return imports[:i] + [new_node] + imports[i + 1 :]
     # No utils import found - add one (PIL files use ...utils for transformers.models.xxx)
-    new_import = cst.parse_statement(
-        "from ...utils import " + ", ".join(sorted(needed))
-    )
+    new_import = cst.parse_statement("from ...utils import " + ", ".join(sorted(needed)))
     return [new_import] + imports
 
 

@@ -30,6 +30,7 @@ from .image_processing_pix2struct import (
     torch_extract_patches,
 )
 
+
 if is_torch_available():
     import torch
 

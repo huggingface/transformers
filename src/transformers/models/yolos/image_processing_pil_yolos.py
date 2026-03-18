@@ -9,8 +9,6 @@ from typing import Any, Optional
 
 import numpy as np
 
-from transformers.utils import is_torch_available, requires_backends
-
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import (
@@ -36,7 +34,13 @@ from ...image_utils import (
     validate_annotations,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_available
+from ...utils import (
+    TensorType,
+    auto_docstring,
+    is_torch_available,
+    is_vision_available,
+    requires_backends,
+)
 from .image_processing_yolos import YolosImageProcessorKwargs
 
 

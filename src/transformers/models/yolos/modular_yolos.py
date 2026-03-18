@@ -1,22 +1,17 @@
 from typing import Optional
 
 import numpy as np
+import torch
+from torch import nn
+from torchvision.transforms.v2 import functional as tvF
 
 from transformers.models.detr.image_processing_detr import DetrImageProcessor
 from transformers.models.detr.image_processing_pil_detr import DetrImageProcessorPil
-from transformers.utils import requires_backends
 
 from ...image_transforms import center_to_corners_format
 from ...image_utils import PILImageResampling, SizeDict, get_image_size_for_max_height_width
-from ...utils import TensorType, is_torch_available, is_torchvision_available, logging
+from ...utils import TensorType, logging, requires_backends
 
-
-if is_torch_available():
-    import torch
-    from torch import nn
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 logger = logging.get_logger(__name__)
 
