@@ -260,7 +260,7 @@ def get_state_dict_dtype(state_dict):
     Returns the first found floating dtype in `state_dict` if there is one, otherwise returns the first dtype.
     """
     for t in state_dict.values():
-        if t.is_floating_point():
+        if hasattr(t, "is_floating_point") and t.is_floating_point():
             return t.dtype
 
     # if no floating dtype was found return whatever the first dtype is
@@ -4060,17 +4060,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         )
 
         is_quantized = hf_quantizer is not None
+        _gguf_weight_mapping = []  # populated below for GGUF checkpoints
+        _gguf_quantizer = None    # populated below for GGUF checkpoints
 
         if gguf_file:
             from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
+            from .quantizers.quantizer_gguf import GGUFQuantizer
 
-            # we need a dummy model to get the state_dict - for this reason, we keep the state_dict as if it was
-            # passed directly as a kwarg from now on
-            with torch.device("meta"):
-                dummy_model = cls(config)
-            state_dict = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True, model_to_load=dummy_model)[
-                "tensors"
-            ]
+            gguf_parsed = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True)
+            state_dict = gguf_parsed["tensors"]  # {gguf_name: GGUFQuantizedTensor}
+            _gguf_weight_mapping = gguf_parsed.get("weight_mapping", [])
+            _gguf_quantizer = GGUFQuantizer()
 
         # Find the correct dtype based on current state
         config, dtype = _get_dtype(
@@ -4098,8 +4098,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # instantiated model, as the flags can be modified by instances sometimes)
         dtype_plan = model._get_dtype_plan(dtype)
 
+        # Determine the effective quantizer: GGUF quantizer takes precedence for materialization
+        effective_quantizer = _gguf_quantizer if gguf_file else hf_quantizer
+
         # Obtain the weight conversion mapping for this model if any are registered
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
+        # For GGUF: prepend GgufDeserializer converters so they run before any model-specific conversions
+        if gguf_file and _gguf_weight_mapping:
+            weight_conversions = list(_gguf_weight_mapping) + list(weight_conversions)
 
         if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
             model = distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size)
@@ -4118,7 +4124,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             offload_buffers=offload_buffers,
             dtype=dtype,
             dtype_plan=dtype_plan,
-            hf_quantizer=hf_quantizer,
+            hf_quantizer=effective_quantizer,
             device_mesh=device_mesh,
             weights_only=weights_only,
             weight_mapping=weight_conversions,
@@ -4177,10 +4183,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     ) -> tuple[LoadStateDictInfo, dict]:
         """Perform the actual loading of some checkpoints into a `model`, by reading them from disk and dispatching them accordingly."""
         is_quantized = load_config.is_quantized
-        is_hqq_or_quark = is_quantized and load_config.hf_quantizer.quantization_config.quant_method in {
-            QuantizationMethod.HQQ,
-            QuantizationMethod.QUARK,
-        }
+        is_hqq_or_quark = (
+            is_quantized
+            and load_config.hf_quantizer.quantization_config is not None
+            and load_config.hf_quantizer.quantization_config.quant_method in {
+                QuantizationMethod.HQQ,
+                QuantizationMethod.QUARK,
+            }
+        )
 
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
         expected_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys

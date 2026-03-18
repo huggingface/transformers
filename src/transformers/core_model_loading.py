@@ -49,6 +49,23 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+@dataclass
+class GGUFQuantizedTensor:
+    """Wraps undequantized GGUF tensor data for lazy processing inside WeightConverter ops."""
+
+    data: Any  # np.ndarray raw quantized bytes from gguf reader
+    tensor_type: Any  # gguf.GGMLQuantizationType
+
+    def is_floating_point(self) -> bool:
+        return True
+
+    @property
+    def dtype(self):
+        import torch
+
+        return torch.float32
+
+
 def build_glob_alternation(
     globs: list[WeightRenaming | WeightConverter | str],
 ) -> tuple[re.Pattern, dict[str, str], dict[str, str]]:
@@ -143,7 +160,7 @@ class Concatenate(ConversionOps):
         target_patterns: list[str],
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        target_pattern = self.get_target_pattern(target_patterns)
+        target_pattern = self.get_target_pattern(target_patterns, kwargs.get("full_layer_name"))
         all_tensors = []
         # Very important to keep the relative order of the source patterns here, so we iterate over them not the
         # input directly as it's unordered!
@@ -155,11 +172,16 @@ class Concatenate(ConversionOps):
                 all_tensors.append(tensors)
         return {target_pattern: torch.cat(all_tensors, dim=self.dim)}
 
-    def get_target_pattern(self, target_patterns: list[str]) -> str:
+    def get_target_pattern(self, target_patterns: list[str], full_layer_name: str | None = None) -> str:
         # Here we always return the target pattern
         if len(target_patterns) > 1:
             raise ValueError("Undefined Operation encountered!")
-        return target_patterns[0]
+        target = target_patterns[0]
+        # If target contains an unresolved \1 backreference, use the already-resolved
+        # full_layer_name passed from WeightConverter.convert instead.
+        if full_layer_name is not None and r"\1" in target:
+            return full_layer_name
+        return target
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -833,6 +855,36 @@ def spawn_materialize(
         return _job
 
 
+def spawn_gguf_materialize(
+    thread_pool: ThreadPoolExecutor | None,
+    tensor: "GGUFQuantizedTensor",
+    device=None,
+    dtype=None,
+) -> "Future | Callable":
+    """Dequantize a GGUFQuantizedTensor and move to target device/dtype.
+
+    Mirrors ``spawn_materialize`` but handles raw GGUF data instead of
+    safetensors slices. Called by ``GGUFQuantizer.spawn_materialize``."""
+
+    def _job():
+        import numpy as np
+        from gguf import dequantize
+
+        # Copy raw quantized bytes from mmap → contiguous RAM before dequantizing.
+        # gguf-py's dequantize_blocks slices the data millions of times; operating
+        # on a plain ndarray instead of a memmap eliminates ~17M __array_finalize__
+        # calls and cuts dequantization wall-time roughly in half.
+        raw = np.array(tensor.data)
+        w = torch.from_numpy(np.copy(dequantize(raw, tensor.tensor_type)))
+        if device is not None or dtype is not None:
+            w = w.to(device=device, dtype=dtype)
+        return w
+
+    if thread_pool is not None:
+        return thread_pool.submit(_job)
+    return _job
+
+
 def spawn_tp_materialize(
     thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, sharding_method, tensor_idx, device=None, dtype=None
 ) -> Future | Callable:
@@ -1244,7 +1296,10 @@ def convert_and_load_state_dict_in_model(
 
             if future_or_tensor is None:
                 param_device = get_device(device_map, renamed_key, valid_torch_device=True)
-                future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
+                if hf_quantizer is not None:
+                    future_or_tensor = hf_quantizer.spawn_materialize(thread_pool, tensor, param_device, _dtype)
+                else:
+                    future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
         elif source_pattern is not None:  # add all target keys as unexpected

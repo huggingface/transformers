@@ -211,6 +211,7 @@ extras["testing"] = (
     deps_list(
         "pytest",
         "pytest-asyncio",
+        "pytest-benchmark",
         "pytest-random-order",
         "pytest-rich",
         "pytest-xdist",
