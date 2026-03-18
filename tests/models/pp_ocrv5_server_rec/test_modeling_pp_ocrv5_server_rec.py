@@ -216,6 +216,15 @@ class PPOCRV5ServerRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
                 [self.model_tester.image_size[0] // 2, self.model_tester.image_size[1] // 2],
             )
 
+            head_hidden_states = outputs.head_hidden_states
+            self.assertIsNotNone(head_hidden_states)
+            self.assertEqual(len(head_hidden_states), self.model_tester.depth + 1)
+
+            self.assertListEqual(
+                list(head_hidden_states[0].shape[-2:]),
+                [self.model_tester.hidden_size * self.model_tester.mlp_ratio * 2, self.model_tester.hidden_size],
+            )
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = True

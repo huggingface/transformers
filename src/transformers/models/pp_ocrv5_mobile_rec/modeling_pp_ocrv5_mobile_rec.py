@@ -79,7 +79,7 @@ class PPOCRV5MobileRecAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,  # Not used but kept for signature matching in downstream modules
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
@@ -236,7 +236,7 @@ class PPOCRV5MobileRecPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": [PPOCRV5MobileRecConvLayer, PPOCRV5MobileRecBlock],
+        "hidden_states": PPOCRV5MobileRecBlock,
     }
     main_input_name = "pixel_values"
     input_modalities = ("image",)
@@ -266,7 +266,6 @@ class PPOCRV5MobileRecEncoderWithSVTR(PPOCRV5MobileRecPreTrainedModel):
         config,
     ):
         super().__init__(config)
-        # Use noqa to bypass the `unused in modular` check.
         in_channels = make_divisible(  # noqa
             config.backbone_config.block_configs[-1][-1][2] * config.backbone_config.scale,
             config.backbone_config.divisor,
@@ -308,7 +307,7 @@ class PPOCRV5MobileRecEncoderWithSVTR(PPOCRV5MobileRecPreTrainedModel):
         batch_size, channels, height, width = hidden_states.shape
         hidden_states = hidden_states.flatten(2).transpose(1, 2)
         for block in self.svtr_block:
-            hidden_states = block(hidden_states=hidden_states)
+            hidden_states = block(hidden_states)
 
         hidden_states = self.norm(hidden_states)
         hidden_states = hidden_states.view(batch_size, height, width, channels).permute(0, 3, 1, 2)
@@ -326,6 +325,7 @@ class PPOCRV5MobileRecModel(PPOCRV5MobileRecPreTrainedModel):
         super().__init__(config)
         self.backbone = load_backbone(config)
 
+        self.gradient_checkpointing = False
         self.post_init()
 
     @can_return_tuple
@@ -392,7 +392,7 @@ class PPOCRV5MobileRecForTextRecognition(PPOCRV5MobileRecPreTrainedModel):
         head_outputs = self.head(outputs.last_hidden_state, **kwargs)
 
         return PPOCRV5MobileRecForTextRecognitionOutput(
-            last_hidden_state=head_outputs,
+            last_hidden_state=head_outputs.last_hidden_state,
             hidden_states=outputs.hidden_states,
             head_hidden_states=head_outputs.hidden_states,
         )

@@ -275,13 +275,10 @@ class PPOCRV5ServerRecBlock(CLIPEncoderLayer):
 
 
 class PPOCRV5ServerRecAttention(Blip2Attention):
-    # NOTE:
-    # Prevents TypeError from duplicate attention_mask arguments (passed both directly and in **kwargs).
-    # This parameter is a placeholder for compatibility and is not actually consumed by the function.
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,  # Not used but kept for signature matching in downstream modules
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         super().forward(hidden_states, **kwargs)
@@ -312,7 +309,7 @@ class PPOCRV5ServerRecPreTrainedModel(PaddleOCRVLPreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_record_outputs = {
-        "hidden_states": [PPOCRV5ServerRecConvLayer, PPOCRV5ServerRecBlock],
+        "hidden_states": PPOCRV5ServerRecBlock,
     }
 
     def _init_weights(self, module):
@@ -387,7 +384,7 @@ class PPOCRV5ServerRecEncoderWithSVTR(PPOCRV5ServerRecPreTrainedModel):
         batch_size, channels, height, width = hidden_states.shape
         hidden_states = hidden_states.flatten(2).transpose(1, 2)
         for block in self.svtr_block:
-            hidden_states = block(hidden_states=hidden_states)
+            hidden_states = block(hidden_states)
 
         hidden_states = self.norm(hidden_states)
         hidden_states = hidden_states.view(batch_size, height, width, channels).permute(0, 3, 1, 2)
@@ -405,6 +402,7 @@ class PPOCRV5ServerRecModel(PPOCRV5ServerRecPreTrainedModel):
         super().__init__(config)
         self.backbone = load_backbone(config)
 
+        self.gradient_checkpointing = False
         self.post_init()
 
     @can_return_tuple
@@ -456,7 +454,7 @@ class PPOCRV5ServerRecForTextRecognition(PPOCRV5ServerRecPreTrainedModel):
         head_outputs = self.head(outputs.last_hidden_state, **kwargs)
 
         return PPOCRV5ServerRecForTextRecognitionOutput(
-            last_hidden_state=head_outputs,
+            last_hidden_state=head_outputs.last_hidden_state,
             hidden_states=outputs.hidden_states,
             head_hidden_states=head_outputs.hidden_states,
         )

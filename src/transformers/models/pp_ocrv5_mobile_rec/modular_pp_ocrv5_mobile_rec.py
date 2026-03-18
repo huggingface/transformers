@@ -58,7 +58,6 @@ class PPOCRV5MobileRecEncoderWithSVTR(PPOCRV5ServerRecEncoderWithSVTR):
         config,
     ):
         super().__init__(config)
-        # Use noqa to bypass the `unused in modular` check.
         in_channels = make_divisible(  # noqa
             config.backbone_config.block_configs[-1][-1][2] * config.backbone_config.scale,
             config.backbone_config.divisor,
