@@ -137,6 +137,9 @@ class JinaEmbeddingsV3Config(XLMRobertaConfig):
     layer_norm_eps: float = 1e-5
     rope_parameters: RopeParameters | dict | None = None
 
+    add_cross_attention = AttributeError()
+    is_decoder = AttributeError()
+
 
 class JinaEmbeddingsV3Embeddings(XLMRobertaEmbeddings):
     def __init__(self, config: JinaEmbeddingsV3Config):
