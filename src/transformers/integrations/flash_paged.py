@@ -12,8 +12,8 @@ around two versions of the flash attention kernel:
 
 1.a Cache behavior:
     This version of flash attention has no mechanism to interact with the paged cache, so we manually read and write
-    from `PagedAttentionCache` using the `update` method. This can become a significant bottlenect when sequence length
-    grows large, so this path is recommended for batches with a large number of request in prefill.
+    from `PagedAttentionCache` using the `update` method. This can become a significant bottleneck when sequence length
+    grows large, so this path is recommended for batches with a large number of requests in prefill.
 
 1.b Indexing mechanism:
     This version of flash attention uses max sequence length (max_seqlen_q or _kv) and cumulative sequence lengths
@@ -34,10 +34,10 @@ around two versions of the flash attention kernel:
     lengths:
 
         Q request index: [r0, r0, r0, r0, r0, r0, r0, r0, r0, r0, r1, r1, r1, r2]
-        cu_seq_lens_q:  0_____________________________________10__________13__14
+        cu_seq_lens_q:   0____________________________________10__________13__14
 
-        K request index: [r1, r2, r2, r2, r2, r2, r2, r2]
-        cu_seq_lens_k:  0__1___________________________8
+        K request index: [r1, r2, r2, r2, r2, r2, r2, r2]  (r0 has 0 K tokens)
+        cu_seq_lens_k: 0,0_1_______________________8
 
 2. `flash_attn_with_kvcache` for decode-only batches, also called the "decode" path.
 
@@ -63,8 +63,8 @@ around two versions of the flash attention kernel:
     The cache seqlens is easy to compute: for each sequence, it is the number of key tokens in the sequence. So:
         cache_seqlens = [30, 32, 70]
 
-    Since there are 3 sequences and 4 block max per sequence, the shape of the block table is (3, 4). Using random
-    adresses for this example, the block table looks like this:
+    Since there are 3 sequences and 4 blocks max per sequence, the shape of the block table is (3, 4). Using random
+    addresses for this example, the block table looks like this:
         block table: [[2, -1, -1, -1],
                       [0,  1, -1, -1],
                       [3,  5,  6, -1]]
@@ -77,7 +77,7 @@ around two versions of the flash attention kernel:
     (KV_cache[1]) already allocated before the kernel is called.
     Sequence 2, with 70 cached tokens, has its cache located in KV_cache[3], KV_cache[5], and KV_cache[6]. Note that the
     blocks are not necessarily contiguous, which is no problem for the kernel, and the real advantage of paged cache.
-    Since the new KV cache token fits in the third block (KV_cache[6]), there is no need to allocated fourth block.
+    Since the new KV cache token fits in the third block (KV_cache[6]), there is no need to allocate a fourth block.
 """
 
 
@@ -114,8 +114,8 @@ def paged_attention_forward(
             If provided, uses flash_attn_with_kvcache for fused attention + cache update. For each request, the block
             table is a vector of size (max_blocks_per_seq,) with indices indicating the physical location of the cache
             to read from and write to. The kernel, using the cache_seqlens for that request, knows how much cache to
-            read and dispatches the read using the block table. Same for the write. If a request has less  blocksthan
-            max_blocks_per_seq blocks, the block table is padded with -1s to indicate that this cache is not allocated.
+            read and dispatches the read using the block table. Same for the write. If a request has fewer than
+            max_blocks_per_seq blocks, the block table is padded with -1s to indicate that the block is not allocated.
     """
     # Retrieve the flash attention functions
     flash_attn_varlen_func, flash_attn_with_kvcache = lazy_import_paged_flash_attention(
