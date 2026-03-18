@@ -22,6 +22,7 @@ from parameterized import parameterized
 
 from transformers import (
     AutoImageProcessor,
+    AutoModelForTextRecognition,
     PPOCRV5ServerRecConfig,
     PPOCRV5ServerRecForTextRecognition,
     is_torch_available,
@@ -245,7 +246,7 @@ class PPOCRV5ServerRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 class PPOCRV5ServerRecModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "PaddlePaddle/PP-OCRv5_server_rec_safetensors"
-        self.model = PPOCRV5ServerRecForTextRecognition.from_pretrained(model_path).to(torch_device)
+        self.model = AutoModelForTextRecognition.from_pretrained(model_path).to(torch_device)
         self.image_processor = (
             AutoImageProcessor.from_pretrained(model_path, return_tensors="pt") if is_vision_available() else None
         )

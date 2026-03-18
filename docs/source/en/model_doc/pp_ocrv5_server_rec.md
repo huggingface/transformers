@@ -41,10 +41,10 @@ The example below demonstrates how to detect text with PP-OCRv5_server_rec using
 ```py
 import requests
 from PIL import Image
-from transformers import AutoImageProcessor, AutoModel
+from transformers import AutoImageProcessor, AutoModelForTextRecognition
 
 model_path="PaddlePaddle/PP-OCRv5_server_rec_safetensors"
-model = AutoModel.from_pretrained(model_path, device_map="auto")
+model = AutoModelForTextRecognition.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png", stream=True).raw).convert("RGB")
@@ -71,10 +71,10 @@ Here is how you can do it with PP-OCRv5_server_rec using the [`AutoModel`]:
 ```py
 import requests
 from PIL import Image
-from transformers import AutoImageProcessor, AutoModel
+from transformers import AutoImageProcessor, AutoModelForTextRecognition
 
 model_path = "PaddlePaddle/PP-OCRv5_server_rec_safetensors"
-model = AutoModel.from_pretrained(model_path, device_map="auto")
+model = AutoModelForTextRecognition.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png", stream=True).raw).convert("RGB")
@@ -108,7 +108,6 @@ for result in results:
 ## PPOCRV5MobileRecEncoderWithSVTR
 
 [[autodoc]] PPOCRV5MobileRecEncoderWithSVTR
-
 
 ## PPOCRV5ServerRecImageProcessorFast
 
