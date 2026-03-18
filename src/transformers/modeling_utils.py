@@ -1925,10 +1925,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def get_correct_experts_implementation(self, requested_experts: str | None) -> str:
         applicable_experts = "grouped_mm" if requested_experts is None else requested_experts
-        if applicable_experts not in ["eager", "grouped_mm", "batched_mm"]:
+        if applicable_experts not in ["eager", "grouped_mm", "batched_mm", "deepgemm"]:
             message = (
                 f'Specified `experts_implementation="{applicable_experts}"` is not supported. The only possible arguments are '
-                '`experts_implementation="eager"`, `"experts_implementation=grouped_mm"` and `"experts_implementation=batched_mm"`.'
+                '`experts_implementation="eager"`, `"experts_implementation=grouped_mm"`, `"experts_implementation=batched_mm"` '
+                'and `"experts_implementation=deepgemm"`.'
             )
             raise ValueError(message)
 

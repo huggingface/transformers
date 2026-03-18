@@ -19,7 +19,8 @@ from torch.nn import functional as F
 from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
-from ..utils import is_kernels_available, is_torch_available, logging
+from ..utils import logging
+from ..utils.import_utils import is_tracing
 from .hub_kernels import get_kernel
 from .moe import ExpertsInterface, use_experts_implementation
 
@@ -36,9 +37,9 @@ _triton_kernel = None
 _triton_kernel_available = None
 
 
-# Global for the CUTLASS quantization kernel (lazily loaded)
-_cutlass_kernel = None
-_cutlass_kernel_available = None
+# Global for the DeepGEMM kernel (lazily loaded)
+_deepgemm_kernel = None
+_deepgemm_kernel_available = None
 
 
 def _get_triton_kernel():
@@ -53,113 +54,32 @@ def _get_triton_kernel():
     return _triton_kernel
 
 
-def _get_cutlass_kernel():
-    """Lazily load the CUTLASS quantization kernel from HuggingFace Hub."""
-    global _cutlass_kernel, _cutlass_kernel_available
+def _get_deepgemm_kernel():
+    """Lazily load the DeepGEMM kernel (try HuggingFace Hub first, then installed package).
 
-    if _cutlass_kernel_available is None:
+    Returns a namespace with at least:
+      - fp8_gemm_nt(a, b, d) — single FP8 GEMM
+      - m_grouped_fp8_gemm_nt_masked(a, b, d, masked_m, expected_m)
+      - m_grouped_fp8_gemm_nt_contiguous(a, b, d, grouped_layout)
+      - per_token_cast_to_fp8(x, use_ue8m0) -> (fp8_data, scale_factors)
+    """
+    global _deepgemm_kernel, _deepgemm_kernel_available
+
+    if _deepgemm_kernel_available is None:
         try:
-            # this kernel's build was not updated since torch 2.8
-            _cutlass_kernel = get_kernel("RedHatAI/quantization")
-            _cutlass_kernel_available = True
+            _deepgemm_kernel = get_kernel("kernels-community/deep-gemm")
+            _deepgemm_kernel_available = True
         except Exception as e:
-            logger.warning_once(f"Failed to load CUTLASS quantization kernel: {e}. Falling back to Triton.")
-            _cutlass_kernel_available = False
+            logger.warning_once(f"Failed to load DeepGEMM from Hub: {e}. Falling back to installed deep_gemm package.")
+            try:
+                import deep_gemm
 
-    return _cutlass_kernel
+                _deepgemm_kernel = deep_gemm
+                _deepgemm_kernel_available = True
+            except ImportError:
+                _deepgemm_kernel_available = False
 
-
-def _supports_cutlass(
-    A: torch.Tensor,
-    B: torch.Tensor,
-    block_size: list[int] | None,
-    output_dtype: torch.dtype,
-) -> bool:
-    """
-    Check if CUTLASS blockwise FP8 matmul is supported for the given inputs, output dtype, and block size.
-
-    CUTLASS blockwise kernels require:
-    - SM90+ (Hopper or newer)
-    - Block size [128, 128] for weights
-    - Block size [1, 128] for activations (handled implicitly)
-    - Output dtype bfloat16 or float16
-    - K and N divisible by 16
-    """
-
-    if torch.compiler.is_compiling():
-        # the checks after this, using importlib fail during torch.compile :/
-        return False
-
-    if not is_torch_available() or not torch.cuda.is_available() or not is_kernels_available():
-        return False
-
-    # CUTLASS only supports bfloat16/float16 output
-    if output_dtype not in (torch.bfloat16, torch.float16):
-        return False
-
-    # Check block size compatibility - CUTLASS only supports [128, 128]
-    if block_size is None:
-        return False
-    if len(block_size) != 2 or block_size[0] != 128 or block_size[1] != 128:
-        return False
-
-    # CUTLASS requires K and N divisible by 16
-    K, N = A.shape[-1], B.shape[0]
-    if K % 16 != 0 or N % 16 != 0:
-        return False
-
-    # Check GPU capability (SM90+)
-    capability = torch.cuda.get_device_capability()
-    cuda_capability = capability[0] * 10 + capability[1]
-
-    # Try to load the kernel and check if blockwise FP8 is supported
-    kernel = _get_cutlass_kernel()
-    if kernel is None:
-        return False
-
-    try:
-        return kernel.cutlass_scaled_mm_supports_block_fp8(cuda_capability)
-    except Exception:
-        return False
-
-
-def w8a8_block_fp8_matmul_cutlass(
-    A: torch.Tensor,
-    B: torch.Tensor,
-    As: torch.Tensor,
-    Bs: torch.Tensor,
-    output_dtype: torch.dtype,
-) -> torch.Tensor:
-    """Call the CUTLASS blockwise FP8 matmul kernel.
-
-    Handles all layout conversions required by CUTLASS:
-      - A:  [M, K]           row-major    float8_e4m3fn
-      - B:  [K, N]           column-major float8_e4m3fn
-      - As: [M,  K//128]     M-major      (stride(0)==1)
-      - Bs: [K//128, N//128] K-major      (stride(0)==1)
-    """
-    kernel = _get_cutlass_kernel()
-
-    original_shape = A.shape
-    M = A.numel() // A.shape[-1]
-    K = A.shape[-1]
-    N = B.shape[0]
-
-    A_2d = A.view(M, K).contiguous()
-    # B is [N, K] row-major; CUTLASS needs [K, N] column-major (stride(0)==1).
-    # .contiguous().t() gives [K, N] with stride=(1, K) — do NOT call .contiguous() after!
-    B_col_major = B.contiguous().t()
-
-    # As: reshape to [M, K//128], then force M-major layout via t().contiguous().t()
-    As_2d = As.view(M, -1).contiguous()
-    As_2d = As_2d.t().contiguous().t()  # [M, K//128] with stride(0)==1
-
-    # Bs: our layout is [N//128, K//128]; CUTLASS needs [K//128, N//128] K-major (stride(0)==1)
-    Bs_km = Bs.contiguous().t()  # [K//128, N//128]
-    Bs_km = Bs_km.t().contiguous().t()  # force K-major (stride(0)==1)
-
-    C = kernel.cutlass_scaled_mm(A_2d, B_col_major, As_2d, Bs_km, output_dtype, None)
-    return C.view(original_shape[:-1] + (N,))
+    return _deepgemm_kernel
 
 
 def w8a8_fp8_matmul(
@@ -170,21 +90,28 @@ def w8a8_fp8_matmul(
     block_size: list[int],
     output_dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
+    """Block-wise FP8 matmul: C = dequant(A, As) @ dequant(B, Bs)^T.
+
+    Dispatches to DeepGEMM (Hopper+, block_size 128x128) or Triton (universal fallback).
+
+    Args:
+        A:  (M, K) float8_e4m3fn — quantized activations
+        B:  (N, K) float8_e4m3fn — quantized weights
+        As: (M, K//block_k) float32 — activation scale factors (sf = max_abs / 448)
+        Bs: (N//block_n, K//block_k) float32 — weight scale factors
+        block_size: [block_n, block_k] quantization block dimensions
+        output_dtype: desired output dtype
     """
-    Dispatch to CUTLASS or Triton for block-wise FP8 matmul.
-
-    Uses CUTLASS when:
-    - Block size is [128, 128] (the only size CUTLASS supports)
-    - Running on SM90+ (Hopper or newer)
-    - The CUTLASS kernel is available
-    - Output dtype is bfloat16 or float16 (CUTLASS requirement)
-    - Tensor dimensions are compatible (divisible by 16)
-
-    Otherwise falls back to Triton.
-    """
-
-    if _supports_cutlass(A, B, block_size, output_dtype):
-        return w8a8_block_fp8_matmul_cutlass(A, B, As, Bs, output_dtype)
+    dg = _get_deepgemm_kernel()
+    if dg is not None and block_size is not None and block_size[0] == block_size[1] == 128:
+        original_shape = A.shape
+        M = A.numel() // A.shape[-1]
+        N = B.shape[0]
+        A_2d = A.view(M, -1)
+        As_2d = As.view(M, -1)
+        d = torch.empty(M, N, device=A.device, dtype=torch.bfloat16)
+        dg.fp8_gemm_nt((A_2d, As_2d), (B, Bs), d)
+        return d.to(output_dtype).view(original_shape[:-1] + (N,))
 
     # Fall back to Triton
     kernel = _get_triton_kernel()
@@ -278,7 +205,6 @@ def fp8_batched_mm_experts_forward(
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
 
-    # Reshape for easier indexing
     # S is the number of selected tokens-experts pairs (S = num_tokens * num_top_k)
     token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)  # (S,)
     sample_weights = top_k_weights.reshape(-1)  # (S,)
@@ -388,6 +314,133 @@ def fp8_grouped_mm_experts_forward(
 
     # Apply routing weights
     weighted_out = proj_out * sample_weights_g.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
+
+    # Restore original order
+    weighted_out = weighted_out[inv_perm]
+
+    # Accumulate results using deterministic reshape+sum instead of index_add_
+    # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
+    final_hidden_states = weighted_out.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
+
+    return final_hidden_states.to(hidden_states.dtype)
+
+
+def fp8_deepgemm_experts_forward(
+    self: torch.nn.Module,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+) -> torch.Tensor:
+    """FP8 expert forward using DeepGEMM's m_grouped_fp8_gemm_nt_contiguous kernel.
+
+    Uses a contiguous flat layout where all expert segments are packed into a single
+    (total_m, dim) tensor, with each expert's segment padded to 128-row alignment
+    (required by DeepGEMM's TMA). A `grouped_layout` vector maps each row to its
+    expert ID (-1 for padding rows the kernel should skip).
+
+    The flow is:
+      1. Sort tokens by expert, compute per-expert counts and B-aligned offsets
+      2. Quantize activations to FP8, scatter into the padded contiguous layout
+      3. Gate+Up GEMM (all experts in one kernel launch)
+      4. Activation (in-place on contiguous tensor — padding rows are zero, harmless)
+      5. Quantize intermediates to FP8 (no scatter needed — already contiguous)
+      6. Down GEMM (reuses the same grouped_layout)
+      7. Gather valid rows, apply routing weights, restore original token order
+    """
+    assert self.block_size[0] == self.block_size[1] == 128, (
+        f"DeepGEMM requires block_size=(128, 128), got {self.block_size}"
+    )
+
+    B = self.block_size[1]  # 128 — TMA alignment requirement
+    dg = _get_deepgemm_kernel()
+    device = hidden_states.device
+    num_top_k = top_k_index.size(-1)
+    num_tokens = hidden_states.size(0)
+    hidden_dim = hidden_states.size(-1)
+
+    # Reshape for easier indexing
+    # S is the number of selected token-expert pairs (S = num_tokens * num_top_k)
+    token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)  # (S,)
+    sample_weights = top_k_weights.reshape(-1)  # (S,)
+    expert_ids = top_k_index.reshape(-1)  # (S,)
+    S = expert_ids.size(0)
+
+    # Get current hidden states for selected samples
+    selected_hidden_states = hidden_states[token_idx]
+
+    # Sort by expert for contiguous grouped processing
+    perm = torch.argsort(expert_ids)
+    inv_perm = torch.empty_like(perm)
+    inv_perm[perm] = torch.arange(S, device=device)
+
+    expert_ids_g = expert_ids[perm]
+    sample_weights_g = sample_weights[perm]
+    selected_hidden_states_g = selected_hidden_states[perm]
+
+    # Compute per-expert token counts.
+    # histc instead of bincount avoids cuda-graph issues;
+    # CPU requires float input, CUDA requires int input (deterministic mode).
+    tokens_per_expert = torch.histc(expert_ids_g.int(), bins=self.num_experts, min=0, max=self.num_experts - 1)
+
+    # Compute row-within-expert for each sorted token via exclusive cumsum (CUDA-graph safe, no .roll())
+    sorted_offsets = torch.zeros(self.num_experts, device=device, dtype=torch.long)
+    sorted_offsets[1:] = tokens_per_expert.long().cumsum(0)[:-1]
+    row_in_sorted = torch.arange(S, device=device) - sorted_offsets[expert_ids_g]
+
+    # Build contiguous layout: each expert's segment is padded to B-alignment (128 rows).
+    # This is required by DeepGEMM's TMA descriptor which loads 128-row tiles.
+    # row_map[i] = position of sorted token i in the flat (total_m,) padded layout.
+    aligned_tpe = ((tokens_per_expert.long() + B - 1) // B) * B  # (E,) — per-expert aligned sizes
+    expert_start = torch.zeros(self.num_experts, device=device, dtype=torch.long)
+    expert_start[1:] = aligned_tpe.cumsum(0)[:-1]
+    row_map = expert_start[expert_ids_g] + row_in_sorted  # (S,) — maps sorted tokens to padded positions
+
+    # Compute total_m — the flat padded layout size.
+    # Tracing/CUDA-graph path: deterministic upper bound (no .item() GPU→CPU sync).
+    # Normal path: exact value from the actual token distribution.
+    if is_tracing():
+        total_m = S + min(S, self.num_experts) * (B - 1)
+    else:
+        total_m = int(aligned_tpe.sum().item())
+
+    # grouped_layout: (total_m,) int32 — tells the kernel which expert each row belongs to.
+    # Padding rows are marked -1 (kernel skips them).
+    grouped_layout = torch.full((total_m,), -1, device=device, dtype=torch.int32)
+    grouped_layout[row_map] = expert_ids_g.int()
+
+    # Quantize activations per-token to FP8 with per-128-block scale factors.
+    # Scale convention: sf = max_abs / 448.0 — same format as weight_scale_inv.
+    selected_hidden_states_g, act_scales = dg.per_token_cast_to_fp8(selected_hidden_states_g, use_ue8m0=False)
+
+    # Scatter FP8 data + scales into the padded contiguous layout (total_m, *)
+    a_fp8 = torch.zeros(total_m, hidden_dim, device=device, dtype=selected_hidden_states_g.dtype)
+    a_fp8[row_map] = selected_hidden_states_g
+    sf_a = torch.zeros(total_m, act_scales.shape[1], device=device, dtype=torch.float32)
+    sf_a[row_map] = act_scales
+
+    # --- Gate+Up projection: all experts in one fused kernel launch ---
+    w_up = self.gate_up_proj if self.has_gate else self.up_proj
+    ws_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
+    proj_out = torch.zeros(total_m, w_up.shape[1], device=device, dtype=torch.bfloat16)
+    dg.m_grouped_fp8_gemm_nt_contiguous((a_fp8, sf_a), (w_up, ws_up), proj_out, grouped_layout)
+
+    # Apply in-place on contiguous tensor; padding rows are zero so activation is a no-op.
+    if self.has_gate:
+        proj_out = self._apply_gate(proj_out)  # (total_m, intermediate_dim)
+    else:
+        proj_out = self.act_fn(proj_out)  # (total_m, intermediate_dim)
+
+    # Quantize intermediates to FP8.
+    proj_fp8, proj_scales = dg.per_token_cast_to_fp8(proj_out, use_ue8m0=False)
+
+    # --- Down projection: reuses the same grouped_layout ---
+    proj_out = torch.zeros(total_m, hidden_dim, device=device, dtype=torch.bfloat16)
+    dg.m_grouped_fp8_gemm_nt_contiguous(
+        (proj_fp8, proj_scales), (self.down_proj, self.down_proj_scale_inv), proj_out, grouped_layout
+    )
+
+    # Gather valid rows from padded layout, apply routing weights
+    weighted_out = proj_out[row_map] * sample_weights_g.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
 
     # Restore original order
     weighted_out = weighted_out[inv_perm]
@@ -518,6 +571,7 @@ class FP8ExpertsInterface(ExpertsInterface):
     _global_mapping = {
         "batched_mm": fp8_batched_mm_experts_forward,
         "grouped_mm": fp8_grouped_mm_experts_forward,
+        "deepgemm": fp8_deepgemm_experts_forward,
     }
 
 

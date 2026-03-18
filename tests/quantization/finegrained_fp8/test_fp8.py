@@ -386,7 +386,7 @@ class FP8QuantizerTest(unittest.TestCase):
         # we should at least have 1.5 times memory reduction in total
         assert model_size[""] > quantized_model_size[""] * 1.5
 
-    @parameterized.expand(["eager", "batched_mm", "grouped_mm"])
+    @parameterized.expand(["eager", "batched_mm", "grouped_mm", "deepgemm"])
     def test_quantized_moe_forward(self, experts_implementation):
         """
         Checks implicitly if the moe implementation is correct, i.e. it does not crash for cases
