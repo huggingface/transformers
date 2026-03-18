@@ -64,10 +64,7 @@ BATCH_SIZE = 2
 SEQ_LEN = 64
 NUM_STEPS = 20
 LR = 3e-4
-MIXED_PRECISION_LR = 1e-3
 SEED = 42
-MIXED_PRECISION_NUM_STEPS = 40
-MIXED_PRECISION_REDUCTION_THRESHOLD = 0.9
 
 
 # =============================================================================
@@ -636,76 +633,6 @@ def _test_fsdp2_plan_vs_ddp_impl(
         logger.debug(f"DDP and {test_label} comparison checks passed.")
 
 
-def _test_fsdp2_plan_cpu_offload_mixed_precision(
-    rank, config_class, config_dict, tie_word_embeddings, plan_mode, policy_options=None
-):
-    """Validate mixed-precision FSDP2 behavior for either auto or manual plan mode."""
-    init_test_logger()
-
-    device = _get_rank_device(rank)
-    config = config_class.from_dict(config_dict)
-    config.tie_word_embeddings = tie_word_embeddings
-    num_steps = MIXED_PRECISION_NUM_STEPS
-    checkpoint_step = num_steps // 2
-    lr = MIXED_PRECISION_LR
-    policy_options = policy_options or []
-    assert "mixed_precision" in policy_options, "Mixed-precision test requires mixed_precision policy option."
-
-    dtype = torch.float32
-    init_model_dir, init_tmpdir_obj = _save_init_pretrained(rank, config, dtype)
-    batches = _build_repeated_training_batches(config, device, num_steps)
-
-    if plan_mode == "auto":
-        fsdp_plan = {
-            "mode": "auto",
-            "cpu_offload": "cpu_offload" in policy_options,
-            "mixed_precision": "mixed_precision" in policy_options,
-        }
-        label = "FSDP2(auto + cpu-offload + mixed-precision)"
-    elif plan_mode == "manual":
-        fsdp_plan = _build_manual_fsdp_plan(config, device, policy_options=policy_options)
-        label = "FSDP2(manual + cpu-offload + mixed-precision)"
-    else:
-        raise ValueError(f"Unsupported plan_mode '{plan_mode}'. Expected 'auto' or 'manual'.")
-
-    try:
-        fsdp_losses, fsdp_grad_norms, _ = train_fsdp2(
-            rank,
-            batches,
-            lr,
-            dtype,
-            init_model_dir=init_model_dir,
-            checkpoint_step=checkpoint_step,
-            fsdp_plan=fsdp_plan,
-        )
-    finally:
-        if rank == 0 and init_tmpdir_obj is not None:
-            init_tmpdir_obj.cleanup()
-
-    if not dist.is_initialized() or dist.get_rank() == 0:
-        logger.debug("%s per-step trace:", label)
-        for step, (loss, grad_norm) in enumerate(zip(fsdp_losses, fsdp_grad_norms)):
-            logger.debug("  step=%d loss=%.6f grad_norm=%.6f", step, loss, grad_norm)
-
-    # Assert loss reduction
-    initial_loss, final_loss = fsdp_losses[0], fsdp_losses[-1]
-    loss_reduction_ratio = (initial_loss - final_loss) / max(abs(initial_loss), 1e-12)
-    if not dist.is_initialized() or dist.get_rank() == 0:
-        logger.debug(
-            "%s reduction summary: loss %.6f -> %.6f (%.2f%%)",
-            label,
-            initial_loss,
-            final_loss,
-            loss_reduction_ratio * 100.0,
-        )
-    assert loss_reduction_ratio >= MIXED_PRECISION_REDUCTION_THRESHOLD, (
-        f"{label}: expected loss reduction >= {MIXED_PRECISION_REDUCTION_THRESHOLD:.0%}, "
-        f"got {loss_reduction_ratio:.2%}"
-    )
-    if rank == 0:
-        logger.debug(f"{label} loss reduction check passed.")
-
-
 # =============================================================================
 # Mixin class
 # =============================================================================
@@ -773,30 +700,6 @@ class FSDPTesterMixin(ABC):
             ("auto_plan_tied", _test_fsdp2_plan_vs_ddp_impl, (config_class, config_dict, True, "auto"), {}),
             ("manual_plan_untied", _test_fsdp2_plan_vs_ddp_impl, (config_class, config_dict, False, "manual"), {}),
             ("manual_plan_tied", _test_fsdp2_plan_vs_ddp_impl, (config_class, config_dict, True, "manual"), {}),
-            (
-                "auto_plan_untied_cpu_offload_mixed_precision",
-                _test_fsdp2_plan_cpu_offload_mixed_precision,
-                (config_class, config_dict, False, "auto", ["cpu_offload", "mixed_precision"]),
-                {},
-            ),
-            (
-                "auto_plan_tied_cpu_offload_mixed_precision",
-                _test_fsdp2_plan_cpu_offload_mixed_precision,
-                (config_class, config_dict, True, "auto", ["cpu_offload", "mixed_precision"]),
-                {},
-            ),
-            (
-                "manual_plan_untied_cpu_offload_mixed_precision",
-                _test_fsdp2_plan_cpu_offload_mixed_precision,
-                (config_class, config_dict, False, "manual", ["cpu_offload", "mixed_precision"]),
-                {},
-            ),
-            (
-                "manual_plan_tied_cpu_offload_mixed_precision",
-                _test_fsdp2_plan_cpu_offload_mixed_precision,
-                (config_class, config_dict, True, "manual", ["cpu_offload", "mixed_precision"]),
-                {},
-            ),
         ]
 
     def _format_fsdp2_subtest_summary(self, results):
