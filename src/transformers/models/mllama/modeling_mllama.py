@@ -1404,11 +1404,9 @@ class MllamaModel(MllamaPreTrainedModel):
         if cross_attention_mask is not None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             seq_len = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
-            current_pos = torch.arange(seq_len, device=device) + past_seen_tokens
 
-            cross_attention_mask = cross_attention_mask[:, :, current_pos]
-            full_text_row_masked_out_mask = full_text_row_masked_out_mask[:, :, current_pos]
+            cross_attention_mask = cross_attention_mask[:, :, past_seen_tokens : past_seen_tokens + seq_len]
+            full_text_row_masked_out_mask = full_text_row_masked_out_mask[:, :, past_seen_tokens : past_seen_tokens + seq_len]
 
         outputs = self.language_model(
             input_ids=input_ids,
