@@ -18,7 +18,7 @@ import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, Mistral3ForConditionalGeneration, is_torch_available
+from transformers import AutoTokenizer, Cache, Mistral3ForConditionalGeneration, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     backend_empty_cache,
@@ -63,6 +63,29 @@ class Mistral4ModelTest(CausalLMModelTest, unittest.TestCase):
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = Mistral4ModelTester
+
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        # generic test expects:
+        # keys   -> (batch, kv_heads, seq_len, head_dim)
+        # values -> (batch, kv_heads, seq_len, head_dim)
+        #
+        # but Mistral4 actually stores:
+        # keys   -> (batch, kv_heads, seq_len, qk_nope_head_dim + qk_rope_head_dim)
+        # values -> (batch, kv_heads, seq_len, v_head_dim)
+        # so we override the shape check to assert the real cache format instead of failing on a wrong expectation.
+        self.assertIsInstance(past_key_values, Cache)
+
+        expected_common_shape = (
+            batch_size,
+            getattr(config, "num_key_value_heads", config.num_attention_heads),
+            seq_length,
+        )
+        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
+        expected_value_shape = expected_common_shape + (config.v_head_dim,)
+
+        for layer in past_key_values.layers:
+            self.assertEqual(layer.keys.shape, expected_key_shape)
+            self.assertEqual(layer.values.shape, expected_value_shape)
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
