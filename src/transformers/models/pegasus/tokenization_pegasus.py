@@ -92,9 +92,11 @@ class PegasusTokenizer(TokenizersBackend):
     ):
         self.offset = offset
 
-        if additional_special_tokens is None:
+        if additional_special_tokens is None or mask_token_sent not in additional_special_tokens:
             additional_special_tokens = [mask_token_sent] if mask_token_sent is not None else []
-            additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
+        else:
+            additional_special_tokens = []
+        additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
 
         if vocab is None:
             vocab = [(str(unk_token), 0.0), (str(pad_token), 0.0), (str(eos_token), 0.0), (str(mask_token), 0.0)]
