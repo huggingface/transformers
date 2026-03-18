@@ -72,6 +72,29 @@ args = TrainingArguments(
 )
 ```
 
+## Metric-based schedulers
+
+Some schedulers adapt to training dynamics instead of following a fixed schedule.
+
+[GreedyLR](https://huggingface.co/papers/2512.14527) updates the learning rate from evaluation results. It raises the learning rate by dividing it by `factor` when the metric keeps improving, and lowers the learning rate by multiplying it by `factor` when the metric doesn't improve. When the learning rate stops at `min_lr` and doesn't improve after `reset_start` steps, [`GreedyLR`] resets to its initial state and starts a new cycle.
+
+[`GreedyLR`] requires evaluation during training. Set `eval_strategy` to `"steps"` or `"epoch"`.
+
+```diff
+args = TrainingArguments(
++   lr_scheduler_type="greedy",
++   lr_scheduler_kwargs={"patience": 10, "factor": 0.95, "min_lr": 1e-5},
++   eval_strategy="steps",
++   eval_steps=200,
+    ...  # remaining args from the TrainingArguments intro config
+)
+```
+
+> [!TIP]
+> The default `mode="min"` works for loss. If you're tracking a metric where a higher value is better, like accuracy, pass `"mode": "max"` in `lr_scheduler_kwargs`.
+
+See the [`GreedyLR`] class for the full list of configurable parameters.
+
 ## Optimizer integrations
 
 Transformers integrates third-party optimizers for specialized training scenarios.
