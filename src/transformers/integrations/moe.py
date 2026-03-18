@@ -328,7 +328,7 @@ def _grouped_linear(
         out = _grouped_mm(input, weight, offs=offs)
     else:
         # (S, input_dim) @ grouped (num_experts, output_dim, input_dim).T -> (S, output_dim)
-        out = _grouped_mm(input, weight.transpose(-2, -1), offs=offs)
+        out = _grouped_mm(input, weight.transpose(-2, -1).contiguous(), offs=offs)
 
     if bias is not None:
         # We should be able to pass bias to the grouped_mm call, but it's not yet supported.
