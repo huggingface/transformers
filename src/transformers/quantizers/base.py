@@ -248,6 +248,11 @@ class HfQuantizer(ABC):
         if keep_in_fp32_modules is not None:
             modules_to_not_convert.extend(keep_in_fp32_modules)
 
+        # Also skip modules marked as _modules_to_not_quantize (no fp32 upcasting, just skip quantization)
+        modules_to_not_quantize = getattr(model, "_modules_to_not_quantize", None)
+        if modules_to_not_quantize is not None:
+            modules_to_not_convert.extend(modules_to_not_quantize)
+
         modules_to_not_convert = list(set(modules_to_not_convert))
 
         return modules_to_not_convert

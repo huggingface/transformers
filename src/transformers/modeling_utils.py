@@ -1125,6 +1125,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     # `_keep_in_fp32_modules_strict` will upcast to fp32 independently if the requested dtype is fp16 or bf16
     _keep_in_fp32_modules: set[str] | list[str] | None = None
     _keep_in_fp32_modules_strict: set[str] | list[str] | None = None
+    # Modules that should not be quantized (but remain in their original dtype, unlike _keep_in_fp32_modules)
+    _modules_to_not_quantize: set[str] | list[str] | None = None
 
     # Loading-specific properties
     # A dictionary `{"target": "source"}` of checkpoint keys that are potentially tied to one another
@@ -1301,6 +1303,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Current submodel should register its `_keep_in_fp32_modules`
         self._keep_in_fp32_modules = set(self._keep_in_fp32_modules or [])
         self._keep_in_fp32_modules_strict = set(self._keep_in_fp32_modules_strict or [])
+        # Current submodel should register its `_modules_to_not_quantize`
+        self._modules_to_not_quantize = set(self._modules_to_not_quantize or [])
         # Current submodel must register its `_no_split_modules` as well
         self._no_split_modules = set(self._no_split_modules or [])
 
@@ -1322,6 +1326,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 self._keep_in_fp32_modules.update(keep_fp32)
             if keep_fp32_strict := getattr(module, "_keep_in_fp32_modules_strict", None):
                 self._keep_in_fp32_modules_strict.update(keep_fp32_strict)
+            # Record `_modules_to_not_quantize` from the children
+            if no_quant := getattr(module, "_modules_to_not_quantize", None):
+                self._modules_to_not_quantize.update(no_quant)
             # Record `_no_split_modules` from the children
             if no_split := getattr(module, "_no_split_modules", None):
                 self._no_split_modules.update(no_split)
