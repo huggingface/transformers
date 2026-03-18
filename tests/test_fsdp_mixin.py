@@ -329,7 +329,9 @@ def _load_training_state(model, optimizer, training_state_dir):
 
 def train_ddp(rank, batches, lr, device, dtype, init_model_dir):
     _set_determinism(SEED)
-    model = AutoModelForCausalLM.from_pretrained(init_model_dir, torch_dtype=dtype).to(device)
+    model = AutoModelForCausalLM.from_pretrained(
+        init_model_dir, torch_dtype=dtype, attn_implementation="eager"
+    ).to(device)
     # MoE/conditional-routing variants) may not use all params on
     # every step, and DDP would otherwise fail. Specifying find_unused_parameters=True allows running backward on a subgraph of the model.
     ddp_kwargs = {"find_unused_parameters": True}
@@ -373,7 +375,11 @@ def train_fsdp2(
     _set_determinism(SEED)
     _, device_mesh, _ = initialize_fsdp(fsdp_plan=fsdp_plan)
     pre_ckpt_model = AutoModelForCausalLM.from_pretrained(
-        init_model_dir, torch_dtype=dtype, fsdp_plan=fsdp_plan, fsdp_device_mesh=device_mesh
+        init_model_dir,
+        torch_dtype=dtype,
+        fsdp_plan=fsdp_plan,
+        fsdp_device_mesh=device_mesh,
+        attn_implementation="eager",
     )
     pre_ckpt_model.train()
     pre_ckpt_optimizer = torch.optim.Adam(pre_ckpt_model.parameters(), lr=lr)
@@ -407,7 +413,11 @@ def train_fsdp2(
         # Intentionally scramble RNG to prove checkpoint restore works
         _set_determinism(SEED + 1234)
         resumed_model = AutoModelForCausalLM.from_pretrained(
-            model_dir, torch_dtype=dtype, fsdp_plan=fsdp_plan, fsdp_device_mesh=device_mesh
+            model_dir,
+            torch_dtype=dtype,
+            fsdp_plan=fsdp_plan,
+            fsdp_device_mesh=device_mesh,
+            attn_implementation="eager",
         )
         resumed_model.train()
         resumed_optimizer = torch.optim.Adam(resumed_model.parameters(), lr=lr)
@@ -457,7 +467,12 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
     try:
         _, device_mesh, _ = initialize_fsdp(fsdp_plan=auto_plan)
         _set_determinism(SEED)
-        model = AutoModelForCausalLM.from_pretrained(init_tmpdir, fsdp_plan=auto_plan, fsdp_device_mesh=device_mesh)
+        model = AutoModelForCausalLM.from_pretrained(
+            init_tmpdir,
+            fsdp_plan=auto_plan,
+            fsdp_device_mesh=device_mesh,
+            attn_implementation="eager",
+        )
         dist.barrier()
     finally:
         if rank == 0 and init_tmpdir_obj is not None:
@@ -478,7 +493,12 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
         model.save_pretrained(tmpdir, is_main_process=(rank == 0))
         dist.barrier()
 
-        new_model = AutoModelForCausalLM.from_pretrained(tmpdir, fsdp_plan=auto_plan, fsdp_device_mesh=device_mesh)
+        new_model = AutoModelForCausalLM.from_pretrained(
+            tmpdir,
+            fsdp_plan=auto_plan,
+            fsdp_device_mesh=device_mesh,
+            attn_implementation="eager",
+        )
         dist.barrier()
     finally:
         if rank == 0:
@@ -659,7 +679,6 @@ def _test_fsdp2_plan_vs_ddp_impl(
 class FSDPTesterMixin(ABC):
     fsdp_nproc_per_node: int = 2
     skip_fsdp_tests: bool = False
-    fsdp_attn_implementation: str | None = "eager"
 
     @property
     @abstractmethod
@@ -724,8 +743,6 @@ class FSDPTesterMixin(ABC):
         # `to_diff_dict()` avoids nested config pollution (e.g. DBRX ffn_config receiving
         # generic PretrainedConfig keys that its constructor rejects).
         config_dict = config.to_diff_dict()
-        if self.fsdp_attn_implementation is not None:
-            config_dict["attn_implementation"] = self.fsdp_attn_implementation
         return type(config), config_dict
 
     def _run_fsdp2_distributed_test(self, test_name, test_impl, *test_args, **test_kwargs):
