@@ -626,6 +626,79 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             max_new_tokens=80,
         )
 
+    def test_continuous_batching_log_probs(self) -> None:
+        """Test that log probabilities match between continuous batching and regular generate."""
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        max_new_tokens = 10
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+        tokenizer.pad_token = tokenizer.eos_token
+        user_messages = ["What is 2+2?", "Hello world"]
+        chats = [[{"role": "user", "content": msg}] for msg in user_messages]
+        tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
+        input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
+
+        # Load model for CB generation
+        model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="sdpa", torch_dtype=torch.float32)
+        model = model.to(torch_device).eval()
+        eos_token_id = model.config.eos_token_id
+
+        gen_config = GenerationConfig(max_new_tokens=max_new_tokens, do_sample=False, eos_token_id=eos_token_id)
+
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=False, use_async_batching=False, allow_block_sharing=False, return_logprobs=True
+        )
+
+        cb_outputs = model.generate_batch(
+            inputs=input_ids, generation_config=gen_config, continuous_batching_config=continuous_batching_config
+        )
+
+        # Load fresh model for regular generate (same pattern as parity tests)
+        model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="sdpa", torch_dtype=torch.float32)
+        model = model.to(torch_device).eval()
+
+        # Run regular generate with output_scores to get logits
+        inputs = tokenizer.apply_chat_template(
+            chats, add_generation_prompt=True, return_tensors="pt", padding=True, return_dict=True
+        )
+        gen_config_regular = GenerationConfig(
+            max_new_tokens=max_new_tokens, do_sample=False, output_scores=True, eos_token_id=eos_token_id
+        )
+        generate_outputs = model.generate(
+            **inputs.to(torch_device), generation_config=gen_config_regular, return_dict_in_generate=True
+        )
+
+        # Compare log_probs for each request, matching by prompt_ids
+        num_input_tokens = inputs.input_ids.shape[1]
+        for i in range(len(user_messages)):
+            # Find the corresponding CB output by matching prompt tokens
+            input_tokens = inputs.input_ids[i][inputs.attention_mask[i] == 1].tolist()
+            cb_output = None
+            for key, state in cb_outputs.items():
+                if state.prompt_ids == input_tokens:
+                    cb_output = state
+                    break
+            self.assertIsNotNone(cb_output, f"Could not find CB output for request {i}")
+
+            # Compute log_probs from regular generate scores
+            expected_logprobs = []
+            generated_tokens = generate_outputs.sequences[i, num_input_tokens:].tolist()
+            for step, (score, token) in enumerate(zip(generate_outputs.scores, generated_tokens)):
+                probs = torch.nn.functional.softmax(score[i], dim=-1)
+                expected_logprobs.append(probs[token].log().item())
+
+            # Truncate to same length (in case of padding differences)
+            min_len = min(len(cb_output.logprobs), len(expected_logprobs))
+            cb_logprobs = cb_output.logprobs[:min_len]
+            expected_logprobs = expected_logprobs[:min_len]
+
+            # Compare with tolerance for floating point differences
+            for j, (cb_lp, exp_lp) in enumerate(zip(cb_logprobs, expected_logprobs)):
+                self.assertAlmostEqual(
+                    cb_lp, exp_lp, places=5,
+                    msg=f"logprob mismatch at position {j} for request {i}: CB={cb_lp}, expected={exp_lp}"
+                )
+
     def test_continuous_batching_with_default_compile_configs(self) -> None:
         """Test continuous batching with use_default_compile_configs=True in ContinuousBatchingConfig.
 
