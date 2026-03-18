@@ -342,6 +342,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
 MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "arctic",
     "chameleon",
+    "deepseek_v2",
+    "deepseek_v3",
     "deepseek_vl",
     "deepseek_vl_v2",
     "deepseek_vl_hybrid",
