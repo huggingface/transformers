@@ -366,6 +366,7 @@ class PPOCRV5ServerRecForTextRecognition(PPOCRV5ServerRecPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PPOCRV5ServerRec model."""
+"""Testing suite for the PPOCRVMobileRec model."""
 
 import inspect
 import unittest
@@ -22,8 +22,8 @@ from parameterized import parameterized
 
 from transformers import (
     AutoImageProcessor,
-    PPOCRV5ServerRecConfig,
-    PPOCRV5ServerRecForTextRecognition,
+    PPOCRV5MobileRecConfig,
+    PPOCRV5MobileRecForTextRecognition,
     is_torch_available,
     is_vision_available,
 )
@@ -47,7 +47,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class PPOCRV5ServerRecModelTester:
+class PPOCRV5MobileRecModelTester:
     def __init__(
         self,
         batch_size=3,
@@ -62,6 +62,7 @@ class PPOCRV5ServerRecModelTester:
         conv_kernel_size=[1, 3],
         qkv_bias=True,
         num_attention_heads=2,
+        num_stages=5,
         attention_dropout=0.0,
     ):
         self.batch_size = batch_size
@@ -77,6 +78,7 @@ class PPOCRV5ServerRecModelTester:
         self.qkv_bias = qkv_bias
         self.num_attention_heads = num_attention_heads
         self.attention_dropout = attention_dropout
+        self.num_stages = num_stages
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values = self.prepare_config_and_inputs()
@@ -89,27 +91,29 @@ class PPOCRV5ServerRecModelTester:
 
         return config, pixel_values
 
-    def get_config(self) -> PPOCRV5ServerRecConfig:
+    def get_config(self) -> PPOCRV5MobileRecConfig:
         backbone_config = {
-            "model_type": "hgnet_v2",
-            "arch": "L",
-            "return_idx": [0, 1, 2, 3],
-            "hidden_sizes": [16, 16, 16, 16],
-            "stem_channels": [3, 16, 16],
-            "stage_in_channels": [16, 16, 16, 16],
-            "stage_mid_channels": [16, 16, 16, 16],
-            "stage_out_channels": [16, 16, 16, 16],
-            "freeze_stem_only": True,
-            "freeze_at": 0,
-            "freeze_norm": True,
-            "lr_mult_list": [1.0, 1.0, 1.0, 1.0, 1.0],
-            "out_features": ["stage1", "stage2", "stage3", "stage4"],
-            "stage_downsample": [True, True, True, True],
-            "stem_strides": [2, 1, 1, 1, 1],
-            "stage_downsample_strides": [[2, 1], [1, 2], [2, 1], [2, 1]],
+            "model_type": "pp_lcnet_v3",
+            "scale": 0.95,
+            "out_features": ["stage2", "stage3", "stage4", "stage5"],
+            "out_indices": [2, 3, 4, 5],
+            "divisor": 16,
+            "block_configs": [
+                [[3, 16, 32, 1, False]],
+                [[3, 32, 32, 1, False], [3, 32, 32, 1, False]],
+                [[3, 32, 32, [2, 1], False], [3, 32, 32, 1, False]],
+                [
+                    [3, 32, 32, [1, 2], False],
+                    [5, 32, 32, 1, False],
+                    [5, 32, 32, 1, False],
+                    [5, 32, 32, 1, False],
+                    [5, 32, 32, 1, False],
+                ],
+                [[5, 32, 32, [2, 1], True], [5, 32, 32, 1, True], [5, 32, 32, [2, 1], False], [5, 32, 32, 1, False]],
+            ],
         }
 
-        config = PPOCRV5ServerRecConfig(
+        config = PPOCRV5MobileRecConfig(
             backbone_config=backbone_config,
             hidden_act=self.hidden_act,
             hidden_size=self.hidden_size,
@@ -126,10 +130,10 @@ class PPOCRV5ServerRecModelTester:
 
 
 @require_torch
-class PPOCRV5ServerRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (PPOCRV5ServerRecForTextRecognition,) if is_torch_available() else ()
+class PPOCRV5MobileRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (PPOCRV5MobileRecForTextRecognition,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"image-feature-extraction": PPOCRV5ServerRecForTextRecognition} if is_torch_available() else {}
+        {"image-feature-extraction": PPOCRV5MobileRecForTextRecognition} if is_torch_available() else {}
     )
 
     has_attentions = False
@@ -137,11 +141,11 @@ class PPOCRV5ServerRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
     model_split_percents = [0.5, 0.8]
 
     def setUp(self):
-        self.model_tester = PPOCRV5ServerRecModelTester()
+        self.model_tester = PPOCRV5MobileRecModelTester()
         self.model_tester.parent = self
         self.config_tester = ConfigTester(
             self,
-            config_class=PPOCRV5ServerRecConfig,
+            config_class=PPOCRV5MobileRecConfig,
             has_text_modality=False,
             common_properties=[],
         )
@@ -149,15 +153,15 @@ class PPOCRV5ServerRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip("PPOCRV5ServerRec does not has no attribute `hf_device_map`")
+    @unittest.skip("PPOCRV5MobileRec does not has no attribute `hf_device_map`")
     def test_model_parallelism(self):
         pass
 
-    @unittest.skip("PPOCRV5ServerRec does not has no function `get_input_embeddings`")
+    @unittest.skip("PPOCRV5MobileRec does not has no function `get_input_embeddings`")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="PPOCRV5ServerRec does not support attention")
+    @unittest.skip(reason="PPOCRV5MobileRec does not support attention")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
@@ -194,11 +198,6 @@ class PPOCRV5ServerRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
     def test_hidden_states_output(self):
-        # PP-OCRV5 uses HGNetV2 backbone: hidden_states = (embedding, stage1, ..., stageN) = num_stages + 1
-        # and head_hidden_states = config.depth + 1
-        config = self.model_tester.get_config()
-        num_expected_hidden_states = len(config.backbone_config.depths) + 1
-
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
             model.to(torch_device)
@@ -208,14 +207,9 @@ class PPOCRV5ServerRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             hidden_states = outputs.hidden_states
-            self.assertIsNotNone(hidden_states)
-            self.assertEqual(len(hidden_states), num_expected_hidden_states)
+            expected_num_stages = self.model_tester.num_stages
 
-            # First hidden state (embedding output) is 2x downsampled
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [self.model_tester.image_size[0] // 2, self.model_tester.image_size[1] // 2],
-            )
+            self.assertEqual(len(hidden_states), expected_num_stages + 1)
 
             head_hidden_states = outputs.head_hidden_states
             self.assertIsNotNone(head_hidden_states)
@@ -242,10 +236,10 @@ class PPOCRV5ServerRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 @require_torch
 @require_vision
 @slow
-class PPOCRV5ServerRecModelIntegrationTest(unittest.TestCase):
+class PPOCRV5MobileRecModelIntegrationTest(unittest.TestCase):
     def setUp(self):
-        model_path = "PaddlePaddle/PP-OCRv5_server_rec_safetensors"
-        self.model = PPOCRV5ServerRecForTextRecognition.from_pretrained(model_path).to(torch_device)
+        model_path = "PaddlePaddle/PP-OCRv5_mobile_rec_safetensors"
+        self.model = PPOCRV5MobileRecForTextRecognition.from_pretrained(model_path).to(torch_device)
         self.image_processor = (
             AutoImageProcessor.from_pretrained(model_path, return_tensors="pt") if is_vision_available() else None
         )
@@ -258,7 +252,7 @@ class PPOCRV5ServerRecModelIntegrationTest(unittest.TestCase):
 
         results = self.image_processor.post_process_text_recognition(outputs)
         expected_text = "绿洲仕格维花园公寓"
-        expected_score = 0.9837473630905151
+        expected_score = 0.9909055233001709
 
         self.assertEqual(results[0]["text"], expected_text)
         torch.testing.assert_close(results[0]["score"], expected_score, rtol=2e-2, atol=2e-2)

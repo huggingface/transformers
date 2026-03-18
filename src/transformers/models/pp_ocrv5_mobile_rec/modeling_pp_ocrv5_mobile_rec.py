@@ -383,6 +383,7 @@ class PPOCRV5MobileRecForTextRecognition(PPOCRV5MobileRecPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
