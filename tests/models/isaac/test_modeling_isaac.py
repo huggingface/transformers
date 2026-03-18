@@ -17,9 +17,7 @@
 import base64
 import io
 import os
-import re
 import unittest
-from collections import namedtuple
 from functools import lru_cache
 from pathlib import Path
 from unittest.mock import patch
@@ -67,74 +65,6 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 if is_torch_available():
     import torch
-
-SinglePoint = namedtuple("SinglePoint", ["x", "y", "mention", "t"], defaults=(None, None))
-BoundingBox = namedtuple(
-    "BoundingBox",
-    ["top_left", "bottom_right", "mention", "t"],
-    defaults=(None, None),
-)
-
-_POINT_OR_BOX_TAG = re.compile(
-    r"<(?P<tag>point|point_box)(?P<attrs>[^>]*)>(?P<body>[\s\S]*?)</(?P=tag)>", re.IGNORECASE
-)
-_ATTR_RE = re.compile(r"(\w+)\s*=\s*(?:\"([^\"]*)\"|([^\s>]+))")
-_COORD_RE = re.compile(r"\(\s*(\d+)\s*,\s*(\d+)\s*\)")
-
-
-def _maybe_float(val):
-    if val is None:
-        return None
-    try:
-        return float(val)
-    except ValueError:
-        return None
-
-
-def _parse_attrs(attr_text: str) -> dict:
-    attrs = {}
-    for match in _ATTR_RE.finditer(attr_text or ""):
-        key = match.group(1)
-        val = match.group(2) or match.group(3) or ""
-        attrs[key] = val
-    return attrs
-
-
-def _parse_point_body(body: str, mention=None, t=None):
-    match = _COORD_RE.search(body)
-    if not match:
-        raise ValueError(f"Malformed <point> tag: {body!r}")
-    x, y = int(match.group(1)), int(match.group(2))
-    return SinglePoint(x, y, mention, _maybe_float(t))
-
-
-def _parse_box_body(body: str, mention=None, t=None):
-    coords = list(_COORD_RE.finditer(body))
-    if len(coords) < 2:
-        raise ValueError(f"Malformed <point_box> tag: {body!r}")
-    x1, y1 = int(coords[0].group(1)), int(coords[0].group(2))
-    x2, y2 = int(coords[1].group(1)), int(coords[1].group(2))
-    return BoundingBox(SinglePoint(x1, y1, None, None), SinglePoint(x2, y2, None, None), mention, _maybe_float(t))
-
-
-def extract_points(text: str, expected: str | None = None):
-    """Minimal parser for Isaac pointing tags used in tests."""
-
-    results = []
-    for match in _POINT_OR_BOX_TAG.finditer(text or ""):
-        tag = match.group("tag").lower()
-        attrs = _parse_attrs(match.group("attrs"))
-        mention = attrs.get("mention")
-        t = attrs.get("t")
-        if tag == "point":
-            if expected not in (None, "point"):
-                continue
-            results.append(_parse_point_body(match.group("body"), mention=mention, t=t))
-        elif tag == "point_box":
-            if expected not in (None, "box"):
-                continue
-            results.append(_parse_box_body(match.group("body"), mention=mention, t=t))
-    return results
 
 
 BASE_MODEL_ID = os.environ.get("ISAAC_TEST_MODEL_ID", "PerceptronAI/Isaac-0.1-Base")
@@ -1228,7 +1158,7 @@ class IsaacBoxPointingIntegrationTest(unittest.TestCase):
         generated_ids = outputs.sequences
         hf_generated_tail = generated_ids[:, prompt_len:]
         hf_generated_text = self.tokenizer.decode(hf_generated_tail[0], skip_special_tokens=True)
-        points = extract_points(hf_generated_text)
+        clean_text, points = self.processor.post_process_generation(hf_generated_text, expected="box")
         assert len(points) == 1
         first_point = points[0]
         assert first_point.top_left.x < first_point.bottom_right.x
