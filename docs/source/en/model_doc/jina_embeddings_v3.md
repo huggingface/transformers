@@ -72,7 +72,7 @@ with torch.no_grad():
 print(f"Features shape: {last_hidden_states.shape}")
 ```
 
-</hfoptions>
+</hfoption>
 </hfoptions>
 
 ## Task-Specific LoRA Adapters
