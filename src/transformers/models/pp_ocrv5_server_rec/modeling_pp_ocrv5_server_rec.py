@@ -54,7 +54,7 @@ class PPOCRV5ServerRecBlock(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         residual = hidden_states
@@ -139,7 +139,7 @@ class PPOCRV5ServerRecAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
@@ -304,7 +304,7 @@ class PPOCRV5ServerRecEncoderWithSVTR(PPOCRV5ServerRecPreTrainedModel):
         batch_size, channels, height, width = hidden_states.shape
         hidden_states = hidden_states.flatten(2).transpose(1, 2)
         for block in self.svtr_block:
-            hidden_states = block(hidden_states=hidden_states, attention_mask=None)
+            hidden_states = block(hidden_states=hidden_states)
 
         hidden_states = self.norm(hidden_states)
         hidden_states = hidden_states.view(batch_size, height, width, channels).permute(0, 3, 1, 2)
