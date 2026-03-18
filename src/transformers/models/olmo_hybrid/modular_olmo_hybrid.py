@@ -517,12 +517,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         # Requires the FLA fast path; torch fallbacks don't support cu_seqlens.
         cu_seqlens = None
         unpad_indices = None
-        if (
-            attention_mask is not None
-            and not use_precomputed
-            and is_fast_path_available
-            and attention_mask.max() > 1
-        ):
+        if attention_mask is not None and not use_precomputed and is_fast_path_available and attention_mask.max() > 1:
             cu_seqlens = _cu_seqlens_from_packed_mask(attention_mask)
             unpad_indices = attention_mask.flatten() > 0
             hidden_states = hidden_states[:, unpad_indices, :]
