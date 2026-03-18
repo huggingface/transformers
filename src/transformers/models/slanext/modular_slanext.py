@@ -134,7 +134,7 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
             stdv = 1.0 / math.sqrt(module.hidden_size * 1.0)
             # Initialize structure_generator and loc_generator layers
             for generator in (module.structure_generator, module.loc_generator):
-                for layer in generator:
+                for layer in generator.children():
                     if isinstance(layer, nn.Linear):
                         init.uniform_(layer.weight, -stdv, stdv)
                         if layer.bias is not None:
@@ -145,16 +145,16 @@ class SLANeXtVisionEncoder(GotOcr2VisionEncoder):
     pass
 
 
-class SLANeXtVary_VIT_B(nn.Module):
+class SLANeXtBackbone(nn.Module):
     def __init__(
         self,
-        vision_config: SLANeXtConfig,
+        config: SLANeXtConfig,
         post_conv_in_channels: int = 256,
         post_conv_out_channels: int = 512,
     ):
         super().__init__()
 
-        self.vision_tower = SLANeXtVisionEncoder(vision_config)
+        self.vision_tower = SLANeXtVisionEncoder(config)
         self.post_conv = nn.Conv2d(
             post_conv_in_channels, post_conv_out_channels, kernel_size=3, stride=2, padding=1, bias=False
         )
@@ -196,6 +196,32 @@ class SLANeXtAttentionGRUCell(nn.Module):
         return (cur_hidden, cur_hidden), alpha
 
 
+class SLANeXtStructureMLP(nn.Module):
+    def __init__(self, hidden_size, out_channels):
+        super().__init__()
+        self.linear1 = nn.Linear(hidden_size, hidden_size)
+        self.linear2 = nn.Linear(hidden_size, out_channels)
+
+    def forward(self, x):
+        x = self.linear1(x)
+        x = self.linear2(x)
+        return x
+
+
+class SLANeXtLocationMLP(nn.Module):
+    def __init__(self, hidden_size, loc_reg_num):
+        super().__init__()
+        self.linear1 = nn.Linear(hidden_size, hidden_size)
+        self.linear2 = nn.Linear(hidden_size, loc_reg_num)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.linear1(x)
+        x = self.linear2(x)
+        x = self.sigmoid(x)
+        return x
+
+
 class SLANeXtSLAHead(nn.Module):
     def __init__(
         self,
@@ -207,12 +233,6 @@ class SLANeXtSLAHead(nn.Module):
         fc_decay=0.0,
         **kwargs,
     ):
-        """
-        @param in_channels: input shape
-        @param hidden_size: hidden_size for RNN and Embedding
-        @param out_channels: num_classes to rec
-        @param max_text_length: max text pred
-        """
         super().__init__()
 
         self.hidden_size = hidden_size
@@ -223,52 +243,29 @@ class SLANeXtSLAHead(nn.Module):
         self.eos = self.num_embeddings - 1
 
         self.structure_attention_cell = SLANeXtAttentionGRUCell(in_channels, hidden_size, self.num_embeddings)
-        self.structure_generator = nn.Sequential(
-            nn.Linear(self.hidden_size, self.hidden_size),
-            nn.Linear(hidden_size, out_channels),
-        )
+        self.structure_generator = SLANeXtStructureMLP(hidden_size, out_channels)
 
-        self.loc_generator = nn.Sequential(
-            nn.Linear(self.hidden_size, self.hidden_size),
-            nn.Linear(self.hidden_size, loc_reg_num),
-            nn.Sigmoid(),
-        )
+        self.loc_generator = SLANeXtLocationMLP(hidden_size, loc_reg_num)
 
-    def forward(self, inputs, targets=None):
-        features = inputs
+    def forward(self, features, targets=None):
         batch_size = features.shape[0]
 
         hidden = torch.zeros((batch_size, self.hidden_size), device=features.device)
-        structure_preds = torch.zeros(
-            (batch_size, self.max_text_length + 1, self.num_embeddings), device=features.device
-        )
-        loc_preds = torch.zeros((batch_size, self.max_text_length + 1, self.loc_reg_num), device=features.device)
-        structure_preds.requires_grad = False
-        loc_preds.requires_grad = False
-        structure_ids = torch.zeros((batch_size, self.max_text_length + 1), dtype=torch.long, device=features.device)
+        structure_preds_list = []
+        structure_ids_list = []
         pre_chars = torch.zeros(size=[batch_size], dtype=torch.long, device=features.device)
-        for i in range(self.max_text_length + 1):
+        for _ in range(self.max_text_length + 1):
             hidden, structure_step, loc_step = self._decode(pre_chars, features, hidden)
             pre_chars = structure_step.argmax(dim=1)
-            structure_preds[:, i, :] = structure_step
-            loc_preds[:, i, :] = loc_step
-
-            structure_ids[:, i] = pre_chars
-            if (structure_ids == self.eos).any(-1).all():
+            structure_preds_list.append(structure_step)
+            structure_ids_list.append(pre_chars)
+            if torch.stack(structure_ids_list, dim=1).eq(self.eos).any(-1).all():
                 break
-        structure_preds = F.softmax(structure_preds[:, : i + 1], dim=-1)
-        loc_preds = loc_preds[:, : i + 1]
+        structure_preds = F.softmax(torch.stack(structure_preds_list, dim=1), dim=-1)
 
         return structure_preds
 
     def _decode(self, pre_chars, features, hidden):
-        """
-        Predict table label and coordinates for each step
-        @param pre_chars: Table label in previous step
-        @param features:
-        @param hidden: hidden status in previous step
-        @return:
-        """
         emb_feature = self.emb(pre_chars)
         (output, hidden), alpha = self.structure_attention_cell(hidden, features, emb_feature)
 
@@ -280,7 +277,7 @@ class SLANeXtSLAHead(nn.Module):
         return F.one_hot(input_char, self.num_embeddings).float()
 
 
-@auto_docstring(custom_intro="The SLANeXt model.")
+@auto_docstring
 class SLANeXtModel(SLANeXtPreTrainedModel):
     """
     Core SLANeXt model, consisting of Backbone and Head networks.
@@ -289,8 +286,8 @@ class SLANeXtModel(SLANeXtPreTrainedModel):
 
     def __init__(self, config: SLANeXtConfig):
         super().__init__(config)
-        self.backbone = SLANeXtVary_VIT_B(
-            vision_config=config.vision_config,
+        self.backbone = SLANeXtBackbone(
+            config=config.vision_config,
             post_conv_in_channels=config.post_conv_in_channels,
             post_conv_out_channels=config.post_conv_out_channels,
         )
@@ -315,7 +312,7 @@ class SLANeXtModel(SLANeXtPreTrainedModel):
         )
 
 
-@auto_docstring(custom_intro="ImageProcessor for the SLANeXt model.")
+@auto_docstring
 class SLANeXtImageProcessor(BaseImageProcessor):
     r"""
     Constructs a SLANeXt image processor.
@@ -488,57 +485,6 @@ class SLANeXtImageProcessor(BaseImageProcessor):
 
         return output
 
-    def pad(
-        self,
-        image: np.ndarray,
-        size: dict[str, int],
-        **kwargs,
-    ):
-        """
-        Pad an image to a square of size `max(size["height"], size["width"])`. Padding is applied to the bottom and
-        right edges with zeros.
-
-        Args:
-            image (`np.ndarray`):
-                Image to pad.
-            size (`dict[str, int]`):
-                Dictionary in the format `{"height": int, "width": int}` specifying the target padded size. The
-                image will be padded to a square of `max(size["height"], size["width"])`.
-
-        Returns:
-            `np.ndarray`: The padded image.
-        """
-        target_pad_size = max(size["height"], size["width"])
-        pad_bottom = max(0, target_pad_size - image.shape[0])
-        pad_right = max(0, target_pad_size - image.shape[1])
-        return pad(image=image, padding=((0, pad_bottom), (0, pad_right)))
-
-    def normalize(
-        self,
-        image: np.ndarray,
-        image_mean: float | list[float],
-        image_std: float | list[float],
-        **kwargs,
-    ):
-        """
-        Normalize an image. The image is first rescaled to [0, 1] by dividing by 255.0, then normalized using the
-        specified `image_mean` and `image_std`: `image = (image - mean) / std`.
-
-        Args:
-            image (`np.ndarray`):
-                Image to normalize.
-            image_mean (`float` or `list[float]`):
-                Mean to use for normalization. Can be a single value or a list of values, one for each channel.
-            image_std (`float` or `list[float]`):
-                Standard deviation to use for normalization. Can be a single value or a list of values, one for each
-                channel.
-
-        Returns:
-            `np.ndarray`: The normalized image.
-        """
-        image = image.astype(np.float32) / 255.0
-        return normalize(image=image, mean=image_mean, std=image_std)
-
     def preprocess(
         self,
         image: ImageInput,
@@ -611,10 +557,14 @@ class SLANeXtImageProcessor(BaseImageProcessor):
             image = self.resize(image=image, size=size)
 
         if do_normalize:
-            image = self.normalize(image=image, image_mean=image_mean, image_std=image_std)
+            image = image.astype(np.float32) / 255.0
+            image = normalize(image=image, mean=image_mean, std=image_std)
 
         if do_pad:
-            image = self.pad(image=image, size=size)
+            target_pad_size = max(size["height"], size["width"])
+            pad_bottom = max(0, target_pad_size - image.shape[0])
+            pad_right = max(0, target_pad_size - image.shape[1])
+            image = pad(image=image, padding=((0, pad_bottom), (0, pad_right)))
 
         image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
         image = np.expand_dims(image, axis=0)
@@ -654,26 +604,8 @@ class SLANeXtImageProcessor(BaseImageProcessor):
         self.dict = {char: i for i, char in enumerate(dict_character)}
         self.character = dict_character
         self.td_token = ["<td>", "<td", "<td></td>"]
-
-    def get_begin_end_flag_idx(self, beg_or_end):
-        """
-        Get the index of the begin-of-sequence (`"sos"`) or end-of-sequence (`"eos"`) token in the decoder
-        vocabulary.
-
-        Args:
-            beg_or_end (`str`):
-                Either `"beg"` for the start-of-sequence token or `"end"` for the end-of-sequence token.
-
-        Returns:
-            `np.ndarray`: The index of the requested special token in the character dictionary.
-        """
-        if beg_or_end == "beg":
-            idx = np.array(self.dict["sos"])
-        elif beg_or_end == "end":
-            idx = np.array(self.dict["eos"])
-        else:
-            assert False, "unsupported type %s in get_begin_end_flag_idx" % beg_or_end
-        return idx
+        self.bos_id = np.array(self.dict["sos"])
+        self.eos_id = np.array(self.dict["eos"])
 
     def post_process_table_recognition(self, outputs):
         """
@@ -697,8 +629,8 @@ class SLANeXtImageProcessor(BaseImageProcessor):
         """
         self.pred = outputs.last_hidden_state.detach().cpu()
         structure_probs = self.pred[0:1].numpy()
-        ignored_tokens = [self.get_begin_end_flag_idx("beg"), self.get_begin_end_flag_idx("end")]
-        end_idx = self.dict["eos"]
+        ignored_tokens = [self.bos_id, self.eos_id]
+        end_idx = self.eos_id
 
         structure_idx = structure_probs.argmax(axis=2)
         structure_probs = structure_probs.max(axis=2)
@@ -724,7 +656,12 @@ class SLANeXtImageProcessor(BaseImageProcessor):
         return {"structure": structure, "structure_score": structure_score}
 
 
-@auto_docstring(custom_intro="TableRecognition for the SLANeXt model.")
+@auto_docstring(
+    custom_intro="""
+    SLANeXt model for table structure recognition tasks. Wraps the core SLANeXtModel
+    and returns outputs compatible with the Transformers table recognition API.
+    """
+)
 class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
     """
     SLANeXt model for table recognition tasks.

@@ -46,7 +46,7 @@ from transformers import AutoImageProcessor, AutoModel
 
 model_path="PaddlePaddle/SLANeXt_wired_safetensors"
 model = AutoModel.from_pretrained(model_path, dtype=torch.float32)
-image_processor = AutoImageProcessor.from_pretrained(model_path)
+image_processor = AutoImageProcessor.from_pretrained(model_path, use_fast=True)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/table_recognition.jpg", stream=True).raw).convert("RGB")
 inputs = image_processor(images=image, return_tensors="pt")

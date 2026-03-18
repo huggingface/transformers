@@ -37,7 +37,7 @@ from ...utils import auto_docstring
 from ...utils.generic import TensorType
 
 
-@auto_docstring(custom_intro="ImageProcessor for the SLANeXt model.")
+@auto_docstring
 class SLANeXtImageProcessor(BaseImageProcessor):
     r"""
     Constructs a SLANeXt image processor.
@@ -210,57 +210,6 @@ class SLANeXtImageProcessor(BaseImageProcessor):
 
         return output
 
-    def pad(
-        self,
-        image: np.ndarray,
-        size: dict[str, int],
-        **kwargs,
-    ):
-        """
-        Pad an image to a square of size `max(size["height"], size["width"])`. Padding is applied to the bottom and
-        right edges with zeros.
-
-        Args:
-            image (`np.ndarray`):
-                Image to pad.
-            size (`dict[str, int]`):
-                Dictionary in the format `{"height": int, "width": int}` specifying the target padded size. The
-                image will be padded to a square of `max(size["height"], size["width"])`.
-
-        Returns:
-            `np.ndarray`: The padded image.
-        """
-        target_pad_size = max(size["height"], size["width"])
-        pad_bottom = max(0, target_pad_size - image.shape[0])
-        pad_right = max(0, target_pad_size - image.shape[1])
-        return pad(image=image, padding=((0, pad_bottom), (0, pad_right)))
-
-    def normalize(
-        self,
-        image: np.ndarray,
-        image_mean: float | list[float],
-        image_std: float | list[float],
-        **kwargs,
-    ):
-        """
-        Normalize an image. The image is first rescaled to [0, 1] by dividing by 255.0, then normalized using the
-        specified `image_mean` and `image_std`: `image = (image - mean) / std`.
-
-        Args:
-            image (`np.ndarray`):
-                Image to normalize.
-            image_mean (`float` or `list[float]`):
-                Mean to use for normalization. Can be a single value or a list of values, one for each channel.
-            image_std (`float` or `list[float]`):
-                Standard deviation to use for normalization. Can be a single value or a list of values, one for each
-                channel.
-
-        Returns:
-            `np.ndarray`: The normalized image.
-        """
-        image = image.astype(np.float32) / 255.0
-        return normalize(image=image, mean=image_mean, std=image_std)
-
     def preprocess(
         self,
         image: ImageInput,
@@ -333,10 +282,14 @@ class SLANeXtImageProcessor(BaseImageProcessor):
             image = self.resize(image=image, size=size)
 
         if do_normalize:
-            image = self.normalize(image=image, image_mean=image_mean, image_std=image_std)
+            image = image.astype(np.float32) / 255.0
+            image = normalize(image=image, mean=image_mean, std=image_std)
 
         if do_pad:
-            image = self.pad(image=image, size=size)
+            target_pad_size = max(size["height"], size["width"])
+            pad_bottom = max(0, target_pad_size - image.shape[0])
+            pad_right = max(0, target_pad_size - image.shape[1])
+            image = pad(image=image, padding=((0, pad_bottom), (0, pad_right)))
 
         image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
         image = np.expand_dims(image, axis=0)
@@ -376,26 +329,8 @@ class SLANeXtImageProcessor(BaseImageProcessor):
         self.dict = {char: i for i, char in enumerate(dict_character)}
         self.character = dict_character
         self.td_token = ["<td>", "<td", "<td></td>"]
-
-    def get_begin_end_flag_idx(self, beg_or_end):
-        """
-        Get the index of the begin-of-sequence (`"sos"`) or end-of-sequence (`"eos"`) token in the decoder
-        vocabulary.
-
-        Args:
-            beg_or_end (`str`):
-                Either `"beg"` for the start-of-sequence token or `"end"` for the end-of-sequence token.
-
-        Returns:
-            `np.ndarray`: The index of the requested special token in the character dictionary.
-        """
-        if beg_or_end == "beg":
-            idx = np.array(self.dict["sos"])
-        elif beg_or_end == "end":
-            idx = np.array(self.dict["eos"])
-        else:
-            assert False, "unsupported type %s in get_begin_end_flag_idx" % beg_or_end
-        return idx
+        self.bos_id = np.array(self.dict["sos"])
+        self.eos_id = np.array(self.dict["eos"])
 
     def post_process_table_recognition(self, outputs):
         """
@@ -419,8 +354,8 @@ class SLANeXtImageProcessor(BaseImageProcessor):
         """
         self.pred = outputs.last_hidden_state.detach().cpu()
         structure_probs = self.pred[0:1].numpy()
-        ignored_tokens = [self.get_begin_end_flag_idx("beg"), self.get_begin_end_flag_idx("end")]
-        end_idx = self.dict["eos"]
+        ignored_tokens = [self.bos_id, self.eos_id]
+        end_idx = self.eos_id
 
         structure_idx = structure_probs.argmax(axis=2)
         structure_probs = structure_probs.max(axis=2)

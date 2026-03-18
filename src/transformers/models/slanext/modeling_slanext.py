@@ -214,7 +214,7 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
             stdv = 1.0 / math.sqrt(module.hidden_size * 1.0)
             # Initialize structure_generator and loc_generator layers
             for generator in (module.structure_generator, module.loc_generator):
-                for layer in generator:
+                for layer in generator.children():
                     if isinstance(layer, nn.Linear):
                         init.uniform_(layer.weight, -stdv, stdv)
                         if layer.bias is not None:
@@ -476,16 +476,16 @@ class SLANeXtVisionEncoder(SLANeXtPreTrainedModel):
         )
 
 
-class SLANeXtVary_VIT_B(nn.Module):
+class SLANeXtBackbone(nn.Module):
     def __init__(
         self,
-        vision_config: SLANeXtConfig,
+        config: SLANeXtConfig,
         post_conv_in_channels: int = 256,
         post_conv_out_channels: int = 512,
     ):
         super().__init__()
 
-        self.vision_tower = SLANeXtVisionEncoder(vision_config)
+        self.vision_tower = SLANeXtVisionEncoder(config)
         self.post_conv = nn.Conv2d(
             post_conv_in_channels, post_conv_out_channels, kernel_size=3, stride=2, padding=1, bias=False
         )
@@ -527,6 +527,32 @@ class SLANeXtAttentionGRUCell(nn.Module):
         return (cur_hidden, cur_hidden), alpha
 
 
+class SLANeXtStructureMLP(nn.Module):
+    def __init__(self, hidden_size, out_channels):
+        super().__init__()
+        self.linear1 = nn.Linear(hidden_size, hidden_size)
+        self.linear2 = nn.Linear(hidden_size, out_channels)
+
+    def forward(self, x):
+        x = self.linear1(x)
+        x = self.linear2(x)
+        return x
+
+
+class SLANeXtLocationMLP(nn.Module):
+    def __init__(self, hidden_size, loc_reg_num):
+        super().__init__()
+        self.linear1 = nn.Linear(hidden_size, hidden_size)
+        self.linear2 = nn.Linear(hidden_size, loc_reg_num)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.linear1(x)
+        x = self.linear2(x)
+        x = self.sigmoid(x)
+        return x
+
+
 class SLANeXtSLAHead(nn.Module):
     def __init__(
         self,
@@ -538,12 +564,6 @@ class SLANeXtSLAHead(nn.Module):
         fc_decay=0.0,
         **kwargs,
     ):
-        """
-        @param in_channels: input shape
-        @param hidden_size: hidden_size for RNN and Embedding
-        @param out_channels: num_classes to rec
-        @param max_text_length: max text pred
-        """
         super().__init__()
 
         self.hidden_size = hidden_size
@@ -554,52 +574,29 @@ class SLANeXtSLAHead(nn.Module):
         self.eos = self.num_embeddings - 1
 
         self.structure_attention_cell = SLANeXtAttentionGRUCell(in_channels, hidden_size, self.num_embeddings)
-        self.structure_generator = nn.Sequential(
-            nn.Linear(self.hidden_size, self.hidden_size),
-            nn.Linear(hidden_size, out_channels),
-        )
+        self.structure_generator = SLANeXtStructureMLP(hidden_size, out_channels)
 
-        self.loc_generator = nn.Sequential(
-            nn.Linear(self.hidden_size, self.hidden_size),
-            nn.Linear(self.hidden_size, loc_reg_num),
-            nn.Sigmoid(),
-        )
+        self.loc_generator = SLANeXtLocationMLP(hidden_size, loc_reg_num)
 
-    def forward(self, inputs, targets=None):
-        features = inputs
+    def forward(self, features, targets=None):
         batch_size = features.shape[0]
 
         hidden = torch.zeros((batch_size, self.hidden_size), device=features.device)
-        structure_preds = torch.zeros(
-            (batch_size, self.max_text_length + 1, self.num_embeddings), device=features.device
-        )
-        loc_preds = torch.zeros((batch_size, self.max_text_length + 1, self.loc_reg_num), device=features.device)
-        structure_preds.requires_grad = False
-        loc_preds.requires_grad = False
-        structure_ids = torch.zeros((batch_size, self.max_text_length + 1), dtype=torch.long, device=features.device)
+        structure_preds_list = []
+        structure_ids_list = []
         pre_chars = torch.zeros(size=[batch_size], dtype=torch.long, device=features.device)
-        for i in range(self.max_text_length + 1):
+        for _ in range(self.max_text_length + 1):
             hidden, structure_step, loc_step = self._decode(pre_chars, features, hidden)
             pre_chars = structure_step.argmax(dim=1)
-            structure_preds[:, i, :] = structure_step
-            loc_preds[:, i, :] = loc_step
-
-            structure_ids[:, i] = pre_chars
-            if (structure_ids == self.eos).any(-1).all():
+            structure_preds_list.append(structure_step)
+            structure_ids_list.append(pre_chars)
+            if torch.stack(structure_ids_list, dim=1).eq(self.eos).any(-1).all():
                 break
-        structure_preds = F.softmax(structure_preds[:, : i + 1], dim=-1)
-        loc_preds = loc_preds[:, : i + 1]
+        structure_preds = F.softmax(torch.stack(structure_preds_list, dim=1), dim=-1)
 
         return structure_preds
 
     def _decode(self, pre_chars, features, hidden):
-        """
-        Predict table label and coordinates for each step
-        @param pre_chars: Table label in previous step
-        @param features:
-        @param hidden: hidden status in previous step
-        @return:
-        """
         emb_feature = self.emb(pre_chars)
         (output, hidden), alpha = self.structure_attention_cell(hidden, features, emb_feature)
 
@@ -611,7 +608,7 @@ class SLANeXtSLAHead(nn.Module):
         return F.one_hot(input_char, self.num_embeddings).float()
 
 
-@auto_docstring(custom_intro="The SLANeXt model.")
+@auto_docstring
 class SLANeXtModel(SLANeXtPreTrainedModel):
     """
     Core SLANeXt model, consisting of Backbone and Head networks.
@@ -620,8 +617,8 @@ class SLANeXtModel(SLANeXtPreTrainedModel):
 
     def __init__(self, config: SLANeXtConfig):
         super().__init__(config)
-        self.backbone = SLANeXtVary_VIT_B(
-            vision_config=config.vision_config,
+        self.backbone = SLANeXtBackbone(
+            config=config.vision_config,
             post_conv_in_channels=config.post_conv_in_channels,
             post_conv_out_channels=config.post_conv_out_channels,
         )
@@ -646,7 +643,12 @@ class SLANeXtModel(SLANeXtPreTrainedModel):
         )
 
 
-@auto_docstring(custom_intro="TableRecognition for the SLANeXt model.")
+@auto_docstring(
+    custom_intro="""
+    SLANeXt model for table structure recognition tasks. Wraps the core SLANeXtModel
+    and returns outputs compatible with the Transformers table recognition API.
+    """
+)
 class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
     """
     SLANeXt model for table recognition tasks.
