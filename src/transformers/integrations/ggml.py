@@ -287,6 +287,24 @@ GGUF_CONFIG_MAPPING = {
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",
         "vocab_size": "vocab_size",
     },
+    "minimax_m2": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": "rotary_dim",
+        "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.key_length": "head_dim",
+        "attention.value_length": None,
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "expert_count": "num_local_experts",
+        "expert_used_count": "num_experts_per_tok",
+        "expert_feed_forward_length": None,
+        "vocab_size": "vocab_size",
+        "expert_gating_func": "scoring_func",
+    },
 }
 
 GGUF_TOKENIZER_MAPPING = {
@@ -319,6 +337,12 @@ GGUF_CONFIG_DEFAULTS_MAPPING = {
         # See: https://github.com/ggml-org/llama.cpp/blob/17f7f4baad8b3a716ee139da7bb56ae984e8c0fa/src/models/qwen3moe.cpp#L85-L96
         #      (the parameter right after LLM_FFN_SILU corresponds to norm_topk_prob)
         "norm_topk_prob": True,
+    },
+    "minimax_m2": {
+        # MiniMax-M2 uses routing bias (e_score_correction_bias) for MoE expert selection,
+        # but this is not stored in GGUF metadata. Set it as default so the model weights
+        # (which include e_score_correction_bias tensors) are loaded correctly.
+        "use_routing_bias": True,
     },
 }
 
@@ -766,6 +790,7 @@ GGUF_TO_FAST_CONVERTERS = {
     "umt5": GGUFT5Converter,
     "deci": GGUFLlamaConverter,
     "decilm": GGUFLlamaConverter,
+    "minimax_m2": GGUFQwen2Converter,
 }
 
 
