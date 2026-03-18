@@ -478,7 +478,8 @@ class JanusIntegrationTest(unittest.TestCase):
         )
         generated_ids = model.generate(**inputs, max_new_tokens=20, generation_mode="text", do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION.get_expectation(), text)
+        expected_text = EXPECTED_TEXT_COMPLETION.get_expectation()
+        self.assertEqual(expected_text, text)
 
     @slow
     @require_deterministic_for_xpu
