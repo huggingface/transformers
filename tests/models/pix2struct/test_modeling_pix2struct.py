@@ -149,7 +149,7 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Pix2StructVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Pix2StructVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=Pix2StructVisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -309,7 +309,7 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Pix2StructTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Pix2StructTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Pix2StructTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -394,11 +394,7 @@ class Pix2StructModelTester:
 @require_torch
 class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Pix2StructForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {"image-to-text": Pix2StructForConditionalGeneration, "image-text-to-text": Pix2StructForConditionalGeneration}
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"image-text-to-text": Pix2StructForConditionalGeneration} if is_torch_available() else {}
 
     test_resize_embeddings = True
     test_attention_outputs = False

@@ -22,50 +22,37 @@
 import math
 
 import numpy as np
+from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="bosonai/higgs-audio-v2-tokenizer")
+@strict(accept_kwargs=True)
 class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of an [`HiggsAudioV2TokenizerModel`]. It is used to instantiate a
-    HiggsAudioV2Tokenizer model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the [`Higgs Audio v2 Tokenizer`](https://huggingface.co/bosonai/higgs-audio-v2-tokenizer).
-    e.g. [bosonai/higgs-audio-v2-tokenizer](https://huggingface.co/bosonai/higgs-audio-v2-tokenizer)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-            target_bandwidths (`List[float]`, *optional*, defaults to `[0.5, 1, 1.5, 2]`):
-                The range of different bandwidths (in kbps) the model can encode audio with.
-            sample_rate (`int`, *optional*, defaults to 24000):
-                The sampling rate at which the audio waveform should be digitalized, in hertz (Hz).
-            kernel_size (`int`, *optional*, defaults to 3):
-                Kernel size for the initial semantic convolution.
-            channel_ratios (`List[float]`, *optional*, defaults to `[1, 1]`):
-                Expansion factors for the number of output channels in each semantic block.
-            strides (`List[int]`, *optional*, defaults to `[1, 1]`):
-                Strides for each semantic encoder block.
-            block_dilations (`List[int]`, *optional*, defaults to `[1, 1]`):
-                Dilation factors for the residual units in semantic blocks.
-            unit_kernel_size (`int`, *optional*, defaults to 3):
-                Kernel size inside each ResidualUnit in semantic blocks.
-            codebook_size (`int`, *optional*, defaults to 1024):
-                Number of entries in each residual quantizer's codebook.
-            codebook_dim (`int`, *optional*, defaults to 64):
-                Dimensionality of each codebook vector.
-            initializer_range (`float`, *optional*, defaults to 0.02):
-                Standard deviation of the truncated normal initializer for all weight matrices.
-            acoustic_model_config (`Union[Dict, AutoConfig]`, *optional*):
-                An instance of the configuration for the acoustic (DAC) model.
-            semantic_model_config (`Union[Dict, AutoConfig]`, *optional*):
-                An instance of the configuration object for the semantic (HuBERT) model.
-            semantic_sample_rate (`int`, *optional*, defaults to 16000):
-                The sampling rate at which the semantic model expects audio input, in hertz (Hz).
-            downsample_factor (`int`, *optional*, defaults to 320):
-                Downsampling factor for the semantic features.
+        target_bandwidths (`List[float]`, *optional*, defaults to `[0.5, 1, 1.5, 2]`):
+            The range of different bandwidths (in kbps) the model can encode audio with.
+        kernel_size (`int`, *optional*, defaults to 3):
+            Kernel size for the initial semantic convolution.
+        channel_ratios (`List[float]`, *optional*, defaults to `[1, 1]`):
+            Expansion factors for the number of output channels in each semantic block.
+        strides (`List[int]`, *optional*, defaults to `[1, 1]`):
+            Strides for each semantic encoder block.
+        block_dilations (`List[int]`, *optional*, defaults to `[1, 1]`):
+            Dilation factors for the residual units in semantic blocks.
+        unit_kernel_size (`int`, *optional*, defaults to 3):
+            Kernel size inside each ResidualUnit in semantic blocks.
+        acoustic_model_config (`Union[Dict, AutoConfig]`, *optional*):
+            An instance of the configuration for the acoustic (DAC) model.
+        semantic_model_config (`Union[Dict, AutoConfig]`, *optional*):
+            An instance of the configuration object for the semantic (HuBERT) model.
+        semantic_sample_rate (`int`, *optional*, defaults to 16000):
+            The sampling rate at which the semantic model expects audio input, in hertz (Hz).
+        downsample_factor (`int`, *optional*, defaults to 320):
+            Downsampling factor for the semantic features.
 
     Example:
 
@@ -103,62 +90,50 @@ class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
         "mask_time_prob": 0.0,
     }
 
-    def __init__(
-        self,
-        target_bandwidths=[0.5, 1, 1.5, 2],
-        sample_rate=24000,
-        kernel_size=3,
-        channel_ratios=[1, 1],
-        strides=[1, 1],
-        block_dilations=[1, 1],
-        unit_kernel_size=3,
-        codebook_size=1024,
-        codebook_dim=64,
-        initializer_range=0.02,
-        acoustic_model_config=None,
-        semantic_model_config=None,
-        semantic_sample_rate=16000,
-        downsample_factor=320,
-        **kwargs,
-    ):
-        if isinstance(acoustic_model_config, dict):
-            acoustic_model_config["model_type"] = acoustic_model_config.get("model_type", "dac")
-            acoustic_model_config = CONFIG_MAPPING[acoustic_model_config["model_type"]](
-                **{**self._default_acoustic_model_config_kwargs, **acoustic_model_config}
+    target_bandwidths: list[int | float] | tuple[int | float, ...] = (0.5, 1, 1.5, 2, 4)
+    sample_rate: int = 24000
+    kernel_size: int = 3
+    channel_ratios: list[int] | tuple[int, ...] = (1, 1)
+    strides: list[int] | tuple[int, ...] = (1, 1)
+    block_dilations: list[int] | tuple[int, ...] = (1, 1)
+    unit_kernel_size: int = 3
+    codebook_size: int = 1024
+    codebook_dim: int = 64
+    initializer_range: float = 0.02
+    acoustic_model_config: dict | PreTrainedConfig | None = None
+    semantic_model_config: dict | PreTrainedConfig | None = None
+    semantic_sample_rate: int = 16000
+    downsample_factor: int = 320
+
+    def __post_init__(self, **kwargs):
+        if self.acoustic_model_config is None:
+            self.acoustic_model_config = CONFIG_MAPPING["dac"](
+                encoder_hidden_size=64,
+                # NOTE: original DAC uses [2, 4, 8, 8] `downsampling ratios`, namely reverse of `upsampling_ratios`
+                # (not sure if intentional by HiggsAudioV2Tokenizer but we keep it)
+                downsampling_ratios=[8, 5, 4, 2],
+                decoder_hidden_size=1024,
+                upsampling_ratios=[8, 5, 4, 2],
+                hidden_size=256,
             )
-        elif acoustic_model_config is None:
-            acoustic_model_config = CONFIG_MAPPING["dac"](**self._default_acoustic_model_config_kwargs)
-        self.acoustic_model_config = acoustic_model_config
-
-        if isinstance(semantic_model_config, dict):
-            semantic_model_config["model_type"] = semantic_model_config.get("model_type", "hubert")
-            semantic_model_config = CONFIG_MAPPING[semantic_model_config["model_type"]](
-                **{**self._default_semantic_model_config_kwargs, **semantic_model_config}
+        elif isinstance(self.acoustic_model_config, dict):
+            self.acoustic_model_config["model_type"] = self.acoustic_model_config.get("model_type", "dac")
+            self.acoustic_model_config = CONFIG_MAPPING[self.acoustic_model_config["model_type"]](
+                **{**self._default_acoustic_model_config_kwargs, **self.acoustic_model_config}
             )
-        elif semantic_model_config is None:
-            semantic_model_config = CONFIG_MAPPING["hubert"](**self._default_semantic_model_config_kwargs)
-        self.semantic_model_config = semantic_model_config
 
-        if target_bandwidths is None:
-            target_bandwidths = [0.5, 1, 1.5, 2, 4]
+        if self.semantic_model_config is None:
+            self.semantic_model_config = CONFIG_MAPPING["hubert"]()
+        elif isinstance(self.semantic_model_config, dict):
+            self.semantic_model_config["model_type"] = self.semantic_model_config.get("model_type", "hubert")
+            self.semantic_model_config = CONFIG_MAPPING[self.semantic_model_config["model_type"]](
+                **{**self._default_semantic_model_config_kwargs, **self.semantic_model_config}
+            )
 
-        self.target_bandwidths = target_bandwidths
-        self.sample_rate = sample_rate
-        self.kernel_size = kernel_size
-        self.channel_ratios = channel_ratios
-        self.strides = strides
-        self.block_dilations = block_dilations
-        self.unit_kernel_size = unit_kernel_size
-        self.codebook_size = codebook_size
-        self.initializer_range = initializer_range
-        if codebook_dim is None:
-            codebook_dim = self.acoustic_model_config.hidden_size + self.semantic_model_config.hidden_size
-        self.codebook_dim = codebook_dim
+        if self.codebook_dim is None:
+            self.codebook_dim = self.acoustic_model_config.hidden_size + self.semantic_model_config.hidden_size
 
-        super().__init__(**kwargs)
-
-        self.semantic_sample_rate = semantic_sample_rate
-        self.downsample_factor = downsample_factor
+        super().__post_init__(**kwargs)
 
     @property
     def frame_rate(self) -> int:

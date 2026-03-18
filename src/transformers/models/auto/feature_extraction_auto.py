@@ -77,6 +77,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("unispeech-sat", "Wav2Vec2FeatureExtractor"),
         ("univnet", "UnivNetFeatureExtractor"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerFeatureExtractor"),
+        ("vibevoice_asr", "VibeVoiceAcousticTokenizerFeatureExtractor"),
         ("voxtral", "WhisperFeatureExtractor"),
         ("voxtral_realtime", "VoxtralRealtimeFeatureExtractor"),
         ("wav2vec2", "Wav2Vec2FeatureExtractor"),

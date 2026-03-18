@@ -230,7 +230,6 @@ class SqueezeBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         {
             "feature-extraction": SqueezeBertModel,
             "fill-mask": SqueezeBertForMaskedLM,
-            "question-answering": SqueezeBertForQuestionAnswering,
             "text-classification": SqueezeBertForSequenceClassification,
             "token-classification": SqueezeBertForTokenClassification,
             "zero-shot": SqueezeBertForSequenceClassification,

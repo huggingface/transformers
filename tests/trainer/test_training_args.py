@@ -1,6 +1,10 @@
+import dataclasses
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
+
+import torch
 
 from transformers import TrainingArguments
 from transformers.debug_utils import DebugOption
@@ -295,6 +299,27 @@ class TestTrainingArguments(unittest.TestCase):
         args = TrainingArguments(output_dir="tmp", report_to="tensorboard")
         self.assertEqual(args.report_to, ["tensorboard"])
 
+    def test_kubeflow_auto_enable(self):
+        """Test that kubeflow is auto-enabled when KUBEFLOW_TRAINER_SERVER_URL is set."""
+        with patch.dict(os.environ, {"KUBEFLOW_TRAINER_SERVER_URL": "https://test-url"}, clear=False):
+            # Should auto-add kubeflow when report_to is "none" (default)
+            args = TrainingArguments(output_dir="tmp", report_to="none")
+            self.assertIn("kubeflow", args.report_to)
+
+            # Should auto-add kubeflow to existing list
+            args = TrainingArguments(output_dir="tmp", report_to="tensorboard")
+            self.assertIn("kubeflow", args.report_to)
+            self.assertIn("tensorboard", args.report_to)
+
+            # Should not duplicate if already present
+            args = TrainingArguments(output_dir="tmp", report_to=["kubeflow", "tensorboard"])
+            self.assertEqual(args.report_to.count("kubeflow"), 1)
+
+        # Should not add kubeflow when env var is not set
+        with patch.dict(os.environ, {}, clear=True):
+            args = TrainingArguments(output_dir="tmp", report_to="none")
+            self.assertNotIn("kubeflow", args.report_to)
+
     def test_warmup_steps_validation(self):
         """Test warmup_steps validation for negative values."""
         with self.assertRaises(ValueError):
@@ -350,3 +375,32 @@ class TestTrainingArguments(unittest.TestCase):
         """Test that JSON string dict fields are parsed into dicts."""
         args = TrainingArguments(output_dir="tmp", lr_scheduler_kwargs='{"factor": 0.5}', report_to=None)
         self.assertEqual(args.lr_scheduler_kwargs, {"factor": 0.5})
+
+    def test_dtype_to_json(self):
+        @dataclasses.dataclass
+        class TorchDtypeTrainingArguments(TrainingArguments):
+            dtype: torch.dtype = dataclasses.field(
+                default=torch.float32,
+            )
+
+        for dtype in [
+            "float32",
+            "float64",
+            "complex64",
+            "complex128",
+            "float16",
+            "bfloat16",
+            "uint8",
+            "int8",
+            "int16",
+            "int32",
+            "int64",
+            "bool",
+        ]:
+            torch_dtype = getattr(torch, dtype)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                args = TorchDtypeTrainingArguments(output_dir=tmp_dir, dtype=torch_dtype)
+
+                args_dict = args.to_dict()
+                self.assertIn("dtype", args_dict)
+                self.assertEqual(args_dict["dtype"], dtype)

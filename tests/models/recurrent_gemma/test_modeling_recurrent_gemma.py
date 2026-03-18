@@ -42,6 +42,10 @@ class RecurrentGemmaModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = RecurrentGemmaModel
 
+    def __init__(self, parent, **kwargs):
+        super().__init__(parent, **kwargs)
+        self.block_types = ("recurrent", "attention")
+
 
 @require_torch
 class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
@@ -225,7 +229,6 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         inputs = tokenizer(self.input_long_text, return_tensors="pt").to(torch_device)
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
         output_text = tokenizer.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
-        print(output_text)
         self.assertEqual(output_text, EXPECTED_GENERATION)
 
     def test_longer_than_window(self):

@@ -13,7 +13,7 @@
 # limitations under the License.
 import time
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import IntEnum
 
 import torch
 
@@ -52,7 +52,7 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
         device = torch.device("mps")
         # MPS memory reporting (PyTorch 2.0+)
         total_memory = torch.mps.driver_allocated_memory()
-        allocated_memory = total_memory - torch.mps.recommended_max_memory()
+        allocated_memory = total_memory - getattr(torch.mps, "recommended_max_memory")()
         reserved_memory = 0  # MPS does not track reserved separately
     else:
         device = torch.device("cpu")
@@ -72,16 +72,14 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
     return device, total_memory, reserved_memory, allocated_memory
 
 
-class RequestStatus(Enum):
+class RequestStatus(IntEnum):
     """Status of a generation request through its lifecycle."""
 
-    PENDING = "pending"
-    PREFILLING = "prefilling"
-    PREFILLING_SPLIT = "prefilling_split"
-    SPLIT_PENDING_REMAINDER = "split_pending_remainder"
-    DECODING = "decoding"
-    FINISHED = "finished"
-    FAILED = "failed"
+    PENDING = 0
+    PREFILLING = 1
+    DECODING = 2
+    FINISHED = 3
+    FAILED = 4
 
 
 @dataclass
@@ -123,14 +121,15 @@ class RequestState:
         num_children (int): The number of children requests
         full_prompt_ids (list[int] | None): The tokens IDs of the full prompt.
         prompt_ids (list[int] | None): The tokens IDs currently being processed.
-        remaining_prompt_ids (list[int]): The tokens IDs remaining to be processed (for split requests).
+        remaining_prompt_ids (list[int]): The initial tokens IDs remaining to be processed.
         static_outputs (list[int]): The generated tokens.
         allocated_blocks (int): The number of blocks allocated to the request.
         position_offset (int): The current position in the sequence for position_ids.
         status (RequestStatus): The status of the request: can be one of PENDING, PREFILLING, PREFILLING_SPLIT,
                                 SPLIT_PENDING_REMAINDER, DECODING, FINISHED, FAILED
         max_new_tokens (int | None): The maximum number of new tokens to generate.
-        eos_token_id (int): The ID of the end-of-sequence token.
+        eos_token_id (None | int | list[int]): The ID(s) of the end-of-sequence tokens. Only used in post-init.
+        _eos_token_ids (set[int]): The IDs of the end-of-sequence tokens, formatted as a set.
         streaming (bool): Whether to stream tokens as they're generated
         created_time (float): The time the request was created.
         error (Optional[str]): Any error message associated with the request. When None, has had no error yet.
@@ -144,13 +143,16 @@ class RequestState:
     num_children: int = 0  # Number of children requests
     # Internal fields
     tokens_to_process: list[int] = field(default_factory=list)  # Tokens IDs currently being processed
-    remaining_prefill_tokens: list[int] = field(default_factory=list)  # For split requests, prefill left to process
+    remaining_prefill_tokens: list[int] = field(
+        default_factory=list
+    )  # Initial tokens left to process (initialized in __post_init__)
     generated_tokens: list[int] = field(default_factory=list)  # Generated tokens
     allocated_blocks: int = 0  # Number of blocks allocated to the request
     position_offset: int = 0  # Current position in the sequence for position_ids
     _status: RequestStatus = RequestStatus.PENDING  # Status of the request, hidden behind a property
     max_new_tokens: int | None = 20  # Maximum number of new tokens to generate. None means no limit. Default to 20.
-    eos_token_id: int = -1  # ID of the end-of-sequence token
+    eos_token_id: int | list[int] | None = None  # ID(s) of the end-of-sequence tokens. Only used in post-init.
+    _eos_token_ids: set[int] = field(default_factory=set)  # IDs of the end-of-sequence tokens, formatted as a set
     streaming: bool = False  # Whether to stream tokens as they're generated
     created_time: float = field(default_factory=time.perf_counter)  # Time the request was created
     error: str | None = None  # Error message if the request failed
@@ -163,6 +165,20 @@ class RequestState:
     def __post_init__(self):
         # If no max length is set, we set an absurdly high value which will never be reached
         self._new_tokens_limit = 2147483647 if self.max_new_tokens is None else self.max_new_tokens
+        # Keep a copy of the initial tokens to process
+        self.remaining_prefill_tokens = self.initial_tokens[:]
+        # Format the EOS token ID(s) as a set of ints. If there is no EOS token ID, it's an empty set
+        if self.eos_token_id is None:
+            pass
+        # If there is a single EOS token ID, add it to the set only if the ID is valid, ie. non-negative
+        elif isinstance(self.eos_token_id, int):
+            if self.eos_token_id >= 0:
+                self._eos_token_ids.add(self.eos_token_id)
+        # If there are multiple EOS token IDs, add them to the set only if they are valid, ie. non-negative
+        else:
+            for token_id in self.eos_token_id:
+                if token_id >= 0:
+                    self._eos_token_ids.add(token_id)
 
     @property
     def status(self) -> RequestStatus:
@@ -218,13 +234,14 @@ class RequestState:
             self._timestamps.append(time.perf_counter())
 
         # Stop if we reached an EOS token
-        is_eos = token_id == self.eos_token_id and self.eos_token_id != -1
-        current_len = self.generated_len() - 1  # do not count the temporary token
+        is_eos = token_id in self._eos_token_ids
+        current_len = self.generated_len()
 
         # Replace the temporary token if we're not finishing due to max length
         # (EOS tokens should still be added to the output)
         if is_eos or (current_len < self._new_tokens_limit):
-            self.generated_tokens[-1] = token_id
+            self.generated_tokens.append(token_id)
+            self.tokens_to_process = [token_id]  # this works for 2 levels of pipelines, but not sure for more
             current_len += 1
         else:
             logger.warning(f"Request {self.request_id} generated a useless token: {token_id}")
@@ -251,8 +268,6 @@ class RequestState:
 
     def to_generation_output(self):
         """Convert the request state to a GenerationOutput object."""
-        if self.generated_tokens and self.generated_tokens[-1] == TMP_TOKEN_ID:
-            self.generated_tokens.pop()
         if self._true_initial_tokens:
             self.generated_tokens = self.initial_tokens[self._true_initial_tokens :] + self.generated_tokens
             self.initial_tokens = self.initial_tokens[: self._true_initial_tokens]
@@ -276,7 +291,6 @@ class RequestState:
             initial_tokens=self.initial_tokens,
             num_children=self.num_children,
             tokens_to_process=self.tokens_to_process[:],
-            remaining_prefill_tokens=self.remaining_prefill_tokens[:],
             generated_tokens=self.generated_tokens[:],
             allocated_blocks=self.allocated_blocks,
             position_offset=self.position_offset,
@@ -290,25 +304,35 @@ class RequestState:
             error=self.error,
             record_timestamps=self.record_timestamps,
         )
+        # Modified by __post_init__
+        new_request.remaining_prefill_tokens = self.remaining_prefill_tokens[:]
         return new_request
 
     def create_equivalent_initial_request(self) -> "RequestState":
         """Creates an equivalent new request by removing the generated tokens and adding them to the initial prompt. The
         created request has THE SAME request_id. Notably, we can retrieve the original request from the created one with
         the _true_initial_tokens attribute."""
-        # Remove the temporary token if it exists
-        if self.generated_tokens and self.generated_tokens[-1] == TMP_TOKEN_ID:
-            self.generated_tokens.pop()
         max_new_tokens = None if self.max_new_tokens is None else (self.max_new_tokens - len(self.generated_tokens))
         new_state = RequestState(
             request_id=self.request_id,
             initial_tokens=self.initial_tokens + self.generated_tokens,
             num_children=self.num_children,
             record_timestamps=self.record_timestamps,
-            tokens_to_process=self.initial_tokens + self.generated_tokens,
             max_new_tokens=max_new_tokens,
             eos_token_id=self.eos_token_id,
             streaming=self.streaming,
         )
         new_state._true_initial_tokens = self._true_initial_tokens + len(self.initial_tokens)
         return new_state
+
+
+class FutureRequestState:
+    """Tracks the current state of a request and the relevant information to update it."""
+
+    # This makes instantiating this class faster
+    __slots__ = ("state", "has_new_token", "complete_blocks")
+
+    def __init__(self, state: RequestState, has_new_token: bool, complete_blocks: int) -> None:
+        self.state = state
+        self.has_new_token = has_new_token
+        self.complete_blocks = complete_blocks

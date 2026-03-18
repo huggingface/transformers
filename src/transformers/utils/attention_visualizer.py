@@ -201,6 +201,8 @@ class AttentionMaskVisualizer:
             tokens = processor.tokenizer.convert_ids_to_tokens(inputs["input_ids"][0])
         else:
             tokenizer = AutoTokenizer.from_pretrained(self.repo_id)
+            if tokenizer is None:
+                raise ValueError(f"Could not load tokenizer for {self.repo_id}")
             tokens = tokenizer.tokenize(input_sentence)
             attention_mask = tokenizer(input_sentence, return_tensors="pt")["attention_mask"]
             if attention_mask is None:
@@ -221,10 +223,14 @@ class AttentionMaskVisualizer:
             past_key_values=None,
         )
 
-        if causal_mask is not None:
-            attention_mask = ~causal_mask.bool()
-        else:
+        if causal_mask is None:
+            # attention_mask must be a tensor here
             attention_mask = attention_mask.unsqueeze(1).unsqueeze(1).expand(batch_size, 1, seq_length, seq_length)
+        elif isinstance(causal_mask, torch.Tensor):
+            attention_mask = ~causal_mask.to(dtype=torch.bool)
+        else:
+            attention_mask = ~causal_mask
+
         top_bottom_border = "##" * (
             len(f"Attention visualization for {self.config.model_type} | {self.mapped_cls}") + 4
         )  # Box width adjusted to text length

@@ -111,6 +111,7 @@ _import_structure = {
     "generation": [
         "AsyncTextIteratorStreamer",
         "CompileConfig",
+        "ContinuousBatchingConfig",
         "GenerationConfig",
         "TextIteratorStreamer",
         "TextStreamer",
@@ -146,7 +147,6 @@ _import_structure = {
         "ImageFeatureExtractionPipeline",
         "ImageSegmentationPipeline",
         "ImageTextToTextPipeline",
-        "ImageToImagePipeline",
         "JsonPipelineDataFormat",
         "KeypointMatchingPipeline",
         "MaskGenerationPipeline",
@@ -155,21 +155,26 @@ _import_structure = {
         "PipedPipelineDataFormat",
         "Pipeline",
         "PipelineDataFormat",
-        "QuestionAnsweringPipeline",
         "TableQuestionAnsweringPipeline",
         "TextClassificationPipeline",
         "TextGenerationPipeline",
         "TextToAudioPipeline",
         "TokenClassificationPipeline",
         "VideoClassificationPipeline",
-        "VisualQuestionAnsweringPipeline",
         "ZeroShotAudioClassificationPipeline",
         "ZeroShotClassificationPipeline",
         "ZeroShotImageClassificationPipeline",
         "ZeroShotObjectDetectionPipeline",
         "pipeline",
     ],
-    "processing_utils": ["ProcessorMixin"],
+    "processing_utils": [
+        "AudioKwargs",
+        "ImagesKwargs",
+        "ProcessingKwargs",
+        "ProcessorMixin",
+        "TextKwargs",
+        "VideosKwargs",
+    ],
     "quantizers": [],
     "testing_utils": [],
     "tokenization_python": ["PreTrainedTokenizer", "PythonBackend"],
@@ -251,10 +256,12 @@ _import_structure = {
         "EetqConfig",
         "FbgemmFp8Config",
         "FineGrainedFP8Config",
+        "FourOverSixConfig",
         "FPQuantConfig",
         "GPTQConfig",
         "HiggsConfig",
         "HqqConfig",
+        "MetalConfig",
         "Mxfp4Config",
         "QuantoConfig",
         "QuarkConfig",
@@ -543,6 +550,7 @@ if TYPE_CHECKING:
     from .generation import BayesianDetectorModel as BayesianDetectorModel
     from .generation import ClassifierFreeGuidanceLogitsProcessor as ClassifierFreeGuidanceLogitsProcessor
     from .generation import CompileConfig as CompileConfig
+    from .generation import ContinuousBatchingConfig as ContinuousBatchingConfig
     from .generation import ContinuousBatchingManager as ContinuousBatchingManager
     from .generation import ContinuousMixin as ContinuousMixin
     from .generation import EncoderNoRepeatNGramLogitsProcessor as EncoderNoRepeatNGramLogitsProcessor
@@ -656,7 +664,6 @@ if TYPE_CHECKING:
     from .pipelines import ImageFeatureExtractionPipeline as ImageFeatureExtractionPipeline
     from .pipelines import ImageSegmentationPipeline as ImageSegmentationPipeline
     from .pipelines import ImageTextToTextPipeline as ImageTextToTextPipeline
-    from .pipelines import ImageToImagePipeline as ImageToImagePipeline
     from .pipelines import JsonPipelineDataFormat as JsonPipelineDataFormat
     from .pipelines import KeypointMatchingPipeline as KeypointMatchingPipeline
     from .pipelines import MaskGenerationPipeline as MaskGenerationPipeline
@@ -665,20 +672,23 @@ if TYPE_CHECKING:
     from .pipelines import PipedPipelineDataFormat as PipedPipelineDataFormat
     from .pipelines import Pipeline as Pipeline
     from .pipelines import PipelineDataFormat as PipelineDataFormat
-    from .pipelines import QuestionAnsweringPipeline as QuestionAnsweringPipeline
     from .pipelines import TableQuestionAnsweringPipeline as TableQuestionAnsweringPipeline
     from .pipelines import TextClassificationPipeline as TextClassificationPipeline
     from .pipelines import TextGenerationPipeline as TextGenerationPipeline
     from .pipelines import TextToAudioPipeline as TextToAudioPipeline
     from .pipelines import TokenClassificationPipeline as TokenClassificationPipeline
     from .pipelines import VideoClassificationPipeline as VideoClassificationPipeline
-    from .pipelines import VisualQuestionAnsweringPipeline as VisualQuestionAnsweringPipeline
     from .pipelines import ZeroShotAudioClassificationPipeline as ZeroShotAudioClassificationPipeline
     from .pipelines import ZeroShotClassificationPipeline as ZeroShotClassificationPipeline
     from .pipelines import ZeroShotImageClassificationPipeline as ZeroShotImageClassificationPipeline
     from .pipelines import ZeroShotObjectDetectionPipeline as ZeroShotObjectDetectionPipeline
     from .pipelines import pipeline as pipeline
+    from .processing_utils import AudioKwargs as AudioKwargs
+    from .processing_utils import ImagesKwargs as ImagesKwargs
+    from .processing_utils import ProcessingKwargs as ProcessingKwargs
     from .processing_utils import ProcessorMixin as ProcessorMixin
+    from .processing_utils import TextKwargs as TextKwargs
+    from .processing_utils import VideosKwargs as VideosKwargs
     from .pytorch_utils import Conv1D as Conv1D
     from .pytorch_utils import apply_chunking_to_forward as apply_chunking_to_forward
 
@@ -756,10 +766,12 @@ if TYPE_CHECKING:
     from .utils.quantization_config import EetqConfig as EetqConfig
     from .utils.quantization_config import FbgemmFp8Config as FbgemmFp8Config
     from .utils.quantization_config import FineGrainedFP8Config as FineGrainedFP8Config
+    from .utils.quantization_config import FourOverSixConfig as FourOverSixConfig
     from .utils.quantization_config import FPQuantConfig as FPQuantConfig
     from .utils.quantization_config import GPTQConfig as GPTQConfig
     from .utils.quantization_config import HiggsConfig as HiggsConfig
     from .utils.quantization_config import HqqConfig as HqqConfig
+    from .utils.quantization_config import MetalConfig as MetalConfig
     from .utils.quantization_config import QuantoConfig as QuantoConfig
     from .utils.quantization_config import QuarkConfig as QuarkConfig
     from .utils.quantization_config import SinqConfig as SinqConfig

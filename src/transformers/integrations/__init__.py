@@ -84,6 +84,7 @@ _import_structure = {
         "DagsHubCallback",
         "DVCLiveCallback",
         "FlyteCallback",
+        "KubeflowCallback",
         "MLflowCallback",
         "NeptuneCallback",
         "NeptuneMissingConfiguration",
@@ -102,6 +103,7 @@ _import_structure = {
         "is_dvclive_available",
         "is_flyte_deck_standard_available",
         "is_flytekit_available",
+        "is_kubeflow_available",
         "is_mlflow_available",
         "is_neptune_available",
         "is_optuna_available",
@@ -117,6 +119,10 @@ _import_structure = {
         "run_hp_search_wandb",
     ],
     "liger": ["apply_liger_kernel"],
+    "metal_quantization": [
+        "MetalLinear",
+        "replace_with_metal_linear",
+    ],
     "moe": [
         "batched_mm_experts_forward",
         "grouped_mm_experts_forward",
@@ -232,6 +238,7 @@ if TYPE_CHECKING:
         DagsHubCallback,
         DVCLiveCallback,
         FlyteCallback,
+        KubeflowCallback,
         MLflowCallback,
         NeptuneCallback,
         NeptuneMissingConfiguration,
@@ -250,6 +257,7 @@ if TYPE_CHECKING:
         is_dvclive_available,
         is_flyte_deck_standard_available,
         is_flytekit_available,
+        is_kubeflow_available,
         is_mlflow_available,
         is_neptune_available,
         is_optuna_available,
@@ -265,6 +273,10 @@ if TYPE_CHECKING:
         run_hp_search_wandb,
     )
     from .liger import apply_liger_kernel
+    from .metal_quantization import (
+        MetalLinear,
+        replace_with_metal_linear,
+    )
     from .moe import (
         batched_mm_experts_forward,
         grouped_mm_experts_forward,

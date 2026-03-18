@@ -21,7 +21,7 @@ import requests
 
 from transformers import VitPoseBackboneConfig, VitPoseConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -36,7 +36,9 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import VitPoseImageProcessor
+
+if is_torchvision_available():
+    from transformers import VitPoseImageProcessorFast
 
 
 class VitPoseModelTester:
@@ -154,7 +156,7 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = VitPoseModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VitPoseConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=VitPoseConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.create_and_test_config_to_json_string()
@@ -231,7 +233,7 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            VitPoseImageProcessor.from_pretrained("usyd-community/vitpose-base-simple")
+            VitPoseImageProcessorFast.from_pretrained("usyd-community/vitpose-base-simple")
             if is_vision_available()
             else None
         )

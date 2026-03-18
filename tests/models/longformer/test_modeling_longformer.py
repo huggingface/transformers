@@ -320,7 +320,6 @@ class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         {
             "feature-extraction": LongformerModel,
             "fill-mask": LongformerForMaskedLM,
-            "question-answering": LongformerForQuestionAnswering,
             "text-classification": LongformerForSequenceClassification,
             "token-classification": LongformerForTokenClassification,
             "zero-shot": LongformerForSequenceClassification,
@@ -358,7 +357,7 @@ class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def setUp(self):
         self.model_tester = LongformerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LongformerConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=LongformerConfig, hidden_size=32)
 
     # Without this, 0.01% failure rate.
     @is_flaky(

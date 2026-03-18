@@ -162,7 +162,7 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Blip2VisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Blip2VisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=Blip2VisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -806,8 +806,6 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
     pipeline_model_mapping = (
         {
             "feature-extraction": Blip2Model,
-            "image-to-text": Blip2ForConditionalGeneration,
-            "visual-question-answering": Blip2ForConditionalGeneration,
             "image-text-to-text": Blip2ForConditionalGeneration,
             "any-to-any": Blip2ForConditionalGeneration,
         }
@@ -1080,7 +1078,7 @@ class Blip2TextModelWithProjectionTester:
             result2 = model(
                 input_ids,
                 attention_mask=attention_mask,
-                return_dict=not config.use_return_dict,
+                return_dict=not config.return_dict,
                 output_attentions=True,
                 output_hidden_states=True,
             )
@@ -1232,7 +1230,7 @@ class Blip2VisionModelWithProjectionTester:
         with torch.no_grad():
             result2 = model(
                 pixel_values,
-                return_dict=not config.use_return_dict,
+                return_dict=not config.return_dict,
                 output_attentions=True,
                 output_hidden_states=True,
             )

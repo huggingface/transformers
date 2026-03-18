@@ -14,8 +14,8 @@
 
 
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
-from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, can_return_tuple
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -27,60 +27,9 @@ from ..llama.modeling_llama import (
 from ..nemotron.modeling_nemotron import NemotronMLP
 
 
+@auto_docstring(checkpoint="inceptionai/Jais-2-8B-Chat")
+@strict(accept_kwargs=True)
 class Jais2Config(LlamaConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`Jais2Model`]. It is used to instantiate a Jais2
-    model according to the specified arguments, defining the model architecture.
-    [inceptionai/Jais-2-8B-Chat](https://huggingface.co/inceptionai/Jais-2-8B-Chat).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 150272):
-            Vocabulary size of the Jais2 model.
-        hidden_size (`int`, *optional*, defaults to 3328):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 26624):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 26):
-            Number of attention heads for each attention layer.
-        num_key_value_heads (`int`, *optional*):
-            Number of key_value heads for Grouped Query Attention.
-        hidden_act (`str`, *optional*, defaults to `"relu2"`):
-            The non-linear activation function in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 8192):
-            The maximum sequence length.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether to return last key/values attentions.
-        pad_token_id (`int`, *optional*):
-            Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 0):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 150024):
-            End of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings.
-        attention_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use a bias in the query, key, value and output projection layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        mlp_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use a bias in up_proj, down_proj and gate_proj layers.
-        head_dim (`int`, *optional*):
-            The attention head dimension.
-        rope_parameters (`dict`, *optional*):
-            The RoPE parameters.
-    """
-
-    model_type = "jais2"
-
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -90,55 +39,19 @@ class Jais2Config(LlamaConfig):
         "layers.*.mlp.down_proj": "rowwise",
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 150272,
-        hidden_size: int | None = 3328,
-        intermediate_size: int | None = 26624,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 26,
-        num_key_value_heads: int | None = None,
-        hidden_act: str | None = "relu2",
-        max_position_embeddings: int | None = 8192,
-        initializer_range: float | None = 0.02,
-        layer_norm_eps: float | None = 1e-5,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = 0,
-        eos_token_id: int | None = 150024,
-        tie_word_embeddings: bool | None = False,
-        attention_bias: bool | None = True,
-        attention_dropout: float | None = 0.0,
-        mlp_bias: bool | None = True,
-        head_dim: int | None = None,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        **kwargs,
-    ):
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            use_cache=use_cache,
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            attention_bias=attention_bias,
-            attention_dropout=attention_dropout,
-            mlp_bias=mlp_bias,
-            head_dim=head_dim,
-            rope_parameters=rope_parameters,
-            **kwargs,
-        )
-        self.layer_norm_eps = layer_norm_eps
-        del self.rms_norm_eps
-        del self.pretraining_tp
+    vocab_size: int = 150272
+    hidden_size: int = 3328
+    intermediate_size: int = 26624
+    num_attention_heads: int = 26
+    hidden_act: str = "relu2"
+    max_position_embeddings: int = 8192
+    layer_norm_eps: float = 1e-5
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 150024
+    attention_bias: bool = True
+    mlp_bias: bool = True
+    rms_norm_eps = AttributeError()
+    pretraining_tp = AttributeError()
 
 
 class Jais2MLP(NemotronMLP):

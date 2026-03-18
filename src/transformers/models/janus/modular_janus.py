@@ -19,6 +19,7 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
@@ -79,215 +80,77 @@ logger = logging.get_logger(__name__)
 # General docstring
 
 
+@auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
+@strict(accept_kwargs=True)
 class JanusVisionConfig(SiglipVisionConfig):
     r"""
-    This is the configuration class to store the configuration of a [`JanusVisionModel`]. It is used to instantiate a
-    `JanusVisionModel` according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        image_size (`int`, *optional*, defaults to 384):
-            The size (resolution) of each image.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for attention weights.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"`, and `"gelu_new"` are supported.
-        mlp_ratio (`float`, *optional*, defaults to 4.0):
-            Ratio of MLP hidden dimensionality to embedding dimensionality.
-        attention_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys, and values in the attention layers.
-        hidden_dropout_rate (`float`, *optional*, defaults to 0.0):
-            The dropout probability for fully connected layers in the encoder.
-        projection_dim (`int`, *optional*, defaults to 2048):
-            Dimensionality of the MLP projection head.
-        projection_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for the projection layer.
-        use_qk_norm (`bool`, *optional*, defaults to `False`):
-            Whether to normalize the query and key matrices.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated normal initializer for initializing all weight matrices.
-        depth (`int`, *optional*, defaults to 2):
-            Number of hidden layers in the aligner module.
-        num_image_tokens (`int`, *optional*, defaults to 576):
-            Number of image tokens.
+    num_image_tokens (`int`, *optional*, defaults to 576):
+        Number of image tokens.
+    projection_dropout (`float`, *optional*, defaults to 0.0):
+        Dropout probability for the projection layer.
     """
 
-    model_type = "janus_vision_model"
-    base_config_key = "vision_config"
-
-    def __init__(
-        self,
-        hidden_size=1024,
-        num_hidden_layers=24,
-        num_attention_heads=16,
-        num_channels=3,
-        patch_size=16,
-        image_size=384,
-        attention_dropout=0.0,
-        layer_norm_eps=1e-6,
-        hidden_act="gelu",
-        mlp_ratio=4.0,
-        attention_bias=True,
-        hidden_dropout_rate=0.0,
-        projection_dim=2048,
-        projection_dropout=0.0,
-        use_qk_norm=False,
-        initializer_range=0.02,
-        depth=2,
-        num_image_tokens=576,
-        **kwargs,
-    ):
-        super().__init__(
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_channels=num_channels,
-            patch_size=patch_size,
-            image_size=image_size,
-            attention_dropout=attention_dropout,
-            layer_norm_eps=layer_norm_eps,
-            hidden_act=hidden_act,
-            **kwargs,
-        )
-        del self.intermediate_size
-
-        self.mlp_ratio = mlp_ratio
-        self.attention_bias = attention_bias
-        self.hidden_dropout_rate = hidden_dropout_rate
-        self.projection_dim = projection_dim
-        self.projection_dropout = projection_dropout
-        self.use_qk_norm = use_qk_norm
-        self.initializer_range = initializer_range
-        self.depth = depth
-        self.num_image_tokens = num_image_tokens
+    hidden_size: int = 1024
+    num_hidden_layers: int = 24
+    num_attention_heads: int = 16
+    image_size: int | list[int] | tuple[int, int] = 384
+    hidden_act: str = "gelu"
+    mlp_ratio: float | int = 4.0
+    attention_bias: bool = True
+    hidden_dropout_rate: float = 0.0
+    projection_dim: int = 2048
+    projection_dropout: float | int = 0.0
+    use_qk_norm: bool = False
+    initializer_range: float = 0.02
+    depth: int = 2
+    num_image_tokens: int = 576
+    intermediate_size = AttributeError()
 
 
+@auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
+@strict(accept_kwargs=True)
 class JanusVQVAEConfig(ChameleonVQVAEConfig):
     r"""
-    This is the configuration class to store the configuration of a [`JanusVQVAEModel`]. It is used to instantiate a
-    `JanusVQVAEModel` according to the specified arguments, defining the model architecture.
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information. Instantiating a
-    configuration with the defaults will yield a similar configuration to the VQModel of the
-    [deepseek-community/Janus-Pro-1B](https://huggingface.co/deepseek-community/Janus-Pro-1B).
-
-    Args:
-        embed_dim (`int`, *optional*, defaults to 8):
-            Dimensionality of each embedding vector.
-        num_embeddings (`int`, *optional*, defaults to 16384):
-            Number of codebook embeddings.
-        double_latent (`bool`, *optional*, defaults to `False`):
-            Whether to use double z channels.
-        latent_channels (`int`, *optional*, defaults to 256):
-            Number of channels for the latent space.
-        num_patches (`int`, *optional*, defaults to 32):
-            Num of patches the input images can be divided into.
-        in_channels (`int`, *optional*, defaults to 3):
-            Number of input channels.
-        out_channels (`int`, *optional*, defaults to 3):
-            Number of out channels.
-        base_channels (`int`, *optional*, defaults to 128):
-            Base channel count.
-        channel_multiplier (`list[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
-            Channel multipliers for each resolution.
-        num_res_blocks (`int`, *optional*, defaults to 2):
-            Number of residual blocks.
-        dropout (`float`, *optional*, defaults to 0.0):
-            Dropout rate.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        projection_dim (`int`, *optional*, defaults to 2048):
-            Dimensionality of the MLP projection head.
-        num_hidden_layers (`int`, *optional*, defaults to 2):
-            Number of hidden layers in VAVAE MLP Connecter module.
-        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        image_token_embed_dim (`int`, *optional*, defaults to 2048):
-            Dimension of image embeddings. It should be same as the dimensionality of text embeddings.
+    image_token_embed_dim (`int`, *optional*, defaults to 2048):
+        Dimension of image embeddings. It should be same as the dimensionality of text embeddings.
+    num_patches (`int`, *optional*, defaults to 32):
+        Num of patches the input images can be divided into.
+    out_channels (`int`, *optional*, defaults to 3):
+        Number of out channels.
+    base_channels (`int`, *optional*, defaults to 128):
+        Base channel count.
+    channel_multiplier (`list[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
+        Channel multipliers for each resolution.
+    num_res_blocks (`int`, *optional*, defaults to 2):
+        Number of residual blocks.
     """
 
-    def __init__(
-        self,
-        embed_dim: int = 8,
-        num_embeddings: int = 16384,
-        double_latent: bool = False,
-        latent_channels: int = 256,
-        num_patches: int = 32,
-        in_channels: int = 3,
-        out_channels: int = 3,
-        base_channels: int = 128,
-        channel_multiplier: list[int] = [1, 1, 2, 2, 4],
-        num_res_blocks: int = 2,
-        dropout: float = 0.0,
-        initializer_range=0.02,
-        projection_dim=2048,
-        num_hidden_layers=2,
-        hidden_act="gelu",
-        image_token_embed_dim=2048,
-        **kwargs,
-    ):
-        super().__init__(
-            embed_dim=embed_dim,
-            num_embeddings=num_embeddings,
-            double_latent=double_latent,
-            latent_channels=latent_channels,
-            in_channels=in_channels,
-            base_channels=base_channels,
-            channel_multiplier=channel_multiplier,
-            num_res_blocks=num_res_blocks,
-            dropout=dropout,
-            initializer_range=initializer_range,
-            **kwargs,
-        )
-        self.num_patches = num_patches
-        self.out_channels = out_channels
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.hidden_act = hidden_act
-        self.image_token_embed_dim = image_token_embed_dim
+    embed_dim: int = 8
+    num_embeddings: int = 16384
+    double_latent: bool = False
+    latent_channels: int = 256
+    num_patches: int = 32
+    in_channels: int = 3
+    out_channels: int = 3
+    base_channels: int = 128
+    channel_multiplier: list[int] | tuple[int, ...] = (1, 1, 2, 2, 4)
+    num_res_blocks: int = 2
+    dropout: float | int = 0.0
+    initializer_range: float = 0.02
+    projection_dim: int = 2048
+    num_hidden_layers: int = 2
+    hidden_act: str = "gelu"
+    image_token_embed_dim = 2048
 
-        del self.resolution
-        del self.attn_resolutions
-        del self.attn_type
+    resolution = AttributeError()
+    attn_resolutions = AttributeError()
+    attn_type = AttributeError()
 
 
+@auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
+@strict(accept_kwargs=True)
 class JanusConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`JanusModel`]. It is used to instantiate an
-    Janus model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Janus-1B or Janus-7B models.
-
-    e.g. [deepseek-community/Janus-Pro-1B](https://huggingface.co/deepseek-community/Janus-Pro-1B) or
-    [deepseek-community/Janus-Pro-7B](https://huggingface.co/deepseek-community/Janus-Pro-7B)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `JanusVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        vq_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `JanusVQVAEConfig`):
-            The config object or dictionary of the VQVAE backbone.
-        image_token_id (`int`, *optional*, defaults to 100581):
-            Token index of a placeholder image token.
-
     Example:
 
     ```python
@@ -319,61 +182,34 @@ class JanusConfig(PreTrainedConfig):
         "vq_config": JanusVQVAEConfig,
     }
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        vq_config=None,
-        image_token_id=100581,
-        **kwargs,
-    ):
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "llama")
-            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    vq_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 100581
 
-        elif text_config is None:
+    def __post_init__(self, **kwargs):
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "llama")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
             logger.info("`text_config` is None. Initializing with default values")
             self.text_config = CONFIG_MAPPING["llama"]()
-        elif isinstance(text_config, PreTrainedConfig):
-            self.text_config = text_config
-        else:
-            raise ValueError(
-                f"Invalid type for `text_config`. Must be either `dict` or `LlamaConfig`."
-                f" Type found: {type(text_config)}"
-            )
 
-        if vision_config is None:
+        if self.vision_config is None:
             logger.info("`vision_config` is None. Initializing with default JanusVisionConfig values")
             self.vision_config = JanusVisionConfig()
-        elif isinstance(vision_config, dict):
-            self.vision_config = JanusVisionConfig(**vision_config)
-        elif isinstance(vision_config, JanusVisionConfig):
-            self.vision_config = vision_config
-        else:
-            raise ValueError(
-                f"Invalid type for `vision_config`. Must be either `dict` or `JanusVisionConfig`."
-                f" Type found: {type(vision_config)}"
-            )
+        elif isinstance(self.vision_config, dict):
+            self.vision_config = JanusVisionConfig(**self.vision_config)
 
-        if vq_config is None:
+        if self.vq_config is None:
             logger.info("`vq_config` is None. Initializing with default JanusVQVAEConfig values")
             self.vq_config = JanusVQVAEConfig()
-        elif isinstance(vq_config, dict):
-            self.vq_config = JanusVQVAEConfig(**vq_config)
-        elif isinstance(vq_config, JanusVQVAEConfig):
-            self.vq_config = vq_config
-        else:
-            raise ValueError(
-                f"Invalid type for `vq_config`. Must be either `dict` or `JanusVQVAEConfig`."
-                f" Type found: {type(vq_config)}"
-            )
+        elif isinstance(self.vq_config, dict):
+            self.vq_config = JanusVQVAEConfig(**self.vq_config)
 
-        self.initializer_range = self.vision_config.initializer_range
         # This dimension is required when decoding discrete image tokens to continuous input.
         self.vq_config.num_patches = self.vision_config.image_size // self.vision_config.patch_size
-        # The default is only the index for the 1B model, 7B uses a different one
-        self.image_token_id = image_token_id
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring
@@ -981,7 +817,6 @@ class JanusModel(JanusPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -1009,7 +844,6 @@ class JanusModel(JanusPreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )
@@ -1057,7 +891,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1078,7 +911,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
@@ -1108,7 +940,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -1120,7 +951,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,

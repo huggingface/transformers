@@ -13,86 +13,53 @@
 # limitations under the License.
 """PyTorch LFM2-VL model."""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-logger = logging.get_logger(__name__)
-
-
+@auto_docstring(checkpoint="LiquidAI/LFM2-VL-1.6B")
+@strict(accept_kwargs=True)
 class Lfm2VlConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Lfm2VlForConditionalGeneration`]. It is used to instantiate an
-    Lfm2Vl model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Lfm2-VL-1.6B.
-
-    e.g. [LiquidAI/LFM2-VL-1.6B](https://huggingface.co/LiquidAI/LFM2-VL-1.6B)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vision_config (`AutoConfig | dict`,  *optional*, defaults to `Siglip2ImageConfig`):
-            The config object or dictionary of the vision backbone.
-        text_config (`AutoConfig | dict`, *optional*, defaults to `Lfm2Config`):
-            The config object or dictionary of the text backbone.
-        image_token_id (`int`, *optional*, defaults to 396):
-            The image token index to encode the image prompt.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
-        projector_hidden_size (`int`, *optional*, defaults to 2560):
-            The hidden size of the multimodal projector.
-        projector_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in the multimodal projector.
-        projector_use_layernorm (`bool`, *optional*, defaults to `True`):
-            Whether to use layernorm in the multimodal projector.
-        downsample_factor (`int`, *optional*, defaults to 2):
-            The downsample_factor factor of the vision backbone.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie the word embeddings of the text backbone.
+    downsample_factor (`int`, *optional*, defaults to 2):
+        The downsample_factor factor of the vision backbone.
+    projector_bias (`bool`, *optional*, defaults to `True`):
+        Whether to use bias in the multimodal projector.
+    projector_use_layernorm (`bool`, *optional*, defaults to `True`):
+        Whether to use layernorm in the multimodal projector.
     """
 
     model_type = "lfm2_vl"
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
-    def __init__(
-        self,
-        vision_config=None,
-        text_config=None,
-        image_token_id=396,
-        projector_hidden_act="gelu",
-        projector_hidden_size=2560,
-        projector_bias=True,
-        projector_use_layernorm=True,
-        downsample_factor=2,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        self.image_token_id = image_token_id
-        self.projector_hidden_act = projector_hidden_act
-        self.projector_hidden_size = projector_hidden_size
-        self.projector_bias = projector_bias
-        self.projector_use_layernorm = projector_use_layernorm
-        self.downsample_factor = downsample_factor
+    vision_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 396
+    projector_hidden_act: str = "gelu"
+    projector_hidden_size: int = 2560
+    projector_bias: bool = True
+    projector_use_layernorm: bool = True
+    downsample_factor: int = 2
+    tie_word_embeddings: bool = True
 
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "siglip2_vision_model")
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        elif vision_config is None:
-            vision_config = CONFIG_MAPPING["siglip2_vision_model"]()
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "siglip2_vision_model")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = CONFIG_MAPPING["siglip2_vision_model"]()
 
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "lfm2")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["lfm2"]()
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "lfm2")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["lfm2"]()
 
-        self.vision_config = vision_config
-        self.text_config = text_config
-        self.tie_word_embeddings = getattr(text_config, "tie_embedding", tie_word_embeddings)
-
-        super().__init__(**kwargs)
+        self.tie_word_embeddings = kwargs.pop("tie_embedding", self.tie_word_embeddings)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Lfm2VlConfig"]

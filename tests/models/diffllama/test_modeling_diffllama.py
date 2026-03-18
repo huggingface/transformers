@@ -184,7 +184,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             "text-classification": DiffLlamaForSequenceClassification,
             "text-generation": DiffLlamaForCausalLM,
             "zero-shot": DiffLlamaForSequenceClassification,
-            "question-answering": DiffLlamaForQuestionAnswering,
             "token-classification": DiffLlamaForTokenClassification,
         }
         if is_torch_available()
@@ -200,7 +199,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     def setUp(self):
         self.model_tester = DiffLlamaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DiffLlamaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=DiffLlamaConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -13,10 +13,10 @@
 # limitations under the License.
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Union
 
 import numpy as np
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 
@@ -24,8 +24,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TensorType, auto_docstring, logging
-from ...utils.generic import can_return_tuple
+from ...utils import ModelOutput, TensorType, auto_docstring, can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from ..clip.modeling_clip import CLIPMLP
@@ -42,49 +41,22 @@ from ..superpoint import SuperPointConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="ETH-CVG/lightglue_superpoint")
+@strict(accept_kwargs=True)
 class LightGlueConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LightGlueForKeypointMatching`]. It is used to
-    instantiate a LightGlue model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the LightGlue
-    [ETH-CVG/lightglue_superpoint](https://huggingface.co/ETH-CVG/lightglue_superpoint) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        keypoint_detector_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SuperPointConfig`):
-            The config object or dictionary of the keypoint detector.
-        descriptor_dim (`int`, *optional*, defaults to 256):
-            The dimension of the descriptors.
-        num_hidden_layers (`int`, *optional*, defaults to 9):
-            The number of self and cross attention layers.
-        num_attention_heads (`int`, *optional*, defaults to 4):
-            The number of heads in the multi-head attention.
-        num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
-            `num_attention_heads`.
-        depth_confidence (`float`, *optional*, defaults to 0.95):
-            The confidence threshold used to perform early stopping
-        width_confidence (`float`, *optional*, defaults to 0.99):
-            The confidence threshold used to prune points
-        filter_threshold (`float`, *optional*, defaults to 0.1):
-            The confidence threshold used to filter matches
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function to be used in the hidden layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        attention_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        trust_remote_code (`bool`, *optional*, defaults to `False`):
-            Whether to trust remote code when using other models than SuperPoint as keypoint detector.
+    keypoint_detector_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SuperPointConfig`):
+        The config object or dictionary of the keypoint detector.
+    descriptor_dim (`int`, *optional*, defaults to 256):
+        The dimension of the descriptors.
+    depth_confidence (`float`, *optional*, defaults to 0.95):
+        The confidence threshold used to perform early stopping
+    width_confidence (`float`, *optional*, defaults to 0.99):
+        The confidence threshold used to prune points
+    filter_threshold (`float`, *optional*, defaults to 0.1):
+        The confidence threshold used to filter matches
+    trust_remote_code (`bool`, *optional*, defaults to `False`):
+        Whether to trust remote code when using other models than SuperPoint as keypoint detector.
 
     Examples:
         ```python
@@ -104,70 +76,50 @@ class LightGlueConfig(PreTrainedConfig):
     model_type = "lightglue"
     sub_configs = {"keypoint_detector_config": AutoConfig}
 
-    def __init__(
-        self,
-        keypoint_detector_config: SuperPointConfig = None,
-        descriptor_dim: int = 256,
-        num_hidden_layers: int = 9,
-        num_attention_heads: int = 4,
-        num_key_value_heads=None,
-        depth_confidence: float = 0.95,
-        width_confidence: float = 0.99,
-        filter_threshold: float = 0.1,
-        initializer_range: float = 0.02,
-        hidden_act: str = "gelu",
-        attention_dropout=0.0,
-        attention_bias=True,
-        trust_remote_code: bool = False,
-        **kwargs,
-    ):
-        # LightGlue can be used with other models than SuperPoint as keypoint detector
-        # We provide the trust_remote_code argument to allow the use of other models
-        # that are not registered in the CONFIG_MAPPING dictionary (for example DISK)
-        self.trust_remote_code = trust_remote_code
+    keypoint_detector_config: dict | SuperPointConfig | None = None
+    descriptor_dim: int = 256
+    num_hidden_layers: int = 9
+    num_attention_heads: int = 4
+    num_key_value_heads: int | None = None
+    depth_confidence: float = 0.95
+    width_confidence: float = 0.99
+    filter_threshold: float = 0.1
+    initializer_range: float = 0.02
+    hidden_act: str = "gelu"
+    attention_dropout: float | int = 0.0
+    attention_bias: bool = True
+    # LightGlue can be used with other models than SuperPoint as keypoint detector
+    # We provide the trust_remote_code argument to allow the use of other models
+    # that are not registered in the CONFIG_MAPPING dictionary (for example DISK)
+    trust_remote_code: bool = False
 
-        if descriptor_dim % num_attention_heads != 0:
-            raise ValueError("descriptor_dim % num_heads is different from zero")
-
-        self.descriptor_dim = descriptor_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-
-        self.depth_confidence = depth_confidence
-        self.width_confidence = width_confidence
-        self.filter_threshold = filter_threshold
-        self.initializer_range = initializer_range
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
         # Keypoint Detector is forced into eager attention mode because SuperPoint does not have Attention
         # See https://github.com/huggingface/transformers/pull/31718#discussion_r2109733153
-        if isinstance(keypoint_detector_config, dict):
-            keypoint_detector_config["model_type"] = keypoint_detector_config.get("model_type", "superpoint")
-            if keypoint_detector_config["model_type"] not in CONFIG_MAPPING:
-                keypoint_detector_config = AutoConfig.from_pretrained(
-                    keypoint_detector_config["_name_or_path"], trust_remote_code=self.trust_remote_code
+        if isinstance(self.keypoint_detector_config, dict):
+            self.keypoint_detector_config["model_type"] = self.keypoint_detector_config.get("model_type", "superpoint")
+            if self.keypoint_detector_config["model_type"] not in CONFIG_MAPPING:
+                self.keypoint_detector_config = AutoConfig.from_pretrained(
+                    self.keypoint_detector_config["_name_or_path"], trust_remote_code=self.trust_remote_code
                 )
             else:
-                keypoint_detector_config = CONFIG_MAPPING[keypoint_detector_config["model_type"]](
-                    **keypoint_detector_config, attn_implementation="eager"
+                self.keypoint_detector_config = CONFIG_MAPPING[self.keypoint_detector_config["model_type"]](
+                    **self.keypoint_detector_config, attn_implementation="eager"
                 )
+        elif self.keypoint_detector_config is None:
+            self.keypoint_detector_config = CONFIG_MAPPING["superpoint"](attn_implementation="eager")
 
-        if keypoint_detector_config is None:
-            keypoint_detector_config = CONFIG_MAPPING["superpoint"](attn_implementation="eager")
+        self.intermediate_size = self.descriptor_dim * 2
+        self.hidden_size = self.descriptor_dim
+        super().__post_init__(**kwargs)
 
-        self.keypoint_detector_config = keypoint_detector_config
-
-        self.hidden_size = descriptor_dim
-        self.intermediate_size = descriptor_dim * 2
-        self.hidden_act = hidden_act
-        self.attention_dropout = attention_dropout
-        self.attention_bias = attention_bias
-        super().__init__(**kwargs)
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.descriptor_dim % self.num_attention_heads != 0:
+            raise ValueError("descriptor_dim % num_heads is different from zero")
 
 
 @dataclass
@@ -928,7 +880,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, "LightGlueKeypointMatchingOutput"]:
+    ) -> tuple | LightGlueKeypointMatchingOutput:
         loss = None
         if labels is not None:
             raise ValueError("LightGlue is not trainable, no labels should be provided.")

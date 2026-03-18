@@ -373,7 +373,6 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         {
             "feature-extraction": Data2VecTextModel,
             "fill-mask": Data2VecTextForMaskedLM,
-            "question-answering": Data2VecTextForQuestionAnswering,
             "text-classification": Data2VecTextForSequenceClassification,
             "text-generation": Data2VecTextForCausalLM,
             "token-classification": Data2VecTextForTokenClassification,
@@ -392,7 +391,7 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
 
     def setUp(self):
         self.model_tester = Data2VecTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Data2VecTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Data2VecTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
