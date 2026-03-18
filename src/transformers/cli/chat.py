@@ -197,125 +197,60 @@ class RichInterface:
         self._console.print()
 
     def print_model_load(self, model: str):
-        size_of_tqdm = 50
-        stage_labels = {
-            "processor": f"{model}  →  Loading processor",
-            "config": f"{model}  →  Loading config",
-            "download": f"{model}  →  Downloading files",
-            "weights": f"{model}  →  Loading model weights",
-        }
-        loading_stages = ["processor", "config", "download", "weights"]
-
-        class _StatsColumn(ProgressColumn):
-            """Shows 'X.X GB / Y.Y GB  Z MB/s  ETA' for download tasks, 'n/total' for others."""
-
-            def render(self, task):  # type: ignore[override]
-                if task.fields.get("is_download"):
-                    if not task.total:
-                        return Text("")
-
-                    completed_str = filesize.decimal(int(task.completed))
-                    total_str = filesize.decimal(int(task.total))
-
-                    speed = task.speed
-                    speed_str = f"  {filesize.decimal(int(speed))}/s" if speed else "  ?/s"
-
-                    remaining = task.time_remaining
-
-                    if remaining is not None:
-                        m, s = divmod(int(remaining), 60)
-                        eta_str = f"  {m}:{s:02d}"
-                    else:
-                        eta_str = ""
-
-                    return Text(f"{completed_str}/{total_str}{speed_str}{eta_str}", style="progress.download")
-                else:
-                    if task.total is None:
-                        return Text("")
-
-                    return Text(f"{int(task.completed)}/{int(task.total)}")
-
-        response = requests.post(
-            f"{self.base_url.rstrip('/')}/load_model",
-            json={"model": model},
-            stream=True,
-        )
+        response = requests.post(f"{self.base_url.rstrip('/')}/load_model", json={"model": model}, stream=True)
         response.raise_for_status()
 
+        class _StatsColumn(ProgressColumn):
+            def render(self, task):  # type: ignore[override]
+                if not task.total:
+                    return Text("")
+                if task.fields.get("unit") == "bytes":
+                    done, tot = filesize.decimal(int(task.completed)), filesize.decimal(int(task.total))
+                    speed = f"  {filesize.decimal(int(task.speed))}/s" if task.speed else ""
+                    eta = f"  {int(task.time_remaining // 60)}:{int(task.time_remaining % 60):02d}" if task.time_remaining is not None else ""
+                    return Text(f"{done}/{tot}{speed}{eta}", style="progress.download")
+                return Text(f"{int(task.completed)}/{int(task.total)}")
+
+        stage_labels = {"processor": "Loading processor", "config": "Loading config",
+                        "download": "Downloading files", "weights": "Loading into memory"}
+
         progress = Progress(
-            TextColumn("[bold]{task.description}", table_column=Column(width=size_of_tqdm, no_wrap=True)),
-            BarColumn(bar_width=40),
-            _StatsColumn(),
-            TimeElapsedColumn(),
-            console=self._console,
+            TextColumn("[bold]{task.description}", table_column=Column(width=50, no_wrap=True)),
+            BarColumn(bar_width=40), _StatsColumn(), TimeElapsedColumn(), console=self._console,
         )
-
-        stage_task = progress.add_task(model + " " * (size_of_tqdm - len(model)), total=len(loading_stages))
-
-        dl_task = progress.add_task(
-            " " * len(model) + "  ↳  Downloading files", total=None, visible=False, is_download=True
-        )
-
-        weights_task = progress.add_task(" " * len(model) + "  ↳  Loading into memory", total=None, visible=False)
-
-        stages_advanced: set[str] = set()
-        prev_dl_current = 0
+        task_id = progress.add_task(f"{model}  →  Starting", total=None)
+        cached = False
 
         with Live(progress, console=self._console, transient=True):
             for line in response.iter_lines():
                 if not line or not line.startswith(b"data: "):
                     continue
+                event = json.loads(line[6:])
+                status = event.get("status")
 
-                payload = json.loads(line.split(b"data: ", 1)[1])
-                status = payload.get("status")
-                stage = payload.get("stage")
-                prog = payload.get("progress")
-
-                if status == "loading":
-                    # Advance the stage counter for each new stage
-                    if stage and stage in stage_labels and stage not in stages_advanced:
-                        progress.update(stage_task, description=stage_labels[stage])
-                        # Advance for all prior stages that were skipped
-                        for s in loading_stages:
-                            if s == stage:
-                                break
-                            if s not in stages_advanced:
-                                stages_advanced.add(s)
-                                progress.advance(stage_task, 1)
-
-                    if stage == "download" and prog:
-                        progress.update(dl_task, visible=True)
-                        current = prog.get("current", 0)
-                        total = prog.get("total")
-                        if total is not None:
-                            progress.update(dl_task, total=total)
-                        delta = current - prev_dl_current
-                        if delta > 0:
-                            progress.advance(dl_task, delta)
-                        prev_dl_current = current
-
-                    elif stage == "weights" and prog:
-                        progress.update(dl_task, visible=False)
-                        progress.update(weights_task, visible=True)
-                        current = prog.get("current", 0)
-                        total = prog.get("total")
-                        if total is not None:
-                            progress.update(weights_task, total=total, completed=current)
-                        else:
-                            progress.update(weights_task, completed=current)
-
-                elif status == "ready":
-                    # Advance any remaining stages
-                    for s in loading_stages:
-                        if s not in stages_advanced:
-                            stages_advanced.add(s)
-                            progress.advance(stage_task, 1)
+                if status == "ready":
+                    cached = event.get("cached", False)
                     break
 
-                elif status == "error":
-                    raise RuntimeError(payload.get("message", "Unknown error"))
+                if status == "error":
+                    raise RuntimeError(event.get("message", "Unknown error"))
 
-        self._console.print(Markdown(f"_*{model} is warm.*_"))
+                if status == "loading":
+                    stage = event.get("stage")
+                    prog = event.get("progress")
+                    label = f"{model}  →  {stage_labels.get(stage, stage)}"
+
+                    if prog:
+                        unit = "bytes" if stage == "download" else "items"
+                        progress.update(task_id, description=label, completed=prog["current"],
+                                        total=prog.get("total"), unit=unit)
+                    else:
+                        progress.update(task_id, description=label, completed=0, total=None)
+
+        if cached:
+            self._console.print(Markdown(f"_*{model} was already loaded.*_"))
+        else:
+            self._console.print(Markdown(f"_*{model} is warm.*_"))
         self._console.print()
 
     def print_status(self, config: GenerationConfig):
