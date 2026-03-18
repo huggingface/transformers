@@ -455,6 +455,21 @@ def _build_checkpoint_conversion_mapping():
                 ],
                 operations=[Chunk(dim=0)],
             ),
+        "jina_embeddings_v3": [
+            WeightRenaming(source_patterns="emb_ln", target_patterns="embeddings.LayerNorm"),
+            WeightRenaming(source_patterns="encoder.layers", target_patterns="layers"),
+            WeightConverter(
+                source_patterns="mixer.Wqkv",
+                target_patterns=[
+                    "self_attn.q_proj",
+                    "self_attn.k_proj",
+                    "self_attn.v_proj",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightRenaming(source_patterns="mixer.out_proj", target_patterns="self_attn.o_proj"),
+            WeightRenaming(source_patterns="norm1", target_patterns="post_attention_layernorm"),
+            WeightRenaming(source_patterns="norm2", target_patterns="post_mlp_layernorm"),
         ],
     }
     mapping["legacy"] += [
