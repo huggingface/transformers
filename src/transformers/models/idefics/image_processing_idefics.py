@@ -39,10 +39,13 @@ class IdeficsImageProcessorKwargs(ImagesKwargs, total=False):
     image_size (`int`, *optional*, defaults to `self.image_size`):
         Resize to image size. This is a backward-compatible alias for `size`. When provided, it overrides
         `size` and sets it to `{"height": image_size, "width": image_size}`.
+    image_num_channels (`int`, *optional*, defaults to `3`):
+        The number of channels of the image.
     """
 
     transform: Callable | None
     image_size: int
+    image_num_channels: int
 
 
 @auto_docstring
@@ -56,6 +59,7 @@ class IdeficsImageProcessor(TorchvisionBackend):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
+    image_num_channels = 3
 
     def __init__(self, **kwargs: Unpack[IdeficsImageProcessorKwargs]):
         image_size = kwargs.pop("image_size", None)

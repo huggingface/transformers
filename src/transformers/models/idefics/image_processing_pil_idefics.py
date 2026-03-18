@@ -31,6 +31,7 @@ class IdeficsImageProcessorPil(PilBackend):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
+    image_num_channels = 3
 
     def __init__(self, **kwargs: Unpack[IdeficsImageProcessorKwargs]):
         image_size = kwargs.pop("image_size", None)

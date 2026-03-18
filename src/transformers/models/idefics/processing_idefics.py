@@ -339,7 +339,8 @@ class IdeficsProcessor(ProcessorMixin):
             if add_eos_token:
                 full_text += self.tokenizer.eos_token
 
-            image_objects = self.image_processor(image_objects, **output_kwargs["images_kwargs"])
+            if len(image_objects) > 0:
+                image_objects = self.image_processor(image_objects, **output_kwargs["images_kwargs"])
 
             all_prompts.append(full_text)
             all_images.append(image_objects)
