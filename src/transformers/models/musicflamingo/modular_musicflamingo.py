@@ -20,7 +20,6 @@ import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import Tensor, broadcast_tensors
-from torch.amp import autocast
 
 from ... import initialization as init
 from ...audio_utils import AudioInput, make_list_of_audio
@@ -72,6 +71,7 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     audio_bos_token_id: int = 151670
     audio_eos_token_id: int = 151671
     head_dim: int = 256
@@ -308,7 +308,7 @@ class MusicFlamingoRotaryEmbedding(LlamaRotaryEmbedding):
 
 class MusicFlamingoPreTrainedModel(AudioFlamingo3PreTrainedModel):
     _no_split_modules = None
-    
+
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
