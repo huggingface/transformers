@@ -234,7 +234,7 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
         self,
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor,
-        rote_timestamps: torch.Tensor | None = None,
+        rote_timestamps: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -250,10 +250,8 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
             **kwargs,
         )
         hidden_states = audio_output.last_hidden_state
-        if rote_timestamps is not None:
-            cos, sin = self.pos_emb(rote_timestamps.to(hidden_states.device), seq_len=hidden_states.shape[-2])
-            hidden_states = apply_rotary_time_emb(hidden_states, cos, sin)
-
+        cos, sin = self.pos_emb(rote_timestamps.to(hidden_states.device), seq_len=hidden_states.shape[-2])
+        hidden_states = apply_rotary_time_emb(hidden_states, cos, sin)
         audio_embeds = self.multi_modal_projector(hidden_states)
 
         # Mask according to the audio tower output lengths, accounting for both conv downsampling and final avg pooling

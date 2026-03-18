@@ -38,7 +38,6 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
-            "chunk_length": 30.0,
             "return_attention_mask": True,
             "padding": "max_length",
         },
@@ -88,7 +87,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         self.max_audio_len = max_audio_len
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
-    def _get_audio_token_length(self, audio_lengths: "torch.Tensor") -> "torch.Tensor":
+    def _get_audio_token_length(self, audio_lengths):
         conv_output_lengths = (audio_lengths - 1) // 2 + 1  # After conv2 downsampling
         audio_tokens_lengths = (conv_output_lengths - 2) // 2 + 1  # After avg pooling
         return audio_tokens_lengths
@@ -146,8 +145,8 @@ class AudioFlamingo3Processor(ProcessorMixin):
                 raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
 
             # Determine number of chunks per sample, and flatten
-            window_size = int(audio_kwargs["sampling_rate"] * audio_kwargs["chunk_length"])
-            max_windows = int(self.max_audio_len // audio_kwargs["chunk_length"])
+            window_size = int(audio_kwargs["sampling_rate"] * self.feature_extractor.chunk_length)
+            max_windows = int(self.max_audio_len // self.feature_extractor.chunk_length)
 
             per_sample_windows: list[int] = []
             flat_chunks: list[np.ndarray] = []

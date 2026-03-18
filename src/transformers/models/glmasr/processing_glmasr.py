@@ -44,7 +44,6 @@ class GlmAsrProcessorKwargs(ProcessingKwargs, total=False):
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
-            "chunk_length": 30.0,
             "return_attention_mask": True,
             "padding": "max_length",
         },
@@ -156,8 +155,8 @@ class GlmAsrProcessor(ProcessorMixin):
                 raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
 
             # Determine number of chunks per sample, and flatten
-            window_size = int(audio_kwargs["sampling_rate"] * audio_kwargs["chunk_length"])
-            max_windows = int(self.max_audio_len // audio_kwargs["chunk_length"])
+            window_size = int(audio_kwargs["sampling_rate"] * self.feature_extractor.chunk_length)
+            max_windows = int(self.max_audio_len // self.feature_extractor.chunk_length)
 
             per_sample_windows: list[int] = []
             flat_chunks: list[np.ndarray] = []

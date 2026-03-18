@@ -167,16 +167,13 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
             if len(text) != len(audio):
                 raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
 
-            window_size = int(audio_kwargs["sampling_rate"] * audio_kwargs["chunk_length"])
-            max_windows = int(self.max_audio_len // audio_kwargs["chunk_length"])
-            frames_per_window = int(
-                self._get_audio_token_length(torch.tensor([self.feature_extractor.nb_max_frames], dtype=torch.long))
-            )
-            time_step = audio_kwargs["chunk_length"] / frames_per_window
+            # Determine number of chunks per sample, and flatten
+            window_size = int(audio_kwargs["sampling_rate"] * self.feature_extractor.chunk_length)
+            max_windows = int(self.max_audio_len // self.feature_extractor.chunk_length)
 
             per_sample_windows: list[int] = []
             flat_chunks: list[np.ndarray] = []
-            chunk_start_times: list[float] = []
+            chunk_start_times: list[float] = []  # For computing rotary time embedding timestamps
 
             for audio_el in audio:
                 n_samples = int(audio_el.shape[0])
@@ -195,23 +192,30 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
                     flat_chunks.append(audio_el[start:end])
                     chunk_start_times.append(start / audio_kwargs["sampling_rate"])
 
+            # Feature extraction
             audio_inputs = self.feature_extractor(flat_chunks, **audio_kwargs)
             padding_mask = audio_inputs.pop("attention_mask")
             audio_inputs["input_features_mask"] = padding_mask
-            frame_offsets = torch.arange(frames_per_window, dtype=torch.float32) * time_step
-            audio_inputs["rote_timestamps"] = (
-                torch.as_tensor(chunk_start_times, dtype=torch.float32).unsqueeze(1) + frame_offsets
-            )
 
+            # Compute sequence lengths token counting
             audio_lengths = torch.stack([s.sum() for s in torch.split(padding_mask.sum(-1), per_sample_windows)])
             audio_tokens_lengths = self._get_audio_token_length(audio_lengths)
 
+            # expand audio tokens in text
             for i, audio_length in enumerate(audio_tokens_lengths):
                 text[i] = re.sub(
                     re.escape(self.audio_token),
                     self.audio_bos_token + self.audio_token * audio_length + self.audio_eos_token,
                     text[i],
                 )
+
+            # Compute timestamps for rotary time embeddings
+            frames_per_window = self._get_audio_token_length(self.feature_extractor.nb_max_frames)
+            time_step = self.feature_extractor.chunk_length / frames_per_window
+            frame_offsets = torch.arange(frames_per_window, dtype=torch.float32) * time_step
+            audio_inputs["rote_timestamps"] = (
+                torch.as_tensor(chunk_start_times, dtype=torch.float32).unsqueeze(1) + frame_offsets
+            )
 
         text_inputs = self.tokenizer(text, **text_kwargs)
 
@@ -335,7 +339,7 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         self,
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor,
-        rote_timestamps: torch.Tensor | None = None,
+        rote_timestamps: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -351,10 +355,8 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
             **kwargs,
         )
         hidden_states = audio_output.last_hidden_state
-        if rote_timestamps is not None:
-            cos, sin = self.pos_emb(rote_timestamps.to(hidden_states.device), seq_len=hidden_states.shape[-2])
-            hidden_states = apply_rotary_time_emb(hidden_states, cos, sin)
-
+        cos, sin = self.pos_emb(rote_timestamps.to(hidden_states.device), seq_len=hidden_states.shape[-2])
+        hidden_states = apply_rotary_time_emb(hidden_states, cos, sin)
         audio_embeds = self.multi_modal_projector(hidden_states)
 
         # Mask according to the audio tower output lengths, accounting for both conv downsampling and final avg pooling
