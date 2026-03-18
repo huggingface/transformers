@@ -136,10 +136,6 @@ class Cohere2VisionPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_flex_attn = True
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": "DecoderLayer",
-        "attentions": "Attention",
-    }
 
 
 @auto_docstring(
@@ -148,8 +144,6 @@ class Cohere2VisionPreTrainedModel(PreTrainedModel):
     """
 )
 class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Cohere2VisionConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -252,7 +246,6 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
     """
 )
 class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: Cohere2VisionConfig):

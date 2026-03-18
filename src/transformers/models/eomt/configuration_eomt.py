@@ -17,11 +17,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="tue-mps/coco_panoptic_eomt_large_640")
+@strict(accept_kwargs=True)
 class EomtConfig(PreTrainedConfig):
     r"""
     num_upscale_blocks (`int`, *optional*, defaults to 2):
@@ -66,64 +69,32 @@ class EomtConfig(PreTrainedConfig):
 
     model_type = "eomt"
 
-    def __init__(
-        self,
-        hidden_size=1024,
-        num_hidden_layers=24,
-        num_attention_heads=16,
-        mlp_ratio=4,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-6,
-        image_size=640,
-        patch_size=16,
-        num_channels=3,
-        layerscale_value=1.0,
-        drop_path_rate=0.0,
-        num_upscale_blocks=2,
-        attention_dropout=0.0,
-        use_swiglu_ffn=False,
-        num_blocks=4,
-        no_object_weight: float = 0.1,
-        class_weight: float = 2.0,
-        mask_weight: float = 5.0,
-        dice_weight: float = 5.0,
-        train_num_points: int = 12544,
-        oversample_ratio: float = 3.0,
-        importance_sample_ratio: float = 0.75,
-        num_queries=200,
-        num_register_tokens=4,
-        **kwargs,
-    ):
-        self.mlp_ratio = mlp_ratio
-        self.attention_dropout = attention_dropout
-        self.layerscale_value = layerscale_value
-        self.drop_path_rate = drop_path_rate
-        self.num_upscale_blocks = num_upscale_blocks
-        self.use_swiglu_ffn = use_swiglu_ffn
-        self.num_blocks = num_blocks
-        self.no_object_weight = no_object_weight
-        self.class_weight = class_weight
-        self.mask_weight = mask_weight
-        self.dice_weight = dice_weight
-        self.train_num_points = train_num_points
-        self.oversample_ratio = oversample_ratio
-        self.importance_sample_ratio = importance_sample_ratio
-        self.num_queries = num_queries
-        self.num_register_tokens = num_register_tokens
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-
-        super().__init__(**kwargs)
+    hidden_size: int = 1024
+    num_hidden_layers: int = 24
+    num_attention_heads: int = 16
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.0
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-6
+    image_size: int | list[int] | tuple[int, int] = 640
+    patch_size: int | list[int] | tuple[int, int] = 16
+    num_channels: int = 3
+    mlp_ratio: int = 4
+    layerscale_value: float = 1.0
+    drop_path_rate: float = 0.0
+    num_upscale_blocks: int = 2
+    attention_dropout: float | int = 0.0
+    use_swiglu_ffn: bool = False
+    num_blocks: int = 4
+    no_object_weight: float = 0.1
+    class_weight: float = 2.0
+    mask_weight: float = 5.0
+    dice_weight: float = 5.0
+    train_num_points: int = 12544
+    oversample_ratio: float = 3.0
+    importance_sample_ratio: float = 0.75
+    num_queries: int = 200
+    num_register_tokens: int = 4
 
 
 __all__ = ["EomtConfig"]

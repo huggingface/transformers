@@ -44,6 +44,8 @@ from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel, AutoModelForTextEncoding
 from .configuration_musicgen_melody import MusicgenMelodyConfig, MusicgenMelodyDecoderConfig
@@ -329,9 +331,9 @@ class MusicgenMelodyDecoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        output_attentions: bool | None = False,
         use_cache: bool | None = True,
         cache_position: torch.Tensor | None = None,
+        **kwargs,
     ) -> torch.Tensor:
         """
         Args:
@@ -339,9 +341,6 @@ class MusicgenMelodyDecoderLayer(GradientCheckpointingLayer):
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             past_key_values (`Cache`): cached past key and value projection states
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
@@ -351,8 +350,8 @@ class MusicgenMelodyDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
             cache_position=cache_position,
+            **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -405,6 +404,12 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MusicgenMelodyDecoderLayer`]
     """
 
+    _can_record_outputs = {
+        "hidden_states": MusicgenMelodyDecoderLayer,
+        "attentions": OutputRecorder(MusicgenMelodyAttention, index=1, layer_name="self_attn"),
+        "cross_attentions": OutputRecorder(MusicgenMelodyAttention, index=1, layer_name="encoder_attn"),
+    }
+
     def __init__(self, config: MusicgenMelodyDecoderConfig):
         super().__init__(config)
         self.dropout = config.dropout
@@ -434,8 +439,10 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring
     # Ignore copy
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -445,11 +452,8 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         cache_position: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, sequence_length)`):
@@ -482,13 +486,6 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
 
             [What are attention masks?](../glossary#attention-mask)
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
@@ -500,13 +497,6 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
             input = inputs_embeds[:, :, -1:]
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing`. Setting `use_cache=False`..."
-                )
-                use_cache = False
 
         if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
@@ -548,13 +538,8 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
             dropout_probability = random.uniform(0, 1)
             if self.training and (dropout_probability < self.layerdrop):
                 continue
@@ -563,29 +548,17 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
                 hidden_states,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
-                output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                **kwargs,
             )
             hidden_states = layer_outputs[0]
-            if output_attentions:
-                all_attentions += (layer_outputs[1],)
 
         hidden_states = self.layer_norm(hidden_states)
 
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v for v in [hidden_states, past_key_values, all_hidden_states, all_attentions] if v is not None
-            )
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
         )
 
 
@@ -606,6 +579,8 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
 
     @auto_docstring
     # Ignore copy
+    @capture_outputs
+    @merge_with_config_defaults
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -615,11 +590,8 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         cache_position: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, sequence_length)`):
@@ -652,15 +624,7 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
 
             [What are attention masks?](../glossary#attention-mask)
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # decoder outputs consists of (dec_features, past_key_values, dec_hidden, dec_attn)
-        decoder_outputs = self.decoder(
+        decoder_outputs: BaseModelOutputWithPast = self.decoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
@@ -668,14 +632,9 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
-
-        if not return_dict:
-            return decoder_outputs
 
         return BaseModelOutputWithPast(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -719,6 +678,8 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_heads = new_embeddings
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     # Ignore copy
     def forward(
@@ -730,12 +691,9 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         labels: torch.LongTensor | None = None,
         cache_position: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MusicgenMelodyOutputWithPast:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, sequence_length)`):
@@ -773,12 +731,10 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if (labels is not None) and (input_ids is None and inputs_embeds is None):
             input_ids = shift_tokens_right(labels, self.config.pad_token_id, self.config.bos_token_id)
 
-        outputs = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids,
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
@@ -786,13 +742,11 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
 
         lm_logits = torch.stack([head(hidden_states) for head in self.lm_heads], dim=1)
 
@@ -820,10 +774,6 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
 
         # (bsz, num_codebooks, seq_len, vocab_size) -> (bsz * num_codebooks, seq_len, vocab_size)
         lm_logits = lm_logits.reshape(-1, *lm_logits.shape[2:])
-
-        if not return_dict:
-            output = (lm_logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return MusicgenMelodyOutputWithPast(
             loss=loss,
@@ -1465,6 +1415,8 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         )
         return cls(text_encoder=text_encoder, audio_encoder=audio_encoder, decoder=decoder, config=config)
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -1479,10 +1431,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MusicgenMelodyOutputWithPast:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, target_sequence_length)`, *optional*):
@@ -1538,8 +1487,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         >>> logits.shape  # (bsz * num_codebooks, encoder_len + tgt_len, vocab_size)
         torch.Size([8, 249, 2048])
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         kwargs_text_encoder = {
             argument[len("text_encoder_")]: value
             for argument, value in kwargs.items()
@@ -1550,15 +1497,17 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
 
+        for passthrough_key in ("output_attentions", "output_hidden_states"):
+            if passthrough_key in kwargs:
+                kwargs_text_encoder[passthrough_key] = kwargs[passthrough_key]
+                kwargs_decoder[passthrough_key] = kwargs[passthrough_key]
+
         if encoder_hidden_states is None:
             if inputs_embeds is not None or input_ids is not None:
                 encoder_outputs = self.text_encoder(
                     input_ids=input_ids,
                     attention_mask=attention_mask,
                     inputs_embeds=inputs_embeds,
-                    output_attentions=output_attentions,
-                    output_hidden_states=output_hidden_states,
-                    return_dict=return_dict,
                     **kwargs_text_encoder,
                 )
 
@@ -1611,22 +1560,16 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
             )
 
         # Decode
-        decoder_outputs = self.decoder(
+        decoder_outputs: MusicgenMelodyOutputWithPast = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             inputs_embeds=decoder_inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             use_cache=use_cache,
             past_key_values=past_key_values,
-            return_dict=return_dict,
             labels=labels,
             **kwargs_decoder,
         )
-
-        if not return_dict:
-            return decoder_outputs + (encoder_hidden_states,)
 
         return MusicgenMelodyOutputWithPast(
             loss=decoder_outputs.loss,

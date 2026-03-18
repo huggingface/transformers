@@ -80,6 +80,7 @@ CORE_FILES = (
     "src/transformers/core_model_loading.py",
     "src/transformers/cache_utils.py",
     "src/transformers/generation/utils.py",
+    "src/transformers/utils/output_capturing.py",
 )
 
 

@@ -411,7 +411,7 @@ class MobileBertLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         if self.use_bottleneck:
             query_tensor, key_tensor, value_tensor, layer_input = self.bottleneck(hidden_states)
         else:
