@@ -22,8 +22,8 @@ from parameterized import parameterized
 
 from transformers import (
     SLANeXtConfig,
-    SLANeXtModel,
     SLANeXtImageProcessor,
+    SLANeXtModel,
     is_torch_available,
     is_vision_available,
 )
