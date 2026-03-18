@@ -4,7 +4,6 @@ from transformers.models.gemma.configuration_gemma import GemmaConfig
 
 
 class NewModelConfig(GemmaConfig):
-
     vocab_size: int = 256030
     hidden_size: int = 64
     intermediate_size: int = 90

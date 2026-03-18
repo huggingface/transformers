@@ -20,7 +20,6 @@ from transformers.models.clip.modeling_clip import (
     CLIPVisionModel,
     CLIPVisionTransformer,
 )
-from transformers.utils import add_start_docstrings
 
 
 class Multimodal2VisionAttention(CLIPAttention):
@@ -59,6 +58,7 @@ class Multimodal2VisionPreTrainedModel(CLIPPreTrainedModel):
 # use it as well
 class Multimodal2VisionTransformer(CLIPVisionTransformer, Multimodal2VisionPreTrainedModel):
     _no_split_modules = ["CLIPEncoderLayer"]
+
     def __init__(self, config):
         super().__init__(config)
         self.encoder = Multimodal2VisionEncoder(config)
