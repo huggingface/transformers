@@ -329,9 +329,9 @@ def _load_training_state(model, optimizer, training_state_dir):
 
 def train_ddp(rank, batches, lr, device, dtype, init_model_dir):
     _set_determinism(SEED)
-    model = AutoModelForCausalLM.from_pretrained(
-        init_model_dir, torch_dtype=dtype, attn_implementation="eager"
-    ).to(device)
+    model = AutoModelForCausalLM.from_pretrained(init_model_dir, torch_dtype=dtype, attn_implementation="eager").to(
+        device
+    )
     # MoE/conditional-routing variants) may not use all params on
     # every step, and DDP would otherwise fail. Specifying find_unused_parameters=True allows running backward on a subgraph of the model.
     ddp_kwargs = {"find_unused_parameters": True}
