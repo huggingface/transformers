@@ -45,7 +45,6 @@ class NewModelConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-
     vocab_size: int = 256030
     hidden_size: int = 64
     intermediate_size: int = 90
