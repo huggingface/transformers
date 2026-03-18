@@ -118,6 +118,10 @@ class ContinuousBatchProcessor:
         self.model_dtype = model_dtype
         self.scheduler = scheduler
 
+        # Generation-related attributes
+        self.do_sample = getattr(generation_config, "do_sample", True)
+        self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
+
         # Retrieve the size of the sliding window if there is one
         self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
         # Cuda graphs for the generation step
@@ -160,7 +164,6 @@ class ContinuousBatchProcessor:
         self._pad_inputs = self.use_cuda_graph or (varlen_config is not None or decode_config is not None)
 
         # Setup inputs and outputs
-        self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
         self.use_async_batching = self.cb_config.use_async_batching
         if self.use_async_batching:
             # Since in async there are 2 IO pairs, there are also 2 graph buffers: we divide the max_cached_graphs by 2
@@ -428,7 +431,7 @@ class ContinuousBatchProcessor:
 
     @traced
     @torch.no_grad()
-    def _generation_step(self, model: nn.Module, logit_processor: LogitsProcessorList, do_sample: bool) -> None:
+    def _generation_step(self, model: nn.Module, logit_processor: LogitsProcessorList) -> None:
         """Perform a single generation step."""
 
         # Retrieve the model kwargs with or without padding
@@ -446,7 +449,7 @@ class ContinuousBatchProcessor:
         if not self.use_cuda_graph:
             maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
             with maybe_stream:
-                forward_fn(model, batch_data, logit_processor, do_sample, carry_over_ids, prev_output_ids, output_ids)
+                forward_fn(model, batch_data, logit_processor, carry_over_ids, prev_output_ids, output_ids)
 
         # Otherwise, we use create or replay the graph (cuda is available in this path)
         else:
@@ -462,7 +465,7 @@ class ContinuousBatchProcessor:
                 # Warmup
                 with torch.cuda.stream(compute_stream):
                     forward_fn(
-                        model, batch_data, logit_processor, do_sample, carry_over_ids, prev_output_ids, output_ids
+                        model, batch_data, logit_processor, carry_over_ids, prev_output_ids, output_ids
                     )
                 # torch.cuda.current_stream().wait_stream(compute_stream)
                 # Capture
@@ -477,7 +480,7 @@ class ContinuousBatchProcessor:
                     capture_error_mode="thread_local",
                 ):
                     forward_fn(
-                        model, batch_data, logit_processor, do_sample, carry_over_ids, prev_output_ids, output_ids
+                        model, batch_data, logit_processor, carry_over_ids, prev_output_ids, output_ids
                     )
                 # Store
                 self.inputs_and_outputs.set_graph(graph)
@@ -491,7 +494,6 @@ class ContinuousBatchProcessor:
         model: nn.Module,
         batch_data: dict,
         logit_processor: LogitsProcessorList,
-        do_sample: bool,
         carry_over_ids: torch.Tensor,
         prev_output_ids: torch.Tensor,
         output_ids: torch.Tensor,
@@ -500,9 +502,8 @@ class ContinuousBatchProcessor:
         function to be easier to trace with OpenTelemetry."""
         self.inputs_and_outputs.carry_over_tokens(batch_data["input_ids"], carry_over_ids, prev_output_ids)
         logits = self._model_forward(model, batch_data)
-        # if self.log_prob_generation:    batch_processor.output_probs.copy_(logits)  # TODO
         probs = self._process_logit(batch_data, logits, logit_processor)
-        self._sample(probs, batch_data, do_sample, output_ids)
+        self._sample(probs, batch_data["logits_indices"], output_ids)
 
     @traced(span_name="model_forward")
     def _model_forward(self, model: nn.Module, batch_data: dict) -> torch.Tensor:
@@ -527,17 +528,17 @@ class ContinuousBatchProcessor:
         return processed_logits_2d.view(batch_size, seq_len, vocab_size)
 
     @traced(span_name="sampling")
-    def _sample(self, probs: torch.Tensor, batch_data: dict, do_sample: bool, output_ids: torch.Tensor) -> None:
+    def _sample(self, probs: torch.Tensor, logits_indices: torch.Tensor, output_ids: torch.Tensor) -> None:
 
         # Apply softmax if we are sampling or if we are generating log probabilities
-        if do_sample or self.log_prob_generation:
+        if self.do_sample or self.log_prob_generation:
             probs = nn.functional.softmax(probs[0], dim=-1)  # shape [seq_len, vocab_size]
         # Otherwise just remove the bastch size dimension, which is always 1
         else:
             probs = probs.squeeze(0)  # shape [seq_len, vocab_size]
 
         # Retrieve next tokens through sampling or argmax
-        if do_sample:
+        if self.do_sample:
             next_tokens = torch.multinomial(probs, num_samples=1)  # shape [seq_len, 1]
         else:
             next_tokens = torch.argmax(probs, dim=-1, keepdim=True)  # shape [seq_len, 1]
@@ -551,7 +552,7 @@ class ContinuousBatchProcessor:
         # Get seq_len dimension to slice the logits indices
         tokens = next_tokens.size(0)
         # Shuffle the next tokens to match the order of the batch's requests
-        indices = batch_data["logits_indices"][:tokens]
+        indices = logits_indices[:tokens]
         next_tokens = next_tokens[indices]
         # Copy the next tokens and maybe their logprobs to the static output tensor
         output_ids[0, :tokens].copy_(next_tokens)
@@ -606,8 +607,6 @@ class ContinuousBatchingManager:
         self._request_lock = threading.Lock()
 
         # Generation config related arguments
-        self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
-        self.do_sample = getattr(generation_config, "do_sample", True)
         self.logit_processor: LogitsProcessorList = self.model._get_logits_processor(generation_config)
         num_return_sequences = getattr(generation_config, "num_return_sequences", None)
         self.num_return_sequences = num_return_sequences if num_return_sequences is not None else 1
@@ -810,7 +809,7 @@ class ContinuousBatchingManager:
         """Perform a single generation step. This is mostly cuda graphed"""
         if self.batch_processor is None:
             raise RuntimeError("Tried to perform a generation step before the batch processor was initialized.")
-        self.batch_processor._generation_step(self.model, self.logit_processor, self.do_sample)
+        self.batch_processor._generation_step(self.model, self.logit_processor)
 
     def _run_generation_loop(self) -> None:
         """Main processing loop running in the background thread."""
