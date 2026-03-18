@@ -912,18 +912,15 @@ class IsaacProcessor(ProcessorMixin):
                 else:
                     vision_image_attention_mask[batch_idx, image_idx] = 0
 
-        batch_size = len(sample_input_ids)
-        lengths = [int(sample_input.shape[0]) for sample_input in sample_input_ids]
-        max_len = max(lengths, default=0)
-
-        input_ids = torch.full((batch_size, max_len), self.text_pad_token_id, dtype=torch.long)
-        attention_mask = torch.zeros((batch_size, max_len), dtype=torch.long)
-
-        for batch_idx, length in enumerate(lengths):
-            if length == 0:
-                continue
-            input_ids[batch_idx, -length:] = sample_input_ids[batch_idx]
-            attention_mask[batch_idx, -length:] = 1
+        text_inputs = self.tokenizer.pad(
+            {"input_ids": [sample_input.tolist() for sample_input in sample_input_ids]},
+            padding=True,
+            padding_side="left",
+            return_attention_mask=True,
+            return_tensors=TensorType.PYTORCH,
+        )
+        input_ids = text_inputs["input_ids"]
+        attention_mask = text_inputs["attention_mask"]
 
         mm_token_type_ids = input_ids.eq(self.image_pad_token_id).to(dtype=torch.long)
 
