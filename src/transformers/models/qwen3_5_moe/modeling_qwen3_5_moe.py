@@ -1419,6 +1419,8 @@ class Qwen3_5MoeCausalLMOutputWithPast(ModelOutput):
 
 
 class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
+    config: Qwen3_5MoeTextConfig
+
     def __init__(self, config: Qwen3_5MoeTextConfig):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
@@ -1517,7 +1519,6 @@ class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
 @auto_docstring
 class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
     base_model_prefix = "model"
-    _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: Qwen3_5MoeConfig
@@ -2080,7 +2081,6 @@ class Qwen3_5MoeForCausalLM(Qwen3_5MoePreTrainedModel, GenerationMixin):
 
 
 class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False

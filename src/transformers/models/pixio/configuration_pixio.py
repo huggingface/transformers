@@ -17,12 +17,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/pixio-huge")
+@strict(accept_kwargs=True)
 class PixioConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     n_cls_tokens (`int`, *optional*, defaults to 8):
@@ -51,51 +54,32 @@ class PixioConfig(BackboneConfigMixin, PreTrainedConfig):
 
     model_type = "pixio"
 
-    def __init__(
-        self,
-        hidden_size=1280,
-        num_hidden_layers=32,
-        num_attention_heads=16,
-        mlp_ratio=4,
-        n_cls_tokens=8,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-6,
-        image_size=256,
-        patch_size=16,
-        num_channels=3,
-        qkv_bias=True,
-        drop_path_rate=0.0,
-        out_features=None,
-        out_indices=None,
-        apply_layernorm=True,
-        reshape_hidden_states=True,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    hidden_size: int = 1280
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 16
+    mlp_ratio: int = 4
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-6
+    image_size: int | list[int] | tuple[int, int] = 256
+    patch_size: int | list[int] | tuple[int, int] = 16
+    num_channels: int = 3
+    qkv_bias: bool = True
+    drop_path_rate: float = 0.0
+    _out_features: list[str] | None = None
+    _out_indices: list[int] | None = None
+    apply_layernorm: bool = True
+    reshape_hidden_states: bool = True
+    n_cls_tokens: int = 8
 
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.mlp_ratio = mlp_ratio
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.qkv_bias = qkv_bias
-        self.drop_path_rate = drop_path_rate
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, num_hidden_layers + 1)]
-        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
-        self.apply_layernorm = apply_layernorm
-        self.reshape_hidden_states = reshape_hidden_states
-
-        self.n_cls_tokens = n_cls_tokens
+    def __post_init__(self, **kwargs):
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
+        self.set_output_features_output_indices(
+            out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
+        )
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["PixioConfig"]

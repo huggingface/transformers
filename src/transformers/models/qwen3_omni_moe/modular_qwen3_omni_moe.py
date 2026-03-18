@@ -20,6 +20,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 from torch.nn import functional as F
 
@@ -134,55 +135,19 @@ class Qwen3OmniMoeAudioEncoderConfig(Qwen2_5OmniAudioEncoderConfig):
     output_dim (`int`, *optional*, defaults to 3584):  Dimensionality of the output
     """
 
-    def __init__(
-        self,
-        num_mel_bins: int | None = 128,
-        encoder_layers: int | None = 32,
-        encoder_attention_heads: int | None = 20,
-        encoder_ffn_dim: int | None = 5120,
-        d_model: int | None = 1280,
-        dropout: int | None = 0,
-        attention_dropout: int | None = 0,
-        activation_function: int | None = "gelu",
-        activation_dropout: int | None = 0,
-        scale_embedding: int | None = False,
-        initializer_range: int | None = 0.02,
-        max_source_positions: int | None = 1500,
-        n_window: int | None = 100,
-        output_dim: int | None = 3584,
-        n_window_infer: int | None = 400,
-        conv_chunksize: int | None = 500,
-        downsample_hidden_size: int | None = 480,
-        **kwargs,
-    ):
-        super().__init__(
-            num_mel_bins,
-            encoder_layers,
-            encoder_attention_heads,
-            encoder_ffn_dim,
-            d_model,
-            dropout,
-            attention_dropout,
-            activation_function,
-            activation_dropout,
-            scale_embedding,
-            initializer_range,
-            max_source_positions,
-            n_window,
-            output_dim,
-            **kwargs,
-        )
-        self.n_window_infer = n_window_infer
-        self.conv_chunksize = conv_chunksize
-        self.downsample_hidden_size = downsample_hidden_size
+    n_window_infer: int = 400
+    conv_chunksize: int = 500
+    downsample_hidden_size: int = 480
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@strict(accept_kwargs=True)
 class Qwen3OmniMoeVisionEncoderConfig(Qwen3VLMoeVisionConfig):
     pass
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@strict(accept_kwargs=True)
 class Qwen3OmniMoeTextConfig(PreTrainedConfig):
     r"""
     decoder_sparse_step (`int`, *optional*, defaults to 1):
@@ -226,74 +191,43 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    ignore_keys_at_rope_validation = {"mrope_section", "interleaved", "mrope_interleaved"}
 
-    def __init__(
-        self,
-        vocab_size: int | None = 3584,
-        hidden_size: int | None = 2048,
-        intermediate_size: int | None = 18944,
-        num_hidden_layers: int | None = 28,
-        num_attention_heads: int | None = 28,
-        num_key_value_heads: int | None = 4,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 32768,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: float | None = 1e-6,
-        use_cache: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        sliding_window: int | None = None,
-        attention_dropout: int | None = 0,
-        decoder_sparse_step: int | None = 1,
-        moe_intermediate_size: int | None = 768,
-        num_experts_per_tok: int | None = 8,
-        num_experts: int | None = 128,
-        norm_topk_prob: bool | None = True,
-        output_router_logits: bool | None = False,
-        router_aux_loss_coef: float | None = 0.001,
-        mlp_only_layers: list[int] | None = None,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = None,
-        eos_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.sliding_window = sliding_window
+    vocab_size: int = 3584
+    hidden_size: int = 2048
+    intermediate_size: int = 18944
+    num_hidden_layers: int = 28
+    num_attention_heads: int = 28
+    num_key_value_heads: int = 4
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 32768
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    sliding_window: int | None = None
+    attention_dropout: float | int = 0.0
+    decoder_sparse_step: int = 1
+    moe_intermediate_size: int = 768
+    num_experts_per_tok: int = 8
+    num_experts: int = 128
+    norm_topk_prob: bool = True
+    output_router_logits: bool = False
+    router_aux_loss_coef: float = 0.001
+    mlp_only_layers: list[int] | None = None
+    pad_token_id: int | None = None
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.rope_parameters = rope_parameters
+    def __post_init__(self, **kwargs):
+        self.mlp_only_layers = [] if self.mlp_only_layers is None else self.mlp_only_layers
 
-        # MoE arguments
-        self.decoder_sparse_step = decoder_sparse_step
-        self.moe_intermediate_size = moe_intermediate_size
-        self.num_experts_per_tok = num_experts_per_tok
-        self.num_experts = num_experts
-        self.norm_topk_prob = norm_topk_prob
-        self.output_router_logits = output_router_logits
-        self.router_aux_loss_coef = router_aux_loss_coef
-        self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-
-        super().__init__(
-            ignore_keys_at_rope_validation={"mrope_section", "interleaved", "mrope_interleaved"},
-            **kwargs,
-        )
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@strict(accept_kwargs=True)
 class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
     r"""
     position_id_per_seconds (`int`, *optional*, defaults to 25):
@@ -322,44 +256,15 @@ class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
     # Override parent's attribute_map as we use audio_token_id directly, not audio_token_index
     attribute_map = {}
 
-    def __init__(
-        self,
-        audio_config=None,
-        vision_config=None,
-        text_config=None,
-        audio_token_id=151646,
-        image_token_id=151655,
-        video_token_id=151656,
-        position_id_per_seconds=25,
-        audio_start_token_id=151647,
-        user_token_id=872,
-        initializer_range=0.02,
-        tie_word_embeddings=False,
-        **kwargs,
-    ):
-        super().__init__(
-            audio_config,
-            vision_config,
-            text_config,
-            None,
-            None,
-            None,
-            position_id_per_seconds,
-            None,
-            audio_start_token_id,
-            None,
-            user_token_id,
-            initializer_range,
-            **kwargs,
-        )
-        del self.seconds_per_chunk
-        del self.audio_token_index
-        del self.image_token_index
-        del self.video_token_index
-        del self.audio_end_token_id
-        self.audio_token_id = audio_token_id
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
+    audio_token_id: int = 151646
+    image_token_id: int = 151655
+    video_token_id: int = 151656
+
+    seconds_per_chunk = AttributeError()
+    audio_token_index = AttributeError()
+    image_token_index = AttributeError()
+    video_token_index = AttributeError()
+    audio_end_token_id = AttributeError()
 
 
 class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
@@ -371,133 +276,39 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
         Number of codebook groups used in the predicted acoustic token sequence, corresponding to multi-codebook VQ representation.
     """
 
-    def __init__(
-        self,
-        vocab_size: int | None = 2048,
-        hidden_size: int | None = 1024,
-        intermediate_size: int | None = 3072,
-        num_hidden_layers: int | None = 5,
-        num_attention_heads: int | None = 16,
-        num_key_value_heads: int | None = 8,
-        head_dim: int | None = 128,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 32768,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: float | None = 0.000001,
-        use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: int | None = None,
-        attention_bias: bool | None = False,
-        sliding_window: int | None = None,
-        max_window_layers: int | None = 28,
-        layer_types: list[str] | None = None,
-        attention_dropout: int | None = 0,
-        num_code_groups: int | None = 32,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = None,
-        eos_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.num_code_groups = num_code_groups
-        super().__init__(
-            vocab_size,
-            hidden_size,
-            intermediate_size,
-            num_hidden_layers,
-            num_attention_heads,
-            num_key_value_heads,
-            head_dim,
-            hidden_act,
-            max_position_embeddings,
-            initializer_range,
-            rms_norm_eps,
-            use_cache,
-            tie_word_embeddings,
-            rope_parameters,
-            attention_bias,
-            False,
-            sliding_window,
-            None,
-            layer_types,
-            attention_dropout,
-            pad_token_id,
-            bos_token_id,
-            eos_token_id,
-            **kwargs,
-        )
-        del self.use_sliding_window
-        self.sliding_window = sliding_window
-        self.max_window_layers = max_window_layers
+    vocab_size: int = 2048
+    hidden_size: int = 1024
+    intermediate_size: int = 3072
+    num_hidden_layers: int = 5
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 8
+    sliding_window: int | None = None
+    num_code_groups: int = 32
+    use_sliding_window = AttributeError()
+
+    def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
+        self.sliding_window = self.sliding_window
 
 
 class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
-    def __init__(
-        self,
-        vocab_size: int | None = 3072,
-        hidden_size: int | None = 1024,
-        intermediate_size: int | None = 2048,
-        num_hidden_layers: int | None = 20,
-        num_attention_heads: int | None = 16,
-        num_key_value_heads: int | None = 2,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 32768,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: float | None = 0.000001,
-        use_cache: int | None = True,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        sliding_window: int | None = None,
-        attention_dropout: int | None = 0,
-        decoder_sparse_step: int | None = 1,
-        moe_intermediate_size: int | None = 384,
-        num_experts_per_tok: int | None = 8,
-        num_experts: int | None = 128,
-        norm_topk_prob: bool | None = False,
-        output_router_logits: bool | None = False,
-        router_aux_loss_coef: float | None = 0.001,
-        mlp_only_layers: list[int] | None = None,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = None,
-        eos_token_id: int | None = None,
-        **kwargs,
-    ):
-        super().__init__(
-            vocab_size,
-            hidden_size,
-            intermediate_size,
-            num_hidden_layers,
-            num_attention_heads,
-            num_key_value_heads,
-            hidden_act,
-            max_position_embeddings,
-            initializer_range,
-            rms_norm_eps,
-            use_cache,
-            tie_word_embeddings,
-            rope_parameters,
-            attention_bias,
-            False,
-            sliding_window,
-            attention_dropout,
-            decoder_sparse_step,
-            moe_intermediate_size,
-            num_experts_per_tok,
-            num_experts,
-            norm_topk_prob,
-            output_router_logits,
-            router_aux_loss_coef,
-            mlp_only_layers,
-            pad_token_id,
-            bos_token_id,
-            eos_token_id,
-            **kwargs,
-        )
-        del self.use_sliding_window
-        self.sliding_window = sliding_window
+    vocab_size: int = 3072
+    hidden_size: int = 1024
+    intermediate_size: int = 2048
+    num_hidden_layers: int = 20
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 2
+    sliding_window: int | None = None
+    moe_intermediate_size: int = 384
+    use_sliding_window = AttributeError()
+
+    def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
+        self.sliding_window = self.sliding_window
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@strict(accept_kwargs=True)
 class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     r"""
     code_predictor_config (`dict`, *optional*):
@@ -553,66 +364,45 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
         "text_config": Qwen3OmniMoeTalkerTextConfig,
     }
 
-    def __init__(
-        self,
-        code_predictor_config=None,
-        text_config=None,
-        num_code_groups=32,
-        thinker_hidden_size=2048,
-        codec_eos_token_id=4198,
-        accept_hidden_layer=18,
-        codec_nothink_id=4203,
-        codec_think_bos_id=4204,
-        codec_think_eos_id=4205,
-        codec_pad_id=4196,
-        codec_bos_id=4197,
-        audio_token_id=151646,
-        image_token_id=151655,
-        video_token_id=151656,
-        vision_start_token_id=151652,
-        position_id_per_seconds=25,
-        audio_start_token_id=151669,
-        speaker_id=None,
-        **kwargs,
-    ):
-        if code_predictor_config is None:
-            code_predictor_config = {}
+    code_predictor_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    num_code_groups: int = 32
+    thinker_hidden_size: int = 2048
+    codec_eos_token_id: int = 4198
+    accept_hidden_layer: int = 18
+    codec_nothink_id: int = 4203
+    codec_think_bos_id: int = 4204
+    codec_think_eos_id: int = 4205
+    codec_pad_id: int = 4196
+    codec_bos_id: int = 4197
+    audio_token_id: int = 151646
+    image_token_id: int = 151655
+    video_token_id: int = 151656
+    vision_start_token_id: int = 151652
+    position_id_per_seconds: int = 25
+    audio_start_token_id: int = 151669
+    speaker_id: dict | None = None
+    initializer_range: float = 0.02
+
+    def __post_init__(self, **kwargs):
+        if self.code_predictor_config is None:
+            self.code_predictor_config = {}
             self.code_predictor_config = Qwen3OmniMoeTalkerCodePredictorConfig()
             logger.info("code_predictor_config is None. Initializing code_predictor_config model with default values")
-        elif isinstance(code_predictor_config, Qwen3OmniMoeTalkerCodePredictorConfig):
-            self.code_predictor_config = code_predictor_config
         else:
-            self.code_predictor_config = Qwen3OmniMoeTalkerCodePredictorConfig(**code_predictor_config)
+            self.code_predictor_config = Qwen3OmniMoeTalkerCodePredictorConfig(**self.code_predictor_config)
 
-        if text_config is None:
-            text_config = {}
+        if self.text_config is None:
+            self.text_config = {}
             self.text_config = Qwen3OmniMoeTalkerTextConfig()
             logger.info("talker text_config is None. Initializing talker text model with default values")
-        elif isinstance(text_config, Qwen3OmniMoeTalkerTextConfig):
-            self.text_config = text_config
         else:
-            self.text_config = Qwen3OmniMoeTalkerTextConfig(**text_config)
-        self.num_code_groups = num_code_groups
-        self.thinker_hidden_size = thinker_hidden_size
-        self.codec_eos_token_id = codec_eos_token_id
-        self.accept_hidden_layer = accept_hidden_layer
-        self.codec_nothink_id = codec_nothink_id
-        self.codec_think_bos_id = codec_think_bos_id
-        self.codec_think_eos_id = codec_think_eos_id
-        self.codec_pad_id = codec_pad_id
-        self.codec_bos_id = codec_bos_id
-        self.audio_token_id = audio_token_id
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.position_id_per_seconds = position_id_per_seconds
-        self.audio_start_token_id = audio_start_token_id
-        self.vision_start_token_id = vision_start_token_id
-        self.speaker_id = speaker_id
-        self.initializer_range = self.text_config.initializer_range
-        super().__init__(**kwargs)
+            self.text_config = Qwen3OmniMoeTalkerTextConfig(**self.text_config)
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@strict(accept_kwargs=True)
 class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
     r"""
     num_quantizers (`int`, *optional*, defaults to 16):
@@ -639,50 +429,25 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
     >>> config = model.config
     ```"""
 
-    def __init__(
-        self,
-        codebook_size=2048,
-        hidden_size=1024,
-        max_position_embeddings=8000,
-        rope_parameters: RopeParameters | dict[RopeParameters] | None = None,
-        num_attention_heads=16,
-        num_key_value_heads=16,
-        attention_bias=False,
-        sliding_window=72,
-        intermediate_size=3072,
-        hidden_act="silu",
-        layer_scale_initial_scale=0.01,
-        rms_norm_eps=1e-5,
-        num_hidden_layers=8,
-        num_quantizers=16,
-        upsample_rates=(8, 5, 4, 3),
-        upsampling_ratios=(2, 2),
-        decoder_dim=1536,
-        attention_dropout=0.0,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        self.codebook_size = codebook_size
-        self.hidden_size = hidden_size
-        self.max_position_embeddings = max_position_embeddings
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.attention_bias = attention_bias
-        self.sliding_window = sliding_window
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.layer_scale_initial_scale = layer_scale_initial_scale
-        self.rms_norm_eps = rms_norm_eps
-        self.num_hidden_layers = num_hidden_layers
-        self.num_quantizers = num_quantizers
-        self.upsample_rates = upsample_rates
-        self.upsampling_ratios = upsampling_ratios
-        self.decoder_dim = decoder_dim
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.rope_parameters = rope_parameters
-
-        super().__init__(**kwargs)
+    codebook_size: int = 2048
+    hidden_size: int = 1024
+    max_position_embeddings: int = 8000
+    rope_parameters: RopeParameters | dict | None = None
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 16
+    attention_bias: bool = False
+    sliding_window: int = 72
+    intermediate_size: int = 3072
+    hidden_act: str = "silu"
+    layer_scale_initial_scale: float = 0.01
+    rms_norm_eps: float = 1e-5
+    num_hidden_layers: int = 8
+    num_quantizers: int = 16
+    upsample_rates: list[int] | tuple[int, ...] = (8, 5, 4, 3)
+    upsampling_ratios: list[int] | tuple[int, ...] = (2, 2)
+    decoder_dim: int = 1536
+    attention_dropout: float | int = 0.0
+    initializer_range: float = 0.02
 
     @property
     def layer_types(self):
@@ -693,6 +458,7 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@strict(accept_kwargs=True)
 class Qwen3OmniMoeConfig(PreTrainedConfig):
     r"""
     thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
@@ -736,48 +502,39 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
         "code2wav_config": Qwen3OmniMoeCode2WavConfig,
     }
 
-    def __init__(
-        self,
-        thinker_config=None,
-        talker_config=None,
-        code2wav_config=None,
-        enable_audio_output=True,
-        im_start_token_id=151644,
-        im_end_token_id=151645,
-        tts_pad_token_id=151671,
-        tts_bos_token_id=151672,
-        tts_eos_token_id=151673,
-        system_token_id=8948,
-        user_token_id=872,
-        assistant_token_id=77091,
-        **kwargs,
-    ):
-        if thinker_config is None:
-            thinker_config = {}
+    thinker_config: dict | PreTrainedConfig | None = None
+    talker_config: dict | PreTrainedConfig | None = None
+    code2wav_config: dict | PreTrainedConfig | None = None
+    enable_audio_output: bool = True
+    im_start_token_id: int = 151644
+    im_end_token_id: int = 151645
+    tts_pad_token_id: int = 151671
+    tts_bos_token_id: int = 151672
+    tts_eos_token_id: int = 151673
+    system_token_id: int = 8948
+    user_token_id: int = 872
+    assistant_token_id: int = 77091
+
+    def __post_init__(self, **kwargs):
+        if self.thinker_config is None:
+            self.thinker_config = Qwen3OmniMoeThinkerConfig()
             logger.info("thinker_config is None. Initializing thinker model with default values")
+        elif isinstance(self.thinker_config, dict):
+            self.thinker_config = Qwen3OmniMoeThinkerConfig(**self.thinker_config)
 
-        if talker_config is None:
-            talker_config = {}
+        if self.talker_config is None:
+            self.talker_config = Qwen3OmniMoeTalkerConfig()
             logger.info("talker_config is None. Initializing talker model with default values")
+        elif isinstance(self.talker_config, dict):
+            self.talker_config = Qwen3OmniMoeTalkerConfig(**self.talker_config)
 
-        if code2wav_config is None:
-            code2wav_config = {}
-            logger.info("code2wav_config is None. Initializing code2wav model with default values")
+        if self.code2wav_config is None:
+            self.code2wav_config = Qwen3OmniMoeCode2WavConfig()
+            logger.info("code2wav_config is None. Initializing code2wav_config model with default values")
+        elif isinstance(self.code2wav_config, dict):
+            self.code2wav_config = Qwen3OmniMoeCode2WavConfig(**self.code2wav_config)
 
-        self.thinker_config = Qwen3OmniMoeThinkerConfig(**thinker_config)
-        self.talker_config = Qwen3OmniMoeTalkerConfig(**talker_config)
-        self.code2wav_config = Qwen3OmniMoeCode2WavConfig(**code2wav_config)
-        self.initializer_range = self.thinker_config.initializer_range
-        self.enable_audio_output = enable_audio_output
-        self.im_start_token_id = im_start_token_id
-        self.im_end_token_id = im_end_token_id
-        self.tts_pad_token_id = tts_pad_token_id
-        self.tts_bos_token_id = tts_bos_token_id
-        self.tts_eos_token_id = tts_eos_token_id
-        self.system_token_id = system_token_id
-        self.user_token_id = user_token_id
-        self.assistant_token_id = assistant_token_id
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
     def get_text_config(self, decoder=False) -> "PreTrainedConfig":
         """
@@ -2482,7 +2239,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         use_audio_in_video: bool = False,
         return_audio: bool | None = None,
         thinker_max_new_tokens: int = 1024,
-        thinker_eos_token_id: int = 151645,
+        thinker_eos_token_id: int | list[int] | None = 151645,
         talker_max_new_tokens: int = 4096,
         talker_do_sample: bool = True,
         talker_top_k: int = 50,

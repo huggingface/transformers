@@ -13,15 +13,15 @@
 # limitations under the License.
 """Dilated Neighborhood Attention Transformer model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="shi-labs/dinat-mini-in1k-224")
+@strict(accept_kwargs=True)
 class DinatConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     dilations (`list[list[int]]`, *optional*, defaults to `[[1, 8, 1], [1, 4, 1, 4], [1, 2, 1, 2, 1, 2], [1, 1, 1, 1, 1]]`):
@@ -49,52 +49,37 @@ class DinatConfig(BackboneConfigMixin, PreTrainedConfig):
         "num_hidden_layers": "num_layers",
     }
 
-    def __init__(
-        self,
-        patch_size=4,
-        num_channels=3,
-        embed_dim=64,
-        depths=[3, 4, 6, 5],
-        num_heads=[2, 4, 8, 16],
-        kernel_size=7,
-        dilations=[[1, 8, 1], [1, 4, 1, 4], [1, 2, 1, 2, 1, 2], [1, 1, 1, 1, 1]],
-        mlp_ratio=3.0,
-        qkv_bias=True,
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        drop_path_rate=0.1,
-        hidden_act="gelu",
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        layer_scale_init_value=0.0,
-        out_features=None,
-        out_indices=None,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    patch_size: int | list[int] | tuple[int, int] = 4
+    num_channels: int = 3
+    embed_dim: int = 64
+    depths: list[int] | tuple[int, ...] = (3, 4, 6, 5)
+    num_heads: list[int] | tuple[int, ...] = (2, 4, 8, 16)
+    kernel_size: int = 7
+    dilations: list | tuple | None = None
+    mlp_ratio: float = 3.0
+    qkv_bias: bool = True
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    drop_path_rate: float = 0.1
+    hidden_act: str = "gelu"
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-5
+    layer_scale_init_value: float = 0.0
+    _out_features: list[str] | None = None
+    _out_indices: list[int] | None = None
 
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.embed_dim = embed_dim
-        self.depths = depths
-        self.num_layers = len(depths)
-        self.num_heads = num_heads
-        self.kernel_size = kernel_size
-        self.dilations = dilations
-        self.mlp_ratio = mlp_ratio
-        self.qkv_bias = qkv_bias
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.drop_path_rate = drop_path_rate
-        self.hidden_act = hidden_act
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
+    def __post_init__(self, **kwargs):
+        self.num_layers = len(self.depths)
+        self.dilations = self.dilations or [[1, 8, 1], [1, 4, 1, 4], [1, 2, 1, 2, 1, 2], [1, 1, 1, 1, 1]]
+
         # we set the hidden_size attribute in order to make Dinat work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
-        self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
-        self.layer_scale_init_value = layer_scale_init_value
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
-        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
+        self.hidden_size = int(self.embed_dim * 2 ** (len(self.depths) - 1))
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.depths) + 1)]
+        self.set_output_features_output_indices(
+            out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
+        )
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["DinatConfig"]

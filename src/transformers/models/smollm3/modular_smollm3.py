@@ -15,9 +15,10 @@
 from collections.abc import Callable
 
 import torch
+from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -41,6 +42,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="HuggingFaceTB/SmolLM3-3B")
+@strict(accept_kwargs=True)
 class SmolLM3Config(PreTrainedConfig):
     r"""
     no_rope_layers (`List[int]`, *optional*):
@@ -84,84 +86,50 @@ class SmolLM3Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 128256,
-        hidden_size: int | None = 2048,
-        intermediate_size: int | None = 11008,
-        num_hidden_layers: int | None = 36,
-        num_attention_heads: int | None = 16,
-        num_key_value_heads: int | None = 4,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 32768,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-6,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = 128004,
-        bos_token_id: int | None = 128000,
-        eos_token_id: int | None = 128001,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        use_sliding_window: bool | None = False,
-        sliding_window: int | None = None,
-        no_rope_layers: int | None = None,
-        no_rope_layer_interval: int | None = 4,
-        layer_types: int | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        mlp_bias: bool | None = False,
-        tie_word_embeddings: bool | None = True,
-        **kwargs,
-    ):
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.mlp_bias = mlp_bias
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window
+    vocab_size: int = 128256
+    hidden_size: int = 2048
+    intermediate_size: int = 11008
+    num_hidden_layers: int = 36
+    num_attention_heads: int = 16
+    num_key_value_heads: int | None = 4
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 32768
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    pad_token_id: int | None = 128004
+    bos_token_id: int | None = 128000
+    eos_token_id: int | list[int] | None = 128001
+    rope_parameters: RopeParameters | dict | None = None
+    use_sliding_window: bool = False
+    sliding_window: int | None = None
+    no_rope_layers: list[int] | None = None
+    no_rope_layer_interval: int = 4
+    layer_types: list[str] | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
+    mlp_bias: bool = False
+    tie_word_embeddings: bool = True
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-
-        if no_rope_layers is None:
+        if self.no_rope_layers is None:
             self.no_rope_layers = [
-                int((layer_idx + 1) % no_rope_layer_interval != 0) for layer_idx in range(num_hidden_layers)
+                int((layer_idx + 1) % self.no_rope_layer_interval != 0) for layer_idx in range(self.num_hidden_layers)
             ]
-        else:
-            self.no_rope_layers = no_rope_layers
 
-        self.no_rope_layer_interval = no_rope_layer_interval
-
-        # Update layer_types based on sliding window and NoPE pattern
-        if layer_types is None:
-            layer_types = []
-            for layer_idx in range(num_hidden_layers):
+        if self.layer_types is None:
+            self.layer_types = []
+            for layer_idx in range(self.num_hidden_layers):
                 has_rope = self.no_rope_layers[layer_idx]
-                if use_sliding_window and sliding_window is not None and not has_rope:
-                    layer_types.append("sliding_attention")
+                if self.use_sliding_window and self.sliding_window is not None and not has_rope:
+                    self.layer_types.append("sliding_attention")
                 else:
-                    layer_types.append("full_attention")
+                    self.layer_types.append("full_attention")
 
-        self.layer_types = layer_types
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
-
-        self.rope_parameters = rope_parameters
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 class SmolLM3RotaryEmbedding(Qwen2RotaryEmbedding):

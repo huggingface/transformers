@@ -19,11 +19,14 @@
 # limitations under the License.
 
 
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/cwm")
+@strict(accept_kwargs=True)
 class CwmConfig(PreTrainedConfig):
     r"""
     ```python
@@ -56,37 +59,34 @@ class CwmConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-    default_theta = 1_000_000.0
 
-    def __init__(
-        self,
-        vocab_size: int = 128256,
-        hidden_size: int = 6144,
-        intermediate_size: int = 21504,
-        num_hidden_layers: int = 64,
-        num_attention_heads: int = 48,
-        num_key_value_heads: int = 8,
-        head_dim: int = 128,
-        hidden_act: str = "silu",
-        max_position_embeddings: int = 131072,
-        initializer_range: float = 0.02,
-        rms_norm_eps: float = 1e-5,
-        use_cache: bool = True,
-        pad_token_id: int | None = None,
-        eos_token_id=[128001, 128008, 128009],
-        bos_token_id: int = 128000,
-        tie_word_embeddings: bool = False,
-        attention_dropout: float = 0.0,
-        pretraining_tp: int = 1,
-        mlp_bias: bool = False,
-        rope_parameters: dict | None = None,
-        # CWM interleaved sliding window fields
-        sliding_window: int = 8192,
-        layer_types: list[str] | None = None,  # ["full_attention"|"sliding_attention"] per layer
-        **kwargs,
-    ):
-        if rope_parameters is None:
-            rope_parameters = {
+    vocab_size: int = 128256
+    hidden_size: int = 6144
+    intermediate_size: int = 21504
+    num_hidden_layers: int = 64
+    num_attention_heads: int = 48
+    num_key_value_heads: int = 8
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 131072
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    pad_token_id: int | None = None
+    bos_token_id: int = 128000
+    eos_token_id: int | list[int] | None = None
+    pretraining_tp: int = 1
+    tie_word_embeddings: bool = False
+    rope_parameters: dict | None = None
+    attention_dropout: float | int = 0.0
+    mlp_bias: bool = False
+    head_dim: int = 128
+    default_theta = 1_000_000.0
+    sliding_window: int = 8192
+    layer_types: list[str] | None = None  # ["full_attention"|"sliding_attention"] per layer
+
+    def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {
                 "rope_theta": 1_000_000.0,
                 "factor": 16.0,
                 "high_freq_factor": 4.0,
@@ -95,45 +95,31 @@ class CwmConfig(PreTrainedConfig):
                 "rope_type": "llama3",
             }
 
-        if layer_types is None:
+        if self.layer_types is None:
             # Default pattern: every 4th layer uses full attention, others use sliding attention
             window_pattern = 4
-            layer_types = [
+            self.layer_types = [
                 ("full_attention" if (i % window_pattern == 0) else "sliding_attention")
-                for i in range(num_hidden_layers)
+                for i in range(self.num_hidden_layers)
             ]
-        else:
-            layer_type_validation(layer_types, num_hidden_layers)
 
-        self.sliding_window = int(sliding_window) if sliding_window else None
-        self.layer_types = list(layer_types)
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+        self.sliding_window = int(self.sliding_window) if self.sliding_window else None
+        self.layer_types = list(self.layer_types)
+        self.eos_token_id = self.eos_token_id if self.eos_token_id is not None else [128001, 128008, 128009]
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+        super().__post_init__(**kwargs)
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.pretraining_tp = pretraining_tp
-        self.use_cache = use_cache
-        self.attention_dropout = attention_dropout
-        self.mlp_bias = mlp_bias
-        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        self.rope_parameters = rope_parameters
-
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        super().__init__(**kwargs)
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({self.num_attention_heads})."
+            )
 
 
 __all__ = ["CwmConfig"]

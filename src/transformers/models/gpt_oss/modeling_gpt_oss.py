@@ -249,7 +249,7 @@ def eager_attention_forward(
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
     scaling: float,
-    dropout: float = 0.0,
+    dropout: float | int = 0.0,
     **kwargs,
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
@@ -405,7 +405,7 @@ class GptOssPreTrainedModel(PreTrainedModel):
         "attentions": GptOssAttention,
     }
     _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
-    _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3"]
+    _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
 
     @torch.no_grad()
     def _init_weights(self, module):

@@ -3903,7 +3903,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         use_audio_in_video: bool = False,
         return_audio: bool | None = None,
         thinker_max_new_tokens: int = 1024,
-        thinker_eos_token_id: int = 151645,
+        thinker_eos_token_id: int | list[int] | None = 151645,
         talker_max_new_tokens: int = 4096,
         talker_do_sample: bool = True,
         talker_top_k: int = 50,

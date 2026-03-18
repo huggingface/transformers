@@ -14,9 +14,9 @@
 
 
 import torch
+from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...processing_utils import Unpack
@@ -35,39 +35,39 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/cwm")
+@strict(accept_kwargs=True)
 class CwmConfig(LlamaConfig):
     model_type = "cwm"
     default_theta = 1_000_000.0
 
-    def __init__(
-        self,
-        vocab_size: int = 128256,
-        hidden_size: int = 6144,
-        intermediate_size: int = 21504,
-        num_hidden_layers: int = 64,
-        num_attention_heads: int = 48,
-        num_key_value_heads: int = 8,
-        head_dim: int = 128,
-        hidden_act: str = "silu",
-        max_position_embeddings: int = 131072,
-        initializer_range: float = 0.02,
-        rms_norm_eps: float = 1e-5,
-        use_cache: bool = True,
-        pad_token_id: int | None = None,
-        eos_token_id=[128001, 128008, 128009],
-        bos_token_id: int = 128000,
-        tie_word_embeddings: bool = False,
-        attention_dropout: float = 0.0,
-        pretraining_tp: int = 1,
-        mlp_bias: bool = False,
-        rope_parameters: dict | None = None,
-        # CWM interleaved sliding window fields
-        sliding_window: int = 8192,
-        layer_types: list[str] | None = None,  # ["full_attention"|"sliding_attention"] per layer
-        **kwargs,
-    ):
-        if rope_parameters is None:
-            rope_parameters = {
+    vocab_size: int = 128256
+    hidden_size: int = 6144
+    intermediate_size: int = 21504
+    num_hidden_layers: int = 64
+    num_attention_heads: int = 48
+    num_key_value_heads: int = 8
+    head_dim: int = 128
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 131072
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    pad_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
+    bos_token_id: int = 128000
+    tie_word_embeddings: bool = False
+    attention_dropout: float | int = 0.0
+    pretraining_tp: int = 1
+    mlp_bias: bool = False
+    rope_parameters: dict | None = None
+    sliding_window: int = 8192
+    layer_types: list[str] | None = None  # ["full_attention"|"sliding_attention"] per layer
+
+    attention_bias = AttributeError()
+
+    def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {
                 "rope_theta": 1_000_000.0,
                 "factor": 16.0,
                 "high_freq_factor": 4.0,
@@ -76,46 +76,18 @@ class CwmConfig(LlamaConfig):
                 "rope_type": "llama3",
             }
 
-        if layer_types is None:
+        if self.layer_types is None:
             # Default pattern: every 4th layer uses full attention, others use sliding attention
             window_pattern = 4
-            layer_types = [
+            self.layer_types = [
                 ("full_attention" if (i % window_pattern == 0) else "sliding_attention")
-                for i in range(num_hidden_layers)
+                for i in range(self.num_hidden_layers)
             ]
-        else:
-            layer_type_validation(layer_types, num_hidden_layers)
 
-        self.sliding_window = int(sliding_window) if sliding_window else None
-        self.layer_types = list(layer_types)
-
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            head_dim=head_dim,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            rms_norm_eps=rms_norm_eps,
-            use_cache=use_cache,
-            pad_token_id=pad_token_id,
-            eos_token_id=list(eos_token_id),
-            bos_token_id=bos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            attention_bias=False,
-            attention_dropout=attention_dropout,
-            rope_parameters=rope_parameters,
-            pretraining_tp=pretraining_tp,
-            mlp_bias=mlp_bias,
-            **kwargs,
-        )
-
-        # CWM models don't use attention bias, remove it from config
-        del self.attention_bias
+        self.sliding_window = int(self.sliding_window) if self.sliding_window else None
+        self.layer_types = list(self.layer_types)
+        self.eos_token_id = self.eos_token_id if self.eos_token_id is not None else [128001, 128008, 128009]
+        super().__post_init__(**kwargs)
 
 
 class CwmRotaryEmbedding(Qwen2RotaryEmbedding):
