@@ -88,6 +88,7 @@ else:
             ("convnextv2", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("cvt", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("data2vec-vision", {"torchvision": "BeitImageProcessor", "pil": "BeitImageProcessorPil"}),
+            ("deepseek_ocr2", {"torchvision": "DeepseekOcr2ImageProcessor", "pil": "DeepseekOcr2ImageProcessorPil"}),
             ("deepseek_vl", {"torchvision": "DeepseekVLImageProcessor", "pil": "DeepseekVLImageProcessorPil"}),
             (
                 "deepseek_vl_hybrid",
