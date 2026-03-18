@@ -918,6 +918,7 @@ class IsaacProcessor(ProcessorMixin):
         attention_mask = text_inputs["attention_mask"]
 
         mm_token_type_ids = input_ids.eq(self.image_pad_token_id).to(dtype=torch.long)
+        vision_image_attention_mask = vision_token_lengths.gt(0).to(dtype=torch.long)
 
         vision_patches = image_inputs["vision_patches"]
         vision_patch_attention_mask = image_inputs["vision_patch_attention_mask"]
@@ -931,6 +932,7 @@ class IsaacProcessor(ProcessorMixin):
             "vision_token_grids": vision_token_grids,
             "vision_token_offsets": vision_token_offsets,
             "vision_token_lengths": vision_token_lengths,
+            "vision_image_attention_mask": vision_image_attention_mask,
         }
 
     def post_process_generation(
@@ -1172,7 +1174,7 @@ class IsaacModel(Qwen3PreTrainedModel):
         image_token_offsets: torch.Tensor,
         image_token_lengths: torch.Tensor,
         attention_mask: torch.Tensor,
-        inputs_embeds: torch.Tensor,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Prepare multimodal RoPE positions for the current prefill sequence.
 
@@ -1182,8 +1184,8 @@ class IsaacModel(Qwen3PreTrainedModel):
         the attended sequence length and Isaac's multimodal positions so decode steps can
         keep counting forward from the cached prefix."""
 
-        device = inputs_embeds.device
-        batch_size, seq_len = inputs_embeds.shape[:2]
+        device = attention_mask.device
+        batch_size, seq_len = attention_mask.shape
         mm_token_type_ids = mm_token_type_ids.to(device=device, dtype=torch.long)
         image_token_grids = image_token_grids.to(device=device, dtype=torch.long)
         image_token_offsets = image_token_offsets.to(device=device, dtype=torch.long)
@@ -1535,17 +1537,32 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
                 image_patch_attention_mask if vision_patch_attention_mask is None else vision_patch_attention_mask
             )
             vision_token_grids = image_token_grids if vision_token_grids is None else vision_token_grids
-        custom_position_ids = (
-            position_ids
-            if position_ids is not None and position_ids.ndim == 3 and vision_patches is not None
-            else None
+        should_recompute_position_ids = position_ids is None or (
+            position_ids.ndim == 3
+            and position_ids.shape[0] == input_ids.shape[0]
+            and position_ids.shape[1] != input_ids.shape[0]
         )
+        if should_recompute_position_ids:
+            position_ids = self._prepare_position_ids_for_generation(
+                input_ids,
+                {
+                    "input_ids": input_ids,
+                    "attention_mask": attention_mask,
+                    "past_key_values": past_key_values,
+                    "mm_token_type_ids": mm_token_type_ids,
+                    "vision_token_grids": vision_token_grids,
+                    "vision_token_offsets": vision_token_offsets,
+                    "vision_token_lengths": vision_token_lengths,
+                },
+            )
+        else:
+            position_ids = self._normalize_generation_position_ids(position_ids)
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            position_ids=None,
+            position_ids=position_ids,
             is_first_iteration=is_first_iteration,
             use_cache=use_cache,
             **kwargs,
@@ -1561,10 +1578,92 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         is_prefill = is_first_iteration or not use_cache
         for key, value in multimodal_inputs.items():
             model_inputs[key] = value if is_prefill else None
-        if custom_position_ids is not None:
-            model_inputs["position_ids"] = custom_position_ids if is_prefill else None
 
         return model_inputs
+
+    def _normalize_generation_position_ids(self, position_ids: torch.LongTensor | None) -> torch.LongTensor | None:
+        if position_ids is None or position_ids.ndim != 3:
+            return position_ids
+
+        if position_ids.shape[0] in (1, 4):
+            return position_ids
+
+        if position_ids.shape[0] == 3:
+            return torch.cat([position_ids[:1], position_ids], dim=0)
+
+        if position_ids.shape[-1] == 3:
+            vision_position_ids = position_ids.permute(2, 0, 1).contiguous()
+            return torch.cat([vision_position_ids[:1], vision_position_ids], dim=0)
+
+        return position_ids
+
+    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+        text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
+
+        past_length = 0
+        if (cache := model_kwargs.get("past_key_values")) is not None:
+            past_length = cache.get_seq_length()
+        if past_length != 0 and self.model.rope_deltas is not None:
+            return text_positions[None, ...] + self.model.rope_deltas
+
+        if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
+            inputs_tensor = model_kwargs["input_ids"]
+
+        if (
+            len(inputs_tensor.shape) == 2
+            and inputs_tensor.dtype in [torch.int, torch.long]
+            and model_kwargs.get("mm_token_type_ids") is not None
+            and model_kwargs.get("vision_token_grids") is not None
+            and model_kwargs.get("vision_token_offsets") is not None
+            and model_kwargs.get("vision_token_lengths") is not None
+        ):
+            vision_positions, rope_deltas = self.model.get_rope_index(
+                mm_token_type_ids=model_kwargs["mm_token_type_ids"],
+                image_token_grids=model_kwargs["vision_token_grids"],
+                image_token_offsets=model_kwargs["vision_token_offsets"],
+                image_token_lengths=model_kwargs["vision_token_lengths"],
+                attention_mask=model_kwargs.get("attention_mask"),
+            )
+            self.model.rope_deltas = rope_deltas
+        else:
+            vision_positions = text_positions.unsqueeze(0).expand(3, -1, -1)
+            self.model.rope_deltas = torch.zeros(
+                inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device
+            )
+
+        return torch.cat([text_positions[None, ...], vision_positions], dim=0)
+
+    def _expand_inputs_for_generation(
+        self,
+        expand_size: int = 1,
+        is_encoder_decoder: bool = False,
+        input_ids: torch.LongTensor | None = None,
+        **model_kwargs,
+    ) -> tuple[torch.LongTensor, dict[str, Any]]:
+        if expand_size == 1:
+            return input_ids, model_kwargs
+
+        def _expand_dict_for_generation(dict_to_expand):
+            for key in dict_to_expand:
+                value = dict_to_expand[key]
+                if key == "position_ids" and value is not None and isinstance(value, torch.Tensor) and value.ndim == 3:
+                    value = self._normalize_generation_position_ids(value)
+                    dict_to_expand[key] = value.repeat_interleave(expand_size, dim=1)
+                elif key != "cache_position" and value is not None and isinstance(value, torch.Tensor):
+                    dict_to_expand[key] = value.repeat_interleave(expand_size, dim=0)
+            return dict_to_expand
+
+        if input_ids is not None:
+            input_ids = input_ids.repeat_interleave(expand_size, dim=0)
+
+        model_kwargs = _expand_dict_for_generation(model_kwargs)
+
+        if is_encoder_decoder:
+            if model_kwargs.get("encoder_outputs") is None:
+                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
+            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
+
+        return input_ids, model_kwargs
 
     def get_input_embeddings(self) -> nn.Module:
         return self.model.get_input_embeddings()
