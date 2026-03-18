@@ -19,7 +19,8 @@ from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, logging, requires_backends
+from ...utils import auto_docstring, logging
+from ...utils.import_utils import requires
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2Config
 
 
@@ -46,6 +47,7 @@ class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
 
 
 @auto_docstring
+@requires(backends=("torch",))
 class PPChart2TableProcessor(ProcessorMixin):
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
@@ -71,7 +73,6 @@ class PPChart2TableProcessor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
-        requires_backends(self, "torch")
         output_kwargs = self._merge_kwargs(
             ProcessingKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,

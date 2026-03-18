@@ -23,10 +23,12 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, requires_backends
+from ...utils import auto_docstring
+from ...utils.import_utils import requires
 
 
 @auto_docstring
+@requires(backends=("torch",))
 class PPChart2TableProcessor(ProcessorMixin):
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
@@ -52,7 +54,6 @@ class PPChart2TableProcessor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
-        requires_backends(self, "torch")
         output_kwargs = self._merge_kwargs(
             ProcessingKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
