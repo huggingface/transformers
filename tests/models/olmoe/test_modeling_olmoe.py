@@ -177,7 +177,9 @@ if is_torch_available():
 
 
 @require_torch
-class OlmoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin, unittest.TestCase):
+class OlmoeModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin, unittest.TestCase
+):
     all_model_classes = (OlmoeModel, OlmoeForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
