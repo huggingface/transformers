@@ -108,6 +108,7 @@ class Serve:
         chat_handler = ChatCompletionHandler(
             model_manager=model_manager,
             force_model=force_model,
+            force_processor=processor,
         )
 
         app = build_server(model_manager, chat_handler, enable_cors=enable_cors)

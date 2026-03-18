@@ -34,6 +34,7 @@ if is_openai_available():
 
     class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
         generation_config: str
+        processor: str
 
 
 # ---------------------------------------------------------------------------

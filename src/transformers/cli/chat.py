@@ -109,10 +109,16 @@ class RichInterface:
         self._console.print(f"[bold blue]<{self.model_id}>:")
         with Live(console=self._console, refresh_per_second=4) as live:
             text = ""
+            completion_tokens = 0
+            start_time = time.time()
             finish_reason: str | None = None
             async for token in await stream:
                 outputs = token.choices[0].delta.content
                 finish_reason = getattr(token.choices[0], "finish_reason", finish_reason)
+
+                usage = getattr(token, "usage", None)
+                if usage is not None:
+                    completion_tokens = getattr(usage, "completion_tokens", completion_tokens)
 
                 if not outputs:
                     continue
@@ -149,6 +155,10 @@ class RichInterface:
                 # Update the Live console output
                 live.update(markdown, refresh=True)
 
+        elapsed = time.time() - start_time
+        if elapsed > 0 and completion_tokens > 0:
+            tok_per_sec = completion_tokens / elapsed
+            self._console.print(f"[dim]{completion_tokens} tokens in {elapsed:.1f}s ({tok_per_sec:.1f} tok/s)[/dim]")
         self._console.print()
 
         return text, finish_reason
@@ -235,6 +245,10 @@ class Chat:
                 help="Path to a local generation config file or to a HuggingFace repo containing a `generation_config.json` file. Other generation settings passed as CLI arguments will be applied on top of this generation config."
             ),
         ] = None,
+        processor: Annotated[
+            str | None,
+            typer.Option(help="Processor/tokenizer model ID. Needed for GGUF models whose repos don't include tokenizer files."),
+        ] = None,
     ) -> None:
         """Chat with a model from the command line."""
         self.base_url = base_url
@@ -253,6 +267,7 @@ class Chat:
         config.update(**parse_generate_flags(generate_flags))
         self.config = config
 
+        self.processor = processor
         self.settings = {"base_url": base_url, "model_id": model_id, "config": self.config.to_dict()}
 
         # User settings
@@ -456,14 +471,18 @@ class Chat:
                     else:
                         chat.append({"role": "user", "content": user_input})
 
+                    extra_body = {
+                        "generation_config": config.to_json_string(),
+                        "model": self.model_id,
+                    }
+                    if self.processor:
+                        extra_body["processor"] = self.processor
+
                     stream = client.chat_completion(
                         chat,
                         stream=True,
                         model=self.model_id,
-                        extra_body={
-                            "generation_config": config.to_json_string(),
-                            "model": self.model_id,
-                        },
+                        extra_body=extra_body,
                     )
 
                     model_output, finish_reason = await interface.stream_output(stream)

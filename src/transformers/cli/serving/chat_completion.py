@@ -39,6 +39,7 @@ from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk, ChoiceDelta
 from openai.types.chat.chat_completion_chunk import Choice as ChoiceChunk
+from openai.types.completion_usage import CompletionUsage
 from tokenizers.decoders import DecodeStream
 
 from transformers import GenerationConfig, PreTrainedModel
@@ -111,9 +112,10 @@ class ChatCompletionHandler:
         force_model: If set, override the model field in every request.
     """
 
-    def __init__(self, model_manager: ModelManager, force_model: str | None = None):
+    def __init__(self, model_manager: ModelManager, force_model: str | None = None, force_processor: str | None = None):
         self.model_manager = model_manager
         self.force_model = force_model
+        self.force_processor = force_processor
 
     # ----- entry point -----
 
@@ -131,7 +133,11 @@ class ChatCompletionHandler:
             return JSONResponse({}, status_code=200)
 
         model_id = self.model_manager.process_model_name(body["model"])
-        model, processor = self.model_manager.load_model_and_processor(model_id)
+        if self.force_processor is not None:
+            processor_id = self.force_processor
+        else:
+            processor_id = body.get("processor")
+        model, processor = self.model_manager.load_model_and_processor(model_id, processor_id=processor_id)
 
         modality = self.model_manager.get_model_modality(model, processor=processor)
         processor_inputs = get_processor_inputs_from_messages(messages, modality)
@@ -145,7 +151,7 @@ class ChatCompletionHandler:
             tokenize=True,
         ).to(model.device)
 
-        gen_config = self._build_generation_config(body, model.generation_config)
+        gen_config = self._build_generation_config(body, model.generation_config, processor)
 
         if body.get("stream"):
             return self._streaming(request_id, model, processor, model_id, inputs, gen_config)
@@ -177,6 +183,8 @@ class ChatCompletionHandler:
 
         Thread(target=_run, daemon=True).start()
 
+        input_len = inputs["input_ids"].shape[-1]
+
         async def sse_gen() -> AsyncGenerator[str, None]:
             # First chunk: tell the client the assistant is about to speak (OpenAI protocol)
             yield self._build_chunk_sse(request_id, role="assistant", model=model_id)
@@ -194,12 +202,17 @@ class ChatCompletionHandler:
 
             # Last chunk: tell the client why generation stopped
             hit_max = gen_config.max_new_tokens is not None and streamer.total_tokens >= gen_config.max_new_tokens
-            if hit_max:
-                logger.warning(
-                    f"Generation hit max_new_tokens={gen_config.max_new_tokens}. "
-                    "Output may be truncated. Use `max_tokens` to increase the limit."
-                )
-            yield self._build_chunk_sse(request_id, finish_reason="length" if hit_max else "stop", model=model_id)
+            usage = CompletionUsage(
+                prompt_tokens=input_len,
+                completion_tokens=streamer.total_tokens,
+                total_tokens=input_len + streamer.total_tokens,
+            )
+            yield self._build_chunk_sse(
+                request_id,
+                finish_reason="length" if hit_max else "stop",
+                model=model_id,
+                usage=usage,
+            )
 
         return StreamingResponse(sse_gen(), media_type="text/event-stream")
 
@@ -222,13 +235,18 @@ class ChatCompletionHandler:
         content = processor.decode(generated_ids, skip_special_tokens=True)
 
         hit_max = gen_config.max_new_tokens is not None and len(generated_ids) >= gen_config.max_new_tokens
-        if hit_max:
-            logger.warning(
-                f"Generation hit max_new_tokens={gen_config.max_new_tokens}. "
-                "Output may be truncated. Use `max_tokens` to increase the limit."
-            )
+        completion_tokens = len(generated_ids)
+        usage = CompletionUsage(
+            prompt_tokens=input_len,
+            completion_tokens=completion_tokens,
+            total_tokens=input_len + completion_tokens,
+        )
         return JSONResponse(
-            self._build_completion(request_id, content, model_id, finish_reason="length" if hit_max else "stop"),
+            self._build_completion(
+                request_id, content, model_id,
+                finish_reason="length" if hit_max else "stop",
+                usage=usage,
+            ),
             media_type="application/json",
         )
 
@@ -256,7 +274,7 @@ class ChatCompletionHandler:
         if generation_config.max_new_tokens is None or generation_config.max_new_tokens < 1024:
             generation_config.max_new_tokens = 1024
 
-    def _build_generation_config(self, body: dict, model_generation_config: GenerationConfig) -> GenerationConfig:
+    def _build_generation_config(self, body: dict, model_generation_config: GenerationConfig, processor=None) -> GenerationConfig:
         """Map Chat Completions API params to a GenerationConfig.
 
         If `body` contains a `generation_config` JSON string, it is used as baseline
@@ -267,6 +285,14 @@ class ChatCompletionHandler:
         else:
             generation_config = copy.deepcopy(model_generation_config)
             self._apply_default_generation_config(generation_config)
+
+        # GGUF models may not have eos/pad token IDs set — sync from processor
+        if processor is not None:
+            tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
+            if generation_config.eos_token_id is None and hasattr(tokenizer, "eos_token_id"):
+                generation_config.eos_token_id = tokenizer.eos_token_id
+            if generation_config.pad_token_id is None and hasattr(tokenizer, "pad_token_id"):
+                generation_config.pad_token_id = tokenizer.pad_token_id
 
         if body.get("max_tokens") is not None:
             generation_config.max_new_tokens = int(body["max_tokens"])
@@ -289,7 +315,9 @@ class ChatCompletionHandler:
 
     # ----- response builders -----
 
-    def _build_completion(self, request_id: str, content: str, model_id: str, finish_reason: str) -> dict:
+    def _build_completion(
+        self, request_id: str, content: str, model_id: str, finish_reason: str, usage: CompletionUsage | None = None,
+    ) -> dict:
         """Build a non-streaming ChatCompletion response dict."""
         result = ChatCompletion(
             id=request_id,
@@ -303,6 +331,7 @@ class ChatCompletionHandler:
                     finish_reason=finish_reason,
                 )
             ],
+            usage=usage,
         )
         return result.model_dump(exclude_none=True)
 
@@ -314,6 +343,7 @@ class ChatCompletionHandler:
         role: str | None = None,
         finish_reason: str | None = None,
         tool_calls: list | None = None,
+        usage: CompletionUsage | None = None,
     ) -> str:
         """Build a streaming ChatCompletionChunk and format it as an SSE event."""
         chunk = ChatCompletionChunk(
@@ -327,6 +357,7 @@ class ChatCompletionHandler:
                     finish_reason=finish_reason,
                 )
             ],
+            usage=usage,
             system_fingerprint="",
             object="chat.completion.chunk",
         )

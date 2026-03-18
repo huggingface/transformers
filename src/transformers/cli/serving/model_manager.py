@@ -125,12 +125,11 @@ class ModelManager:
         self.attn_implementation = attn_implementation
         self.quantization = quantization
         self.model_timeout = model_timeout
-        self.processor_id = processor_id
 
         self.loaded_models: dict[str, TimedModel] = {}
 
         if force_model is not None:
-            self.load_model_and_processor(self.process_model_name(force_model))
+            self.load_model_and_processor(self.process_model_name(force_model), processor_id=processor_id)
 
     @staticmethod
     def process_model_name(model_id: str) -> str:
@@ -151,16 +150,20 @@ class ModelManager:
             return BitsAndBytesConfig(load_in_8bit=True)
         return None
 
-    def _load_processor(self, model_id_and_revision: str) -> ProcessorMixin | PreTrainedTokenizerFast:
+    def _load_processor(
+        self, model_id_and_revision: str, processor_id: str | None = None
+    ) -> ProcessorMixin | PreTrainedTokenizerFast:
         """Load a processor, trying AutoProcessor first then AutoTokenizer.
 
-        If `processor_id` was set (e.g. for GGUF models), uses that instead of `model_id`.
-        Expects `model_id_and_revision` in `'model_id@revision'` format (from `process_model_name`).
+        Args:
+            model_id_and_revision: Model ID in ``'model_id@revision'`` format.
+            processor_id: Override processor/tokenizer ID (e.g. for GGUF models).
+                Falls back to ``model_id``.
         """
         from transformers import AutoProcessor
 
-        if self.processor_id:
-            model_id, revision = self.processor_id, "main"
+        if processor_id:
+            model_id, revision = processor_id, "main"
         else:
             model_id, revision = model_id_and_revision.split("@", 1)
         try:
@@ -190,6 +193,7 @@ class ModelManager:
                 revision=revision,
                 n_gpu_layers=-1,
                 flash_attn=flash_attn,
+                n_ctx=8192,
             )
 
         dtype = self.dtype if self.dtype in ["auto", None] else getattr(torch, self.dtype)
@@ -207,11 +211,17 @@ class ModelManager:
         return architecture.from_pretrained(model_id, **model_kwargs)
 
     def load_model_and_processor(
-        self, model_id_and_revision: str
+        self, model_id_and_revision: str, processor_id: str | None = None
     ) -> tuple[PreTrainedModel, ProcessorMixin | PreTrainedTokenizerFast]:
-        """Load a model (or return it from cache), resetting its inactivity timer."""
+        """Load a model (or return it from cache), resetting its inactivity timer.
+
+        Args:
+            model_id_and_revision: Model ID in ``'model_id@revision'`` format.
+            processor_id: Optional per-request processor override (takes precedence
+                over the instance-level ``self.processor_id``).
+        """
         if model_id_and_revision not in self.loaded_models or self.loaded_models[model_id_and_revision].is_deleted():
-            processor = self._load_processor(model_id_and_revision)
+            processor = self._load_processor(model_id_and_revision, processor_id=processor_id)
             model = self._load_model(model_id_and_revision)
             self.loaded_models[model_id_and_revision] = TimedModel(
                 model, timeout_seconds=self.model_timeout, processor=processor
