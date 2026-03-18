@@ -121,6 +121,10 @@ def _run_processor(processor, text, images=None):
     return processor(text=text, images=images, return_tensors="pt")
 
 
+def _make_post_process_processor():
+    return IsaacProcessor(image_processor=IsaacImageProcessorFast(), tokenizer=SimpleIsaacTokenizer())
+
+
 def _assert_common(outputs):
     assert set(outputs.keys()) == {"input_ids", "packed_inputs"}
     input_ids = outputs["input_ids"]
@@ -133,7 +137,6 @@ def _assert_common(outputs):
         "vision_token_lengths",
         "vision_token_batch_indices",
         "modality_tensor",
-        "position_ids",
     }
     assert set(packed_inputs.keys()) == expected_packed_keys
 
@@ -141,12 +144,9 @@ def _assert_common(outputs):
     assert input_ids.dtype == torch.long
 
     modality = packed_inputs["modality_tensor"]
-    position_ids = packed_inputs["position_ids"]
     assert modality.shape == (1, input_ids.shape[1])
-    assert position_ids.shape == (1, input_ids.shape[1], 3)
     assert modality.dtype == torch.long
-    assert position_ids.dtype == torch.long
-    assert modality.device == input_ids.device == position_ids.device
+    assert modality.device == input_ids.device
 
     return input_ids, packed_inputs
 
@@ -281,6 +281,28 @@ def test_text_only_has_no_vision_fields(isaac_processor):
 
 
 @require_torch
+def test_post_process_generation_extracts_boxes_and_cleans_text():
+    processor = _make_post_process_processor()
+
+    generated_text = (
+        "No, it is not safe to cross the street. "
+        '<point_box mention="traffic light" t="0.5">(808, 247), (863, 386)</point_box>'
+    )
+
+    clean_text, annotations = processor.post_process_generation(generated_text)
+
+    assert clean_text == "No, it is not safe to cross the street."
+    assert len(annotations) == 1
+    box = annotations[0]
+    assert box.mention == "traffic light"
+    assert box.t == pytest.approx(0.5)
+    assert box.top_left.x == 808
+    assert box.top_left.y == 247
+    assert box.bottom_right.x == 863
+    assert box.bottom_right.y == 386
+
+
+@require_torch
 @require_vision
 def test_accepts_batchencoding_chat_template(isaac_processor):
     messages = [{"role": "user", "content": "Hello, how are you?"}]
@@ -363,7 +385,6 @@ def test_device_and_dtype_consistency(isaac_processor):
 
     tensors = [
         input_ids,
-        packed["position_ids"],
         packed["modality_tensor"],
         packed["vision_token_offsets"],
         packed["vision_token_lengths"],
@@ -510,12 +531,10 @@ def test_batch_outputs_match_individual_calls(isaac_processor):
         "vision_token_lengths",
         "vision_token_batch_indices",
         "modality_tensor",
-        "position_ids",
     }
 
     assert batch_input_ids.shape[0] == len(texts)
     assert batch_packed["modality_tensor"].shape[0] == len(texts)
-    assert batch_packed["position_ids"].shape[0] == len(texts)
 
     sample_lengths = [output["input_ids"].squeeze(0).shape[0] for output in per_sample]
     max_length = max(sample_lengths)
@@ -536,13 +555,6 @@ def test_batch_outputs_match_individual_calls(isaac_processor):
         )
         expected_modality[-single_len:] = single_packed["modality_tensor"].squeeze(0)
         torch.testing.assert_close(batch_modality_row, expected_modality)
-
-        batch_positions_row = batch_packed["position_ids"][i]
-        expected_positions = torch.zeros(
-            (max_length, 3), dtype=batch_positions_row.dtype, device=batch_positions_row.device
-        )
-        expected_positions[-single_len:] = single_packed["position_ids"].squeeze(0)
-        torch.testing.assert_close(batch_positions_row, expected_positions)
 
         if single_len == max_length:
             continue
