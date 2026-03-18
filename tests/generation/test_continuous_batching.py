@@ -93,7 +93,11 @@ def with_flush_memory(func):
         cb_config = kwargs.get("continuous_batching_config")
         generation_config = kwargs.get("generation_config")
         if isinstance(cb_config, ContinuousBatchingConfig):
-            flush_compile = cb_config.use_default_compile_configs
+            flush_compile = (
+                cb_config.use_default_compile_configs or
+                cb_config.varlen_compile_config is not None or
+                cb_config.decode_compile_config is not None
+            )
         elif isinstance(generation_config, GenerationConfig):
             flush_compile = generation_config.compile_config is not None
         else:
@@ -662,9 +666,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             cb_config = ContinuousBatchingConfig(use_default_compile_configs=True)
 
             # Verify the config will create default compile configs
-            varlen_cfg = cb_config.process_compile_config(
+            cb_config.resolve_compile_configs(
                 fallback_compile_config=None, is_flash_attn=True, decode_fast_path_available=False
-            )[0]
+            )
+            varlen_cfg = cb_config.varlen_compile_config
             if varlen_cfg is None:
                 raise RuntimeError("Varlen compile config should be created with use_default_compile_configs=True")
             self.assertEqual(

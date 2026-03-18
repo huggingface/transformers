@@ -135,25 +135,28 @@ class ContinuousBatchProcessor:
         self._ensure_decode_fast_path_is_available()  # this needs to happen before self.inputs_and_outputs is created
 
         # Resolve compile behavior
-        varlen_config, decode_config = self.cb_config.process_compile_config(
+        self.cb_config.resolve_compile_configs(
             fallback_compile_config=getattr(generation_config, "compile_config", None),
             is_flash_attn=is_flash_attention_requested(config=config),
             decode_fast_path_available=self.cache.max_blocks_per_request > 0,
         )
-        use_compile_config = varlen_config is not None or decode_config is not None
-        self._pad_inputs = self.use_cuda_graph or use_compile_config  # even with dynamic compile, it's better to pad
 
         # Compile the varlen path if config provided
+        varlen_config = self.cb_config.varlen_compile_config
         if varlen_config is not None:
             self._compiled_varlen = torch.compile(self._forward_process_and_sample, **varlen_config.to_dict())
         else:
             self._compiled_varlen = None
 
         # Compile the decode path if config provided
+        decode_config = self.cb_config.decode_compile_config
         if decode_config is not None:
             self._compiled_decode = torch.compile(self._forward_process_and_sample, **decode_config.to_dict())
         else:
             self._compiled_decode = None
+
+        # Padding is turned on it either cuda graphs or compile is used
+        self._pad_inputs = self.use_cuda_graph or (varlen_config is not None or decode_config is not None)
 
         # Setup inputs and outputs
         self.use_async_batching = self.cb_config.use_async_batching

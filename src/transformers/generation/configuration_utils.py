@@ -1579,8 +1579,10 @@ class ContinuousBatchingConfig:
             Maximum number of cached CUDA graphs. Uses a preset from `continuous_api.py` when set to 0.
         varlen_compile_config (`CompileConfig`, *optional*, defaults to None):
             CompileConfig for varlen (prefill) path. Default is None (uses generation_config fallback)
+            The varlen path handles batches with varying query and KV lengths, often benefiting from dynamic=True.
         decode_compile_config (`CompileConfig`, *optional*, defaults to None):
             CompileConfig for decode (fast) path. Default is None (uses generation_config fallback)
+            The decode path handles batches has no dynamic KV length, so static shapes are a better fit.
         use_default_compile_configs (`bool`, *optional*, defaults to False):
             If True, a default compile config will be used for paths that are not explicitly set.
         scheduler (`str`, *optional*, defaults to `"fifo"`):
@@ -1751,15 +1753,10 @@ class ContinuousBatchingConfig:
         if self.max_cached_graphs == 0:
             self.max_cached_graphs = 32
 
-    def process_compile_config(
+    def resolve_compile_configs(
         self, fallback_compile_config: CompileConfig | None, is_flash_attn: bool, decode_fast_path_available: bool
-    ) -> tuple[CompileConfig | None, CompileConfig | None]:
-        """Processes the compile configs for varlen and decode paths. Returns (varlen_config, decode_config) with either
-        potentially None, and modifies them in place.
-        Args:
-            fallback_compile_config: The compile_config from generation_config to use as fallback
-            decode_fast_path_available: Whether the fast decode path (block table) is available
-        """
+    ) -> None:
+        """Resolve if the compile configs for varlen and decode paths, modifying these attributes in place if needed."""
         logger_ = logging.get_logger("ContinuousBatchingLogger")
 
         # For each config, priority is: explicit config, default config, fallback config, None
@@ -1777,6 +1774,7 @@ class ContinuousBatchingConfig:
 
         if self.decode_compile_config is None:
             if self.use_default_compile_configs:
+                # Paged attention is wrapped in @torch.compiler.disable so we can't use fullgraph
                 decode_config = CompileConfig(mode="max-autotune-no-cudagraphs", fullgraph=False, dynamic=False)
             elif fallback_compile_config is not None:
                 decode_config = fallback_compile_config
@@ -1786,16 +1784,15 @@ class ContinuousBatchingConfig:
             decode_config = self.decode_compile_config
 
         # For decode, we throw a warning if the fast decode path is not available and a compile config was found
-        if not decode_fast_path_available and decode_config is not None:
+        if not decode_fast_path_available and self.decode_compile_config is not None:
             decode_config = None
-            logger_.warning("A decode_compile_config was found but fast decode path is not available. Ignoring it.")
+            logger_.warning("A decode_compile_config was set but fast decode path is not available. Ignoring it.")
 
         # Log what will be compiled
         if varlen_config is not None:
             logger_.info(f"Varlen path will be compiled with {varlen_config.to_dict()}")
         if decode_config is not None:
             logger_.info(f"Decode path will be compiled with {decode_config.to_dict()}")
-        # Modify in place and return
+        # Modify in place
         self.varlen_compile_config = varlen_config
         self.decode_compile_config = decode_config
-        return varlen_config, decode_config
