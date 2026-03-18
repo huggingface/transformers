@@ -177,11 +177,12 @@ class UVDocModelTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class UVDocModelIntegrationTest(unittest.TestCase):
     def setUp(self):
-        model_path = "/workspace/model_weight_torch/UVDoc"
+        model_path = "PaddlePaddle/UVDoc_safetensors"
         self.model = UVDocModel.from_pretrained(model_path).to(torch_device)
         self.image_processor = UVDocImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
-        path = "/workspace/PaddleX/paddlex/inference/models/image_unwarping/modeling/doc_test.jpg"
-        self.image = Image.open(path)
+        self.image = Image.open(requests.get(
+            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/doc_test.jpg", stream=True
+        ).raw)
 
     def test_inference_document_rectification(self):
         inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)
