@@ -15,6 +15,7 @@ from collections.abc import Callable
 
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
@@ -39,6 +40,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="DeepGlint-AI/mlcd-vit-bigG-patch14-336")
+@strict(accept_kwargs=True)
 class MLCDVisionConfig(PreTrainedConfig):
     r"""
     num_key_value_groups (`int`, *optional*, defaults to 1):
@@ -62,38 +64,19 @@ class MLCDVisionConfig(PreTrainedConfig):
     model_type = "mlcd_vision_model"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        hidden_size=1664,
-        intermediate_size=8192,
-        num_hidden_layers=48,
-        num_attention_heads=16,
-        num_key_value_groups=1,
-        num_channels=3,
-        image_size=336,
-        patch_size=14,
-        hidden_act="gelu",
-        layer_norm_eps=1e-5,
-        attention_dropout=0.0,
-        initializer_range=0.02,
-        initializer_factor=1.0,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_groups = num_key_value_groups
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.image_size = image_size
-        self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
-        self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
+    hidden_size: int = 1664
+    intermediate_size: int = 8192
+    num_hidden_layers: int = 48
+    num_attention_heads: int = 16
+    num_key_value_groups: int = 1
+    num_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] = 336
+    patch_size: int | list[int] | tuple[int, int] = 14
+    hidden_act: str = "gelu"
+    layer_norm_eps: float = 1e-5
+    attention_dropout: float | int = 0.0
+    initializer_range: float = 0.02
+    initializer_factor: float = 1.0
 
 
 class MLCDMLP(CLIPMLP):

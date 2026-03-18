@@ -1030,7 +1030,7 @@ class XLNetModel(XLNetPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if self.training:
             use_mems = use_mems if use_mems is not None else self.config.use_mems_train
@@ -1403,7 +1403,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         ...     outputs.logits
         ... )  # Logits have shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1529,7 +1529,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             states from previous forward passes to compute attention, which can significantly improve performance for
             sequential decoding tasks.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1656,7 +1656,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
             states from previous forward passes to compute attention, which can significantly improve performance for
             sequential decoding tasks.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.transformer(
             input_ids,
@@ -1780,7 +1780,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             states from previous forward passes to compute attention, which can significantly improve performance for
             sequential decoding tasks.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
@@ -1904,7 +1904,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             states from previous forward passes to compute attention, which can significantly improve performance for
             sequential decoding tasks.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.transformer(
             input_ids,
@@ -2057,7 +2057,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
 
         >>> loss = outputs.loss
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,

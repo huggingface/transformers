@@ -14,6 +14,7 @@
 
 
 import torch
+from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
@@ -36,6 +37,7 @@ from ..olmoe.modeling_olmoe import (
 
 
 @auto_docstring(checkpoint="allenai/FlexOlmo-7x7B-1T")
+@strict(accept_kwargs=True)
 class FlexOlmoConfig(PreTrainedConfig):
     r"""
     Example:
@@ -72,63 +74,34 @@ class FlexOlmoConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 100352,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 11008,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = None,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 4096,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: float | None = 1e-06,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = 100277,
-        bos_token_id: int | None = None,
-        eos_token_id: int | None = 100257,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        num_experts_per_tok: int | None = 5,
-        num_experts: int | None = 7,
-        output_router_logits: bool | None = False,
-        router_aux_loss_coef: float | None = 0.01,
-        norm_topk_prob: bool | None = False,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vocab_size: int = 100352
+    hidden_size: int = 4096
+    intermediate_size: int = 11008
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = None
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 4096
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-06
+    use_cache: bool = True
+    pad_token_id: int | None = 100277
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = 100257
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | None = 0.0
+    num_experts_per_tok: int = 5
+    num_experts: int = 7
+    output_router_logits: bool = False
+    router_aux_loss_coef: float = 0.01
+    norm_topk_prob: bool = False
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.num_experts_per_tok = num_experts_per_tok
-        self.num_experts = num_experts
-        self.output_router_logits = output_router_logits
-        self.router_aux_loss_coef = router_aux_loss_coef
-        self.norm_topk_prob = norm_topk_prob
-        self.rope_parameters = rope_parameters
-
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        super().__init__(**kwargs)
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+        super().__post_init__(**kwargs)
 
 
 # FlexOlmo RMS norm reuses Olmo2 RMS norm, which handles low precision slightly differently than the original Olmoe.

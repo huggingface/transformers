@@ -468,8 +468,6 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
     """
 )
 class Ovis2Model(Ovis2PreTrainedModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Ovis2Config):
         super().__init__(config)
         self.vision_tower = Ovis2VisionModel(config.vision_config)
@@ -613,7 +611,6 @@ class Ovis2Model(Ovis2PreTrainedModel):
 
 @auto_docstring
 class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: Ovis2Config):

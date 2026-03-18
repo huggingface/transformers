@@ -13,14 +13,16 @@
 # limitations under the License.
 """Wav2Vec2Bert model configuration"""
 
+from typing import Literal
+
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/wav2vec2-bert-rel-pos-large")
+@strict(accept_kwargs=True)
 class Wav2Vec2BertConfig(PreTrainedConfig):
     r"""
     feature_projection_input_dim (`int`, *optional*, defaults to 160):
@@ -133,131 +135,62 @@ class Wav2Vec2BertConfig(PreTrainedConfig):
 
     model_type = "wav2vec2-bert"
 
-    def __init__(
-        self,
-        vocab_size=None,
-        hidden_size=1024,
-        num_hidden_layers=24,
-        num_attention_heads=16,
-        intermediate_size=4096,
-        feature_projection_input_dim=160,
-        hidden_act="swish",
-        hidden_dropout=0.0,
-        activation_dropout=0.0,
-        attention_dropout=0.0,
-        feat_proj_dropout=0.0,
-        final_dropout=0.1,
-        layerdrop=0.1,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        apply_spec_augment=True,
-        mask_time_prob=0.05,
-        mask_time_length=10,
-        mask_time_min_masks=2,
-        mask_feature_prob=0.0,
-        mask_feature_length=10,
-        mask_feature_min_masks=0,
-        ctc_loss_reduction="sum",
-        ctc_zero_infinity=False,
-        use_weighted_layer_sum=False,
-        classifier_proj_size=768,
-        tdnn_dim=(512, 512, 512, 512, 1500),
-        tdnn_kernel=(5, 3, 3, 1, 1),
-        tdnn_dilation=(1, 2, 3, 1, 1),
-        xvector_output_dim=512,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        add_adapter=False,
-        adapter_kernel_size=3,
-        adapter_stride=2,
-        num_adapter_layers=1,
-        adapter_act="relu",
-        use_intermediate_ffn_before_adapter=False,
-        output_hidden_size=None,
-        position_embeddings_type="relative_key",
-        rotary_embedding_base=10000,
-        max_source_positions=5000,
-        left_max_position_embeddings=64,
-        right_max_position_embeddings=8,
-        conv_depthwise_kernel_size=31,
-        conformer_conv_dropout=0.1,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.num_attention_heads = num_attention_heads
-        self.feature_projection_input_dim = feature_projection_input_dim
-        self.hidden_dropout = hidden_dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.feat_proj_dropout = feat_proj_dropout
-        self.final_dropout = final_dropout
-        self.layerdrop = layerdrop
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
-        self.vocab_size = vocab_size
-        self.use_weighted_layer_sum = use_weighted_layer_sum
-        self.max_source_positions = max_source_positions
+    vocab_size: int | None = None
+    hidden_size: int = 1024
+    num_hidden_layers: int = 24
+    num_attention_heads: int = 16
+    intermediate_size: int = 4096
+    feature_projection_input_dim: int = 160
+    hidden_act: str = "swish"
+    hidden_dropout: float | int = 0.0
+    activation_dropout: float | int = 0.0
+    attention_dropout: float | int = 0.0
+    feat_proj_dropout: float | int = 0.0
+    final_dropout: float | int = 0.1
+    layerdrop: float | int = 0.1
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-5
+    apply_spec_augment: bool = True
+    mask_time_prob: float = 0.05
+    mask_time_length: int = 10
+    mask_time_min_masks: int = 2
+    mask_feature_prob: float = 0.0
+    mask_feature_length: int = 10
+    mask_feature_min_masks: int = 0
+    ctc_loss_reduction: str = "sum"
+    ctc_zero_infinity: bool = False
+    use_weighted_layer_sum: bool = False
+    classifier_proj_size: int = 768
+    tdnn_dim: list[int] | tuple[int, ...] = (512, 512, 512, 512, 1500)
+    tdnn_kernel: list[int] | tuple[int, ...] = (5, 3, 3, 1, 1)
+    tdnn_dilation: list[int] | tuple[int, ...] = (1, 2, 3, 1, 1)
+    xvector_output_dim: int = 512
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 1
+    eos_token_id: int | None = 2
+    add_adapter: bool = False
+    adapter_kernel_size: int = 3
+    adapter_stride: int = 2
+    num_adapter_layers: int = 1
+    adapter_act: str = "relu"
+    use_intermediate_ffn_before_adapter: bool = False
+    output_hidden_size: int | None = None
+    position_embeddings_type: Literal["rotary", "relative", "relative_key"] | None = "relative_key"
+    rotary_embedding_base: int = 10000
+    max_source_positions: int = 5000
+    left_max_position_embeddings: int = 64
+    right_max_position_embeddings: int = 8
+    conv_depthwise_kernel_size: int = 31
+    conformer_conv_dropout: float | int = 0.1
 
-        if position_embeddings_type is not None and position_embeddings_type not in [
-            "rotary",
-            "relative",
-            "relative_key",
-        ]:
-            raise ValueError(
-                """
-                `position_embeddings_type` is not valid. It must be one of the following values:
-                `["rotary", "relative", "relative_key"]` or left as `None`.
-                """
-            )
-        self.position_embeddings_type = position_embeddings_type
-        self.rotary_embedding_base = rotary_embedding_base
-        self.left_max_position_embeddings = left_max_position_embeddings
-        self.right_max_position_embeddings = right_max_position_embeddings
+    def __post_init__(self, **kwargs):
+        self.output_hidden_size = self.output_hidden_size or self.hidden_size
+        super().__post_init__(**kwargs)
 
-        # Conformer-block related
-        self.conv_depthwise_kernel_size = conv_depthwise_kernel_size
-        self.conformer_conv_dropout = conformer_conv_dropout
-
-        # fine-tuning config parameters for SpecAugment: https://huggingface.co/papers/1904.08779
-        self.apply_spec_augment = apply_spec_augment
-        self.mask_time_prob = mask_time_prob
-        self.mask_time_length = mask_time_length
-        self.mask_time_min_masks = mask_time_min_masks
-        self.mask_feature_prob = mask_feature_prob
-        self.mask_feature_length = mask_feature_length
-        self.mask_feature_min_masks = mask_feature_min_masks
-
-        # ctc loss
-        self.ctc_loss_reduction = ctc_loss_reduction
-        self.ctc_zero_infinity = ctc_zero_infinity
-
-        # adapter
-        self.add_adapter = add_adapter
-        self.adapter_kernel_size = adapter_kernel_size
-        self.adapter_stride = adapter_stride
-        self.num_adapter_layers = num_adapter_layers
-        self.adapter_act = adapter_act
-        self.output_hidden_size = output_hidden_size if output_hidden_size is not None else hidden_size
-        if use_intermediate_ffn_before_adapter and not add_adapter:
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.use_intermediate_ffn_before_adapter and not self.add_adapter:
             raise ValueError("`use_intermediate_ffn_before_adapter` is `True` but `add_adapter` is `False`.")
-        self.use_intermediate_ffn_before_adapter = use_intermediate_ffn_before_adapter
-
-        # SequenceClassification-specific parameter. Feel free to ignore for other classes.
-        self.classifier_proj_size = classifier_proj_size
-
-        # XVector-specific parameters. Feel free to ignore for other classes.
-        self.tdnn_dim = list(tdnn_dim)
-        self.tdnn_kernel = list(tdnn_kernel)
-        self.tdnn_dilation = list(tdnn_dilation)
-        self.xvector_output_dim = xvector_output_dim
 
     @property
     def inputs_to_logits_ratio(self):
