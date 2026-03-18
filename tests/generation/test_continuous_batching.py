@@ -564,7 +564,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     ) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         continuous_batching_config = ContinuousBatchingConfig(
-            allow_block_sharing=allow_block_sharing, use_cuda_graph=use_cuda_graph, use_default_compile_configs=use_compile
+            allow_block_sharing=allow_block_sharing,
+            use_cuda_graph=use_cuda_graph,
+            use_default_compile_configs=use_compile,
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
@@ -585,7 +587,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     )
     @slow
     def test_continuous_batching_diverse_models(self, model_id: str, use_cuda_graph: bool, use_compile: bool) -> None:
-        continuous_batching_config = ContinuousBatchingConfig(use_cuda_graph=use_cuda_graph, use_default_compile_configs=use_compile)
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=use_cuda_graph, use_default_compile_configs=use_compile
+        )
         self._test_continuous_batching_parity(
             model_id=model_id,
             continuous_batching_config=continuous_batching_config,
@@ -595,7 +599,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     def test_continuous_batching_fast(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         continuous_batching_config = ContinuousBatchingConfig(
-            use_cuda_graph=False, allow_block_sharing=False, use_async_batching=False, use_default_compile_configs=False
+            use_cuda_graph=False,
+            allow_block_sharing=False,
+            use_async_batching=False,
+            use_default_compile_configs=False,
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
@@ -656,13 +663,15 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
             # Verify the config will create default compile configs
             varlen_cfg = cb_config.process_compile_config(
-                fallback_compile_config=None,
-                is_flash_attn=True,
-                decode_fast_path_available=False
+                fallback_compile_config=None, is_flash_attn=True, decode_fast_path_available=False
             )[0]
             if varlen_cfg is None:
                 raise RuntimeError("Varlen compile config should be created with use_default_compile_configs=True")
-            self.assertEqual(varlen_cfg.mode, "max-autotune-no-cudagraphs", "Default varlen config should use max-autotune-no-cudagraphs mode")
+            self.assertEqual(
+                varlen_cfg.mode,
+                "max-autotune-no-cudagraphs",
+                "Default varlen config should use max-autotune-no-cudagraphs mode",
+            )
             self.assertTrue(varlen_cfg.dynamic, "Default varlen config should have dynamic=True")
 
             # Create GenerationConfig
@@ -681,7 +690,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             # Verify outputs are valid
             for req_id, output in outputs.items():
                 self.assertIsNotNone(output.generated_tokens, f"Output for {req_id} should have generated_tokens")
-                self.assertGreater(len(output.generated_tokens), 0, f"Output for {req_id} should have at least one token")
+                self.assertGreater(
+                    len(output.generated_tokens), 0, f"Output for {req_id} should have at least one token"
+                )
                 self.assertEqual(output.status.name, "FINISHED", f"Output for {req_id} should be FINISHED")
 
         finally:
@@ -942,7 +953,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         self._test_continuous_batching_parity(
             model_id=model_id,
             continuous_batching_config=ContinuousBatchingConfig(
-                allow_block_sharing=True, use_cuda_graph=use_cuda_graph, use_async_batching=True, use_default_compile_configs=use_compile
+                allow_block_sharing=True,
+                use_cuda_graph=use_cuda_graph,
+                use_async_batching=True,
+                use_default_compile_configs=use_compile,
             ),
             attn_implementation=attn_implementation,
         )

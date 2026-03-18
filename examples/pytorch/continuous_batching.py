@@ -35,7 +35,7 @@ def generate_without_cb(
 ) -> dict[str, str]:
     # Setup model and tokenizer
     model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, attn_implementation=attn_impl)
-    model = model.cuda().eval() # type: ignore
+    model = model.cuda().eval()  # type: ignore
     if sliding_window > 0 and getattr(model.config, "sliding_window", None) is not None:
         model.config.sliding_window = sliding_window
     tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -47,7 +47,7 @@ def generate_without_cb(
         attention_mask = torch.ones_like(input_ids)
         outputs = model.generate(input_ids, attention_mask=attention_mask, generation_config=generation_config)
         generated_tokens = outputs[0][input_ids.shape[1] :]
-        decoded_outputs[key] = tokenizer.decode(generated_tokens, skip_special_tokens=False) # type: ignore
+        decoded_outputs[key] = tokenizer.decode(generated_tokens, skip_special_tokens=False)  # type: ignore
     return decoded_outputs
 
 
@@ -184,7 +184,9 @@ if __name__ == "__main__":
     parser.add_argument("--cuda-graph", "-cg", help="Use cuda graphs", type=str, default=None)
     parser.add_argument("--compile", action="store_true", help="Compile the model using torch.compile")
     parser.add_argument("--use-async", action=argparse.BooleanOptionalAction, help="Use asynchronous batching")
-    parser.add_argument("--block-table", "-bt", type=int, default=0, help="Block table size, ie. number of blocks / request")
+    parser.add_argument(
+        "--block-table", "-bt", type=int, default=0, help="Block table size, ie. number of blocks / request"
+    )
 
     # Generation parameters
     parser.add_argument("--do-sample", action="store_true", help="Activate sampling")
@@ -314,7 +316,6 @@ if __name__ == "__main__":
         num_blocks=args.num_blocks,
         max_batch_tokens=args.max_batch_tokens,
         max_blocks_per_request=args.block_table,
-
         use_cuda_graph=use_cuda_graph,
         use_async_batching=args.use_async,
         use_default_compile_configs=args.compile,
