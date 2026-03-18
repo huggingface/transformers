@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
-
 from huggingface_hub.dataclasses import strict
 
 from ...feature_extraction_utils import BatchFeature
@@ -21,15 +19,8 @@ from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, is_vision_available, logging
+from ...utils import auto_docstring, logging, requires_backends
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2Config
-from ..got_ocr2.modeling_got_ocr2 import (
-    GotOcr2ForConditionalGeneration,
-    GotOcr2Model,
-    GotOcr2ModelOutputWithPast,
-    GotOcr2PreTrainedModel,
-    GotOcr2VisionEncoder,
-)
 
 
 logger = logging.get_logger(__name__)
@@ -60,22 +51,11 @@ class PPChart2TableProcessor(ProcessorMixin):
     tokenizer_class = "AutoTokenizer"
     model_input_names = ["input_ids", "pixel_values"]
 
-    def __call__(
-        self,
-        images: ImageInput = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[ProcessingKwargs],
-    ) -> BatchFeature:
-        output_kwargs = self._merge_kwargs(
-            ProcessingKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-        batch_size = image_inputs["pixel_values"].shape[0]
-
-        messages = [
+    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        
+        # PPChart2TableProcessor uses hardcoded "Chart to table" instruction internally via chat template
+        self.messages = [
             {
                 "role": "system",
             },
@@ -85,9 +65,26 @@ class PPChart2TableProcessor(ProcessorMixin):
             },
         ]
 
+
+    def __call__(
+        self,
+        images: ImageInput = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ) -> BatchFeature:
+        requires_backends(self, "torch")
+        output_kwargs = self._merge_kwargs(
+            ProcessingKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
+        batch_size = image_inputs["pixel_values"].shape[0]
+
         # Use tokenizer's apply_chat_template instead of manually loading template
         inputs = self.tokenizer.apply_chat_template(
-            messages,
+            self.messages,
             tokenize=True,
             add_generation_prompt=True,
             truncation=True,

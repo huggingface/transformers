@@ -23,7 +23,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, requires_backends
 
 
 @auto_docstring
@@ -32,22 +32,11 @@ class PPChart2TableProcessor(ProcessorMixin):
     tokenizer_class = "AutoTokenizer"
     model_input_names = ["input_ids", "pixel_values"]
 
-    def __call__(
-        self,
-        images: ImageInput = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[ProcessingKwargs],
-    ) -> BatchFeature:
-        output_kwargs = self._merge_kwargs(
-            ProcessingKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
+    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-        image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-        batch_size = image_inputs["pixel_values"].shape[0]
-
-        messages = [
+        # PPChart2TableProcessor uses hardcoded "Chart to table" instruction internally via chat template
+        self.messages = [
             {
                 "role": "system",
             },
@@ -57,9 +46,25 @@ class PPChart2TableProcessor(ProcessorMixin):
             },
         ]
 
+    def __call__(
+        self,
+        images: ImageInput = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ) -> BatchFeature:
+        requires_backends(self, "torch")
+        output_kwargs = self._merge_kwargs(
+            ProcessingKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
+        batch_size = image_inputs["pixel_values"].shape[0]
+
         # Use tokenizer's apply_chat_template instead of manually loading template
         inputs = self.tokenizer.apply_chat_template(
-            messages,
+            self.messages,
             tokenize=True,
             add_generation_prompt=True,
             truncation=True,
