@@ -312,6 +312,8 @@ if TYPE_CHECKING:
     from .phi4_multimodal import *
     from .phimoe import *
     from .phobert import *
+    from .pi0 import *
+    from .pi0_fast import *
     from .pix2struct import *
     from .pixio import *
     from .pixtral import *
