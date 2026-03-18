@@ -194,6 +194,7 @@ class ModelManager:
                 n_gpu_layers=-1,
                 flash_attn=flash_attn,
                 n_ctx=8192,
+                n_batch=2048,
             )
 
         dtype = self.dtype if self.dtype in ["auto", None] else getattr(torch, self.dtype)
