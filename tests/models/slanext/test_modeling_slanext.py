@@ -22,7 +22,7 @@ from parameterized import parameterized
 
 from transformers import (
     SLANeXtConfig,
-    SLANeXtForTableRecognition,
+    SLANeXtModel,
     SLANeXtImageProcessor,
     is_torch_available,
     is_vision_available,
@@ -98,8 +98,8 @@ class SLANeXtModelTester:
 
 @require_torch
 class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (SLANeXtForTableRecognition,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-feature-extraction": SLANeXtForTableRecognition} if is_torch_available() else {}
+    all_model_classes = (SLANeXtModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-feature-extraction": SLANeXtModel} if is_torch_available() else {}
 
     has_attentions = False
 
@@ -212,7 +212,7 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 class SLANeXtModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "PaddlePaddle/SLANeXt_wired_safetensors"
-        self.model = SLANeXtForTableRecognition.from_pretrained(model_path, dtype=torch.float32).to(torch_device)
+        self.model = SLANeXtModel.from_pretrained(model_path, dtype=torch.float32).to(torch_device)
         self.image_processor = SLANeXtImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png"
         self.image = Image.open(requests.get(url, stream=True).raw)
