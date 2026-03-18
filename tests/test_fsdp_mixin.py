@@ -26,11 +26,11 @@ from abc import ABC, abstractmethod
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, is_torch_available
 from transformers.testing_utils import (
     backend_device_count,
+    backend_empty_cache,
+    backend_torch_accelerator_module,
     init_test_logger,
     is_fsdp_test,
     require_fsdp,
-    require_torch_multi_accelerator,
-    torch_device,
 )
 from transformers.trainer_utils import set_seed
 
@@ -75,10 +75,52 @@ MIXED_PRECISION_REDUCTION_THRESHOLD = 0.9
 # =============================================================================
 
 
+def _get_distributed_device_type():
+    device_type = torch._C._get_accelerator().type
+    return "cpu" if device_type == "mps" else device_type
+
+
+def _get_distributed_backend():
+    backend_map = {"cpu": "gloo", "cuda": "nccl", "xpu": "xccl", "hpu": "hccl"}
+    return backend_map.get(_get_distributed_device_type(), "gloo")
+
+
+def _get_rank_device(rank):
+    device_type = _get_distributed_device_type()
+    if device_type == "cpu":
+        return torch.device("cpu")
+    return torch.device(device_type, rank)
+
+
+def _set_rank_device(rank):
+    accelerator_module = backend_torch_accelerator_module(_get_distributed_device_type())
+    if accelerator_module is not None and hasattr(accelerator_module, "set_device"):
+        accelerator_module.set_device(rank)
+
+
+def _get_accelerator_rng_state():
+    accelerator_module = backend_torch_accelerator_module(_get_distributed_device_type())
+    if accelerator_module is None or not hasattr(accelerator_module, "get_rng_state"):
+        return None
+    return accelerator_module.get_rng_state()
+
+
+def _set_accelerator_rng_state(rng_state):
+    accelerator_module = backend_torch_accelerator_module(_get_distributed_device_type())
+    if rng_state is not None and accelerator_module is not None and hasattr(accelerator_module, "set_rng_state"):
+        accelerator_module.set_rng_state(rng_state)
+
+
+def _get_available_fsdp_workers():
+    if _get_distributed_device_type() == "cpu":
+        return os.cpu_count() or 1
+    return backend_device_count(_get_distributed_device_type())
+
+
 def _fsdp_global_wrapper_batched(rank, test_specs, world_size, port, results_file):
     """Set up distributed environment once and run multiple test functions sequentially.
 
-    This avoids the mp.spawn + NCCL/GLOO init overhead per test by initializing the
+    This avoids the mp.spawn + process-group init overhead per test by initializing the
     process group once and running all tests within the same spawned processes.
     """
     os.environ["WORLD_SIZE"] = str(world_size)
@@ -89,21 +131,8 @@ def _fsdp_global_wrapper_batched(rank, test_specs, world_size, port, results_fil
 
     _set_determinism(SEED)
 
-    # NOTE(3outeille): will have to do everything through gloo
-    # Initialize a dual-backend default group so CUDA tensors use NCCL and CPU
-    # tensors (needed by cpu_offload paths) use GLOO.
-    try:
-        dist.init_process_group(backend="cpu:gloo,cuda:nccl", rank=rank, world_size=world_size)
-    except Exception as e:
-        if dist.is_initialized():
-            dist.destroy_process_group()
-        if rank == 0:
-            logger.warning(
-                "Falling back to NCCL-only process group init; cpu_offload tests may be skipped. "
-                f"Original init error: {e}"
-            )
-        dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
-    torch.cuda.set_device(rank)
+    dist.init_process_group(backend=_get_distributed_backend(), rank=rank, world_size=world_size)
+    _set_rank_device(rank)
 
     results = {}
     for test_name, func, func_args, func_kwargs in test_specs:
@@ -113,7 +142,7 @@ def _fsdp_global_wrapper_batched(rank, test_specs, world_size, port, results_fil
         except Exception as e:
             error = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
 
-        error_flag = torch.tensor([1 if error else 0], device=f"cuda:{rank}")
+        error_flag = torch.tensor([1 if error else 0], device=_get_rank_device(rank))
         dist.all_reduce(error_flag, op=dist.ReduceOp.MAX)
         any_failed = error_flag.item() > 0
 
@@ -124,7 +153,7 @@ def _fsdp_global_wrapper_batched(rank, test_specs, world_size, port, results_fil
         else:
             results[test_name] = None
 
-        torch.cuda.empty_cache()
+        backend_empty_cache(_get_distributed_device_type())
         dist.barrier()
 
     if rank == 0:
@@ -136,12 +165,13 @@ def _fsdp_global_wrapper_batched(rank, test_specs, world_size, port, results_fil
 
 
 def _set_determinism(seed):
-    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     torch.use_deterministic_algorithms(True)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cuda.matmul.allow_tf32 = False
-    torch.backends.cudnn.allow_tf32 = False
+    if _get_distributed_device_type() == "cuda" and torch.cuda.is_available():
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cuda.matmul.allow_tf32 = False
+        torch.backends.cudnn.allow_tf32 = False
     set_seed(seed)
 
 
@@ -246,14 +276,14 @@ def _save_init_pretrained(rank, config, dtype):
 def _save_training_state(model, optimizer, training_state_dir):
     """Save optimizer + RNG states as distcp (for training resume only)."""
     _, optim_sd = get_state_dict(model, optimizer)
-    dcp.save(
-        {
-            "optim": optim_sd,
-            "cpu_rng_state": torch.get_rng_state(),
-            "cuda_rng_state": torch.cuda.get_rng_state(),
-        },
-        checkpoint_id=training_state_dir,
-    )
+    training_state = {
+        "optim": optim_sd,
+        "cpu_rng_state": torch.get_rng_state(),
+    }
+    accelerator_rng_state = _get_accelerator_rng_state()
+    if accelerator_rng_state is not None:
+        training_state["accelerator_rng_state"] = accelerator_rng_state
+    dcp.save(training_state, checkpoint_id=training_state_dir)
 
 
 def _load_training_state(model, optimizer, training_state_dir):
@@ -262,8 +292,10 @@ def _load_training_state(model, optimizer, training_state_dir):
     loaded_training_state = {
         "optim": optim_sd,
         "cpu_rng_state": torch.empty_like(torch.get_rng_state()),
-        "cuda_rng_state": torch.empty_like(torch.cuda.get_rng_state()),
     }
+    accelerator_rng_state = _get_accelerator_rng_state()
+    if accelerator_rng_state is not None:
+        loaded_training_state["accelerator_rng_state"] = torch.empty_like(accelerator_rng_state)
     # MoE models can have sparse optimizer state (experts not selected yet), so
     # allow partial optimizer key restoration instead of failing hard on missing keys.
     dcp.load(
@@ -278,7 +310,7 @@ def _load_training_state(model, optimizer, training_state_dir):
         optim_state_dict=loaded_training_state["optim"],
     )
     torch.set_rng_state(loaded_training_state["cpu_rng_state"])
-    torch.cuda.set_rng_state(loaded_training_state["cuda_rng_state"])
+    _set_accelerator_rng_state(loaded_training_state.get("accelerator_rng_state"))
 
 
 def train_ddp(rank, batches, lr, device, dtype, init_model_dir):
@@ -286,11 +318,10 @@ def train_ddp(rank, batches, lr, device, dtype, init_model_dir):
     model = AutoModelForCausalLM.from_pretrained(init_model_dir, torch_dtype=dtype).to(device)
     # MoE/conditional-routing variants) may not use all params on
     # every step, and DDP would otherwise fail. Specifying find_unused_parameters=True allows running backward on a subgraph of the model.
-    ddp_model = DDP(
-        model,
-        device_ids=[rank],
-        find_unused_parameters=True,
-    )
+    ddp_kwargs = {"find_unused_parameters": True}
+    if device.type != "cpu":
+        ddp_kwargs["device_ids"] = [rank]
+    ddp_model = DDP(model, **ddp_kwargs)
     ddp_model.train()
     optimizer = torch.optim.Adam(ddp_model.parameters(), lr=lr)
 
@@ -309,7 +340,7 @@ def train_ddp(rank, batches, lr, device, dtype, init_model_dir):
     state_dict = _gather_ddp_state_dict(ddp_model)
 
     del optimizer, ddp_model, model
-    torch.cuda.empty_cache()
+    backend_empty_cache(_get_distributed_device_type())
     dist.barrier()
 
     return losses, grad_norms, state_dict
@@ -401,7 +432,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
     """Train FSDP2 model, save via save_pretrained, load via from_pretrained, compare state dicts."""
     init_test_logger()
 
-    device = torch.device(f"cuda:{rank}")
+    device = _get_rank_device(rank)
     config = config_class.from_dict(config_dict)
 
     batches = _build_repeated_training_batches(config, device, NUM_STEPS)
@@ -539,7 +570,7 @@ def _test_fsdp2_plan_vs_ddp_impl(
         "Use the mixed-precision specific tests when enabling mixed_precision policy."
     )
 
-    device = torch.device(f"cuda:{rank}")
+    device = _get_rank_device(rank)
     config = config_class.from_dict(config_dict)
     config.tie_word_embeddings = tie_word_embeddings
 
@@ -611,7 +642,7 @@ def _test_fsdp2_plan_cpu_offload_mixed_precision(
     """Validate mixed-precision FSDP2 behavior for either auto or manual plan mode."""
     init_test_logger()
 
-    device = torch.device(f"cuda:{rank}")
+    device = _get_rank_device(rank)
     config = config_class.from_dict(config_dict)
     config.tie_word_embeddings = tie_word_embeddings
     num_steps = MIXED_PRECISION_NUM_STEPS
@@ -633,7 +664,7 @@ def _test_fsdp2_plan_cpu_offload_mixed_precision(
         label = "FSDP2(auto + cpu-offload + mixed-precision)"
     elif plan_mode == "manual":
         fsdp_plan = _build_manual_fsdp_plan(config, device, policy_options=policy_options)
-        label = "FSDP2(manual + cpu-offload + mixed-precision"
+        label = "FSDP2(manual + cpu-offload + mixed-precision)"
     else:
         raise ValueError(f"Unsupported plan_mode '{plan_mode}'. Expected 'auto' or 'manual'.")
 
@@ -696,10 +727,9 @@ class FSDPTesterMixin(ABC):
 
     def _skip_if_insufficient_devices(self):
         self._skip_if_fsdp_disabled()
-        if backend_device_count(torch_device) < self.fsdp_nproc_per_node:
-            self.skipTest(
-                f"Need at least {self.fsdp_nproc_per_node} devices, have {backend_device_count(torch_device)}"
-            )
+        available_workers = _get_available_fsdp_workers()
+        if available_workers < self.fsdp_nproc_per_node:
+            self.skipTest(f"Need at least {self.fsdp_nproc_per_node} FSDP workers, have {available_workers}")
 
     def _create_model_on_meta(self, config):
         """Instantiate a model on the meta device (no memory allocated)."""
@@ -809,10 +839,9 @@ class FSDPTesterMixin(ABC):
 
     @is_fsdp_test
     @require_fsdp
-    @require_torch_multi_accelerator
     def test_fsdp2_all(self):
         """Run all distributed FSDP2 tests in a single process group spawn.
-        This amortizes the mp.spawn + NCCL init overhead across all
+        This amortizes the mp.spawn + process-group init overhead across all
         distributed tests instead of paying it once per test method.
         """
         self._skip_if_insufficient_devices()
