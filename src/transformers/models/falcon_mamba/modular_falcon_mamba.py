@@ -197,7 +197,6 @@ class FalconMambaMixer(MambaMixer):
         cache_params: FalconMambaCache | None = None,
         attention_mask: torch.LongTensor | None = None,
     ):
-        seq_len = hidden_states.shape[1]
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
         if self.training and cache_params is None:  # Doesn't support outputting the states -> used for training
@@ -245,7 +244,7 @@ class FalconMambaMixer(MambaMixer):
                     conv_states = nn.functional.pad(
                         hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0)
                     )
-                    cache_params.update_conv_state(self.layer_idx, conv_states, seq_len)
+                    cache_params.update_conv_state(self.layer_idx, conv_states, cache_init=True)
                 hidden_states = causal_conv1d_fn(
                     hidden_states, conv_weights, self.conv1d.bias, activation=self.activation
                 )
@@ -329,12 +328,12 @@ class FalconMambaMixer(MambaMixer):
             if not cache_params.has_previous_state:
                 conv_state = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
 
-                cache_params.update_conv_state(self.layer_idx, conv_state, seq_len)
+                cache_params.update_conv_state(self.layer_idx, conv_state, cache_init=True)
                 hidden_states = self.act(
                     self.conv1d(hidden_states)[..., :seq_len]
                 )  # [batch, intermediate_size, seq_len]
             else:
-                conv_state = cache_params.update_conv_state(self.layer_idx, hidden_states, seq_len)
+                conv_state = cache_params.update_conv_state(self.layer_idx, hidden_states, cache_init=False)
                 conv_state = conv_state.to(self.conv1d.weight.device)
                 hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
                 if self.use_conv_bias:
