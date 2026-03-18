@@ -20,8 +20,6 @@
 
 
 import numpy as np
-import torch
-import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -34,12 +32,15 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
 from .image_processing_segformer import SegformerImageProcessorKwargs
 
 
 if is_torch_available():
+    import torch
     import torch.nn.functional as F
+if is_torchvision_available():
+    import torchvision.transforms.v2.functional as tvF
 
 
 @auto_docstring
@@ -108,8 +109,8 @@ class SegformerImageProcessorPil(PilBackend):
                 {
                     "do_normalize": False,
                     "do_rescale": False,
-                    # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": tvF.InterpolationMode.NEAREST_EXACT,
+                    # Nearest resample is used for segmentation maps instead of BILINEAR.
+                    "resample": tvF.InterpolationMode.NEAREST_EXACT,
                 }
             )
             processed_segmentation_maps = self._preprocess(

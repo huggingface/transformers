@@ -22,8 +22,6 @@ import pathlib
 from typing import Any, Optional
 
 import numpy as np
-import torch
-from torch import nn
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -69,6 +67,9 @@ from .image_processing_conditional_detr import (
 
 if is_vision_available():
     import PIL.Image
+if is_torch_available():
+    import torch
+    from torch import nn
 
 
 logger = logging.get_logger(__name__)

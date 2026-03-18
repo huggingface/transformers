@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from transformers.utils import requires_backends
+from transformers.utils import is_torch_available, requires_backends
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -40,13 +40,11 @@ from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_a
 from .image_processing_yolos import YolosImageProcessorKwargs
 
 
+if is_vision_available():
+    import PIL.Image
 if is_torch_available():
     import torch
     from torch import nn
-
-
-if is_vision_available():
-    import PIL.Image
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 

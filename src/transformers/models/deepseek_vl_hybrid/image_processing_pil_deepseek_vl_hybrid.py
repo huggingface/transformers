@@ -21,7 +21,6 @@
 from collections.abc import Iterable
 
 import numpy as np
-import torch
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
@@ -35,10 +34,12 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
 from .image_processing_deepseek_vl_hybrid import DeepseekVLHybridImageProcessorKwargs
 
 
+if is_torch_available():
+    import torch
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
 

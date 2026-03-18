@@ -18,12 +18,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import math
 from typing import Any
 
 import numpy as np
-import torch
-from torch import nn
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
@@ -44,6 +43,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
+    is_torch_available,
     is_torchvision_available,
     logging,
     requires_backends,
@@ -56,6 +56,9 @@ from .image_processing_mask2former import (
 )
 
 
+if is_torch_available():
+    import torch
+    from torch import nn
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 

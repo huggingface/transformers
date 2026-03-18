@@ -21,8 +21,6 @@ import pathlib
 from typing import Any, Optional
 
 import numpy as np
-import torch
-import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, SizeDict
@@ -49,9 +47,14 @@ from ...image_utils import (
     validate_annotations,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, requires_backends
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
 from .image_processing_rt_detr import RTDetrImageProcessorKwargs
 
+
+if is_torch_available():
+    import torch
+if is_torchvision_available():
+    import torchvision.transforms.v2.functional as tvF
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 

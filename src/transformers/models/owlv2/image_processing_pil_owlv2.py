@@ -22,15 +22,20 @@ import warnings
 from typing import TYPE_CHECKING
 
 import numpy as np
-import torch
-import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import center_to_corners_format, pad, to_channel_dimension_format
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelDimension, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_scipy_available, requires_backends
+from ...utils import (
+    TensorType,
+    auto_docstring,
+    is_scipy_available,
+    is_torch_available,
+    is_torchvision_available,
+    requires_backends,
+)
 from ..owlv2.image_processing_owlv2 import box_iou
 
 
@@ -40,6 +45,10 @@ if is_scipy_available():
 
 if TYPE_CHECKING:
     from .modeling_owlv2 import Owlv2ObjectDetectionOutput
+if is_torch_available():
+    import torch
+if is_torchvision_available():
+    import torchvision.transforms.v2.functional as tvF
 
 
 def _preprocess_resize_output_shape(image, output_shape):
@@ -194,6 +203,7 @@ class Owlv2ImageProcessorPil(PilBackend):
             - "labels": Indexes of the classes predicted by the model on the image.
             - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
         """
+        requires_backends(self, "torch")
         batch_logits, batch_boxes = outputs.logits, outputs.pred_boxes
         batch_size = len(batch_logits)
 
@@ -244,6 +254,7 @@ class Owlv2ImageProcessorPil(PilBackend):
             in the batch as predicted by the model. All labels are set to None as
             `Owlv2ForObjectDetection.image_guided_detection` perform one-shot object detection.
         """
+        requires_backends(self, "torch")
         logits, target_boxes = outputs.logits, outputs.target_pred_boxes
 
         if target_sizes is not None and len(logits) != len(target_sizes):

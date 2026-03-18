@@ -20,7 +20,6 @@
 
 
 import numpy as np
-import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
@@ -34,8 +33,12 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import TensorType, auto_docstring, is_torchvision_available
 from .image_processing_llava_onevision import LlavaOnevisionImageProcessorKwargs
+
+
+if is_torchvision_available():
+    import torchvision.transforms.v2.functional as tvF
 
 
 @auto_docstring

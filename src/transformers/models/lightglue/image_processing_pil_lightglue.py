@@ -21,13 +21,19 @@
 from typing import TYPE_CHECKING
 
 import numpy as np
-import torch
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict, to_numpy_array
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available, is_vision_available
+from ...utils import (
+    TensorType,
+    auto_docstring,
+    is_torch_available,
+    is_torchvision_available,
+    is_vision_available,
+    requires_backends,
+)
 from .image_processing_lightglue import LightGlueImageProcessorKwargs, validate_and_format_image_pairs
 
 
@@ -37,7 +43,8 @@ if TYPE_CHECKING:
 if is_vision_available():
     import PIL
     from PIL import Image, ImageDraw
-
+if is_torch_available():
+    import torch
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 
@@ -162,6 +169,7 @@ class LightGlueImageProcessorPil(PilBackend):
             `list[Dict]`: A list of dictionaries, each dictionary containing the keypoints in the first and second image
             of the pair, the matching scores and the matching indices.
         """
+        requires_backends(self, "torch")
         if outputs.mask.shape[0] != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
         if not all(len(target_size) == 2 for target_size in target_sizes):

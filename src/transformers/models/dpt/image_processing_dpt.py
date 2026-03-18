@@ -120,6 +120,8 @@ class DPTImageProcessor(TorchvisionBackend):
     image_std = IMAGENET_STANDARD_STD
     size = {"height": 384, "width": 384}
     default_to_square = True
+
+    # necessary for modular conversion
     crop_size = None
     do_resize = True
     do_center_crop = None

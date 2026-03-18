@@ -24,7 +24,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TensorType, auto_docstring, can_return_tuple, logging
+from ...utils import ModelOutput, TensorType, auto_docstring, can_return_tuple, logging, requires_backends
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from ..clip.modeling_clip import CLIPMLP
@@ -185,6 +185,7 @@ class LightGlueImageProcessorPil(SuperGlueImageProcessorPil):
         target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
     ) -> list[dict[str, torch.Tensor]]:
+        requires_backends(self, "torch")
         return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
 
 

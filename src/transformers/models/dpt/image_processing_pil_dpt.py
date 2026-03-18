@@ -67,8 +67,8 @@ class DPTImageProcessorPil(PilBackend):
     do_resize = True
     do_rescale = True
     do_normalize = True
-    do_reduce_labels = False
     do_pad = False
+    rescale_factor = 1 / 255
     ensure_multiple_of = 1
     keep_aspect_ratio = False
 

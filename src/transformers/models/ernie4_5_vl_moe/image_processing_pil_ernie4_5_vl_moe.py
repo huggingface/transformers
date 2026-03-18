@@ -19,16 +19,17 @@
 # limitations under the License.
 
 import numpy as np
-import torch
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, logging
 from .image_processing_ernie4_5_vl_moe import Ernie4_5_VLMoeImageProcessorKwargs, smart_resize
 
 
+if is_torch_available():
+    import torch
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
 

@@ -15,16 +15,16 @@
 
 from typing import TYPE_CHECKING
 
-import torch
-
 from ...image_processing_backends import PilBackend
 from ...image_transforms import center_to_corners_format
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, logging
+from ...utils import TensorType, auto_docstring, is_torch_available, logging, requires_backends
 from ..owlvit.image_processing_owlvit import _scale_boxes, box_iou
 
 
+if is_torch_available():
+    import torch
 if TYPE_CHECKING:
     from .modeling_owlvit import OwlViTObjectDetectionOutput
 
@@ -82,6 +82,7 @@ class OwlViTImageProcessorPil(PilBackend):
             - "labels": Indexes of the classes predicted by the model on the image.
             - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
         """
+        requires_backends(self, "torch")
         batch_logits, batch_boxes = outputs.logits, outputs.pred_boxes
         batch_size = len(batch_logits)
 
@@ -132,6 +133,7 @@ class OwlViTImageProcessorPil(PilBackend):
             in the batch as predicted by the model. All labels are set to None as
             `OwlViTForObjectDetection.image_guided_detection` perform one-shot object detection.
         """
+        requires_backends(self, "torch")
         logits, target_boxes = outputs.logits, outputs.target_pred_boxes
 
         if target_sizes is not None and len(logits) != len(target_sizes):

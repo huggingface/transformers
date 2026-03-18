@@ -80,8 +80,8 @@ class SegformerImageProcessor(BeitImageProcessor):
                 {
                     "do_normalize": False,
                     "do_rescale": False,
-                    # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": tvF.InterpolationMode.NEAREST_EXACT,
+                    # Nearest resample is used for segmentation maps instead of BILINEAR.
+                    "resample": tvF.InterpolationMode.NEAREST_EXACT,
                 }
             )
             processed_segmentation_maps = self._preprocess(
@@ -186,8 +186,8 @@ class SegformerImageProcessorPil(BeitImageProcessorPil):
                 {
                     "do_normalize": False,
                     "do_rescale": False,
-                    # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": tvF.InterpolationMode.NEAREST_EXACT,
+                    # Nearest resample is used for segmentation maps instead of BILINEAR.
+                    "resample": tvF.InterpolationMode.NEAREST_EXACT,
                 }
             )
             processed_segmentation_maps = self._preprocess(

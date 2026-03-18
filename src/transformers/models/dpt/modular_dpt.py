@@ -112,6 +112,8 @@ class DPTImageProcessor(BeitImageProcessor):
     rescale_factor = 1 / 255
     ensure_multiple_of = 1
     keep_aspect_ratio = False
+
+    # necessary for modular conversion
     crop_size = None
     do_center_crop = None
     do_reduce_labels = None

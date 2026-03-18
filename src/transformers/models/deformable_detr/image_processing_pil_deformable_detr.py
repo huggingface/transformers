@@ -17,12 +17,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import pathlib
 from typing import Any, Optional
 
 import numpy as np
-import torch
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -57,6 +55,8 @@ from .image_processing_deformable_detr import DeformableDetrImageProcessorKwargs
 
 if is_vision_available():
     import PIL.Image
+if is_torch_available():
+    import torch
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 

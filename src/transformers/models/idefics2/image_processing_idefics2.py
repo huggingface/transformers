@@ -123,6 +123,7 @@ class Idefics2ImageProcessor(TorchvisionBackend):
     do_pad = True
     do_convert_rgb = True
     do_image_splitting = False
+    default_to_square = False
     size = {"shortest_edge": 378, "longest_edge": 980}
     model_input_names = ["pixel_values", "pixel_attention_mask"]
 

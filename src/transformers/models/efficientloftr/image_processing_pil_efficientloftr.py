@@ -5,14 +5,14 @@
 #                          modular_efficientloftr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
+
 import numpy as np
-import torch
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict, to_numpy_array
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available, is_vision_available
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, is_vision_available
 from ...utils.import_utils import requires_backends
 from .image_processing_efficientloftr import EfficientLoFTRImageProcessorKwargs, validate_and_format_image_pairs
 from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
@@ -21,7 +21,8 @@ from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
 if is_vision_available():
     import PIL
     from PIL import Image, ImageDraw
-
+if is_torch_available():
+    import torch
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 

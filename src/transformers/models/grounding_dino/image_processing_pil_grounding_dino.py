@@ -27,7 +27,6 @@ import pathlib
 from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
-import torch
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -71,6 +70,8 @@ if TYPE_CHECKING:
 
 if is_vision_available():
     import PIL.Image
+if is_torch_available():
+    import torch
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 

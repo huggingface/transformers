@@ -57,6 +57,7 @@ from .utils import (
     is_torchvision_available,
     is_vision_available,
     logging,
+    requires_backends,
 )
 from .utils.import_utils import is_rocm_platform, is_torchdynamo_compiling
 
@@ -83,6 +84,7 @@ class TorchvisionBackend(BaseImageProcessor):
     """Torchvision backend for GPU-accelerated batched image processing."""
 
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
+        requires_backends(self, "torchvision")
         super().__init__(**kwargs)
         self._set_attributes(**kwargs)
 

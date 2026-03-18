@@ -110,6 +110,8 @@ class CHMv2ImageProcessor(TorchvisionBackend):
     image_std = [0.213, 0.156, 0.143]
     size = {"height": 384, "width": 384}
     default_to_square = True
+
+    # necessary for modular conversion
     crop_size = None
     do_resize = False
     do_center_crop = None
