@@ -264,6 +264,7 @@ class PPOCRV5ServerRecBlock(CLIPEncoderLayer):
             in_features=self.embed_dim,
             hidden_features=int(self.embed_dim * config.mlp_ratio),
         )
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -373,6 +374,7 @@ class PPOCRV5ServerRecEncoderWithSVTR(PPOCRV5ServerRecPreTrainedModel):
             self.svtr_block.append(PPOCRV5ServerRecBlock(config=config))
 
         self.norm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
+        self.post_init()
 
     @merge_with_config_defaults
     @capture_outputs
