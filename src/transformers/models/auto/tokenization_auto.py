@@ -16,6 +16,7 @@
 import importlib
 import json
 import os
+import sys
 from collections import OrderedDict
 from typing import Any
 
@@ -410,7 +411,13 @@ def tokenizer_class_from_name(class_name: str) -> type[Any] | None:
             else:
                 module = importlib.import_module(f".{module_name}", "transformers.models")
             try:
-                return getattr(module, class_name)
+                result = getattr(module, class_name)
+                # BC v5: expose XxxFast alias and tokenization_*_fast submodule for pre-v5 remote code.
+                if (submod := getattr(result, "__module__", None)) and submod in sys.modules:
+                    base_mod = sys.modules[submod]
+                    setattr(base_mod, result.__name__ + "Fast", result)
+                    sys.modules.setdefault(submod + "_fast", base_mod)
+                return result
             except AttributeError:
                 continue
 
@@ -424,6 +431,10 @@ def tokenizer_class_from_name(class_name: str) -> type[Any] | None:
     main_module = importlib.import_module("transformers")
     if hasattr(main_module, class_name):
         return getattr(main_module, class_name)
+
+    # BC v5: If a XxxFast class is not found, retry without 'Fast' for tokenizers saved pre-v5.
+    if class_name.endswith("Fast"):
+        return tokenizer_class_from_name(class_name[:-4])
 
     return None
 
@@ -730,6 +741,9 @@ class AutoTokenizer:
             )
 
         if has_remote_code and trust_remote_code:
+            # BC v5: register *Fast aliases before remote code loads.
+            if tokenizer_config_class:
+                tokenizer_class_from_name(tokenizer_config_class.removesuffix("Fast"))
             tokenizer_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
             tokenizer_class.register_for_auto_class()
