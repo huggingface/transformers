@@ -1,109 +1,122 @@
-# _static_sample: Remaining neuron_sample Optimizations Investigation
+# _static_sample: Clean-up of neuron_sample into a General Static-Shape Generation Loop
 
-**Date:** 2026-03-16
+**Date:** 2026-03-18
 **Branch:** `static_shape_generation`
-**Baseline:** 6 commits implementing `_static_sample` with +1.3% speedup on CUDA vs `_sample`
-**Hardware:** NVIDIA A10G, Llama-3.1-8B, torch 2.10, SDPA attention
+**Issue:** #44742
 
 ---
 
-## Items Evaluated
+## Context
 
-### Item 1: CPU-side EOS tracking
+### Goal
 
-**Status: IMPLEMENTED — no measurable CUDA improvement**
+The `neuron_sample` function in [`huggingface/torch-neuronx`](https://github.com/huggingface/torch-neuronx/blob/evaluation/examples/huggingface/transformers/run_generation.py#L536) is a standalone replacement for `GenerationMixin._sample` that enforces static tensor shapes throughout the decode loop. It was written specifically for AWS Neuron, where every new tensor shape triggers a fresh NEFF compilation (~40ms+ penalty per shape change per step).
 
-**What was done:**
-- Moved `unfinished_sequences` to CPU (`device="cpu"`)
-- Extract `eos_token_id_cpu` from `EosTokenCriteria` before the loop
-- Each step: `next_tokens_cpu = next_tokens.cpu()` (async D2H), then `torch.isin(next_tokens_cpu, eos_token_id_cpu)` on CPU
-- `unfinished_sequences.max() == 0` early exit is now a CPU op (no device sync)
-- EOS masking uses `unfinished_sequences.to(device)` (small H2D copy) for device-side `next_tokens` masking
+The question is: **should this live in `transformers` as a Neuron-only path, or as a general static-shape path that also benefits CUDA and other devices?**
 
-**Rationale:** The `max()` reduction on a device tensor forces a blocking D2H sync every decode step. Moving to CPU replaces this with an async `next_tokens.cpu()` transfer + CPU-only bookkeeping.
+To answer this, we are cleaning up `neuron_sample` into `_static_sample` (integrated into `GenerationMixin`) and benchmarking each optimization step-by-step on CUDA. If the optimizations bring measurable CUDA improvement, the path is general-purpose. If not, it's Neuron/XLA-specific.
 
-**Result on CUDA:** Still +1.3% total (no change). On CUDA with torch.compile, the `max()` sync overhead is already negligible — the inductor backend pipelines these operations efficiently. **On Neuron/XLA, this matters more (~40ms per sync).**
+### What `neuron_sample` fixes over `_sample`
 
-**Code location:** `src/transformers/generation/utils.py` lines ~2922-2931 (setup), ~2976-2983 (first token), ~3076-3083 (decode loop)
+The default `_sample` has 5 `torch.cat` operations that create new tensor shapes every decode step:
+
+1. `input_ids` grows by 1 token each step
+2. `attention_mask` grows by 1 element each step
+3. `position_ids` grows by 1 element each step
+4. `cache_position` grows by 1 element each step
+5. `while` loop conditioned on dynamically-shaped stopping check
+
+Beyond eliminating these, `neuron_sample` also:
+
+6. Bypasses `prepare_inputs_for_generation` (avoids per-step `clone()` — each clone triggers ~40ms device sync on Neuron)
+7. Sets `position_ids` explicitly from `cache_position` (avoids dynamic `cumsum` on attention mask)
+8. Pre-computes a static 4D causal mask updated in-place via `scatter_` (avoids per-step 2D→4D conversion)
+9. Falls back to static 2D mask for models with sliding window layers
+10. Keeps `output_ids` on CPU (avoids device-side scatter/index-put NEFF compilations)
+11. Runs all EOS tracking on CPU using `next_tokens.cpu()` (avoids ~40ms device sync from `max()` reduction)
+12. Passes full `output_ids` buffer to `logits_processor` (no growing slice — static shape)
+13. Uses a separate `next_token_device` buffer updated via `.copy_()` for decode input
+14. Builds `model_inputs` dict directly (no `_update_model_kwargs_for_generation` calls)
+
+### Reference: `neuron_sample` source
+
+Located at `huggingface/torch-neuronx`, branch `evaluation`:
+`examples/huggingface/transformers/run_generation.py`, line 536.
+
+Key structural choices:
+- Loop runs `i in range(requested_max_new_tokens)` with `i == 0` processing prefill output
+- `output_ids` on CPU, shape `(batch, total_len)`, filled with `pad_token_id`
+- `next_token_device`: separate `(batch, 1)` device tensor for model input, updated via `.copy_()`
+- 4D causal mask: `(batch, 1, 1, max_cache_len)` filled with `min_dtype`, unmasked via `scatter_` each step
+- Sliding window fallback: 2D mask `(batch, max_cache_len)` with decode positions pre-set to 1
+- EOS masking on CPU: `next_tokens_cpu * unfinished + pad * (1 - unfinished)`
+- No `return_dict_in_generate`, no streamer, no scores/logits/attentions collection
+- Timing instrumentation via `model._timing` dict
+- Supports chunked prefill via `_neuron_chunked_prefill`
 
 ---
 
-### Item 2: 4D causal mask built once
+## Methodology: Aligning on the Newest Algorithm
 
-**Status: SKIPPED — not worth the complexity on CUDA**
+`neuron_sample` was forked from `_sample` ~2 weeks ago. Since then, several PRs have landed on `main` that changed `_sample`'s algorithm. When `neuron_sample` and current `_sample` disagree, **we align on the newest `_sample` as the source of truth** and only deviate where static shapes require it.
 
-**Investigation findings:**
-- The 2D→4D mask conversion happens inside the compiled graph (`_optimize_model_for_decode` context) and is **fused by inductor** on CUDA
-- `masking_utils.py:828` has an early exit when mask is already 4D — pre-building would skip the conversion
-- **Format problem:** SDPA expects `bool` 4D masks (True=attend), eager expects `float` (0.0=attend, min_dtype=masked). A pre-built mask must match the attention backend
-- **Sliding window:** `neuron_sample` falls back to 2D for models with sliding attention layers. We'd need the same fallback
-- Previous attempt (earlier in the branch history) produced incorrect outputs due to mask value convention mismatch
+### Key recent PRs affecting `_sample`:
 
-**Why skipped:** The 2D→4D conversion cost is near-zero on CUDA (fused into compiled graph). The implementation complexity (format-dependent, sliding window fallback) isn't justified. **Worth revisiting for Neuron/XLA** where each new op in the compiled graph triggers separate compilation.
+1. **#44226** `[generate] Always pass full input_ids in prepare_inputs_for_generation` (2026-02-24)
+   - `_sample` now passes full `input_ids` to `prepare_inputs_for_generation`, which slices via `next_sequence_length` param
+   - `neuron_sample` bypasses `prepare_inputs_for_generation` entirely — **still valid** (we bypass it too, for different reasons)
 
-**Key files for future work:**
-- `src/transformers/masking_utils.py:828` — 4D early exit
-- `src/transformers/masking_utils.py:957-959` — `is_compileable` blocks mask skip
-- `src/transformers/masking_utils.py:610-612` — eager float mask format
-- `src/transformers/masking_utils.py:367` — SDPA boolean mask format
+2. **#44130** `[generate] Completely stop relying on cache_position to prepare inputs` (2026-02-21)
+   - Input slicing no longer uses `cache_position` — uses `next_sequence_length` instead
+   - `neuron_sample` still uses `cache_position` for position_ids and mask updates — **still needed for static shapes**
 
----
+3. **#44181** `[core] Completely remove cache positions` (2026-03-04)
+   - Removed `cache_position` from cache and masking APIs (not from generation loop itself)
+   - `_sample` still has `cache_position` in `_update_model_kwargs_for_generation` and `prepare_inputs_for_generation`
+   - **Impact on `_static_sample`:** `cache_position` is still passed to model forward. Need to verify models still accept it.
 
-### Item 3: Left-padding position_offset
+4. **#44126** `Simplify input preparation in generate` (2026-02-20)
+   - Simplified slicing logic in `prepare_inputs_for_generation`
+   - `neuron_sample` bypasses this entirely — **no impact**
 
-**Status: IMPLEMENTED — correctness fix**
+### Current `_sample` structure (post all PRs):
 
-**Bug:** `_static_sample` computed `position_ids = cache_position` for all batch elements. With left-padded batches (required for decoder-only batched generation), different batch elements have different padding amounts, so `cache_position != position_id`.
-
-**Fix:** Compute `position_offset` once before the loop:
 ```python
-position_offset = prefill_len - attention_mask[:, :prefill_len].sum(dim=-1, keepdim=True)
+# Prefill
+outputs = self._prefill(input_ids, generation_config, model_kwargs)
+
+while self._has_unfinished_sequences(...):
+    if prefill_consumed:
+        model_inputs = self.prepare_inputs_for_generation(
+            input_ids, next_sequence_length=1, **model_kwargs  # <-- full input_ids, sliced inside
+        )
+        outputs = model_forward(**model_inputs, return_dict=True)
+    prefill_consumed = True
+    model_kwargs = self._update_model_kwargs_for_generation(outputs, model_kwargs, ...)
+
+    next_token_logits = outputs.logits[:, -1, :].to(copy=True, ...)
+    next_token_scores = logits_processor(input_ids, next_token_logits)  # <-- full input_ids
+    # ... token selection ...
+    next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
+    input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)  # <-- grows each step
+    unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
+    this_peer_finished = unfinished_sequences.max() == 0
 ```
-Then each step: `position_ids = cache_position - position_offset`
 
-**Code location:** `src/transformers/generation/utils.py` lines ~2991-3004 (setup), ~3017-3019 (decode loop)
-
-**Note:** Not yet verified with a batched left-padded test — the greedy sanity check (batch_size=1) passes. **Need a batch_size>1 test with variable-length prompts to confirm.**
-
----
-
-### Item 4: Dynamic output_ids[:, :cur_len] slices
-
-**Status: DEFERRED**
-
-**Current behavior:** `logits_processor(output_ids[:, :cur_len], ...)` passes a growing slice each step. The shape changes per step.
-
-**Why it was initially dismissed:** `logits_processor` and `stopping_criteria` run outside `_optimize_model_for_decode()` (eager mode), so dynamic shapes don't cause graph breaks or recompilation.
-
-**Why it needs revisiting:**
-- If Item 1 moves `output_ids` to CPU (for Neuron), the slice is CPU → fine for CPU-side logits processing
-- On CUDA, passing the growing slice to `RepetitionPenaltyLogitsProcessor` triggers `scatter_()` with the slice as index tensor — dynamic shape but still eager
-- `neuron_sample` passes the **full buffer** (including unfilled pad positions) — simpler but exposes pads to processors. Need to check if processors handle trailing pads correctly
+**Key observations vs `neuron_sample`:**
+- `_sample` passes **full growing `input_ids`** to `logits_processor` (not a slice of `output_ids`)
+- `neuron_sample` passes **full pre-allocated `output_ids`** (including unfilled pad positions)
+- Both pass the full sequence; the difference is growing vs pre-allocated with trailing pads
+- `_update_model_kwargs_for_generation` still does `torch.cat` on `attention_mask`, `position_ids`, `cache_position` — these are exactly what `_static_sample` replaces with in-place updates
 
 ---
 
-## Benchmark Summary (CUDA, A10G, Llama-3.1-8B)
+## Current State of `_static_sample`
 
-Medium prompt (~83 tokens), 256 new tokens, greedy decoding, SDPA, torch.compile max-autotune:
+### What's already implemented (committed)
 
-| Configuration | Avg (s) | Tok/s | Speedup |
-|---|---|---|---|
-| `_sample` + static cache + compile | 8.020 | 31.9 | 1.00x |
-| `_static_sample` + static cache + compile (all items) | 7.916 | 32.3 | 1.01x (+1.3%) |
+6 commits on `static_shape_generation`:
 
-Peak memory: identical (15,376.4 MB). Sanity check: PASSED (identical greedy output).
-
-**Conclusion:** On CUDA with torch.compile/inductor, the additional optimizations (Items 1-2) don't provide measurable improvement beyond the original 5 `torch.cat` replacements. The inductor backend already optimizes away most of the overhead. These optimizations are primarily valuable for **Neuron/XLA** where dynamic shapes trigger recompilation and device syncs have ~40ms overhead.
-
----
-
-## Current State of the Code
-
-Uncommitted changes on `static_shape_generation` (on top of the 6 existing commits):
-- Item 1: CPU-side EOS tracking
-- Item 3: Left-padding position_offset
-
-These changes are **not yet committed**. The 6 existing commits are:
 ```
 c5c76f4 Add _static_sample method for static-shape generation with StaticCache
 829830b Bypass prepare_inputs_for_generation in _static_sample decode loop
@@ -113,10 +126,208 @@ c73b95b Remove redundant past_key_values reassignment in _static_sample
 fd28f3b Auto-dispatch to _static_sample when StaticCache is detected
 ```
 
-## Next Steps
+Plus 2 additional committed changes:
+```
+b8c775863d Fix left-padding position_ids in _static_sample for batched generation
+6239cbaabc Move EOS tracking to CPU in _static_sample to avoid blocking device sync
+```
 
-1. **Test Item 3** with batched left-padded inputs (batch_size=2, different prompt lengths)
-2. **Decide on Item 1** — keep or revert? No CUDA benefit, but prepares the code for Neuron
-3. **Revisit Item 4** — dynamic slices vs full buffer for logits_processor
-4. **Revisit Item 2** — only if targeting Neuron/XLA
-5. **Update issue #44742** with findings from `project_static_sample_incremental_fixes.md`
+### What's implemented vs `neuron_sample`
+
+| # | Optimization | `neuron_sample` | `_static_sample` | Status |
+|---|---|---|---|---|
+| 1 | Eliminate 5 `torch.cat` ops | Yes | Yes | Done |
+| 2 | Bypass `prepare_inputs_for_generation` | Yes | Yes | Done |
+| 3 | Explicit `position_ids` from `cache_position` | Yes | Yes | Done |
+| 4 | Position offset for left-padding | Yes | Yes | Done |
+| 5 | Remove redundant `past_key_values` reassignment | N/A (neuron still reassigns) | Yes | Done |
+| 6 | Replace `.item()` with loop index | Yes (uses `prompt_len + i`) | Yes (uses `prefill_len + i`) | Done |
+| 7 | CPU-side EOS tracking (`unfinished_sequences` on CPU) | Yes | Yes | Done |
+| 8 | `output_ids` on CPU | **Yes** | **No** — output_ids on device | **TODO** |
+| 9 | 4D causal mask pre-built | **Yes** — `(batch, 1, 1, max_cache_len)` with `min_dtype` | **No** — 2D mask, model does 2D→4D each step | **TODO** |
+| 10 | Sliding window fallback to 2D mask | **Yes** | **No** | **TODO** (depends on #9) |
+| 11 | Full buffer to `logits_processor` (no growing slice) | **Yes** — `logits_processor(output_ids, ...)` | **No** — `output_ids[:, :cur_len]` | **TODO** |
+| 12 | EOS masking entirely on CPU | **Yes** — `next_tokens_cpu * unfinished + pad * (1 - unfinished)` | **Partial** — EOS check on CPU, but masking uses `unfinished_sequences.to(device)` | **TODO** |
+| 13 | Separate `next_token_device` via `.copy_()` | **Yes** | **No** — uses `current_ids[:, 0] = next_tokens` | **TODO** (tied to #8) |
+| 14 | `return_dict_in_generate` support | No | Yes | `_static_sample` extra |
+| 15 | Streamer support | No | Yes | `_static_sample` extra |
+| 16 | Scores/logits/attentions collection | No | Yes | `_static_sample` extra |
+| 17 | Chunked prefill | Yes | No | Out of scope for now |
+
+### Structural differences
+
+**Loop structure:**
+- `neuron_sample`: single `for i in range(max_new_tokens)`, `i == 0` handles prefill output
+- `_static_sample`: prefill token processed before loop, loop runs `max_new_tokens - 1` iterations
+
+**EOS masking:**
+- `neuron_sample`: all on CPU — `next_tokens_cpu * unfinished + pad * (1 - unfinished)` before writing to CPU output buffer
+- `_static_sample`: EOS check on CPU, but masking on device — `next_tokens * unfinished.to(device) + pad * (1 - unfinished.to(device))`
+
+**output_ids location:**
+- `neuron_sample`: CPU — avoids all device-side bookkeeping ops
+- `_static_sample`: device — logits_processor receives device tensors directly
+
+---
+
+## Remaining Items to Benchmark on CUDA
+
+Each item below should be implemented and benchmarked independently to measure CUDA impact.
+
+### Item A: `output_ids` on CPU + EOS masking fully on CPU
+
+**What:** Move `output_ids` to CPU. All token bookkeeping (write, EOS masking) happens on CPU. Use a separate `next_token_device` buffer (batch, 1) for model input, updated via `.copy_()`.
+
+**neuron_sample approach:**
+```python
+output_ids = torch.full((batch_size, total_len), fill_value=pad_id, dtype=input_ids.dtype, device="cpu")
+output_ids[:, :prompt_len] = input_ids.cpu()
+next_token_device = torch.zeros(batch_size, 1, dtype=input_ids.dtype, device=input_ids.device)
+# In loop:
+next_tokens_cpu = next_tokens.cpu()
+next_tokens_cpu = next_tokens_cpu * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
+output_ids[:, prompt_len + i] = next_tokens_cpu
+next_token_device.copy_(next_tokens_cpu.unsqueeze(1))
+```
+
+**Current `_static_sample` approach:**
+```python
+output_ids = input_ids.new_full((batch_size, max_length), pad_id)  # on device
+# In loop:
+unfinished_device = unfinished_sequences.to(device)
+next_tokens = next_tokens * unfinished_device + pad_id * (1 - unfinished_device)
+output_ids[:, prefill_len + i + 1] = next_tokens
+current_ids[:, 0] = next_tokens
+```
+
+**Expected CUDA impact:** Unclear. The `.cpu()` copy is async and cheap, but `logits_processor` receiving CPU tensors may force a H2D transfer for processors that do device ops. Need to check if `logits_processor` can work with CPU input when `next_token_logits` is on device.
+
+**Risk:** `logits_processor` implementations may assume `input_ids` and `scores` are on the same device. If `output_ids` is CPU and `next_token_logits` is device, this breaks. For example, `RepetitionPenaltyLogitsProcessor` uses `input_ids` as a scatter index into `scores` (a device tensor) — CPU `input_ids` would fail or silently force a sync.
+
+**Alignment note:** Current `_sample` passes full growing `input_ids` (on device) to `logits_processor`. `neuron_sample` passes full pre-allocated `output_ids` (on CPU). Moving `output_ids` to CPU diverges from `_sample`'s device assumption. If this doesn't help CUDA, it may be better to keep `output_ids` on device for the general path and only move to CPU in a Neuron-specific variant.
+
+---
+
+### Item B: 4D causal mask pre-built with sliding window fallback
+
+**What:** Pre-build a static 4D causal mask `(batch, 1, 1, max_cache_len)` filled with `min_dtype`, unmask prompt positions, then `scatter_` each decode position.
+
+**neuron_sample approach:**
+```python
+min_dtype = torch.finfo(model.dtype).min
+causal_mask = torch.full((batch_size, 1, 1, max_cache_len), min_dtype, device=device, dtype=model.dtype)
+if attention_mask_2d is not None:
+    causal_mask[:, 0, 0, :prompt_len].masked_fill_(attention_mask_2d.bool(), 0.0)
+# In decode loop:
+mask_idx = cp.view(1, 1, 1, 1).expand(batch_size, 1, 1, 1)
+causal_mask.scatter_(3, mask_idx, 0.0)
+```
+
+**Sliding window fallback:**
+```python
+has_sliding_layers = hasattr(past_key_values, "is_sliding") and any(past_key_values.is_sliding)
+if has_sliding_layers:
+    attention_mask_sliding = torch.ones((batch_size, max_cache_len), dtype=torch.long, device=device)
+    if attention_mask_2d is not None:
+        attention_mask_sliding[:, :prompt_len] = attention_mask_2d
+    model_kwargs["attention_mask"] = attention_mask_sliding
+else:
+    model_kwargs["attention_mask"] = causal_mask
+```
+
+**Previous attempt:** Failed due to mask value convention mismatch — SDPA expects `bool` (True=attend), eager expects `float` (0.0=attend, min_dtype=masked). `neuron_sample` uses the float convention. Need to verify this matches what the model's `create_causal_mask` produces when it sees a 4D input (early exit at `masking_utils.py:828`).
+
+**Expected CUDA impact:** Likely minimal — the 2D→4D conversion is fused by inductor into the compiled graph. But worth measuring.
+
+**Key files:**
+- `src/transformers/masking_utils.py:828` — 4D early exit
+- `src/transformers/masking_utils.py:957-959` — `is_compileable` blocks mask skip
+- `src/transformers/masking_utils.py:610-612` — eager float mask format
+- `src/transformers/masking_utils.py:367` — SDPA boolean mask format
+
+---
+
+### Item C: Full buffer to `logits_processor` (no growing slice)
+
+**What:** Pass `logits_processor(output_ids, next_token_logits)` instead of `logits_processor(output_ids[:, :cur_len], next_token_logits)`.
+
+**neuron_sample approach:** Passes full CPU `output_ids` buffer (including unfilled pad positions after `cur_len`).
+
+**Risk:** Logits processors may behave differently when they see trailing pad tokens. For example, `RepetitionPenaltyLogitsProcessor` would penalize pad_token_id if it appears in the full buffer. Need to check each processor in `logits_processor_list` for pad sensitivity.
+
+**Expected CUDA impact:** Eliminates a per-step dynamic-shape slice. On CUDA this is eager code so the impact may be negligible. But it simplifies the code and aligns with neuron_sample.
+
+**Depends on:** Item A if `output_ids` is on CPU.
+
+---
+
+## Benchmark Results (CUDA, A10G, Llama-3.1-8B)
+
+Medium prompt (~83 tokens), 256 new tokens, greedy decoding, SDPA, torch.compile max-autotune:
+
+### Baseline (committed state)
+
+| Configuration | Avg (s) | Tok/s | Speedup |
+|---|---|---|---|
+| `_sample` + static cache + compile | 8.020 | 31.9 | 1.00x |
+| `_static_sample` + static cache + compile (items 1-7) | 7.916 | 32.3 | 1.01x (+1.3%) |
+
+Peak memory: identical (15,376.4 MB). Sanity check: PASSED (identical greedy output).
+
+### Item A: output_ids on CPU + full CPU EOS masking + full buffer to logits_processor
+
+**Changes:**
+- `output_ids` allocated on CPU (`device="cpu"`)
+- `output_ids[:, :prefill_len] = input_ids.cpu()` (prompt copied to CPU)
+- `current_ids` updated via `.copy_(next_tokens_cpu.unsqueeze(1))` instead of direct indexing
+- EOS masking entirely on CPU: `next_tokens_cpu * unfinished + pad * (1 - unfinished)` (no `to(device)`)
+- `logits_processor(output_ids, ...)` receives full CPU buffer (no growing slice)
+- `output_ids.to(device)` at the end before return
+
+| Configuration | Avg (s) | Tok/s | Speedup vs `_sample` |
+|---|---|---|---|
+| `_sample` (baseline) | 8.010 | 32.0 | 1.00x |
+| `_static_sample` + Item A | 7.897 | 32.4 | 1.01x (+1.4%) |
+
+Peak memory: identical (15,376.4 MB). Sanity check: PASSED.
+
+**Result:** +1.4% vs baseline (+0.6% improvement over pre-Item-A `_static_sample` which was +0.8%).
+The improvement likely comes from eliminating the per-step `unfinished_sequences.to(device)` H2D transfer and the device-side EOS masking arithmetic.
+
+### Item B: 4D causal mask pre-built (cumulative with Item A)
+
+**Changes (on top of Item A):**
+- After prefill, build a static 4D additive mask `(batch, 1, 1, max_cache_len)` filled with `min_dtype`
+- Unmask prompt positions via `masked_fill_(attention_mask_2d.bool(), 0.0)`
+- Each decode step: `scatter_(3, mask_idx, 0.0)` to unmask the current position
+- Sliding window fallback: static 2D mask `(batch, max_cache_len)` with decode positions pre-set to 1
+- Mask dimension uses `past_key_values.get_max_cache_shape()` (not `max_length`) to match cache KV size
+- Prefill still uses the original 2D mask — 4D mask is only for the decode loop
+
+**Gotcha encountered:** `max_length != max_cache_len`. The cache is allocated with `max_cache_length = max_length - 1` (see `generate()` line ~2511). The 4D mask must match cache KV length, not `max_length`.
+
+| Configuration | Avg (s) | Tok/s | Speedup vs `_sample` |
+|---|---|---|---|
+| `_sample` (baseline) | 7.933 | 32.3 | 1.00x |
+| `_static_sample` + Items A+B | 7.879 | 32.5 | 1.01x (+0.7%) |
+
+Peak memory: identical (15,376.4 MB). Sanity check: PASSED.
+
+**Result:** +0.7% total. Note that `_sample` baseline was faster this run (7.933 vs 8.010 in Item A's run), suggesting run-to-run variance of ~0.5-1%. The 4D mask appears to have no measurable benefit on CUDA — the 2D→4D conversion inside the compiled graph is already fused by inductor. The value is for Neuron/XLA where it avoids a per-step compilation.
+
+### Item C: Full buffer to logits_processor
+
+**Implemented as part of Item A** — `logits_processor(output_ids, next_token_logits)` where `output_ids` is the full CPU buffer. No separate benchmark needed; the effect is included in Item A's numbers.
+
+---
+
+## Plan
+
+Benchmark each item (A, B, C) independently on CUDA:
+1. Implement item
+2. Run `test_compile_generate.py --mode both`
+3. Record result
+4. Decide: keep for general path or gate behind Neuron-only check
+
+If all items show no CUDA improvement, `_static_sample` becomes a Neuron-specific path.
+If some items help, those go into the general path; the rest are Neuron-gated.
