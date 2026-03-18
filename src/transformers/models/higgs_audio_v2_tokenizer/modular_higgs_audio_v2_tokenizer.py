@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchaudio
+from huggingface_hub.dataclasses import strict
 
 from ...utils import auto_docstring
 from ...utils.import_utils import requires
@@ -24,6 +26,7 @@ from ..xcodec.modeling_xcodec import XcodecEuclideanCodebook, XcodecModel, Xcode
 
 
 @auto_docstring(checkpoint="bosonai/higgs-audio-v2-tokenizer")
+@strict(accept_kwargs=True)
 class HiggsAudioV2TokenizerConfig(XcodecConfig):
     r"""
         target_bandwidths (`List[float]`, *optional*, defaults to `[0.5, 1, 1.5, 2]`):
@@ -66,42 +69,11 @@ class HiggsAudioV2TokenizerConfig(XcodecConfig):
         "mask_time_prob": 0.0,
     }
 
-    def __init__(
-        self,
-        target_bandwidths=[0.5, 1, 1.5, 2],
-        sample_rate=24000,
-        kernel_size=3,
-        channel_ratios=[1, 1],
-        strides=[1, 1],
-        block_dilations=[1, 1],
-        unit_kernel_size=3,
-        codebook_size=1024,
-        codebook_dim=64,
-        initializer_range=0.02,
-        acoustic_model_config=None,
-        semantic_model_config=None,
-        semantic_sample_rate=16000,
-        downsample_factor=320,
-        **kwargs,
-    ):
-        super().__init__(
-            target_bandwidths=target_bandwidths,
-            sample_rate=sample_rate,
-            kernel_size=kernel_size,
-            channel_ratios=channel_ratios,
-            strides=strides,
-            block_dilations=block_dilations,
-            unit_kernel_size=unit_kernel_size,
-            codebook_size=codebook_size,
-            codebook_dim=codebook_dim,
-            initializer_range=initializer_range,
-            acoustic_model_config=acoustic_model_config,
-            semantic_model_config=semantic_model_config,
-            **kwargs,
-        )
-
-        self.semantic_sample_rate = semantic_sample_rate
-        self.downsample_factor = downsample_factor
+    target_bandwidths: list[int | float] | tuple[int | float, ...] = (0.5, 1, 1.5, 2, 4)
+    sample_rate: int = 24000
+    codebook_dim: int = 64
+    semantic_sample_rate: int = 16000
+    downsample_factor: int = 320
 
     @property
     def semantic_downsample_factor(self):

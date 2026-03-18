@@ -14,73 +14,38 @@
 
 
 import torch
+from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache
-from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import Gemma2Attention, Gemma2DecoderLayer, Gemma2ForCausalLM, Gemma2MLP, Gemma2RMSNorm
 
 
 @auto_docstring(checkpoint="google/vaultgemma-1b")
+@strict(accept_kwargs=True)
 class VaultGemmaConfig(Gemma2Config):
-    def __init__(
-        self,
-        vocab_size: int | None = 256000,
-        hidden_size: int | None = 2304,
-        intermediate_size: int | None = 9216,
-        num_hidden_layers: int | None = 26,
-        num_attention_heads: int | None = 8,
-        num_key_value_heads: int | None = 4,
-        head_dim: int | None = 256,
-        hidden_activation: str | None = "gelu_pytorch_tanh",
-        max_position_embeddings: int | None = 8192,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-6,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = 0,
-        eos_token_id: int | None = 1,
-        bos_token_id: int | None = 2,
-        tie_word_embeddings: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        query_pre_attn_scalar: int | None = 256,
-        sliding_window: int | None = 4096,
-        layer_types: list[str] | None = None,
-        final_logit_softcapping: float | None = 30.0,
-        attn_logit_softcapping: float | None = 50.0,
-        **kwargs,
-    ):
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            head_dim=head_dim,
-            hidden_activation=hidden_activation,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            rms_norm_eps=rms_norm_eps,
-            use_cache=use_cache,
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            bos_token_id=bos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            rope_parameters=rope_parameters,
-            attention_bias=attention_bias,
-            attention_dropout=attention_dropout,
-            query_pre_attn_scalar=query_pre_attn_scalar,
-            sliding_window=sliding_window,
-            layer_types=layer_types,
-            final_logit_softcapping=final_logit_softcapping,
-            attn_logit_softcapping=attn_logit_softcapping,
-            **kwargs,
-        )
+    r"""
+    query_pre_attn_scalar (`float`, *optional*, defaults to 256):
+        scaling factor used on the attention scores
+    final_logit_softcapping (`float`, *optional*, defaults to 30.0):
+        scaling factor when applying tanh softcapping on the logits.
+    attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
+        scaling factor when applying tanh softcapping on the attention scores.
+    use_bidirectional_attention (`bool`, *optional*):
+        If True, the model will attend to all text tokens instead of using a causal mask.
 
-        del self.use_bidirectional_attention
+    ```python
+    >>> from transformers import VaultGemmaModel, VaultGemmaConfig
+    >>> # Initializing a VaultGemma vaultgemma-7b style configuration
+    >>> configuration = VaultGemmaConfig()
+    >>> # Initializing a model from the vaultgemma-7b style configuration
+    >>> model = VaultGemmaModel(configuration)
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    use_bidirectional_attention = AttributeError()
 
 
 class VaultGemmaRMSNorm(Gemma2RMSNorm):
@@ -112,7 +77,6 @@ class VaultGemmaDecoderLayer(Gemma2DecoderLayer):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
@@ -124,7 +88,6 @@ class VaultGemmaDecoderLayer(Gemma2DecoderLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = residual + hidden_states
