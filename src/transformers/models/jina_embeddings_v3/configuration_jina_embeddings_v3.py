@@ -26,7 +26,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="jinaai/jina-embeddings-v3")
+@auto_docstring(checkpoint="jinaai/jina-embeddings-v3-hf")
 @strict(accept_kwargs=True)
 class JinaEmbeddingsV3Config(PreTrainedConfig):
     r"""
@@ -35,10 +35,10 @@ class JinaEmbeddingsV3Config(PreTrainedConfig):
     ```python
     >>> from transformers import JinaEmbeddingsV3Config, JinaEmbeddingsV3Model
 
-    >>> # Initializing a Jina-Embeddings-V3 jinaai/jina-embeddings-v3 style configuration
+    >>> # Initializing a Jina-Embeddings-V3 jinaai/jina-embeddings-v3-hf style configuration
     >>> configuration = JinaEmbeddingsV3Config()
 
-    >>> # Initializing a model (with random weights) from the jinaai/jina-embeddings-v3 style configuration
+    >>> # Initializing a model (with random weights) from the jinaai/jina-embeddings-v3-hf style configuration
     >>> model = JinaEmbeddingsV3Model(configuration)
 
     >>> # Accessing the model configuration

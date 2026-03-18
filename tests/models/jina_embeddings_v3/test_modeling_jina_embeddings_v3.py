@@ -263,8 +263,7 @@ class JinaEmbeddingsV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 
 @require_torch
 class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
-    model_id = "jinaai/jina-embeddings-v3"
-    revision = "refs/pr/137"
+    model_id = "jinaai/jina-embeddings-v3-hf"
     prompt = "Jina Embeddings V3 is great for semantic search."
 
     def setup(self):
@@ -274,13 +273,13 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def _prepare_inputs(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.prompt, return_tensors="pt", padding=True)
         return inputs
 
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = AutoModel.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
+        model = AutoModel.from_pretrained(self.model_id, dtype=torch.float32)
         model.eval()
         inputs = self._prepare_inputs()
 
@@ -305,7 +304,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_retrieval_query_adapter(self):
         task = "retrieval_query"
-        model = AutoModel.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
+        model = AutoModel.from_pretrained(self.model_id, dtype=torch.float32)
         model.load_adapter(
             self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": self.revision}
         )
@@ -332,7 +331,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_retrieval_passage_adapter(self):
         task = "retrieval_passage"
-        model = AutoModel.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
+        model = AutoModel.from_pretrained(self.model_id, dtype=torch.float32)
         model.load_adapter(
             self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": self.revision}
         )
@@ -361,7 +360,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_separation_adapter(self):
         task = "separation"
-        model = AutoModel.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
+        model = AutoModel.from_pretrained(self.model_id, dtype=torch.float32)
         model.load_adapter(
             self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": self.revision}
         )
@@ -389,7 +388,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_classification_adapter(self):
         task = "classification"
-        model = AutoModel.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
+        model = AutoModel.from_pretrained(self.model_id, dtype=torch.float32)
         model.load_adapter(
             self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": self.revision}
         )
@@ -417,7 +416,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_text_matching_adapter(self):
         task = "text_matching"
-        model = AutoModel.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
+        model = AutoModel.from_pretrained(self.model_id, dtype=torch.float32)
         model.load_adapter(
             self.model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": self.revision}
         )

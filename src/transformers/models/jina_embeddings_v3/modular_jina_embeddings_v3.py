@@ -53,7 +53,7 @@ from ..xlm_roberta.modeling_xlm_roberta import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="jinaai/jina-embeddings-v3")
+@auto_docstring(checkpoint="jinaai/jina-embeddings-v3-hf")
 @strict(accept_kwargs=True)
 class JinaEmbeddingsV3Config(XLMRobertaConfig):
     r"""
@@ -62,10 +62,10 @@ class JinaEmbeddingsV3Config(XLMRobertaConfig):
     ```python
     >>> from transformers import JinaEmbeddingsV3Config, JinaEmbeddingsV3Model
 
-    >>> # Initializing a Jina-Embeddings-V3 jinaai/jina-embeddings-v3 style configuration
+    >>> # Initializing a Jina-Embeddings-V3 jinaai/jina-embeddings-v3-hf style configuration
     >>> configuration = JinaEmbeddingsV3Config()
 
-    >>> # Initializing a model (with random weights) from the jinaai/jina-embeddings-v3 style configuration
+    >>> # Initializing a model (with random weights) from the jinaai/jina-embeddings-v3-hf style configuration
     >>> model = JinaEmbeddingsV3Model(configuration)
 
     >>> # Accessing the model configuration
