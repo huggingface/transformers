@@ -139,12 +139,7 @@ def _get_available_fsdp_workers():
     return backend_device_count(_get_distributed_device_type())
 
 
-def _fsdp_global_wrapper_batched(rank, test_specs, world_size, port, results_file):
-    """Set up distributed environment once and run multiple test functions sequentially.
-
-    This avoids the mp.spawn + process-group init overhead per test by initializing the
-    process group once and running all tests within the same spawned processes.
-    """
+def _fsdp_global_wrapper(rank, test_name, func, func_args, func_kwargs, world_size, port, results_file):
     os.environ["WORLD_SIZE"] = str(world_size)
     os.environ["RANK"] = str(rank)
     os.environ["LOCAL_RANK"] = str(rank)
@@ -156,39 +151,29 @@ def _fsdp_global_wrapper_batched(rank, test_specs, world_size, port, results_fil
     dist.init_process_group(backend=_get_distributed_backend(), rank=rank, world_size=world_size)
     _set_rank_device(rank)
 
-    results = {}
-    for test_name, func, func_args, func_kwargs in test_specs:
-        if rank == 0:
-            subtest_start = time.perf_counter()
-            print(f"[FSDP] Starting subtest: {test_name}", flush=True)
-        error = None
-        try:
-            func(rank, *func_args, **func_kwargs)
-        except Exception as e:
-            error = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+    if rank == 0:
+        start_time = time.perf_counter()
+        print(f"[FSDP] Starting test: {test_name}", flush=True)
 
-        error_flag = torch.tensor([1 if error else 0], device=_get_rank_device(rank))
-        dist.all_reduce(error_flag, op=dist.ReduceOp.MAX)
-        any_failed = error_flag.item() > 0
+    error = None
+    try:
+        func(rank, *func_args, **func_kwargs)
+    except Exception as e:
+        error = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
 
-        if any_failed:
-            results[test_name] = error if error else "Failed on another rank"
-            if rank == 0:
-                elapsed = time.perf_counter() - subtest_start
-                print(f"  [FAIL] {test_name} ({elapsed:.1f}s)", file=sys.stderr, flush=True)
-        else:
-            results[test_name] = None
-            if rank == 0:
-                elapsed = time.perf_counter() - subtest_start
-                print(f"  [PASS] {test_name} ({elapsed:.1f}s)", flush=True)
-
-        backend_empty_cache(_get_distributed_device_type())
-        dist.barrier()
+    error_flag = torch.tensor([1 if error else 0], device=_get_rank_device(rank))
+    dist.all_reduce(error_flag, op=dist.ReduceOp.MAX)
+    any_failed = error_flag.item() > 0
 
     if rank == 0:
+        elapsed = time.perf_counter() - start_time
+        status = "FAIL" if any_failed else "PASS"
+        output_stream = sys.stderr if any_failed else sys.stdout
+        print(f"[FSDP] {status} test: {test_name} ({elapsed:.1f}s)", file=output_stream, flush=True)
         with open(results_file, "w") as f:
-            json.dump(results, f)
+            json.dump({"error": error if error else "Failed on another rank" if any_failed else None}, f)
 
+    backend_empty_cache(_get_distributed_device_type())
     dist.barrier()
     dist.destroy_process_group()
 
@@ -738,32 +723,33 @@ class FSDPTesterMixin(ABC):
         # generic PretrainedConfig keys that its constructor rejects).
         return type(config), config.to_diff_dict()
 
-    def _build_fsdp2_subtest_specs(self, config_class, config_dict):
-        return [
-            ("sharding_structure_untied", _test_fsdp2_sharding_structure_impl, (config_class, config_dict, False), {}),
-            ("sharding_structure_tied", _test_fsdp2_sharding_structure_impl, (config_class, config_dict, True), {}),
-            ("save_load", _test_fsdp2_save_load_impl, (config_class, config_dict), {}),
-            ("auto_plan_untied", _test_fsdp2_plan_vs_ddp_impl, (config_class, config_dict, False, "auto"), {}),
-            ("auto_plan_tied", _test_fsdp2_plan_vs_ddp_impl, (config_class, config_dict, True, "auto"), {}),
-            ("manual_plan_untied", _test_fsdp2_plan_vs_ddp_impl, (config_class, config_dict, False, "manual"), {}),
-            ("manual_plan_tied", _test_fsdp2_plan_vs_ddp_impl, (config_class, config_dict, True, "manual"), {}),
-        ]
+    def _run_fsdp2_distributed_test(self, test_name, test_impl, *test_args, **test_kwargs):
+        self._skip_if_fsdp_model_not_selected()
+        self._skip_if_insufficient_devices()
 
-    def _format_fsdp2_subtest_summary(self, results):
-        passed = [name for name, err in results.items() if err is None]
-        failed = [name for name, err in results.items() if err is not None]
+        config_class, config_dict = self._get_tiny_config()
+        func_args = (config_class, config_dict, *test_args)
 
-        summary_lines = [
-            "",
-            "=" * 60,
-            f"  test_fsdp2_all: {len(passed)} passed, {len(failed)} failed (out of {len(results)} subtests)",
-            "=" * 60,
-        ]
-        for name in results:
-            is_passed = results[name] is None
-            summary_lines.append(f"  {'[PASS]' if is_passed else '[FAIL]'} {name}")
-        summary_lines.append("=" * 60)
-        return "\n".join(summary_lines)
+        results_file = tempfile.mktemp(suffix=".json")
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("", 0))
+            port = s.getsockname()[1]
+
+        try:
+            mp.spawn(
+                _fsdp_global_wrapper,
+                args=(test_name, test_impl, func_args, test_kwargs, self.fsdp_nproc_per_node, port, results_file),
+                nprocs=self.fsdp_nproc_per_node,
+            )
+
+            with open(results_file) as f:
+                result = json.load(f)
+        finally:
+            if os.path.exists(results_file):
+                os.unlink(results_file)
+
+        if result["error"] is not None:
+            self.fail(f"FSDP test '{test_name}' failed:\n{result['error']}")
 
     # =========================================================================
     # Test: get_transformer_block_classes (CPU, meta device)
@@ -774,53 +760,66 @@ class FSDPTesterMixin(ABC):
         """get_transformer_block_classes() finds >= 1 block class for the model."""
         self._skip_if_fsdp_disabled()
         self._skip_if_fsdp_model_not_selected()
-        config = self.model_tester.get_config()
-        model = self._create_model_on_meta(config)
+        start_time = time.perf_counter()
+        logger.info("[FSDP] Starting test: test_get_transformer_block_classes")
+        status = "FAIL"
+        try:
+            config = self.model_tester.get_config()
+            model = self._create_model_on_meta(config)
 
-        block_classes = get_transformer_block_classes(model)
-        self.assertTrue(len(block_classes) > 0, f"No block classes found for {type(config).__name__}")
+            block_classes = get_transformer_block_classes(model)
+            self.assertTrue(len(block_classes) > 0, f"No block classes found for {type(config).__name__}")
 
-        for cls in block_classes:
-            count = sum(1 for m in model.modules() if type(m) is cls)
-            self.assertGreater(count, 0, f"Block class {cls.__name__} has no instances in model")
-
-    # =========================================================================
-    # Batched test: all distributed FSDP2 tests in a single mp.spawn
-    # =========================================================================
+            for cls in block_classes:
+                count = sum(1 for m in model.modules() if type(m) is cls)
+                self.assertGreater(count, 0, f"Block class {cls.__name__} has no instances in model")
+            status = "PASS"
+        finally:
+            logger.info("[FSDP] %s test: test_get_transformer_block_classes (%.1fs)", status, time.perf_counter() - start_time)
 
     @is_fsdp_test
     @require_fsdp
-    def test_fsdp2_all(self):
-        """Run all distributed FSDP2 tests in a single process group spawn.
-        This amortizes the mp.spawn + process-group init overhead across all
-        distributed tests instead of paying it once per test method.
-        """
-        self._skip_if_fsdp_model_not_selected()
-        self._skip_if_insufficient_devices()
+    def test_fsdp2_sharding_structure_untied(self):
+        self._run_fsdp2_distributed_test(
+            "test_fsdp2_sharding_structure_untied", _test_fsdp2_sharding_structure_impl, False
+        )
 
-        config_class, config_dict = self._get_tiny_config()
-        test_specs = self._build_fsdp2_subtest_specs(config_class, config_dict)
+    @is_fsdp_test
+    @require_fsdp
+    def test_fsdp2_sharding_structure_tied(self):
+        self._run_fsdp2_distributed_test(
+            "test_fsdp2_sharding_structure_tied", _test_fsdp2_sharding_structure_impl, True
+        )
 
-        results_file = tempfile.mktemp(suffix=".json")
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(("", 0))
-            port = s.getsockname()[1]
-        try:
-            mp.spawn(
-                _fsdp_global_wrapper_batched,
-                args=(test_specs, self.fsdp_nproc_per_node, port, results_file),
-                nprocs=self.fsdp_nproc_per_node,
-            )
+    @is_fsdp_test
+    @require_fsdp
+    def test_fsdp2_save_load(self):
+        self._run_fsdp2_distributed_test("test_fsdp2_save_load", _test_fsdp2_save_load_impl)
 
-            with open(results_file) as f:
-                results = json.load(f)
-        finally:
-            if os.path.exists(results_file):
-                os.unlink(results_file)
+    @is_fsdp_test
+    @require_fsdp
+    def test_fsdp2_auto_plan_vs_ddp_untied(self):
+        self._run_fsdp2_distributed_test(
+            "test_fsdp2_auto_plan_vs_ddp_untied", _test_fsdp2_plan_vs_ddp_impl, False, "auto"
+        )
 
-        print(self._format_fsdp2_subtest_summary(results), flush=True)
+    @is_fsdp_test
+    @require_fsdp
+    def test_fsdp2_auto_plan_vs_ddp_tied(self):
+        self._run_fsdp2_distributed_test(
+            "test_fsdp2_auto_plan_vs_ddp_tied", _test_fsdp2_plan_vs_ddp_impl, True, "auto"
+        )
 
-        for test_name, error in results.items():
-            with self.subTest(test_name=test_name):
-                if error is not None:
-                    self.fail(f"FSDP subtest '{test_name}' failed:\n{error}")
+    @is_fsdp_test
+    @require_fsdp
+    def test_fsdp2_manual_plan_vs_ddp_untied(self):
+        self._run_fsdp2_distributed_test(
+            "test_fsdp2_manual_plan_vs_ddp_untied", _test_fsdp2_plan_vs_ddp_impl, False, "manual"
+        )
+
+    @is_fsdp_test
+    @require_fsdp
+    def test_fsdp2_manual_plan_vs_ddp_tied(self):
+        self._run_fsdp2_distributed_test(
+            "test_fsdp2_manual_plan_vs_ddp_tied", _test_fsdp2_plan_vs_ddp_impl, True, "manual"
+        )
