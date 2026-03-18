@@ -466,10 +466,8 @@ def pixel_shuffle_padded(
             Spatial down-sampling factor.
 
     Returns:
-        Tuple of:
-            - pixel-shuffled embeddings `(num_images, max_tokens, hidden_size * scale_factor**2)`
-            - attention mask `(num_images, max_tokens)`
-            - per-image valid token lengths `(num_images,)`
+        `torch.Tensor`: Pixel-shuffled embeddings of shape
+        `(num_images, max_tokens, hidden_size * scale_factor**2)`.
     """
     num_images, max_patches, embed_dim = x.shape
     output_dim = embed_dim * scale_factor * scale_factor
@@ -731,6 +729,18 @@ class IsaacConfig(PretrainedConfig):
 
     This configuration corresponds to checkpoints such as
     [Perceptron/isaac-base](https://huggingface.co/Perceptron/isaac-base).
+
+    Args:
+        vision_config (`IsaacVisionConfig`, *optional*):
+            Configuration for the Isaac vision tower. If unset, the default [`IsaacVisionConfig`] is used.
+        text_config (`IsaacTextConfig` or `dict`, *optional*):
+            Configuration for the text backbone. Dictionaries are converted to [`IsaacTextConfig`].
+        vision_rescale_factor (`float`, *optional*, defaults to 1 / 255):
+            Rescale factor applied by the image processor before normalization.
+        max_sequence_length (`int`, *optional*, defaults to 16384):
+            Maximum multimodal sequence length produced by the processor and expected by the model.
+        vision_token (`str`, *optional*, defaults to `"<image>"`):
+            Placeholder string inserted into text prompts to mark image positions.
     """
 
     model_type = "isaac"
@@ -777,8 +787,6 @@ class IsaacConfig(PretrainedConfig):
 
 @auto_docstring
 class IsaacProcessor(ProcessorMixin):
-    """Processor that pairs the Isaac image processor with the Qwen2 tokenizer."""
-
     def __init__(
         self,
         image_processor,
@@ -787,13 +795,9 @@ class IsaacProcessor(ProcessorMixin):
         vision_token: str = "<image>",
         max_sequence_length: int = 16384,
         rescale_factor: float | None = None,
-    ) -> None:
+    ):
         """
         Args:
-            image_processor:
-                Image processor used to convert images into Isaac patch tensors.
-            tokenizer:
-                Tokenizer used for the text side of the multimodal prompt.
             chat_template (`str` or `dict[str, str]`, *optional*):
                 Chat template override forwarded to [`~processing_utils.ProcessorMixin`].
             vision_token (`str`, *optional*, defaults to `"<image>"`):
@@ -1296,7 +1300,14 @@ class IsaacModel(Qwen3PreTrainedModel):
         position_ids = rope_position.view(1, inputs_embeds.shape[0], -1).expand(3, -1, -1)
         return position_ids + rope_deltas.to(device=inputs_embeds.device).unsqueeze(0)
 
-    @auto_docstring
+    @auto_docstring(
+        custom_intro="""
+        Forward pass with multimodal MRoPE position ids.
+
+        When image placeholders are present, Isaac computes vision features, scatters them into the token
+        embeddings, and runs the shared text backbone on the mixed sequence.
+        """,
+    )
     @can_return_tuple
     @merge_with_config_defaults
     def forward(
@@ -1319,10 +1330,6 @@ class IsaacModel(Qwen3PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         """
-        Forward pass with MRoPE position embeddings.
-
-        Computes position embeddings once and passes them through all layers.
-
         Args:
             mm_token_type_ids (`torch.LongTensor`, *optional*):
                 Multimodal token type ids aligned with the embedded sequence, shaped `(batch_size, seq_len)`. Isaac
