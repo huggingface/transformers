@@ -43,9 +43,9 @@ The original code can be found [here](https://github.com/tensorflow/tpu/tree/mas
 [[autodoc]] EfficientNetImageProcessor
     - preprocess
 
-## EfficientNetImageProcessorFast
+## EfficientNetImageProcessorPil
 
-[[autodoc]] EfficientNetImageProcessorFast
+[[autodoc]] EfficientNetImageProcessorPil
     - preprocess
 
 ## EfficientNetModel

@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 from ...video_utils import VideoMetadata
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor
-from ..glm4v.image_processing_glm4v_fast import Glm4vImageProcessorFast
+from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
 from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration, Glm4vModel, Glm4vPreTrainedModel
 from ..glm4v.processing_glm4v import Glm4vProcessor
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
@@ -109,11 +109,11 @@ class Glm46VProcessor(Glm4vProcessor):
         return f"<|begin_of_image|>{self.image_token}<|end_of_image|>{timestamp_sec:.1f} seconds"
 
 
-class Glm46VImageProcessor(Glm4vImageProcessor):
+class Glm46VImageProcessorPil(Glm4vImageProcessorPil):
     pass
 
 
-class Glm46VImageProcessorFast(Glm4vImageProcessorFast):
+class Glm46VImageProcessor(Glm4vImageProcessor):
     pass
 
 
@@ -192,6 +192,6 @@ __all__ = [
     "Glm46VForConditionalGeneration",
     "Glm46VProcessor",
     "Glm46VImageProcessor",
-    "Glm46VImageProcessorFast",
+    "Glm46VImageProcessorPil",
     "Glm46VVideoProcessor",
 ]

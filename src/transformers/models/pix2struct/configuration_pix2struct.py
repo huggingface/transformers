@@ -75,7 +75,7 @@ class Pix2StructTextConfig(PreTrainedConfig):
     decoder_start_token_id: int = 0
     use_cache: bool = False
     pad_token_id: int | None = 0
-    eos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 1
     bos_token_id: int | None = None
     tie_word_embeddings: bool = False
     is_decoder: bool = True

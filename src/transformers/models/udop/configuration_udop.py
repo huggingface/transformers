@@ -59,7 +59,7 @@ class UdopConfig(PreTrainedConfig):
     is_encoder_decoder: bool = True
     use_cache: bool = True
     pad_token_id: int | None = 0
-    eos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 1
     max_2d_position_embeddings: int = 1024
     image_size: int | list[int] | tuple[int, int] = 224
     patch_size: int | list[int] | tuple[int, int] = 16
