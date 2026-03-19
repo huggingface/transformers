@@ -19,7 +19,6 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Optional
 
 import torch
@@ -31,12 +30,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
-    ModelOutput,
-)
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -545,36 +539,6 @@ class HyperClovaXForCausalLM(HyperClovaXPreTrainedModel, GenerationMixin):
         )
 
 
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for HCXVision outputs, with hidden states and attentions.
-    """
-)
-class HCXVisionModelOutputWithPast(ModelOutput):
-    r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(num_images_features, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    video_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(num_video_features, hidden_size)`.
-        video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    past_key_values: list[torch.FloatTensor] | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: torch.FloatTensor | None = None
-    video_hidden_states: torch.FloatTensor | None = None
-
-
 @auto_docstring
 class HCXVisionModel(HCXVisionPreTrainedModel):
     base_model_prefix = "model"
@@ -608,7 +572,7 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
-        video_merge_sizes: torch.LongTensor,
+        video_merge_sizes: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -632,6 +596,7 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
+        image_merge_sizes: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -640,7 +605,7 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        vision_outputs = self.vision_model(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        vision_outputs = self.vision_model(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         vision_outputs.pooler_output = self.projector(vision_outputs.pooler_output)
 
         return vision_outputs
@@ -687,58 +652,51 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         return special_image_mask, special_video_mask
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
-        image_grid_thw: torch.LongTensor | None = None,
-        image_merge_sizes: torch.LongTensor | None = None,
         pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        video_merge_sizes: torch.LongTensor | None = None,
-        video_compression_mask: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | HCXVisionModelOutputWithPast:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
+        pixel_values (`torch.FloatTensor`, *optional*):
+            Pixel values of input images after preprocessing by [`Qwen2VLImageProcessor`].
+            A 2D tensor of shape `(total_num_patches, channels * patch_size^2 * temporal_patch_size)`.
+            In the input token sequence, each image position should contain `config.img_start_id`.
+        pixel_values_videos (`torch.FloatTensor`, *optional*):
+            Pixel values of input videos, with the same format as `pixel_values`.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
-            The spatial downsampling ratio of each image feature.
-        video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`):
-            The temporal, height and width of feature shape of each video before vision encoder.
-        video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
-            The spatial downsampling ratio of each video feature.
-        video_compression_mask (`torch.BoolTensor` of shape `(num_video_features,)`, *optional*):
-            The mask to indicate which video features are kept after token compression.
+            The temporal, height and width dimensions of the feature grid for each image.
+            Each row contains `[temporal, height, width]` grid counts.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width dimensions of the feature grid for each video.
         """
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        image_embeds = None
         if pixel_values is not None:
-            image_embeds = self.get_image_features(
-                pixel_values, image_grid_thw, image_merge_sizes, return_dict=True
-            ).pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw, None).pooler_output
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        video_embeds = None
         if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(
-                pixel_values_videos, video_grid_thw, video_merge_sizes, return_dict=True
-            ).pooler_output
-            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
-            if video_compression_mask is not None:
-                video_embeds = video_embeds[video_compression_mask.to(video_embeds.device)]
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, None).pooler_output
+            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -753,14 +711,11 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
-
-        return HCXVisionModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_embeds,
-            video_hidden_states=video_embeds,
         )
 
 

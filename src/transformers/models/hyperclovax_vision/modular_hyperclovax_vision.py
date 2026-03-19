@@ -19,7 +19,7 @@ from torch import nn
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GenericForSequenceClassification
-from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto.modeling_auto import AutoModel
@@ -83,6 +83,7 @@ class HCXVisionModel(VideoLlama3Model):
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
+        image_merge_sizes: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -91,10 +92,77 @@ class HCXVisionModel(VideoLlama3Model):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        vision_outputs = self.vision_model(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        vision_outputs = self.vision_model(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         vision_outputs.pooler_output = self.projector(vision_outputs.pooler_output)
 
         return vision_outputs
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | CausalLMOutputWithPast:
+        r"""
+        pixel_values (`torch.FloatTensor`, *optional*):
+            Pixel values of input images after preprocessing by [`Qwen2VLImageProcessor`].
+            A 2D tensor of shape `(total_num_patches, channels * patch_size^2 * temporal_patch_size)`.
+            In the input token sequence, each image position should contain `config.img_start_id`.
+        pixel_values_videos (`torch.FloatTensor`, *optional*):
+            Pixel values of input videos, with the same format as `pixel_values`.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width dimensions of the feature grid for each image.
+            Each row contains `[temporal, height, width]` grid counts.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width dimensions of the feature grid for each video.
+        """
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if pixel_values is not None:
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw, None).pooler_output
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+        if pixel_values_videos is not None:
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, None).pooler_output
+            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+
+        outputs = self.language_model(
+            input_ids=None,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+        return BaseModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @auto_docstring
