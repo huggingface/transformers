@@ -66,7 +66,7 @@ model.layers.0.self_attn.k_proj.weight  →  model.layers.0.self_attn.k_proj.wei
 model.layers.0.mlp.gate_proj.weight     →  model.layers.0.mlp.gate_proj.weight
 model.layers.0.mlp.up_proj.weight       →  model.layers.0.mlp.up_proj.weight
 model.layers.0.mlp.down_proj.weight     →  model.layers.0.mlp.down_proj.weight
-```x
+```
 
 Legacy checkpoints may use older naming conventions that are handled by built-in renamings applied to all models:
 

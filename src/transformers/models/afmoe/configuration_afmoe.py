@@ -84,6 +84,7 @@ class AfmoeConfig(PreTrainedConfig):
     num_experts_per_tok: int | None = 6
     num_shared_experts: int | None = 2
     route_scale: float | None = 1.0
+    output_router_logits: bool = False
     global_attn_every_n_layers: int | None = 4
     sliding_window: int | None = 1024
     layer_types: list | None = None

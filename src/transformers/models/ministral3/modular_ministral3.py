@@ -50,9 +50,9 @@ class Ministral3Attention(MistralAttention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        cache_position = torch.arange(query_states.shape[2], device=query_states.device) + past_seen_tokens
+        absolute_positions = torch.arange(query_states.shape[2], device=query_states.device) + past_seen_tokens
         query_states = query_states * get_llama_4_attn_scale(
-            cache_position,
+            absolute_positions,
             self.config.rope_parameters.get("llama_4_scaling_beta"),
             self.config.rope_parameters.get("original_max_position_embeddings"),
         ).to(query_states.dtype)

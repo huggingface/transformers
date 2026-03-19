@@ -4,6 +4,7 @@ from ..generation.continuous_batching import PagedAttentionCache
 from ..modeling_flash_attention_utils import lazy_import_paged_flash_attention
 
 
+@torch.compiler.disable
 def paged_attention_forward(
     module: torch.nn.Module,
     q: torch.Tensor,
@@ -21,6 +22,7 @@ def paged_attention_forward(
     """Performs the forward pass of attention with paged key-value cache. This function handles the cache updates and
     performs the attention computation. For decode-only batches (when block_table is provided), uses
     `flash_attn_with_kvcache` for fused attention + cache update. Otherwise uses `flash_attn_varlen_func`.
+    See the [paged attention guide](https://huggingface.co/docs/transformers/en/paged_attention) for more details.
 
     Args:
         q: (1, nheads, total_q, headdim), where total_q = total number of query tokens in the batch.
@@ -36,8 +38,8 @@ def paged_attention_forward(
             If provided, uses flash_attn_with_kvcache for fused attention + cache update. For each request, the block
             table is a vector of size (max_blocks_per_seq,) with indices indicating the physical location of the cache
             to read from and write to. The kernel, using the cache_seqlens for that request, knows how much cache to
-            read and dispatches the read using the block table. Same for the write. If a request has less  blocksthan
-            max_blocks_per_seq blocks, the block table is padded with -1s to indicate that this cache is not allocated.
+            read and dispatches the read using the block table. Same for the write. If a request has fewer than
+            max_blocks_per_seq blocks, the block table is padded with -1s to indicate that the block is not allocated.
     """
     # Retrieve the flash attention functions
     flash_attn_varlen_func, flash_attn_with_kvcache = lazy_import_paged_flash_attention(
@@ -102,10 +104,10 @@ def paged_attention_forward(
         if "s_aux" in kwargs:
             flash_kwargs["s_aux"] = kwargs["s_aux"]  # this is only available in VLLM's FA3
         # Call flash_attn_with_kvcache - this updates cache in-place and computes attention
-        attn_output = flash_attn_with_kvcache(  # TODO: add more doc in a dedicated wrapper (coming in next PRs)
-            q,
-            k_cache,
-            v_cache,
+        attn_output = flash_attn_with_kvcache(
+            q=q,
+            k_cache=k_cache,
+            v_cache=v_cache,
             k=k,
             v=v,
             cache_seqlens=cache_seqlens,

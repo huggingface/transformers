@@ -67,9 +67,9 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
 [[autodoc]] ViltImageProcessor
     - preprocess
 
-## ViltImageProcessorFast
+## ViltImageProcessorPil
 
-[[autodoc]] ViltImageProcessorFast
+[[autodoc]] ViltImageProcessorPil
     - preprocess
 
 ## ViltProcessor
