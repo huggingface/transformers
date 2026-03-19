@@ -74,10 +74,10 @@ model = AutoModelForObjectDetection.from_pretrained(
     model_path,
     device_map="auto"
 )
-image_processor = AutoImageProcessor.from_pretrained(model_path).to(model.device)
+image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True).raw).convert("RGB")
-inputs = image_processor(images=image, return_tensors="pt")
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
 results = image_processor.post_process_object_detection(outputs, target_sizes=inputs["target_sizes"])
@@ -132,10 +132,10 @@ model = AutoModelForObjectDetection.from_pretrained(
     model_path,
     device_map="auto",
 )
-image_processor = AutoImageProcessor.from_pretrained(model_path).to(model.device)
+image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True).raw).convert("RGB")
-inputs = image_processor(images=[image, image], return_tensors="pt")
+inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
 results = image_processor.post_process_object_detection(outputs, target_sizes=inputs["target_sizes"])
