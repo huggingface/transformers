@@ -94,6 +94,10 @@ jobs:
         working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
+      - name: Install hf-doc-builder from main
+        working-directory: /transformers
+        run: python3 -m pip install --no-cache-dir git+https://github.com/huggingface/doc-builder.git@main#egg=hf-doc-builder
+
       - name: Update / Install some packages (for Past CI)
         if: ${{ contains(inputs.docker, '-past-') }}
         working-directory: /transformers
