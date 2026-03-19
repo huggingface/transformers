@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_isaac.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 Perceptron, Inc and The HuggingFace Team. All rights reserved.
+# Copyright 2026 Perceptron, Inc and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,9 +19,11 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig, PretrainedConfig, layer_type_validation
-from ...models.qwen3.configuration_qwen3 import Qwen3Config
+from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="google/isaac-base-patch16-naflex")
 class IsaacVisionConfig(PreTrainedConfig):
     """Vision configuration for Isaac with Pixel Shuffle support.
 
@@ -30,8 +32,6 @@ class IsaacVisionConfig(PreTrainedConfig):
     Args:
         pixel_shuffle_scale_factor (`int`, *optional*, defaults to 1):
             Spatial factor applied before pixel shuffle reduces the resolution.
-        num_patches (`int`, *optional*, defaults to 256):
-            Maximum number of learnable positional embeddings to initialize.
     """
 
     model_type = "isaac_vision"
@@ -64,13 +64,118 @@ class IsaacVisionConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.num_patches = num_patches
-
         # Add our custom fields
         self.pixel_shuffle_scale_factor = pixel_shuffle_scale_factor
 
-        # Ensure a sensible default attention backend
-        if getattr(self, "_attn_implementation", None) is None:
-            self._attn_implementation = "sdpa"
+
+@auto_docstring(checkpoint="Qwen/IsaacText-8B")
+class IsaacTextConfig(PreTrainedConfig):
+    r"""
+    max_window_layers (`int`, *optional*, defaults to 28):
+        The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
+        additional layer afterwards will use SWA (Sliding Window Attention).
+
+    ```python
+    >>> from transformers import IsaacTextModel, IsaacTextConfig
+
+    >>> # Initializing a IsaacText style configuration
+    >>> configuration = IsaacTextConfig()
+
+    >>> # Initializing a model from the IsaacText-8B style configuration
+    >>> model = IsaacTextModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "isaac_text"
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    # Default tensor parallel plan for base model `IsaacText`
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+
+    def __init__(
+        self,
+        vocab_size: int | None = 151936,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 22016,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = 32,
+        head_dim: int | None = 128,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 32768,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-6,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        use_sliding_window: bool | None = False,
+        sliding_window: int | None = 4096,
+        max_window_layers: int | None = 28,
+        layer_types: list[str] | None = None,
+        attention_dropout: float | None = 0.0,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
+        **kwargs,
+    ):
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.use_sliding_window = use_sliding_window
+        self.sliding_window = sliding_window if self.use_sliding_window else None
+        self.max_window_layers = max_window_layers
+
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
+        self.head_dim = head_dim
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
+
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention"
+                if self.sliding_window is not None and i >= self.max_window_layers
+                else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
+
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        self.rope_parameters = rope_parameters
+
+        super().__init__(**kwargs)
 
 
 class IsaacConfig(PretrainedConfig):
@@ -78,16 +183,27 @@ class IsaacConfig(PretrainedConfig):
 
     This configuration corresponds to checkpoints such as
     [Perceptron/isaac-base](https://huggingface.co/Perceptron/isaac-base).
+
+    Args:
+        vision_config (`IsaacVisionConfig`, *optional*):
+            Configuration for the Isaac vision tower. If unset, the default [`IsaacVisionConfig`] is used.
+        text_config (`IsaacTextConfig` or `dict`, *optional*):
+            Configuration for the text backbone. Dictionaries are converted to [`IsaacTextConfig`].
+        vision_rescale_factor (`float`, *optional*, defaults to 1 / 255):
+            Rescale factor applied by the image processor before normalization.
+        max_sequence_length (`int`, *optional*, defaults to 16384):
+            Maximum multimodal sequence length produced by the processor and expected by the model.
+        vision_token (`str`, *optional*, defaults to `"<image>"`):
+            Placeholder string inserted into text prompts to mark image positions.
     """
 
     model_type = "isaac"
-    sub_configs = {"vision_config": IsaacVisionConfig, "text_config": Qwen3Config}
-    image_processor_type = "IsaacImageProcessor"
+    sub_configs = {"vision_config": IsaacVisionConfig, "text_config": IsaacTextConfig}
 
     def __init__(
         self,
         vision_config: IsaacVisionConfig | None = None,
-        text_config: Qwen3Config | dict | None = None,
+        text_config: IsaacTextConfig | dict | None = None,
         vision_rescale_factor: float = 1 / 255,
         max_sequence_length: int = 16384,
         vision_token: str = "<image>",
@@ -95,7 +211,7 @@ class IsaacConfig(PretrainedConfig):
     ):
         if isinstance(text_config, dict):
             self.text_config = self.sub_configs["text_config"](**text_config)
-        elif isinstance(text_config, Qwen3Config):
+        elif isinstance(text_config, IsaacTextConfig):
             self.text_config = text_config
         elif text_config is None:
             self.text_config = self.sub_configs["text_config"]()
@@ -107,32 +223,14 @@ class IsaacConfig(PretrainedConfig):
         elif vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
 
-        # Seed RoPE parameters before base init so the shared mixin can standardize/validate them.
-        self.rope_parameters = getattr(self.text_config, "rope_parameters", None)
-        self.layer_types = getattr(self.text_config, "layer_types", None)
-
         super().__init__(**kwargs)
 
-        # Keep rope parameters aligned between the composite and text sub-configs.
-        self.text_config.rope_parameters = self.rope_parameters
-
-        # Mirror frequently accessed Qwen3 attributes at the composite config level
-        self.vocab_size = self.text_config.vocab_size
-        self.hidden_size = self.text_config.hidden_size
-        self.num_hidden_layers = self.text_config.num_hidden_layers
-        self.num_attention_heads = self.text_config.num_attention_heads
-        self.head_dim = self.text_config.head_dim
-        self.hidden_act = self.text_config.hidden_act
+        # Mirror frequently accessed composite-level attributes.
         self.use_cache = self.text_config.use_cache
-        self.rope_theta = self.rope_parameters["rope_theta"]
+        self.rope_theta = self.text_config.rope_parameters["rope_theta"]
         self.max_position_embeddings = getattr(self.text_config, "max_position_embeddings", max_sequence_length)
         self.text_config.max_position_embeddings = self.max_position_embeddings
 
-        self.layer_types = getattr(self.text_config, "layer_types", None)
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
-
-        if getattr(self, "_attn_implementation", None) is None:
-            self._attn_implementation = "sdpa"
         # Vision normalization parameters
         self.vision_rescale_factor = float(vision_rescale_factor)
 
@@ -141,4 +239,4 @@ class IsaacConfig(PretrainedConfig):
         self.vision_token = vision_token
 
 
-__all__ = ["IsaacConfig"]
+__all__ = ["IsaacConfig", "IsaacTextConfig", "IsaacVisionConfig"]
