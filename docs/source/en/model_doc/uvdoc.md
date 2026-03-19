@@ -25,10 +25,6 @@ rendered properly in your Markdown viewer.
 
 **UVDoc** The main purpose of text image correction is to carry out geometric transformation on the image to correct the document distortion, inclination, perspective deformation and other problems in the image.
 
-## Model Architecture
-The main purpose of text image correction is to carry out geometric transformation on the image to correct the document distortion, inclination, perspective deformation and other problems in the image.
-
-
 ## Usage
 
 ### Single input inference
@@ -41,10 +37,10 @@ The example below demonstrates how to rectify a document image with UVDoc using 
 ```py
 import requests
 from PIL import Image
-from transformers import AutoImageProcessor, UVDocModel
+from transformers import AutoImageProcessor, AutoModel
 
 model_path = "PaddlePaddle/UVDoc_safetensors"
-model = UVDocModel.from_pretrained(
+model = AutoModel.from_pretrained(
     model_path,
     device_map="auto",
 )
@@ -72,11 +68,11 @@ Here is how to perform batched document rectification with UVDoc:
 ```py
 import requests
 from PIL import Image
-from transformers import AutoImageProcessor, UVDocModel
+from transformers import AutoImageProcessor, AutoModel
 
 model_path = "PaddlePaddle/UVDoc_safetensors"
-model = UVDocModel.from_pretrained(
-    model_path,
+model = AutoModel.from_pretrained(
+    model_path
     device_map="auto",
 )
 image_processor = AutoImageProcessor.from_pretrained(model_path)

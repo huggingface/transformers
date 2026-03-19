@@ -27,7 +27,7 @@ import torchvision.transforms.v2.functional as tvF
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import PILImageResampling, SizeDict
+from ...image_utils import SizeDict
 from ...utils import auto_docstring
 from ...utils.generic import TensorType
 
@@ -109,7 +109,6 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
                           and BGR channel order (suitable for OpenCV visualization)
         """
         image_list = list(original_images)
-
         scale_t = torch.tensor(float(scale), device=prediction.device)
         results = []
 
@@ -128,7 +127,6 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
                 mode="bilinear",
                 align_corners=True,
             )
-
             # Permute mesh for grid_sample: (1, H, W, 2)
             rearranged_mesh = upsampled_mesh.permute(0, 2, 3, 1)
 
@@ -140,6 +138,7 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
 
             # Scale and convert to uint8 with BGR channel
             image = image * scale_t
+
             image = image.flip(dims=[-1]).to(dtype=torch.uint8, non_blocking=True, copy=False)
 
             results.append({"images": image})

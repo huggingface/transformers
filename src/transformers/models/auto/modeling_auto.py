@@ -440,6 +440,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("timm_backbone", "TimmBackbone"),
         ("timm_wrapper", "TimmWrapperModel"),
         ("tvp", "TvpModel"),
+        ("uvdoc", "UVDocModel"),
         ("udop", "UdopModel"),
         ("umt5", "UMT5Model"),
         ("unispeech", "UniSpeechModel"),
