@@ -80,7 +80,6 @@ class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
 
 @auto_docstring
 class PPChart2TableProcessor(ProcessorMixin):
-
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
@@ -90,7 +89,6 @@ class PPChart2TableProcessor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
-
         if text is None or images is None:
             raise ValueError("Both `images` and `text` must be provided")
         return super().__call__(images=images, text=text, **kwargs)
