@@ -28,8 +28,8 @@ from transformers import (
     AutoTokenizer,
     CompileConfig,
     ContinuousBatchingConfig,
-    ContinuousMixin,
     GenerationConfig,
+    GenerationMixin,
     LogitsProcessorList,
     StaticCache,
 )
@@ -58,7 +58,7 @@ from transformers.utils import (
 from transformers.utils.generic import is_flash_attention_requested
 
 
-# Constant for tests
+# Constants for tests
 _DEFAULT_USER_MESSAGES = [
     "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?",
     "Josh decides to try flipping a house. He buys a house for $80,000 and then puts in $50,000 in repairs. This increased the value of the house by 150%. How much profit did he make?",
@@ -98,7 +98,7 @@ def flush_memory(flush_compile: bool = True) -> None:
 
 def get_tokenizer_and_model(
     model_id: str, attn_implementation: str, device: str, dtype: str | torch.dtype = "auto"
-) -> tuple[AutoTokenizer, ContinuousMixin]:
+) -> tuple[AutoTokenizer, GenerationMixin]:
     """Returns a tokenizer and a model for the given model ID. Attributes to setup the models (attn_implementation,
     dtype and device) are needed as arguments."""
     # Get tokenizer, with a padding token if not present
@@ -342,87 +342,43 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
     @parameterized.expand(
         [
-            # (block_size, block_table, past_length, query_length, expected_indices)
-            # Basic cases
-            (32, [0, 1, 2], 0, 16, list(range(16))),
-            (32, [0, 1, 2], 0, 32, list(range(32))),
-            (32, [0, 1, 2], 0, 64, list(range(64))),
+            # (block_size, block_table, past_length, query_length)
+            # Contiguous blocks
+            (32, [0, 1, 2], 0, 16),
+            (32, [0, 1, 2], 0, 64),
+            (32, [0, 1, 2], 16, 16),
+            (32, [0, 1, 2], 31, 2),
             # Non-contiguous blocks
-            (32, [0, 3, 6], 0, 64, list(range(32)) + list(range(96, 128))),
-            (32, [2, 5, 8], 0, 32, list(range(64, 96))),
-            # With past_length (read still starts from 0)
-            (32, [0, 1, 2], 16, 16, list(range(32))),
-            (32, [0, 1, 2], 31, 2, list(range(33))),
-            # Partial last block
-            (32, [0, 1, 2], 0, 50, list(range(32)) + list(range(32, 50))),
+            (32, [0, 3, 6], 0, 64),
+            (32, [2, 5, 8], 60, 10),
             # Different block sizes
-            (16, [0, 1, 2, 3], 0, 48, list(range(48))),
-            (64, [0, 1], 0, 100, list(range(100))),
+            (16, [0, 1, 2, 3], 14, 4),
+            (64, [0, 1], 60, 10),
         ]
     )
-    def test_full_attention_get_read_indices(
+    def test_full_attention_get_indices(
         self,
         block_size: int,
         block_table: list[int],
         past_length: int,
         query_length: int,
-        expected_indices: list[int],
     ) -> None:
-        """Test FullAttentionCacheAllocator.get_read_indices returns correct physical indices."""
+        """Test FullAttentionCacheAllocator.get_read_indices and get_write_indices return correct physical indices."""
+
+        def reference_indices(start: int, end: int) -> list[int]:
+            """Reference implementation: converts logical indices to physical indices."""
+            return [block_table[i // block_size] * block_size + i % block_size for i in range(start, end)]
+
         allocator = FullAttentionCacheAllocator(index=0, block_size=block_size, allow_block_sharing=False)
-        request_id = "test_request"
-        allocator.block_table[request_id] = block_table
+        allocator.block_table["req"] = block_table
 
-        result = allocator.get_read_indices(request_id, past_length, query_length)
-        self.assertEqual(
-            result,
-            expected_indices,
-            f"Failed for {block_size=}, {block_table=}, {past_length=}, {query_length=}",
-        )
+        # Test read indices (from 0 to past_length + query_length)
+        expected_read = reference_indices(0, past_length + query_length)
+        self.assertEqual(allocator.get_read_indices("req", past_length, query_length), expected_read)
 
-    @parameterized.expand(
-        [
-            # (block_size, block_table, past_length, query_length, expected_indices)
-            # Start of sequence
-            (32, [0, 1, 2], 0, 16, list(range(16))),
-            (32, [0, 1, 2], 0, 32, list(range(32))),
-            # Continue in same block
-            (32, [0, 1, 2], 16, 16, list(range(16, 32))),
-            # Cross block boundary
-            (32, [0, 1, 2], 30, 4, list(range(30, 34))),
-            (32, [0, 1, 2], 31, 2, [31, 32]),
-            # Non-contiguous blocks
-            (32, [0, 3, 6], 30, 4, [30, 31, 96, 97]),
-            (32, [2, 5, 8], 60, 10, list(range(188, 192)) + list(range(256, 262))),
-            # Decode step (single token)
-            (32, [0, 1, 2], 0, 1, [0]),
-            (32, [0, 1, 2], 31, 1, [31]),
-            (32, [0, 1, 2], 32, 1, [32]),
-            (32, [0, 1, 2], 63, 1, [63]),
-            # Different block sizes
-            (16, [0, 1, 2, 3], 14, 4, [14, 15, 16, 17]),
-            (64, [0, 1], 60, 10, list(range(60, 70))),
-        ]
-    )
-    def test_full_attention_get_write_indices(
-        self,
-        block_size: int,
-        block_table: list[int],
-        past_length: int,
-        query_length: int,
-        expected_indices: list[int],
-    ) -> None:
-        """Test FullAttentionCacheAllocator.get_write_indices returns correct physical indices."""
-        allocator = FullAttentionCacheAllocator(index=0, block_size=block_size, allow_block_sharing=False)
-        request_id = "test_request"
-        allocator.block_table[request_id] = block_table
-
-        result = allocator.get_write_indices(request_id, past_length, query_length)
-        self.assertEqual(
-            result,
-            expected_indices,
-            f"Failed for {block_size=}, {block_table=}, {past_length=}, {query_length=}",
-        )
+        # Test write indices (from past_length to past_length + query_length)
+        expected_write = reference_indices(past_length, past_length + query_length)
+        self.assertEqual(allocator.get_write_indices("req", past_length, query_length), expected_write)
 
     @slow
     def test_continuous_batching_no_accelerators(self) -> None:
