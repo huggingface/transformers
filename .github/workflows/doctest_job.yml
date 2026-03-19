@@ -40,6 +40,10 @@ jobs:
         working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[flax]
 
+      - name: Install hf-doc-builder from main
+        working-directory: /transformers
+        run: python3 -m pip install --no-cache-dir git+https://github.com/huggingface/doc-builder.git@main#egg=hf-doc-builder
+
       - name: GPU visibility
         working-directory: /transformers
         run: |
@@ -97,6 +101,10 @@ jobs:
         working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[flax]
 
+      - name: Install hf-doc-builder from main
+        working-directory: /transformers
+        run: python3 -m pip install --no-cache-dir git+https://github.com/huggingface/doc-builder.git@main#egg=hf-doc-builder
+
       - name: GPU visibility
         working-directory: /transformers
         run: |
@@ -108,7 +116,7 @@ jobs:
       - name: Run runnable doc tests
         working-directory: /transformers
         run: |
-          python3 -m pytest -v --make-reports doc_runnable_gpu -p no:doctest docs/source/en -sv
+          python3 -m pytest -v --make-reports doc_runnable_gpu -o addopts='' -p no:doctest docs/source/en -sv
 
       - name: Failure short reports
         if: ${{ failure() }}
