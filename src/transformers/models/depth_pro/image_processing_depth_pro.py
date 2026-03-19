@@ -78,7 +78,7 @@ class DepthProImageProcessor(TorchvisionBackend):
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             # Rescale and normalize FIRST
-            stacked_images = self._rescale_and_normalize(
+            stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             # Then resize (using torch interpolation to handle negative values)

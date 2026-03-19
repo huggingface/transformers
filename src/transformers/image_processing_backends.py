@@ -305,7 +305,7 @@ class TorchvisionBackend(BaseImageProcessor):
             do_rescale = False
         return image_mean, image_std, do_rescale
 
-    def _rescale_and_normalize(
+    def rescale_and_normalize(
         self,
         images: "torch.Tensor",
         do_rescale: bool,
@@ -394,7 +394,7 @@ class TorchvisionBackend(BaseImageProcessor):
             if do_center_crop:
                 stacked_images = self.center_crop(stacked_images, crop_size)
             # Fused rescale and normalize
-            stacked_images = self._rescale_and_normalize(
+            stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_images_grouped[shape] = stacked_images

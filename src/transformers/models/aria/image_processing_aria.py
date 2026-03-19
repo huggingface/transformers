@@ -189,7 +189,7 @@ class AriaImageProcessor(TorchvisionBackend):
                 processed_crops.append(crop_image)
 
         stacked_images = torch.stack(processed_crops, dim=0)
-        stacked_images = self._rescale_and_normalize(
+        stacked_images = self.rescale_and_normalize(
             stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
         )
         stacked_masks = torch.stack(pixel_masks, dim=0)

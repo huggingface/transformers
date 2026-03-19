@@ -184,7 +184,7 @@ class Phi4MultimodalImageProcessor(TorchvisionBackend):
             resized_image, attention_mask = self.dynamic_preprocess(
                 image, size.height, patch_size, mask_size, max_num=dynamic_hd
             )
-            processed_image = self._rescale_and_normalize(
+            processed_image = self.rescale_and_normalize(
                 resized_image, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             global_image = self.resize(processed_image, size, resample=resample, antialias=False)

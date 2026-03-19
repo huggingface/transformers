@@ -762,7 +762,7 @@ class ConditionalDetrImageProcessor(TorchvisionBackend):
                     )
                 image = resized_image
             # Fused rescale and normalize
-            image = self._rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
+            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
             if do_convert_annotations and annotations is not None:
                 annotation = self.normalize_annotation(annotation, get_image_size(image, ChannelDimension.FIRST))
 

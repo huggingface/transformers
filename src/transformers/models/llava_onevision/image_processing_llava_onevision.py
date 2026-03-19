@@ -236,7 +236,7 @@ class LlavaOnevisionImageProcessor(TorchvisionBackend):
                 if do_center_crop:
                     stacked_image_patches = self.center_crop(stacked_image_patches, crop_size)
                 # Fused rescale and normalize
-                stacked_image_patches = self._rescale_and_normalize(
+                stacked_image_patches = self.rescale_and_normalize(
                     stacked_image_patches, do_rescale, rescale_factor, do_normalize, image_mean, image_std
                 )
                 processed_image_patches_grouped[shape] = stacked_image_patches

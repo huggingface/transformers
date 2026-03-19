@@ -181,7 +181,7 @@ class Glm4vImageProcessor(TorchvisionBackend):
         for shape, stacked_images in grouped_images.items():
             resized_height, resized_width = stacked_images.shape[-2:]
 
-            patches = self._rescale_and_normalize(
+            patches = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             if patches.ndim == 4:  # (B, C, H, W)

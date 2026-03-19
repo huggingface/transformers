@@ -318,7 +318,7 @@ class Llama4ImageProcessor(TorchvisionBackend):
 
     # Disable compilation here as conversion to bfloat16 causes differences in the output of the compiled and non-compiled versions
     @torch.compiler.disable
-    def _rescale_and_normalize(
+    def rescale_and_normalize(
         self,
         images: "torch.Tensor",
         do_rescale: bool,
@@ -390,7 +390,7 @@ class Llama4ImageProcessor(TorchvisionBackend):
 
             # pad to target_size to be able to split into tiles
             processed_images = pad_to_best_fit(processed_images, target_size)
-            processed_images = self._rescale_and_normalize(
+            processed_images = self.rescale_and_normalize(
                 processed_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
 
@@ -412,7 +412,7 @@ class Llama4ImageProcessor(TorchvisionBackend):
                     size,
                     resample=resample,
                 )
-                global_tiles = self._rescale_and_normalize(
+                global_tiles = self.rescale_and_normalize(
                     global_tiles, do_rescale, rescale_factor, do_normalize, image_mean, image_std
                 )
                 grouped_processed_images[shape] = torch.cat([processed_images, global_tiles.unsqueeze(1)], dim=1)

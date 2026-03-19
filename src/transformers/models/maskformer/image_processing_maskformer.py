@@ -517,7 +517,7 @@ class MaskFormerImageProcessor(TorchvisionBackend):
         processed_pixel_masks_grouped = {}
         for shape, stacked_images in grouped_images.items():
             # Fused rescale and normalize
-            stacked_images = self._rescale_and_normalize(
+            stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             padded_images, pixel_masks, padded_segmentation_maps = self.pad(

@@ -309,7 +309,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         grouped_videos, grouped_videos_index = group_videos_by_shape(resized_videos)
         processed_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
-            stacked_videos = self._rescale_and_normalize(
+            stacked_videos = self.rescale_and_normalize(
                 stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_videos_grouped[shape] = stacked_videos

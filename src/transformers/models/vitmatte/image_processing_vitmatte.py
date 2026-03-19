@@ -141,10 +141,10 @@ class VitMatteImageProcessor(TorchvisionBackend):
             stacked_images = grouped_images[shape]
             stacked_trimaps = grouped_trimaps[shape]
             # Fused rescale and normalize
-            stacked_images = self._rescale_and_normalize(
+            stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            stacked_trimaps = self._rescale_and_normalize(
+            stacked_trimaps = self.rescale_and_normalize(
                 stacked_trimaps, do_rescale, rescale_factor, False, image_mean, image_std
             )
             stacked_images = torch.cat([stacked_images, stacked_trimaps], dim=1)

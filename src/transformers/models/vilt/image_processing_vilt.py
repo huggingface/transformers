@@ -212,7 +212,7 @@ class ViltImageProcessor(TorchvisionBackend):
 
         for shape, stacked_images in grouped_images.items():
             # Fused rescale and normalize
-            stacked_images = self._rescale_and_normalize(
+            stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_images_grouped[shape] = stacked_images

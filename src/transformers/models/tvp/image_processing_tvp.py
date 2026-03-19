@@ -210,7 +210,7 @@ class TvpImageProcessor(TorchvisionBackend):
                 stacked_frames = self.center_crop(stacked_frames, crop_size)
 
             # Rescale and normalize using fused method for consistency
-            stacked_frames = self._rescale_and_normalize(
+            stacked_frames = self.rescale_and_normalize(
                 stacked_frames, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
 

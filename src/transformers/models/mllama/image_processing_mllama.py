@@ -511,7 +511,7 @@ class MllamaImageProcessor(TorchvisionBackend):
             split_images = split_to_tiles(stacked_images, num_tiles_height, num_tiles_width)
 
             # Rescale and normalize
-            split_images = self._rescale_and_normalize(
+            split_images = self.rescale_and_normalize(
                 split_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             split_images_grouped[shape] = split_images

@@ -154,7 +154,7 @@ class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase
         image_processor = self.image_processing_classes["torchvision"](**self.image_processor_dict)
 
         # Rescale between [-1, 1] with rescale_factor=1/127.5 and rescale_offset=True. Then normalize
-        rescaled_normalized = image_processor._rescale_and_normalize_efficientnet(
+        rescaled_normalized = image_processor.rescale_and_normalize_efficientnet(
             image, True, 1 / 127.5, True, image_mean_0, image_std_0, True
         )
         expected_image = (image * (1 / 127.5)) - 1
@@ -164,7 +164,7 @@ class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase
         self.assertTrue(torch.allclose(rescaled_normalized, expected_image, rtol=1e-3))
 
         # Rescale between [0, 1] with rescale_factor=1/255 and rescale_offset=False. Then normalize
-        rescaled_normalized = image_processor._rescale_and_normalize_efficientnet(
+        rescaled_normalized = image_processor.rescale_and_normalize_efficientnet(
             image, True, 1 / 255, True, image_mean_1, image_std_1, False
         )
         expected_image = image * (1 / 255.0)

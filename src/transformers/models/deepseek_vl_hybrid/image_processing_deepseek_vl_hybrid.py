@@ -215,7 +215,7 @@ class DeepseekVLHybridImageProcessor(TorchvisionBackend):
                 )
                 high_res_padded_images[shape] = stacked_high_res_images
             # Fused rescale and normalize
-            stacked_high_res_images = self._rescale_and_normalize(
+            stacked_high_res_images = self.rescale_and_normalize(
                 stacked_high_res_images,
                 do_rescale,
                 rescale_factor,
@@ -243,7 +243,7 @@ class DeepseekVLHybridImageProcessor(TorchvisionBackend):
             if do_pad:
                 stacked_images = self.pad_to_square(stacked_images, background_color=self.background_color)
             # Fused rescale and normalize
-            stacked_images = self._rescale_and_normalize(
+            stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_images_grouped[shape] = stacked_images

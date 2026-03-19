@@ -524,7 +524,7 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
         processed_masks, processed_spatial_shapes = {}, {}
         for shape, stacked_images in grouped_images.items():
             # Fused rescale and normalize
-            stacked_images = self._rescale_and_normalize(
+            stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             batch_size, *_, height, width = stacked_images.shape

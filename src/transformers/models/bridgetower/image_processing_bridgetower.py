@@ -167,7 +167,7 @@ class BridgeTowerImageProcessor(TorchvisionBackend):
                     stacked_images, size=SizeDict(height=crop_size.shortest_edge, width=crop_size.shortest_edge)
                 )
             # Use fused rescale and normalize
-            stacked_images = self._rescale_and_normalize(
+            stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_images_grouped[shape] = stacked_images

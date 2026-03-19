@@ -116,7 +116,7 @@ class GLPNImageProcessor(TorchvisionBackend):
         for shape, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_images = self.resize(stacked_images, size, resample, size_divisor=size_divisor)
-            stacked_images = self._rescale_and_normalize(
+            stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_images_grouped[shape] = stacked_images

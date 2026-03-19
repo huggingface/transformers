@@ -246,7 +246,7 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
             resized_height, resized_width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
 
             # Fused rescale and normalize
-            stacked_videos = self._rescale_and_normalize(
+            stacked_videos = self.rescale_and_normalize(
                 stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             patches = stacked_videos

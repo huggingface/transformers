@@ -176,7 +176,7 @@ class Siglip2ImageProcessor(TorchvisionBackend):
                 size_dict = SizeDict(height=height, width=width)
                 image = self.resize(image=image, size=size_dict, resample=resample)
 
-            image = self._rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
+            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
 
             # (num_channels, height, width) -> (num_patches, patch_size * patch_size * num_channels)
             patches = convert_image_to_patches(image, patch_size)

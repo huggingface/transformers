@@ -227,7 +227,7 @@ class LlavaNextImageProcessor(TorchvisionBackend):
                 # Convert lists to tuples for lru_cache compatibility
                 image_mean_tuple = tuple(image_mean) if isinstance(image_mean, list) else image_mean
                 image_std_tuple = tuple(image_std) if isinstance(image_std, list) else image_std
-                stacked_image_patches = self._rescale_and_normalize(
+                stacked_image_patches = self.rescale_and_normalize(
                     stacked_image_patches, do_rescale, rescale_factor, do_normalize, image_mean_tuple, image_std_tuple
                 )
                 processed_image_patches_grouped[shape] = stacked_image_patches

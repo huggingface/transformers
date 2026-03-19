@@ -131,7 +131,7 @@ class InternVLVideoProcessor(BaseVideoProcessor):
             if do_center_crop:
                 stacked_videos = self.center_crop(stacked_videos, crop_size)
             # Fused rescale and normalize
-            stacked_videos = self._rescale_and_normalize(
+            stacked_videos = self.rescale_and_normalize(
                 stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_videos_grouped[shape] = stacked_videos
