@@ -13,6 +13,8 @@
 # limitations under the License.
 """OWLv2 model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
@@ -20,6 +22,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
 @auto_docstring(checkpoint="google/owlv2-base-patch16")
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTTextConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
 class Owlv2TextConfig(PreTrainedConfig):
@@ -42,42 +45,23 @@ class Owlv2TextConfig(PreTrainedConfig):
     model_type = "owlv2_text_model"
     base_config_key = "text_config"
 
-    def __init__(
-        self,
-        vocab_size=49408,
-        hidden_size=512,
-        intermediate_size=2048,
-        num_hidden_layers=12,
-        num_attention_heads=8,
-        max_position_embeddings=16,
-        hidden_act="quick_gelu",
-        layer_norm_eps=1e-5,
-        attention_dropout=0.0,
-        initializer_range=0.02,
-        initializer_factor=1.0,
-        pad_token_id=0,
-        bos_token_id=49406,
-        eos_token_id=49407,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_act = hidden_act
-        self.layer_norm_eps = layer_norm_eps
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
+    vocab_size: int = 49408
+    hidden_size: int = 512
+    intermediate_size: int = 2048
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 8
+    max_position_embeddings: int = 16
+    hidden_act: str = "quick_gelu"
+    layer_norm_eps: float = 1e-5
+    attention_dropout: float | int = 0.0
+    initializer_range: float = 0.02
+    initializer_factor: float = 1.0
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 49406
+    eos_token_id: int | None = 49407
 
 
+@strict(accept_kwargs=True)
 @auto_docstring(checkpoint="google/owlv2-base-patch16")
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTVisionConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2, 32->16
 class Owlv2VisionConfig(PreTrainedConfig):
@@ -100,73 +84,48 @@ class Owlv2VisionConfig(PreTrainedConfig):
     model_type = "owlv2_vision_model"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        hidden_size=768,
-        intermediate_size=3072,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        num_channels=3,
-        image_size=768,
-        patch_size=16,
-        hidden_act="quick_gelu",
-        layer_norm_eps=1e-5,
-        attention_dropout=0.0,
-        initializer_range=0.02,
-        initializer_factor=1.0,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.hidden_act = hidden_act
-        self.layer_norm_eps = layer_norm_eps
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
+    hidden_size: int = 768
+    intermediate_size: int = 3072
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    num_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] = 768
+    patch_size: int | list[int] | tuple[int, int] = 16
+    hidden_act: str = "quick_gelu"
+    layer_norm_eps: float = 1e-5
+    attention_dropout: float | int = 0.0
+    initializer_range: float = 0.02
+    initializer_factor: float = 1.0
 
 
+@strict(accept_kwargs=True)
 @auto_docstring(checkpoint="google/owlv2-base-patch16")
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
 class Owlv2Config(PreTrainedConfig):
     model_type = "owlv2"
     sub_configs = {"text_config": Owlv2TextConfig, "vision_config": Owlv2VisionConfig}
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        projection_dim=512,
-        logit_scale_init_value=2.6592,
-        return_dict=True,
-        **kwargs,
-    ):
-        if text_config is None:
-            text_config = Owlv2TextConfig()
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    projection_dim: int = 512
+    logit_scale_init_value: float = 2.6592
+    return_dict: bool = True
+    initializer_factor: float = 1.0
+
+    def __post_init__(self, **kwargs):
+        if self.text_config is None:
+            self.text_config = Owlv2TextConfig()
             logger.info("`text_config` is `None`. initializing the `Owlv2TextConfig` with default values.")
-        elif isinstance(text_config, dict):
-            text_config = Owlv2TextConfig(**text_config)
+        elif isinstance(self.text_config, dict):
+            self.text_config = Owlv2TextConfig(**self.text_config)
 
-        if vision_config is None:
-            vision_config = Owlv2VisionConfig()
+        if self.vision_config is None:
+            self.vision_config = Owlv2VisionConfig()
             logger.info("`vision_config` is `None`. initializing the `Owlv2VisionConfig` with default values.")
-        elif isinstance(vision_config, dict):
-            vision_config = Owlv2VisionConfig(**vision_config)
+        elif isinstance(self.vision_config, dict):
+            self.vision_config = Owlv2VisionConfig(**self.vision_config)
 
-        self.text_config = text_config
-        self.vision_config = vision_config
-
-        self.projection_dim = projection_dim
-        self.logit_scale_init_value = logit_scale_init_value
-        self.return_dict = return_dict
-        self.initializer_factor = 1.0
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Owlv2Config", "Owlv2TextConfig", "Owlv2VisionConfig"]

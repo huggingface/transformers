@@ -528,7 +528,6 @@ class VideoLlama3ModelOutputWithPast(ModelOutput):
 @auto_docstring
 class VideoLlama3Model(VideoLlama3PreTrainedModel):
     base_model_prefix = "model"
-    _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     _can_compile_fullgraph = False
@@ -661,7 +660,6 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         video_merge_sizes: torch.LongTensor | None = None,
         video_compression_mask: torch.BoolTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VideoLlama3ModelOutputWithPast:
         r"""
@@ -711,7 +709,6 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -761,7 +758,6 @@ class VideoLlama3CausalLMOutputWithPast(ModelOutput):
 
 
 class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _can_compile_fullgraph = False
 
@@ -828,7 +824,6 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
         video_grid_thw: torch.LongTensor | None = None,
         video_merge_sizes: torch.LongTensor | None = None,
         video_compression_mask: torch.BoolTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VideoLlama3CausalLMOutputWithPast:
         r"""
@@ -863,7 +858,6 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -892,7 +886,6 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         position_ids=None,
         use_cache=True,
         pixel_values: torch.Tensor | None = None,
@@ -912,7 +905,6 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             position_ids=position_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,

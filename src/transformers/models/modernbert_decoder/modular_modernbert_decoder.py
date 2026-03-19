@@ -17,6 +17,7 @@ from collections.abc import Callable
 from typing import Literal
 
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -27,7 +28,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -47,6 +48,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="blab-jhu/test-32m-dec")
+@strict(accept_kwargs=True)
 class ModernBertDecoderConfig(PreTrainedConfig):
     r"""
     initializer_cutoff_factor (`float`, *optional*, defaults to 2.0):
@@ -90,89 +92,53 @@ class ModernBertDecoderConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = {"global": 160_000.0, "local": 10_000.0}
 
-    def __init__(
-        self,
-        vocab_size: int | None = 50368,
-        hidden_size: int | None = 768,
-        intermediate_size: int | None = 1152,
-        num_hidden_layers: int | None = 22,
-        num_attention_heads: int | None = 12,
-        hidden_activation: str | None = "gelu",
-        max_position_embeddings: int | None = 8192,
-        initializer_range: float | None = 0.02,
-        initializer_cutoff_factor: float | None = 2.0,
-        norm_eps: int | None = 1e-5,
-        norm_bias: bool | None = False,
-        pad_token_id: int | None = 50283,
-        eos_token_id: int | None = 50282,
-        bos_token_id: int | None = 50281,
-        cls_token_id: int | None = 50281,
-        sep_token_id: int | None = 50282,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        embedding_dropout: float | None = 0.0,
-        mlp_bias: bool | None = False,
-        mlp_dropout: float | None = 0.0,
-        decoder_bias: bool | None = True,
-        classifier_dropout: float | None = 0.0,
-        classifier_bias: bool | None = False,
-        classifier_activation: str | None = "gelu",
-        use_cache: bool | None = True,
-        local_attention: int | None = 128,
-        global_attn_every_n_layers: int | None = 3,
-        layer_types: list[str] | None = None,
-        tie_word_embeddings: bool | None = True,
-        rope_parameters: dict[Literal["full_attention", "sliding_attention"], RopeParameters] | None = None,
-        **kwargs,
-    ):
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.cls_token_id = cls_token_id
-        self.sep_token_id = sep_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.initializer_range = initializer_range
-        self.initializer_cutoff_factor = initializer_cutoff_factor
-        self.norm_eps = norm_eps
-        self.norm_bias = norm_bias
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.hidden_activation = hidden_activation
-        self.embedding_dropout = embedding_dropout
-        self.mlp_bias = mlp_bias
-        self.mlp_dropout = mlp_dropout
-        self.decoder_bias = decoder_bias
-        self.classifier_dropout = classifier_dropout
-        self.classifier_bias = classifier_bias
-        self.classifier_activation = classifier_activation
-        self.use_cache = use_cache
-        self.global_attn_every_n_layers = global_attn_every_n_layers
-        # for consistency with ModernBert
-        self.reference_compile = False
+    vocab_size: int = 50368
+    hidden_size: int = 768
+    intermediate_size: int = 1152
+    num_hidden_layers: int = 22
+    num_attention_heads: int = 12
+    hidden_activation: str = "gelu"
+    max_position_embeddings: int = 8192
+    initializer_range: float = 0.02
+    initializer_cutoff_factor: float = 2.0
+    norm_eps: float = 1e-5
+    norm_bias: bool = False
+    pad_token_id: int = 50283
+    eos_token_id: int | list[int] | None = 50282
+    bos_token_id: int = 50281
+    cls_token_id: int = 50281
+    sep_token_id: int = 50282
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
+    embedding_dropout: float | int = 0.0
+    mlp_bias: bool = False
+    mlp_dropout: float | int = 0.0
+    decoder_bias: bool = True
+    classifier_dropout: float | int = 0.0
+    classifier_bias: bool = False
+    classifier_activation: str = "gelu"
+    use_cache: bool = True
+    local_attention: int | None = 128
+    layer_types: list[str] | None = None
+    tie_word_embeddings: bool = True
+    rope_parameters: dict[Literal["full_attention", "sliding_attention"], dict] | None = None
 
-        # Set up layer_types for standardized layer type detection
-        self.layer_types = layer_types
+    def __post_init__(self, **kwargs):
+        # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
+        global_attn_every_n_layers = kwargs.get("global_attn_every_n_layers", 3)
         if self.layer_types is None:
-            # Create layer_types based on the alternating pattern
             self.layer_types = []
-            for layer_id in range(num_hidden_layers):
+            for layer_id in range(self.num_hidden_layers):
                 if layer_id % global_attn_every_n_layers != 0:
                     self.layer_types.append("sliding_attention")
                 else:
                     self.layer_types.append("full_attention")
 
         # NOTE: sliding window numbers matches ModernBERT but is only half of it
-        self.sliding_window = local_attention // 2 if local_attention else -1
-        self.rope_parameters = rope_parameters
-        super().__init__(**kwargs)
+        self.sliding_window = self.local_attention // 2 if self.local_attention else -1
+        super().__post_init__(**kwargs)
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
+    def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
 
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
@@ -200,7 +166,6 @@ class ModernBertDecoderConfig(PreTrainedConfig):
 
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.standardize_rope_params()
-        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
 
 
@@ -222,7 +187,7 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    dropout: float = 0.0,
+    dropout: float | int = 0.0,
     scaling: float | None = None,
     sliding_window: int | None = None,
     **kwargs,
@@ -284,7 +249,6 @@ class ModernBertDecoderAttention(nn.Module):
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -298,9 +262,7 @@ class ModernBertDecoderAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -344,7 +306,6 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
         position_embeddings: torch.Tensor = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
@@ -356,7 +317,6 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = attn_outputs[0]
@@ -475,35 +435,23 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, ...] | BaseModelOutputWithPast:
-        if (input_ids is None) == (inputs_embeds is None):
+        if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if input_ids is not None:
-            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-            batch_size, seq_length = input_ids.shape[:2]
-        else:
-            batch_size, seq_length = inputs_embeds.shape[:2]
+        # Calculate embeddings
+        hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
 
         # Handle past_key_values and cache setup
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens,
-                past_seen_tokens + seq_length,
-                device=input_ids.device if input_ids is not None else inputs_embeds.device,
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0).expand(batch_size, -1)
-
-        # Calculate embeddings
-        hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
+            batch_size = hidden_states.shape[0]
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
@@ -512,7 +460,6 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
                 "config": self.config,
                 "inputs_embeds": hidden_states,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
@@ -532,7 +479,6 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_embeddings=position_embeddings[decoder_layer.attention_type],
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 position_ids=position_ids,
                 **kwargs,
             )

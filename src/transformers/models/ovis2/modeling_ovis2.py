@@ -468,8 +468,6 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
     """
 )
 class Ovis2Model(Ovis2PreTrainedModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Ovis2Config):
         super().__init__(config)
         self.vision_tower = Ovis2VisionModel(config.vision_config)
@@ -555,18 +553,9 @@ class Ovis2Model(Ovis2PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple | Ovis2ModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -607,10 +596,6 @@ class Ovis2Model(Ovis2PreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )
@@ -626,7 +611,6 @@ class Ovis2Model(Ovis2PreTrainedModel):
 
 @auto_docstring
 class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: Ovis2Config):
@@ -662,10 +646,6 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple | Ovis2CausalLMOutputWithPast:
@@ -698,11 +678,6 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True)[0]
         "user\n\nDescribe the image.\nassistant\nThe image features a brown dog standing on a wooden floor, looking up with"
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -711,10 +686,6 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -745,7 +716,6 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         pixel_values=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -757,7 +727,6 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,

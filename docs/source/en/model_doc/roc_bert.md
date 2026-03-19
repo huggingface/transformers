@@ -79,13 +79,6 @@ print(f"The predicted token is: {predicted_token}")
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "這家餐廳的拉麵是我[MASK]過的最好的拉麵之" | transformers run --task fill-mask --model weiweishi/roc-bert-base-zh --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 ## RoCBertConfig

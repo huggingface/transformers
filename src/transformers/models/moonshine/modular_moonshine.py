@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
@@ -47,6 +48,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="UsefulSensors/moonshine-tiny")
+@strict(accept_kwargs=True)
 class MoonshineConfig(PreTrainedConfig):
     r"""
     encoder_hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
@@ -97,70 +99,40 @@ class MoonshineConfig(PreTrainedConfig):
         "hidden_act": "decoder_hidden_act",
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 32768,
-        hidden_size: int | None = 288,
-        intermediate_size: int | None = 1152,
-        encoder_num_hidden_layers: int | None = 6,
-        decoder_num_hidden_layers: int | None = 6,
-        encoder_num_attention_heads: int | None = 8,
-        decoder_num_attention_heads: int | None = 8,
-        encoder_num_key_value_heads: int | None = None,
-        decoder_num_key_value_heads: int | None = None,
-        pad_head_dim_to_multiple_of: int | None = None,
-        encoder_hidden_act: str | None = "gelu",
-        decoder_hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 512,
-        initializer_range: float | None = 0.02,
-        decoder_start_token_id: int | None = 1,
-        use_cache: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        is_encoder_decoder: bool | None = True,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        bos_token_id: int | None = 1,
-        eos_token_id: int | None = 2,
-        pad_token_id: int | None = None,
-        tie_word_embeddings: bool | None = True,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.encoder_num_hidden_layers = encoder_num_hidden_layers
-        self.decoder_num_hidden_layers = decoder_num_hidden_layers
-        self.encoder_num_attention_heads = encoder_num_attention_heads
-        self.decoder_num_attention_heads = decoder_num_attention_heads
+    vocab_size: int = 32768
+    hidden_size: int = 288
+    intermediate_size: int = 1152
+    encoder_num_hidden_layers: int = 6
+    decoder_num_hidden_layers: int = 6
+    encoder_num_attention_heads: int = 8
+    decoder_num_attention_heads: int = 8
+    encoder_num_key_value_heads: int | None = None
+    decoder_num_key_value_heads: int | None = None
+    pad_head_dim_to_multiple_of: int | None = None
+    encoder_hidden_act: str = "gelu"
+    decoder_hidden_act: str = "silu"
+    max_position_embeddings: int = 512
+    initializer_range: float = 0.02
+    decoder_start_token_id: int = 1
+    use_cache: bool = True
+    rope_parameters: RopeParameters | dict | None = None
+    is_encoder_decoder: bool = True
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    pad_token_id: int | None = None
+    tie_word_embeddings: bool = True
 
-        if encoder_num_key_value_heads is None:
-            encoder_num_key_value_heads = encoder_num_attention_heads
-        self.encoder_num_key_value_heads = encoder_num_key_value_heads
+    def __post_init__(self, **kwargs):
+        if self.encoder_num_key_value_heads is None:
+            self.encoder_num_key_value_heads = self.encoder_num_attention_heads
 
-        if decoder_num_key_value_heads is None:
-            decoder_num_key_value_heads = decoder_num_attention_heads
-        self.decoder_num_key_value_heads = decoder_num_key_value_heads
+        if self.decoder_num_key_value_heads is None:
+            self.decoder_num_key_value_heads = self.decoder_num_attention_heads
 
-        self.pad_head_dim_to_multiple_of = pad_head_dim_to_multiple_of
-
-        self.encoder_hidden_act = encoder_hidden_act
-        self.decoder_hidden_act = decoder_hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.decoder_start_token_id = decoder_start_token_id
-        self.use_cache = use_cache
-        self.is_encoder_decoder = is_encoder_decoder
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.rope_parameters = rope_parameters
         kwargs.setdefault("partial_rotary_factor", 0.9)  # assign default for BC
-
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        super().__post_init__(**kwargs)
 
 
 @dataclass
@@ -495,6 +467,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         hidden_states = hidden_states.permute(0, 2, 1)
 
         # attention mask downsampling
+        output_attention_mask = None
         if attention_mask is not None:
             mask_len = self._get_feat_extract_output_lengths(attention_mask.shape[-1])
             downsample_stride = 64 * 3 * 2  # conv strides
@@ -524,7 +497,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
 
         return MoonshineEncoderModelOutput(
             last_hidden_state=hidden_states,
-            attention_mask=output_attention_mask.int() if attention_mask is not None else None,
+            attention_mask=output_attention_mask.int() if output_attention_mask is not None else None,
         )
 
 

@@ -13,14 +13,14 @@
 # limitations under the License.
 """PatchTST model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from transformers.configuration_utils import PreTrainedConfig
-from transformers.utils import auto_docstring, logging
+from transformers.utils import auto_docstring
 
 
-logger = logging.get_logger(__name__)
-
-
-@auto_docstring(checkpoint="ibm/patchtst")
+@auto_docstring(checkpoint="ibm-granite/granite-timeseries-patchtst")
+@strict(accept_kwargs=True)
 class PatchTSTConfig(PreTrainedConfig):
     r"""
     context_length (`int`, *optional*, defaults to 32):
@@ -105,7 +105,6 @@ class PatchTSTConfig(PreTrainedConfig):
     num_parallel_samples (`int`, *optional*, defaults to 100):
         The number of samples is generated in parallel for probabilistic prediction.
 
-
     ```python
     >>> from transformers import PatchTSTConfig, PatchTSTModel
 
@@ -126,112 +125,45 @@ class PatchTSTConfig(PreTrainedConfig):
         "num_hidden_layers": "num_hidden_layers",
     }
 
-    def __init__(
-        self,
-        # time series specific configuration
-        num_input_channels: int = 1,
-        context_length: int = 32,
-        distribution_output: str = "student_t",
-        loss: str = "mse",
-        # PatchTST arguments
-        patch_length: int = 1,
-        patch_stride: int = 1,
-        # Transformer architecture configuration
-        num_hidden_layers: int = 3,
-        d_model: int = 128,
-        num_attention_heads: int = 4,
-        share_embedding: bool = True,
-        channel_attention: bool = False,
-        ffn_dim: int = 512,
-        norm_type: str = "batchnorm",
-        norm_eps: float = 1e-05,
-        attention_dropout: float = 0.0,
-        positional_dropout: float = 0.0,
-        path_dropout: float = 0.0,
-        ff_dropout: float = 0.0,
-        bias: bool = True,
-        activation_function: str = "gelu",
-        pre_norm: bool = True,
-        positional_encoding_type: str = "sincos",
-        use_cls_token: bool = False,
-        init_std: float = 0.02,
-        share_projection: bool = True,
-        scaling: str | bool | None = "std",
-        # mask pretraining
-        do_mask_input: bool | None = None,
-        mask_type: str = "random",
-        random_mask_ratio: float = 0.5,
-        num_forecast_mask_patches: list[int] | int | None = [2],
-        channel_consistent_masking: bool | None = False,
-        unmasked_channel_indices: list[int] | None = None,
-        mask_value: int = 0,
-        # head
-        pooling_type: str = "mean",
-        head_dropout: float = 0.0,
-        prediction_length: int = 24,
-        num_targets: int = 1,
-        output_range: list | None = None,
-        # distribution head
-        num_parallel_samples: int = 100,
-        **kwargs,
-    ):
-        # time series specific configuration
-        self.context_length = context_length
-        self.num_input_channels = num_input_channels  # n_vars
-        self.loss = loss
-        self.distribution_output = distribution_output
-        self.num_parallel_samples = num_parallel_samples
-
-        # Transformer architecture configuration
-        self.d_model = d_model
-        self.num_attention_heads = num_attention_heads
-        self.ffn_dim = ffn_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.attention_dropout = attention_dropout
-        self.share_embedding = share_embedding
-        self.channel_attention = channel_attention
-        self.norm_type = norm_type
-        self.norm_eps = norm_eps
-        self.positional_dropout = positional_dropout
-        self.path_dropout = path_dropout
-        self.ff_dropout = ff_dropout
-        self.bias = bias
-        self.activation_function = activation_function
-        self.pre_norm = pre_norm
-        self.positional_encoding_type = positional_encoding_type
-        self.use_cls_token = use_cls_token
-        self.init_std = init_std
-        self.scaling = scaling
-
-        # PatchTST parameters
-        self.patch_length = patch_length
-        self.patch_stride = patch_stride
-
-        # Mask pretraining
-        self.do_mask_input = do_mask_input
-        self.mask_type = mask_type
-        self.random_mask_ratio = random_mask_ratio  # for random masking
-        self.num_forecast_mask_patches = num_forecast_mask_patches  # for forecast masking
-        self.channel_consistent_masking = channel_consistent_masking
-        self.unmasked_channel_indices = unmasked_channel_indices
-        self.mask_value = mask_value
-
-        # general head params
-        self.pooling_type = pooling_type
-        self.head_dropout = head_dropout
-
-        # For prediction head
-        self.share_projection = share_projection
-        self.prediction_length = prediction_length
-
-        # For prediction and regression head
-        self.num_parallel_samples = num_parallel_samples
-
-        # Regression
-        self.num_targets = num_targets
-        self.output_range = output_range
-
-        super().__init__(**kwargs)
+    num_input_channels: int = 1
+    context_length: int = 32
+    distribution_output: str = "student_t"
+    loss: str | None = "mse"
+    patch_length: int = 1
+    patch_stride: int = 1
+    num_hidden_layers: int = 3
+    d_model: int = 128
+    num_attention_heads: int = 4
+    share_embedding: bool = True
+    channel_attention: bool = False
+    ffn_dim: int = 512
+    norm_type: str = "batchnorm"
+    norm_eps: float = 1e-05
+    attention_dropout: float | int = 0.0
+    positional_dropout: float | int = 0.0
+    path_dropout: float | int = 0.0
+    ff_dropout: float | int = 0.0
+    bias: bool = True
+    activation_function: str = "gelu"
+    pre_norm: bool = True
+    positional_encoding_type: str = "sincos"
+    use_cls_token: bool = False
+    init_std: float = 0.02
+    share_projection: bool = True
+    scaling: str | bool | None = "std"
+    do_mask_input: bool | None = None
+    mask_type: str = "random"
+    random_mask_ratio: float = 0.5
+    num_forecast_mask_patches: list[int] | tuple[int, ...] | int | None = (2,)
+    channel_consistent_masking: bool | None = False
+    unmasked_channel_indices: list[int] | None = None
+    mask_value: int = 0
+    pooling_type: str | None = "mean"
+    head_dropout: float | int = 0.0
+    prediction_length: int = 24
+    num_targets: int = 1
+    output_range: list | None = None
+    num_parallel_samples: int = 100
 
 
 __all__ = ["PatchTSTConfig"]

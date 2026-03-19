@@ -509,8 +509,10 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
     pattern = pattern.removesuffix("$")
     # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
-    # Qwen2.5, Sam3, Ernie4.5 VL MoE!
-    pattern = re.sub(r"\(\?.+\)", "", pattern)
+    # Qwen2.5, Sam3, Ernie4.5 VL MoE! It needs to be non greedy in case there are several
+    pattern = re.sub(r"\(\?.+?\)?\)", "", pattern)
+    # Remove the backslash for literal dots
+    pattern = pattern.replace(r"\.", ".")
     # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
     capturing_group_match = re.search(r"\(.+?\)", pattern)
     captured_group = None
@@ -518,6 +520,22 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
         captured_group = capturing_group_match.group(0)
         pattern = pattern.replace(captured_group, r"\1", 1)
     return pattern, captured_group
+
+
+def process_source_pattern(source_pattern: str, target_pattern: str) -> str:
+    """
+    Process a source pattern for reverse mapping (when sources become targets).
+    This is useful because usually if the original source (so now the target in reverse mode) had a `^` or `$`
+    to restrict to start/end of string, we should do the same in reverse mode. This is why this method in conditioned
+    on the target pattern, we want to do it only for pairs (source, target) when the original source (so the current target
+    in reverse mode) had it.
+    """
+    if target_pattern.startswith("^"):
+        source_pattern = f"^{source_pattern}" if not source_pattern.startswith("^") else source_pattern
+    if target_pattern.endswith("$"):
+        source_pattern = f"{source_pattern}$" if not source_pattern.endswith("$") else source_pattern
+
+    return source_pattern
 
 
 @dataclass(slots=True)
@@ -551,6 +569,7 @@ class WeightTransform:
         # Process target_patterns: detect capturing groups and replace with \1
         # Store the original capturing group patterns for reverse mapping
         target_capturing_groups: list[str] = []
+        unprocess_targets = self.target_patterns.copy()
         for i, pattern in enumerate(self.target_patterns):
             self.target_patterns[i], captured_group = process_target_pattern(pattern)
             if captured_group is not None:
@@ -568,6 +587,7 @@ class WeightTransform:
 
         # We also need to check capturing groups in the sources during reverse mapping (e.g. timm_wrapper, sam3)
         for i, pattern in enumerate(self.source_patterns):
+            # Replace capturing groups
             if r"\1" in pattern:
                 if unique_capturing_group is None:
                     raise ValueError(
@@ -576,6 +596,9 @@ class WeightTransform:
                     )
                 # Use the unique capturing group from target_patterns for all sources
                 pattern = pattern.replace(r"\1", unique_capturing_group, 1)
+            # Potentially process a bit more for consistency - only if they are consistent pairs, i.e. the length is the same
+            if len(self.source_patterns) == len(self.target_patterns):
+                pattern = process_source_pattern(pattern, unprocess_targets[i])
             self.source_patterns[i] = pattern
 
         # Construct the regex we will use to rename keys from the sources to the targets
@@ -646,7 +669,7 @@ class WeightTransform:
         - saving: the tensors are already torch.Tensor instances (the existing model weights)
         """
         collected_tensors = {}
-        for key in set(self.collected_tensors.keys()):
+        for key in list(self.collected_tensors.keys()):
             # Remove from internal attribute
             tensors = self.collected_tensors.pop(key)
             # Async loading
@@ -791,7 +814,10 @@ def _materialize_copy(tensor: torch.Tensor, device=None, dtype=None) -> torch.Te
 
 
 def spawn_materialize(
-    thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, device=None, dtype=None
+    thread_pool: ThreadPoolExecutor | None,
+    tensor: torch.Tensor,
+    device=None,
+    dtype=None,
 ) -> Future | Callable:
     """Materialize a tensor from file asynchronously if `thread_pool` is provided, or return a Callable that will
     load the tensor synchronously when called."""
@@ -897,6 +923,11 @@ def set_param_for_module(
 ):
     module_path, _, param_name = target_name.rpartition(".")
     module_obj = model.get_submodule(module_path) if module_path else model
+
+    if param_name == torch.nn.modules.module._EXTRA_STATE_KEY_SUFFIX:
+        module_obj.set_extra_state(param_value)
+        loading_info.missing_keys.discard(target_name)
+        return
 
     ref = getattr(module_obj, param_name)
     if ref is None:
@@ -1105,8 +1136,15 @@ def convert_and_load_state_dict_in_model(
     )
 
     # We use threading by default, if not explicitly deactivated via env variable. If we have to offload,
-    # we cannot use it either to control the memory as we are under memory constraints, so we need to be sequential
-    if is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD") or "disk" in device_map.values():
+    # we cannot use it either to control the memory as we are under memory constraints, so we need to be sequential.
+    # When doing on-the-fly quantization, we also use sync loading to avoid worker threads loading full-precision
+    # tensors to GPU faster than the main thread can quantize them, which would cause a large memory spike.
+    has_on_the_fly_quantization = hf_quantizer is not None and not hf_quantizer.pre_quantized
+    if (
+        is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD")
+        or "disk" in device_map.values()
+        or has_on_the_fly_quantization
+    ):
         thread_pool = None
     else:
         thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
@@ -1148,18 +1186,26 @@ def convert_and_load_state_dict_in_model(
                 source_pattern = original_key
 
             # 3. Handle dtype casting
-            if (
+            needs_quantization = (
                 hf_quantizer
                 and not hf_quantizer.pre_quantized
                 and hf_quantizer.param_needs_quantization(model, renamed_key)
-            ):
+            )
+            if needs_quantization:
                 mapping.quantization_operation = hf_quantizer.get_quantize_ops()
 
             _dtype = dtype
             if (
                 hf_quantizer
                 and hf_quantizer.pre_quantized
-                and (original_key != renamed_key or not tensor.get_dtype().startswith(("F", "BF")))
+                and (
+                    original_key != renamed_key
+                    or not (
+                        tensor.get_dtype().startswith(("F", "BF"))
+                        if hasattr(tensor, "get_dtype")
+                        else tensor.is_floating_point()
+                    )
+                )
             ):
                 # if the key was renamed as it is not available in the state dict otherwise, it means that we are deserializing it,
                 # so we need to make sure to load the tensor with the same dtype from the checkpoint
@@ -1174,7 +1220,7 @@ def convert_and_load_state_dict_in_model(
 
             # 4. Handle TP sharding or device_map placement
             future_or_tensor = None
-            if device_mesh:
+            if device_mesh and tp_plan:
                 if matched_tp_pattern := tp_plan_alt.search(renamed_key):
                     matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
                     if getattr(mapping, "distributed_operation", None) is None:

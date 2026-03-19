@@ -1,13 +1,13 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-.PHONY: style check-repo fix-repo test test-examples benchmark
+.PHONY: style check-repo check-model-rules check-model-rules-pr check-model-rules-all fix-repo test test-examples benchmark codex claude clean-ai
 
 check_dirs := examples tests src utils scripts benchmark benchmark_v2
 exclude_folders :=  ""
 
 # Directories to type-check with ty
-ty_check_dirs := src/transformers/utils src/transformers/generation
+ty_check_dirs := src/transformers/_typing.py src/transformers/utils src/transformers/generation src/transformers/quantizers
 
 
 # this runs all linting/formatting scripts, most notably ruff
@@ -49,6 +49,18 @@ check-repo:
 	}
 
 
+check-model-rules:
+	python utils/check_modeling_structure.py --changed-only --base-ref origin/main
+
+
+check-model-rules-pr:
+	python utils/check_modeling_structure.py --changed-only --base-ref origin/main --github-annotations
+
+
+check-model-rules-all:
+	python utils/check_modeling_structure.py
+
+
 # Run all repo checks for which there is an automatic fix, most notably modular conversions
 # Note: each line is run in its own shell, and doing `-` before the command ignores the errors if any, continuing with next command
 fix-repo: style
@@ -74,6 +86,19 @@ test-examples:
 # Run benchmark
 benchmark:
 	python3 benchmark/benchmark.py --config-dir benchmark/config --config-name generation --commit=diff backend.model=google/gemma-2b backend.cache_implementation=null,static backend.torch_compile=false,true --multirun
+
+codex:
+	mkdir -p .agents
+	rm -rf .agents/skills
+	ln -snf ../.ai/skills .agents/skills
+
+claude:
+	mkdir -p .claude
+	rm -rf .claude/skills
+	ln -snf ../.ai/skills .claude/skills
+
+clean-ai:
+	rm -rf .agents/skills .claude/skills
 
 
 # Release stuff

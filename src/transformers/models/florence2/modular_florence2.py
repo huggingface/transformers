@@ -20,6 +20,7 @@ from typing import Any
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -49,6 +50,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="florence-community/Florence-2-base")
+@strict(accept_kwargs=True)
 class Florence2VisionConfig(PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 12):
@@ -83,51 +85,28 @@ class Florence2VisionConfig(PreTrainedConfig):
 
     model_type = "florence_vision"
 
-    def __init__(
-        self,
-        in_channels=3,
-        depths=(1, 1, 9, 1),
-        patch_size=(7, 3, 3, 3),
-        patch_stride=(4, 2, 2, 2),
-        patch_padding=(3, 1, 1, 1),
-        patch_prenorm=(False, True, True, True),
-        embed_dim=(128, 256, 512, 1024),
-        num_heads=(4, 8, 16, 32),
-        num_groups=(4, 8, 16, 32),
-        window_size=12,
-        drop_path_rate=0.1,
-        mlp_ratio=4.0,
-        qkv_bias=True,
-        activation_function="gelu",
-        projection_dim=1024,
-        max_temporal_embeddings=100,
-        max_position_embeddings=50,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        self.in_channels = in_channels
-        self.depths = list(depths)
-        self.patch_size = list(patch_size)
-        self.patch_stride = list(patch_stride)
-        self.patch_padding = list(patch_padding)
-        self.patch_prenorm = list(patch_prenorm)
-        self.embed_dim = list(embed_dim)
-        self.num_heads = list(num_heads)
-        self.num_groups = list(num_groups)
-        self.window_size = window_size
-        self.drop_path_rate = drop_path_rate
-        self.mlp_ratio = mlp_ratio
-        self.qkv_bias = qkv_bias
-        self.projection_dim = projection_dim
-        self.max_temporal_embeddings = max_temporal_embeddings
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.activation_function = activation_function
-
-        super().__init__(**kwargs)
+    in_channels: int = 3
+    depths: list[int] | tuple[int, ...] = (1, 1, 9, 1)
+    patch_size: list[int] | tuple[int, ...] = (7, 3, 3, 3)
+    patch_stride: list[int] | tuple[int, ...] = (4, 2, 2, 2)
+    patch_padding: list[int] | tuple[int, ...] = (3, 1, 1, 1)
+    patch_prenorm: list[bool] | tuple[bool, ...] = (False, True, True, True)
+    embed_dim: list[int] | tuple[int, ...] = (128, 256, 512, 1024)
+    num_heads: list[int] | tuple[int, ...] = (4, 8, 16, 32)
+    num_groups: list[int] | tuple[int, ...] = (4, 8, 16, 32)
+    window_size: int = 12
+    drop_path_rate: float = 0.1
+    mlp_ratio: float = 4.0
+    qkv_bias: bool = True
+    activation_function: str = "gelu"
+    projection_dim: int = 1024
+    max_temporal_embeddings: int = 100
+    max_position_embeddings: int = 50
+    initializer_range: float = 0.02
 
 
 @auto_docstring(checkpoint="florence-community/Florence-2-base")
+@strict(accept_kwargs=True)
 class Florence2Config(PreTrainedConfig):
     r"""
     Example:
@@ -157,36 +136,26 @@ class Florence2Config(PreTrainedConfig):
         "vision_config": Florence2VisionConfig,
     }
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        image_token_id=51289,
-        is_encoder_decoder=True,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "bart")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["bart"]()
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 51289
+    is_encoder_decoder: bool = True
+    tie_word_embeddings: bool = True
 
-        if isinstance(vision_config, dict):
-            vision_config = Florence2VisionConfig(**vision_config)
-        elif vision_config is None:
+    def __post_init__(self, **kwargs):
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "bart")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["bart"]()
+
+        if isinstance(self.vision_config, dict):
+            self.vision_config = Florence2VisionConfig(**self.vision_config)
+        elif self.vision_config is None:
             logger.info("vision_config is None. Initializing the Florence2VisionConfig with default values.")
-            vision_config = Florence2VisionConfig()
+            self.vision_config = Florence2VisionConfig()
 
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.image_token_id = image_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-
-        super().__init__(
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+        super().__post_init__(**kwargs)
 
 
 class Florence2ProcessorKwargs(LlavaProcessorKwargs):
@@ -1360,6 +1329,8 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
     def forward(
         self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
+        target_dtype = self.convs[0].conv.weight.dtype
+        hidden_states = hidden_states.to(dtype=target_dtype)
         for conv, block in zip(self.convs, self.blocks):
             hidden_states = conv(hidden_states)
             for layer in block:
@@ -1459,8 +1430,6 @@ class Florence2PreTrainedModel(LlavaPreTrainedModel):
     """
 )
 class Florence2Model(LlavaModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Florence2Config):
         super().__init__(config)
         self.vision_tower = Florence2VisionBackbone(config=config.vision_config)
@@ -1482,7 +1451,7 @@ class Florence2Model(LlavaModel):
         pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
         """
-        image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
+        image_outputs = self.vision_tower(pixel_values, **kwargs)
         image_outputs.pooler_output = self.multi_modal_projector(image_outputs.last_hidden_state)
 
         return image_outputs
@@ -1501,18 +1470,8 @@ class Florence2Model(LlavaModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | Florence2Seq2SeqModelOutput:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if encoder_outputs is None:
             if (input_ids is None) ^ (inputs_embeds is not None):
                 raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1521,7 +1480,7 @@ class Florence2Model(LlavaModel):
                 inputs_embeds = self.get_input_embeddings()(input_ids)
 
             if pixel_values is not None:
-                image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
+                image_features = self.get_image_features(pixel_values).pooler_output
                 image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 special_image_mask = self.get_placeholder_mask(
                     input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -1531,9 +1490,7 @@ class Florence2Model(LlavaModel):
             encoder_outputs = self.language_model.encoder(
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=True,
+                **kwargs,
             )
 
         if decoder_input_ids is None:
@@ -1549,10 +1506,7 @@ class Florence2Model(LlavaModel):
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            cache_position=cache_position,
-            return_dict=True,
+            **kwargs,
         )
 
         return Florence2Seq2SeqModelOutput(
@@ -1574,7 +1528,6 @@ class Florence2Model(LlavaModel):
     """
 )
 class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {
         "lm_head.weight": "model.language_model.shared.weight",
     }
@@ -1600,10 +1553,6 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Florence2Seq2SeqLMOutput:
@@ -1636,12 +1585,6 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "A green car parked in front of a yellow building."
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if labels is not None:
             if use_cache:
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
@@ -1662,10 +1605,6 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1715,7 +1654,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
             inputs_embeds = self.get_input_embeddings()(inputs_tensor)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
+            image_features = self.get_image_features(pixel_values).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 inputs_tensor, inputs_embeds=inputs_embeds, image_features=image_features

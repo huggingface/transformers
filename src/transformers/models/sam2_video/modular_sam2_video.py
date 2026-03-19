@@ -23,6 +23,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import Tensor
 from tqdm import tqdm
 
@@ -71,6 +72,7 @@ class Sam2VideoMaskDecoderConfig(Sam2MaskDecoderConfig):
 
 
 @auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
+@strict(accept_kwargs=True)
 class Sam2VideoConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `Sam2PromptEncoderConfig`], *optional*):
@@ -188,117 +190,70 @@ class Sam2VideoConfig(PreTrainedConfig):
         "mask_decoder_config": Sam2VideoMaskDecoderConfig,
     }
 
-    def __init__(
-        self,
-        vision_config=None,
-        prompt_encoder_config=None,
-        mask_decoder_config=None,
-        initializer_range=0.02,
-        num_maskmem=7,
-        image_size=1024,
-        sigmoid_scale_for_mem_enc=20.0,
-        sigmoid_bias_for_mem_enc=-10.0,
-        enable_occlusion_spatial_embedding=True,
-        multimask_output_in_sam=True,
-        multimask_min_pt_num=0,
-        multimask_max_pt_num=1,
-        multimask_output_for_tracking=True,
-        max_object_pointers_in_encoder=16,
-        max_cond_frame_num=-1,
-        enable_temporal_pos_encoding_for_object_pointers=True,
-        # memory attention
-        memory_attention_hidden_size=256,
-        memory_attention_num_layers=4,
-        memory_attention_num_attention_heads=1,
-        memory_attention_downsample_rate=1,
-        memory_attention_feed_forward_hidden_size=2048,
-        memory_attention_feed_forward_hidden_act="relu",
-        memory_attention_dropout=0.1,
-        memory_attention_rope_theta=10000,
-        memory_attention_rope_feat_sizes=None,
-        memory_attention_rope_dropout=0.1,
-        # memory encoder
-        memory_encoder_hidden_size=256,
-        memory_encoder_output_channels=64,
-        mask_downsampler_embed_dim=256,
-        mask_downsampler_kernel_size=3,
-        mask_downsampler_stride=2,
-        mask_downsampler_padding=1,
-        mask_downsampler_total_stride=16,
-        mask_downsampler_hidden_act="gelu",
-        memory_fuser_num_layers=2,
-        memory_fuser_embed_dim=256,
-        memory_fuser_intermediate_dim=1024,
-        memory_fuser_kernel_size=7,
-        memory_fuser_padding=3,
-        memory_fuser_layer_scale_init_value=1e-6,
-        memory_fuser_hidden_act="gelu",
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    vision_config: dict | PreTrainedConfig | None = None
+    prompt_encoder_config: dict | PreTrainedConfig | None = None
+    mask_decoder_config: dict | PreTrainedConfig | None = None
+    initializer_range: float = 0.02
+    num_maskmem: int = 7
+    image_size: int | list[int] | tuple[int, int] = 1024
+    sigmoid_scale_for_mem_enc: float = 20.0
+    sigmoid_bias_for_mem_enc: float = -10.0
+    enable_occlusion_spatial_embedding: bool = True
+    multimask_output_in_sam: bool = True
+    multimask_min_pt_num: int = 0
+    multimask_max_pt_num: int = 1
+    multimask_output_for_tracking: bool = True
+    max_object_pointers_in_encoder: int = 16
+    max_cond_frame_num: int = -1
+    enable_temporal_pos_encoding_for_object_pointers: bool = True
+    memory_attention_hidden_size: int = 256
+    memory_attention_num_layers: int = 4
+    memory_attention_num_attention_heads: int = 1
+    memory_attention_downsample_rate: int = 1
+    memory_attention_feed_forward_hidden_size: int = 2048
+    memory_attention_feed_forward_hidden_act: str = "relu"
+    memory_attention_dropout: float | int = 0.1
+    memory_attention_rope_theta: int = 10000
+    memory_attention_rope_feat_sizes: list[int] | None = None
+    memory_attention_rope_dropout: float | int = 0.1
+    memory_encoder_hidden_size: int = 256
+    memory_encoder_output_channels: int = 64
+    mask_downsampler_embed_dim: int = 256
+    mask_downsampler_kernel_size: int = 3
+    mask_downsampler_stride: int = 2
+    mask_downsampler_padding: int = 1
+    mask_downsampler_total_stride: int = 16
+    mask_downsampler_hidden_act: str = "gelu"
+    memory_fuser_num_layers: int = 2
+    memory_fuser_embed_dim: int = 256
+    memory_fuser_intermediate_dim: int = 1024
+    memory_fuser_kernel_size: int = 7
+    memory_fuser_padding: int = 3
+    memory_fuser_layer_scale_init_value: float = 1e-6
+    memory_fuser_hidden_act: str = "gelu"
 
-        vision_config = vision_config if vision_config is not None else {}
-        prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
-        mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
-        memory_attention_rope_feat_sizes = (
-            [64, 64] if memory_attention_rope_feat_sizes is None else memory_attention_rope_feat_sizes
+    def __post_init__(self, **kwargs):
+        self.memory_attention_rope_feat_sizes = (
+            [64, 64] if self.memory_attention_rope_feat_sizes is None else self.memory_attention_rope_feat_sizes
         )
 
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "sam2_vision_model")
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        if isinstance(prompt_encoder_config, Sam2VideoPromptEncoderConfig):
-            prompt_encoder_config = prompt_encoder_config.to_dict()
-        if isinstance(mask_decoder_config, Sam2VideoMaskDecoderConfig):
-            mask_decoder_config = mask_decoder_config.to_dict()
+        if isinstance(self.vision_config, dict):
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "sam2_vision_model")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = CONFIG_MAPPING["sam2_vision_model"]()
 
-        self.vision_config = vision_config
-        self.prompt_encoder_config = Sam2VideoPromptEncoderConfig(**prompt_encoder_config)
-        self.mask_decoder_config = Sam2VideoMaskDecoderConfig(**mask_decoder_config)
+        if isinstance(self.prompt_encoder_config, dict):
+            self.prompt_encoder_config = Sam2VideoPromptEncoderConfig(**self.prompt_encoder_config)
+        elif self.prompt_encoder_config is None:
+            self.prompt_encoder_config = Sam2VideoPromptEncoderConfig()
 
-        self.initializer_range = initializer_range
-        self.num_maskmem = num_maskmem  # default 1 input frame + 6 previous frames
-        self.image_size = image_size
-        self.sigmoid_scale_for_mem_enc = sigmoid_scale_for_mem_enc
-        self.sigmoid_bias_for_mem_enc = sigmoid_bias_for_mem_enc
-        self.multimask_output_in_sam = multimask_output_in_sam
-        self.multimask_min_pt_num = multimask_min_pt_num
-        self.multimask_max_pt_num = multimask_max_pt_num
-        self.multimask_output_for_tracking = multimask_output_for_tracking
-        self.max_object_pointers_in_encoder = max_object_pointers_in_encoder
-        self.max_cond_frame_num = max_cond_frame_num
-        # The next 4 are True for sam2.1 and False for sam2
-        self.enable_occlusion_spatial_embedding = enable_occlusion_spatial_embedding
-        self.enable_temporal_pos_encoding_for_object_pointers = enable_temporal_pos_encoding_for_object_pointers
+        if isinstance(self.mask_decoder_config, dict):
+            self.mask_decoder_config = Sam2VideoPromptEncoderConfig(**self.mask_decoder_config)
+        elif self.mask_decoder_config is None:
+            self.mask_decoder_config = Sam2VideoMaskDecoderConfig()
 
-        # memory attention
-        self.memory_attention_hidden_size = memory_attention_hidden_size
-        self.memory_attention_num_layers = memory_attention_num_layers
-        self.memory_attention_num_attention_heads = memory_attention_num_attention_heads
-        self.memory_attention_downsample_rate = memory_attention_downsample_rate
-        self.memory_attention_feed_forward_hidden_size = memory_attention_feed_forward_hidden_size
-        self.memory_attention_feed_forward_hidden_act = memory_attention_feed_forward_hidden_act
-        self.memory_attention_dropout = memory_attention_dropout
-        self.memory_attention_rope_theta = memory_attention_rope_theta
-        self.memory_attention_rope_feat_sizes = memory_attention_rope_feat_sizes
-        self.memory_attention_rope_dropout = memory_attention_rope_dropout
-
-        # memory encoder
-        self.memory_encoder_hidden_size = memory_encoder_hidden_size
-        self.memory_encoder_output_channels = memory_encoder_output_channels
-        self.mask_downsampler_embed_dim = mask_downsampler_embed_dim
-        self.mask_downsampler_kernel_size = mask_downsampler_kernel_size
-        self.mask_downsampler_stride = mask_downsampler_stride
-        self.mask_downsampler_padding = mask_downsampler_padding
-        self.mask_downsampler_total_stride = mask_downsampler_total_stride
-        self.mask_downsampler_hidden_act = mask_downsampler_hidden_act
-        self.memory_fuser_num_layers = memory_fuser_num_layers
-        self.memory_fuser_embed_dim = memory_fuser_embed_dim
-        self.memory_fuser_intermediate_dim = memory_fuser_intermediate_dim
-        self.memory_fuser_kernel_size = memory_fuser_kernel_size
-        self.memory_fuser_padding = memory_fuser_padding
-        self.memory_fuser_layer_scale_init_value = memory_fuser_layer_scale_init_value
-        self.memory_fuser_hidden_act = memory_fuser_hidden_act
+        super().__post_init__(**kwargs)
 
 
 class Sam2VideoInferenceCache:

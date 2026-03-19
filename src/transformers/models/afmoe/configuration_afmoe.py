@@ -13,14 +13,14 @@
 # limitations under the License.
 """AFMoE model configuration"""
 
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring
 
 
-logger = logging.get_logger(__name__)
-
-
+@strict(accept_kwargs=True)
 @auto_docstring(
     custom_intro="""
     AFMoE is an Adaptive Feedforward MoE (Mixture of Experts) model with token-choice routing, shared experts, and a
@@ -64,87 +64,48 @@ class AfmoeConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 200192,
-        hidden_size: int | None = 2048,
-        intermediate_size: int | None = 6144,
-        moe_intermediate_size: int | None = 1408,
-        num_hidden_layers: int | None = 32,
-        num_dense_layers: int | None = 1,
-        num_attention_heads: int | None = 16,
-        num_key_value_heads: int | None = None,
-        head_dim: int | None = 128,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 16384,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: float | None = 1e-5,
-        use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
-        rope_theta: float | None = 10000.0,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        num_experts: int | None = 64,
-        num_experts_per_tok: int | None = 6,
-        num_shared_experts: int | None = 2,
-        route_scale: float | None = 1.0,
-        output_router_logits: bool | None = False,
-        global_attn_every_n_layers: int | None = 4,
-        sliding_window: int | None = 1024,
-        layer_types: list | None = None,
-        attention_dropout: float | None = 0.0,
-        mup_enabled: bool | None = False,
-        eos_token_id: bool | None = None,
-        pad_token_id: bool | None = None,
-        bos_token_id: bool | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_dense_layers = num_dense_layers
-        self.num_attention_heads = num_attention_heads
-        self.head_dim = head_dim
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_parameters = rope_parameters
+    vocab_size: int = 200192
+    hidden_size: int = 2048
+    intermediate_size: int = 6144
+    moe_intermediate_size: int = 1408
+    num_hidden_layers: int = 32
+    num_dense_layers: int | None = 1
+    num_attention_heads: int = 16
+    num_key_value_heads: int | None = None
+    head_dim: int | None = 128
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 16384
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    num_experts: int | None = 64
+    num_experts_per_tok: int | None = 6
+    num_shared_experts: int | None = 2
+    route_scale: float | None = 1.0
+    output_router_logits: bool | None = False,
+    global_attn_every_n_layers: int | None = 4
+    sliding_window: int | None = 1024
+    layer_types: list | None = None
+    attention_dropout: float | int | None = 0.0
+    mup_enabled: bool | None = False
+    eos_token_id: int | list[int] | None = None
+    pad_token_id: int | None = None
+    bos_token_id: int | None = None
+    attention_bias: bool = False
 
-        # MoE specific
-        self.moe_intermediate_size = moe_intermediate_size
-        self.num_experts_per_tok = num_experts_per_tok
-        self.num_experts = num_experts
-        self.num_shared_experts = num_shared_experts
-        self.route_scale = route_scale
-        self.output_router_logits = output_router_logits
-        self.attention_bias = False
-
-        # Attention specific
-        self.attention_dropout = attention_dropout
-        self.global_attn_every_n_layers = global_attn_every_n_layers
-        self.sliding_window = sliding_window
-        self.mup_enabled = mup_enabled
-        self.layer_types = layer_types
+    def __post_init__(self, **kwargs):
         if self.layer_types is None:
             self.layer_types = [
-                "sliding_attention" if bool((i + 1) % global_attn_every_n_layers) else "full_attention"
+                "sliding_attention" if bool((i + 1) % self.global_attn_every_n_layers) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
 
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["AfmoeConfig"]

@@ -18,9 +18,11 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 import torchvision.transforms.v2.functional as tvF
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
@@ -83,6 +85,7 @@ DEEPSEEK_VL_COMMON_CUSTOM_ARGS = r"""
 
 
 @auto_docstring(checkpoint="deepseek-community/deepseek-vl-7b-chat")
+@strict(accept_kwargs=True)
 class DeepseekVLHybridConfig(DeepseekVLConfig):
     r"""
     high_res_vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SamVisionConfig`):
@@ -106,32 +109,22 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
     model_type = "deepseek_vl_hybrid"
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "high_res_vision_config": AutoConfig}
 
-    def __init__(
-        self,
-        text_config: AutoConfig | None = None,
-        vision_config: AutoConfig | None = None,
-        high_res_vision_config: AutoConfig | None = None,
-        image_token_id: int = 100015,
-        tie_word_embeddings: bool | None = True,
-        **kwargs,
-    ):
-        if high_res_vision_config is None:
-            high_res_vision_config = {}
+    high_res_vision_config: dict | PreTrainedConfig | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.high_res_vision_config is None:
+            self.high_res_vision_config = {}
             logger.info("`high_res_vision_config` is `None`. Initializing the `SamVisionConfig` with default values.")
 
-        if isinstance(high_res_vision_config, dict):
-            high_res_vision_config["model_type"] = high_res_vision_config.get("model_type", "sam_vision_model")
-            high_res_vision_config = CONFIG_MAPPING[high_res_vision_config["model_type"]](**high_res_vision_config)
+        if isinstance(self.high_res_vision_config, dict):
+            self.high_res_vision_config["model_type"] = self.high_res_vision_config.get(
+                "model_type", "sam_vision_model"
+            )
+            self.high_res_vision_config = CONFIG_MAPPING[self.high_res_vision_config["model_type"]](
+                **self.high_res_vision_config
+            )
 
-        self.high_res_vision_config = high_res_vision_config
-
-        super().__init__(
-            text_config=text_config,
-            vision_config=vision_config,
-            image_token_id=image_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__post_init__(**kwargs)
 
 
 @dataclass
@@ -327,7 +320,6 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -365,7 +357,6 @@ class DeepseekVLHybridModel(DeepseekVLModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )
@@ -390,7 +381,6 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -412,7 +402,6 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
@@ -443,7 +432,6 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
         pixel_values=None,
         high_res_pixel_values=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -453,7 +441,6 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,
