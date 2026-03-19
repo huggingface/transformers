@@ -19,6 +19,7 @@ from .quantizers_utils import get_module_from_name
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import BitsAndBytesConfig
 
 from ..utils import (
     ACCELERATE_MIN_VERSION,
@@ -47,6 +48,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    quantization_config: "BitsAndBytesConfig"
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -101,9 +103,9 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         if device_map is None:
             if torch.cuda.is_available():
                 device_map = {"": torch.cuda.current_device()}
-            elif is_torch_npu_available():
+            elif is_torch_npu_available() and hasattr(torch, "npu"):
                 device_map = {"": f"npu:{torch.npu.current_device()}"}
-            elif is_torch_hpu_available():
+            elif is_torch_hpu_available() and hasattr(torch, "hpu"):
                 device_map = {"": f"hpu:{torch.hpu.current_device()}"}
             elif is_torch_xpu_available():
                 device_map = {"": torch.xpu.current_device()}
@@ -141,8 +143,8 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         )
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        model.is_loaded_in_4bit = True
-        model.is_4bit_serializable = self.is_serializable()
+        setattr(model, "is_loaded_in_4bit", True)
+        setattr(model, "is_4bit_serializable", self.is_serializable())
         return model
 
     def is_serializable(self):

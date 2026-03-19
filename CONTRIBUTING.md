@@ -240,6 +240,15 @@ We're always looking for improvements to the documentation that make it more cle
 
 For more details about how to generate, build, and write the documentation, take a look at the documentation [README](https://github.com/huggingface/transformers/tree/main/docs).
 
+## Coding with AI agents
+
+This repository keeps AI-agent configuration in `.ai/` and exposes local agent files via symlinks.
+
+Skills can be exposed to agents by running `make codex` or `make claude`
+
+Cursor reads `AGENTS.md` and reads skills from Claude or Codex paths, so setting up the repository
+for Claude or Codex will work for Claude.
+
 ## Create a Pull Request
 
 Before writing any code, we strongly advise you to search through the existing PRs or
@@ -371,6 +380,18 @@ You'll need **[Python 3.9](https://github.com/huggingface/transformers/blob/main
    too! So everyone can see the changes in the pull request, work in your local
    branch and push the changes to your fork. They will automatically appear in
    the pull request.
+
+### AI-assisted and agentic contributions
+
+AI-assisted contributions are welcome, but they must be coordinated, scoped, and verified to keep review load manageable.
+
+- Do not submit "pure agent" PRs. The human submitter is responsible for reviewing all changed lines, validating behavior end-to-end, and running relevant tests.
+- If AI tools were used, disclose this in the PR description and include: coordination link, differentiation from existing PRs (if applicable), and test commands/results.
+- Avoid one-off "busywork" PRs (single typo, isolated style cleanup, one mutable default fix, etc.). Bundle mechanical cleanups into a clear, systematic scope.
+- Coordinate on issues before opening a PRs, review similar PRs, and wait for approval. 
+
+> [!WARNING] 
+> These topics are outlined for agents in `AGENTS.MD` with instruction for how to autonomously implement them. 
 
 ### Pull request checklist
 

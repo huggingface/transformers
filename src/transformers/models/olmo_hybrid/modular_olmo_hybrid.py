@@ -20,17 +20,18 @@ from collections.abc import Callable
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import layer_type_validation
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.import_utils import is_flash_linear_attention_available
 from ...utils.output_capturing import capture_outputs
@@ -69,92 +70,40 @@ is_fast_path_available = all(
     (ShortConvolution, chunk_gated_delta_rule, fused_recurrent_gated_delta_rule, FusedRMSNormGated)
 )
 
+
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="allenai/Olmo-Hybrid-7B")
+@strict(accept_kwargs=True)
 class OlmoHybridConfig(LlamaConfig):
     r"""
-    This is the configuration class to store the configuration of a [`OlmoHybridModel`]. It is used to instantiate
-    an OLMo Hybrid model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the
-    [allenai/Olmo-Hybrid-7B](https://huggingface.co/allenai/Olmo-Hybrid-7B) model.
+    linear_num_key_heads (`int`, *optional*):
+        Number of key heads for the linear attention layers. Defaults to `num_attention_heads`.
+    linear_num_value_heads (`int`, *optional*):
+        Number of value heads for the linear attention layers. Defaults to `num_attention_heads`.
+    linear_key_head_dim (`int`, *optional*):
+        Dimension of each key head in linear attention layers. Defaults to `0.75 * hidden_size / linear_num_key_heads`.
+    linear_value_head_dim (`int`, *optional*):
+        Dimension of each value head in linear attention layers. Defaults to `2 * linear_key_head_dim`.
+    linear_a_log_min (`float`, *optional*, defaults to 0.0):
+        Minimum value for uniform initialization of A_log in GatedDeltaNet layers.
+    linear_a_log_max (`float`, *optional*, defaults to 16.0):
+        Maximum value for uniform initialization of A_log in GatedDeltaNet layers.
+    linear_dt_min (`float`, *optional*, defaults to 0.001):
+        Minimum value for dt initialization in GatedDeltaNet layers.
+    linear_dt_max (`float`, *optional*, defaults to 0.1):
+        Maximum value for dt initialization in GatedDeltaNet layers.
+    linear_dt_init_floor (`float`, *optional*, defaults to 0.0001):
+        Floor value for clamping dt during initialization in GatedDeltaNet layers.
+    linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
+        Kernel size for the short convolution applied to queries, keys, and values in linear attention layers.
+    linear_allow_neg_eigval (`bool`, *optional*, defaults to `True`):
+        Whether to allow negative eigenvalues in the GatedDeltaNet recurrence. When `True`, the beta
+        parameter is scaled by 2.0 to allow values in range [0, 2] instead of [0, 1].
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Example:
 
-    Args:
-        vocab_size (`int`, *optional*, defaults to 100352):
-            Vocabulary size of the OlmoHybrid model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`OlmoHybridModel`].
-        hidden_size (`int`, *optional*, defaults to 3840):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 11008):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 30):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
-            `num_attention_heads`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 65536):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*, defaults to 100277):
-            Padding token id.
-        bos_token_id (`int`, *optional*):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 100257):
-            End of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`. Can be `None` to disable RoPE (e.g., during long context extension).
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        layer_types (`list`, *optional*):
-            Attention pattern for each layer. Can contain `"full_attention"` or `"linear_attention"`.
-            Defaults to linear attention for most layers with full attention for every 4th layer.
-        linear_num_key_heads (`int`, *optional*):
-            Number of key heads for the linear attention layers. Defaults to `num_attention_heads`.
-        linear_num_value_heads (`int`, *optional*):
-            Number of value heads for the linear attention layers. Defaults to `num_attention_heads`.
-        linear_key_head_dim (`int`, *optional*):
-            Dimension of each key head in linear attention layers. Defaults to `0.75 * hidden_size / linear_num_key_heads`.
-        linear_value_head_dim (`int`, *optional*):
-            Dimension of each value head in linear attention layers. Defaults to `2 * linear_key_head_dim`.
-        linear_a_log_min (`float`, *optional*, defaults to 0.0):
-            Minimum value for uniform initialization of A_log in GatedDeltaNet layers.
-        linear_a_log_max (`float`, *optional*, defaults to 16.0):
-            Maximum value for uniform initialization of A_log in GatedDeltaNet layers.
-        linear_dt_min (`float`, *optional*, defaults to 0.001):
-            Minimum value for dt initialization in GatedDeltaNet layers.
-        linear_dt_max (`float`, *optional*, defaults to 0.1):
-            Maximum value for dt initialization in GatedDeltaNet layers.
-        linear_dt_init_floor (`float`, *optional*, defaults to 0.0001):
-            Floor value for clamping dt during initialization in GatedDeltaNet layers.
-        linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
-            Kernel size for the short convolution applied to queries, keys, and values in linear attention layers.
-        linear_allow_neg_eigval (`bool`, *optional*, defaults to `True`):
-            Whether to allow negative eigenvalues in the GatedDeltaNet recurrence. When `True`, the beta
-            parameter is scaled by 2.0 to allow values in range [0, 2] instead of [0, 1].
     ```python
     >>> from transformers import OlmoHybridModel, OlmoHybridConfig
 
@@ -180,103 +129,64 @@ class OlmoHybridConfig(LlamaConfig):
         "layers.*.mlp.down_proj": "rowwise",
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 100352,
-        hidden_size: int | None = 3840,
-        intermediate_size: int | None = 11008,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 30,
-        num_key_value_heads: int | None = None,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 65536,
-        initializer_range: float | None = 0.02,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = 100277,
-        bos_token_id: int | None = None,
-        eos_token_id: int | None = 100257,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters=None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        rms_norm_eps: float | None = 1e-06,
-        layer_types: list[str] | None = None,
-        linear_num_key_heads: int | None = None,
-        linear_num_value_heads: int | None = None,
-        linear_key_head_dim: int | None = None,
-        linear_value_head_dim: int | None = None,
-        linear_a_log_min: float = 0.0,
-        linear_a_log_max: float = 16.0,
-        linear_dt_min: float = 0.001,
-        linear_dt_max: float = 0.1,
-        linear_dt_init_floor: float = 1e-4,
-        linear_conv_kernel_dim: int = 4,
-        linear_allow_neg_eigval: bool = True,
-        **kwargs,
-    ):
-        if layer_types is None:
+    vocab_size: int = 100352
+    hidden_size: int = 3840
+    intermediate_size: int = 11008
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 30
+    num_key_value_heads: int | None = None
+    max_position_embeddings: int = 65536
+    pad_token_id: int | None = 100277
+    bos_token_id: int | None = None
+    eos_token_id: int | None = 100257
+    rms_norm_eps: float = 1e-06
+    layer_types: list[str] | None = None
+    linear_num_key_heads: int | None = None
+    linear_num_value_heads: int | None = None
+    linear_key_head_dim: int | None = None
+    linear_value_head_dim: int | None = None
+    linear_a_log_min: float = 0.0
+    linear_a_log_max: float = 16.0
+    linear_dt_min: float = 0.001
+    linear_dt_max: float = 0.1
+    linear_dt_init_floor: float = 1e-4
+    linear_conv_kernel_dim: int = 4
+    linear_allow_neg_eigval: bool = True
+
+    pretraining_tp = AttributeError()
+    mlp_bias = AttributeError()
+    head_dim = AttributeError()
+
+    def __post_init__(self, **kwargs):
+        if self.layer_types is None:
             # Default: linear attention for most layers, full attention every 4th layer
-            layer_types = ["linear_attention"] * int(num_hidden_layers)
-            for i in range(int(num_hidden_layers)):
+            self.layer_types = ["linear_attention"] * int(self.num_hidden_layers)
+            for i in range(int(self.num_hidden_layers)):
                 if i % 4 == 3:
-                    layer_types[i] = "full_attention"
+                    self.layer_types[i] = "full_attention"
             # Ensure at least one full attention layer for small num_hidden_layers
-            if "full_attention" not in layer_types:
-                layer_types[-1] = "full_attention"
+            if "full_attention" not in self.layer_types:
+                self.layer_types[-1] = "full_attention"
 
-        layer_type_validation(layer_types, num_hidden_layers)
-        if "linear_attention" not in layer_types:
+        if self.linear_num_key_heads is None:
+            self.linear_num_key_heads = self.num_attention_heads
+        if self.linear_num_value_heads is None:
+            self.linear_num_value_heads = self.num_attention_heads
+        if self.linear_key_head_dim is None:
+            self.linear_key_head_dim = int(0.75 * self.hidden_size / self.linear_num_key_heads)
+        if self.linear_value_head_dim is None:
+            self.linear_value_head_dim = 2 * self.linear_key_head_dim
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+
+        PreTrainedConfig.__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if "linear_attention" not in self.layer_types:
             raise ValueError("OLMoHybrid expects at least one 'linear_attention' layer.")
-        if all(t == "linear_attention" for t in layer_types):
+        if all(t == "linear_attention" for t in self.layer_types):
             raise ValueError("OLMoHybrid expects at least one attention layer.")
-
-        self.layer_types = layer_types
-
-        if linear_num_key_heads is None:
-            linear_num_key_heads = num_attention_heads
-        if linear_num_value_heads is None:
-            linear_num_value_heads = num_attention_heads
-        if linear_key_head_dim is None:
-            linear_key_head_dim = int(0.75 * hidden_size / linear_num_key_heads)
-        if linear_value_head_dim is None:
-            linear_value_head_dim = 2 * linear_key_head_dim
-
-        self.linear_num_key_heads = linear_num_key_heads
-        self.linear_num_value_heads = linear_num_value_heads
-        self.linear_key_head_dim = linear_key_head_dim
-        self.linear_value_head_dim = linear_value_head_dim
-        self.linear_a_log_min = linear_a_log_min
-        self.linear_a_log_max = linear_a_log_max
-        self.linear_dt_min = linear_dt_min
-        self.linear_dt_max = linear_dt_max
-        self.linear_dt_init_floor = linear_dt_init_floor
-        self.linear_conv_kernel_dim = linear_conv_kernel_dim
-        self.linear_allow_neg_eigval = linear_allow_neg_eigval
-
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            use_cache=use_cache,
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            attention_bias=attention_bias,
-            attention_dropout=attention_dropout,
-            rms_norm_eps=rms_norm_eps,
-            rope_parameters=rope_parameters,
-            **kwargs,
-        )
-        del self.pretraining_tp
-        del self.mlp_bias
-        del self.head_dim
 
 
 class OlmoHybridDynamicCache(Qwen3NextDynamicCache):
@@ -417,7 +327,6 @@ class OlmoHybridAttention(Olmo3Attention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -438,8 +347,7 @@ class OlmoHybridAttention(Olmo3Attention):
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -578,7 +486,6 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         self,
         hidden_states: torch.Tensor,
         cache_params: OlmoHybridDynamicCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -694,7 +601,6 @@ class OlmoHybridLinearAttentionDecoderLayer(LlamaDecoderLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         output_attentions: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
@@ -705,7 +611,6 @@ class OlmoHybridLinearAttentionDecoderLayer(LlamaDecoderLayer):
         hidden_states = self.linear_attn(
             hidden_states=hidden_states,
             cache_params=past_key_values,
-            cache_position=cache_position,
             attention_mask=attention_mask,
         )
         hidden_states = residual + hidden_states
@@ -773,7 +678,6 @@ class OlmoHybridModel(Qwen3NextModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -785,23 +689,19 @@ class OlmoHybridModel(Qwen3NextModel):
         if use_cache and past_key_values is None:
             past_key_values = OlmoHybridDynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
             input_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
-        linear_attn_mask = self._update_linear_attn_mask(attention_mask, cache_position)
+        linear_attn_mask = self._update_linear_attn_mask(attention_mask, past_key_values)
 
         hidden_states = inputs_embeds
         # RoPE or NoPE
@@ -818,7 +718,6 @@ class OlmoHybridModel(Qwen3NextModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 

@@ -13,79 +13,38 @@
 # limitations under the License.
 """FocalNet model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring
 
 
-logger = logging.get_logger(__name__)
-
-
+@auto_docstring(checkpoint="microsoft/focalnet-tiny")
+@strict(accept_kwargs=True)
 class FocalNetConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FocalNetModel`]. It is used to instantiate a
-    FocalNet model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the FocalNet
-    [microsoft/focalnet-tiny](https://huggingface.co/microsoft/focalnet-tiny) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 4):
-            The size (resolution) of each patch in the embeddings layer.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        embed_dim (`int`, *optional*, defaults to 96):
-            Dimensionality of patch embedding.
-        use_conv_embed (`bool`, *optional*, defaults to `False`):
-            Whether to use convolutional embedding. The authors noted that using convolutional embedding usually
-            improve the performance, but it's not used by default.
-        hidden_sizes (`list[int]`, *optional*, defaults to `[192, 384, 768, 768]`):
-            Dimensionality (hidden size) at each stage.
-        depths (`list(int)`, *optional*, defaults to `[2, 2, 6, 2]`):
-            Depth (number of layers) of each stage in the encoder.
-        focal_levels (`list(int)`, *optional*, defaults to `[2, 2, 2, 2]`):
-            Number of focal levels in each layer of the respective stages in the encoder.
-        focal_windows (`list(int)`, *optional*, defaults to `[3, 3, 3, 3]`):
-            Focal window size in each layer of the respective stages in the encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder. If string, `"gelu"`, `"relu"`,
-            `"selu"` and `"gelu_new"` are supported.
-        mlp_ratio (`float`, *optional*, defaults to 4.0):
-            Ratio of MLP hidden dimensionality to embedding dimensionality.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings and encoder.
-        drop_path_rate (`float`, *optional*, defaults to 0.1):
-            Stochastic depth rate.
-        use_layerscale (`bool`, *optional*, defaults to `False`):
-            Whether to use layer scale in the encoder.
-        layerscale_value (`float`, *optional*, defaults to 0.0001):
-            The initial value of the layer scale.
-        use_post_layernorm (`bool`, *optional*, defaults to `False`):
-            Whether to use post layer normalization in the encoder.
-        use_post_layernorm_in_modulation (`bool`, *optional*, defaults to `False`):
-            Whether to use post layer normalization in the modulation layer.
-        normalize_modulator (`bool`, *optional*, defaults to `False`):
-            Whether to normalize the modulator.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        encoder_stride (`int`, *optional*, defaults to 32):
-            Factor to increase the spatial resolution by in the decoder head for masked image modeling.
-        out_features (`list[str]`, *optional*):
-            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
-            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        out_indices (`list[int]`, *optional*):
-            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
-            If unset and `out_features` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
+    use_conv_embed (`bool`, *optional*, defaults to `False`):
+        Whether to use convolutional embedding. The authors noted that using convolutional embedding usually
+        improve the performance, but it's not used by default.
+    focal_levels (`list(int)`, *optional*, defaults to `[2, 2, 2, 2]`):
+        Number of focal levels in each layer of the respective stages in the encoder.
+    focal_windows (`list(int)`, *optional*, defaults to `[3, 3, 3, 3]`):
+        Focal window size in each layer of the respective stages in the encoder.
+    hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
+        The dropout probability for all fully connected layers in the embeddings and encoder.
+    use_layerscale (`bool`, *optional*, defaults to `False`):
+        Whether to use layer scale in the encoder.
+    layerscale_value (`float`, *optional*, defaults to 0.0001):
+        The initial value of the layer scale.
+    use_post_layernorm (`bool`, *optional*, defaults to `False`):
+        Whether to use post layer normalization in the encoder.
+    use_post_layernorm_in_modulation (`bool`, *optional*, defaults to `False`):
+        Whether to use post layer normalization in the modulation layer.
+    normalize_modulator (`bool`, *optional*, defaults to `False`):
+        Whether to normalize the modulator.
+    encoder_stride (`int`, *optional*, defaults to 32):
+        Factor to increase the spatial resolution by in the decoder head for masked image modeling.
 
     Example:
 
@@ -104,58 +63,36 @@ class FocalNetConfig(BackboneConfigMixin, PreTrainedConfig):
 
     model_type = "focalnet"
 
-    def __init__(
-        self,
-        image_size=224,
-        patch_size=4,
-        num_channels=3,
-        embed_dim=96,
-        use_conv_embed=False,
-        hidden_sizes=[192, 384, 768, 768],
-        depths=[2, 2, 6, 2],
-        focal_levels=[2, 2, 2, 2],
-        focal_windows=[3, 3, 3, 3],
-        hidden_act="gelu",
-        mlp_ratio=4.0,
-        hidden_dropout_prob=0.0,
-        drop_path_rate=0.1,
-        use_layerscale=False,
-        layerscale_value=1e-4,
-        use_post_layernorm=False,
-        use_post_layernorm_in_modulation=False,
-        normalize_modulator=False,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        encoder_stride=32,
-        out_features=None,
-        out_indices=None,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    image_size: int | list[int] | tuple[int, int] = 224
+    patch_size: int | list[int] | tuple[int, int] = 4
+    num_channels: int = 3
+    embed_dim: int = 96
+    use_conv_embed: bool = False
+    hidden_sizes: list[int] | tuple[int, ...] = (192, 384, 768, 768)
+    depths: list[int] | tuple[int, ...] = (2, 2, 6, 2)
+    focal_levels: list[int] | tuple[int, ...] = (2, 2, 2, 2)
+    focal_windows: list[int] | tuple[int, ...] = (3, 3, 3, 3)
+    hidden_act: str = "gelu"
+    mlp_ratio: float = 4.0
+    hidden_dropout_prob: float = 0.0
+    drop_path_rate: float = 0.1
+    use_layerscale: bool = False
+    layerscale_value: float = 1e-4
+    use_post_layernorm: bool = False
+    use_post_layernorm_in_modulation: bool = False
+    normalize_modulator: bool = False
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-5
+    encoder_stride: int = 32
+    _out_features: list[str] | None = None
+    _out_indices: list[int] | None = None
 
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.embed_dim = embed_dim
-        self.use_conv_embed = use_conv_embed
-        self.hidden_sizes = hidden_sizes
-        self.depths = depths
-        self.focal_levels = focal_levels
-        self.focal_windows = focal_windows
-        self.hidden_act = hidden_act
-        self.mlp_ratio = mlp_ratio
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.drop_path_rate = drop_path_rate
-        self.use_layerscale = use_layerscale
-        self.layerscale_value = layerscale_value
-        self.use_post_layernorm = use_post_layernorm
-        self.use_post_layernorm_in_modulation = use_post_layernorm_in_modulation
-        self.normalize_modulator = normalize_modulator
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.encoder_stride = encoder_stride
+    def __post_init__(self, **kwargs):
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.depths) + 1)]
-        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
+        self.set_output_features_output_indices(
+            out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
+        )
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["FocalNetConfig"]

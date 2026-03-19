@@ -13,130 +13,68 @@
 # limitations under the License.
 """SAM3 model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from transformers import CLIPTextConfig
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="facebook/sam3")
+@strict(accept_kwargs=True)
 class Sam3ViTConfig(PreTrainedConfig):
     r"""
-    Configuration class for SAM3 Vision Encoder (ViT backbone).
-
-    Instantiating a configuration defaults will yield a similar configuration to that of SAM 3
-    [facebook/sam3](https://huggingface.co/facebook/sam3) architecture.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimensionality of the encoder layers.
-        intermediate_size (`int`, *optional*, defaults to 4736):
-            Dimensionality of the feedforward (MLP) layers.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of input image channels.
-        image_size (`int`, *optional*, defaults to 1008):
-            Expected input image size.
-        patch_size (`int`, *optional*, defaults to 14):
-            Size of image patches.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for attention probabilities.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            Base frequency for RoPE.
-        window_size (`int`, *optional*, defaults to 24):
-            Window size for windowed attention.
-        global_attn_indexes (`list[int]`, *optional*, defaults to `[7, 15, 23, 31]`):
-            Indexes of layers with global attention.
-        layer_scale_init_value (`float`, *optional*):
-            Initial value for layer scale. None means no layer scale.
-        pretrain_image_size (`int`, *optional*, defaults to 336):
-            Pretrained model image size for position embedding initialization.
-        hidden_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for hidden states.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing weight matrices.
+    rope_theta (`float`, *optional*, defaults to 10000.0):
+        Base frequency for RoPE.
+    window_size (`int`, *optional*, defaults to 24):
+        Window size for windowed attention.
+    global_attn_indexes (`list[int]`, *optional*, defaults to `[7, 15, 23, 31]`):
+        Indexes of layers with global attention.
+    pretrain_image_size (`int`, *optional*, defaults to 336):
+        Pretrained model image size for position embedding initialization.
+    hidden_dropout (`float`, *optional*, defaults to 0.0):
+        Dropout probability for hidden states.
     """
 
     base_config_key = "backbone_config"
     model_type = "sam3_vit_model"
 
-    def __init__(
-        self,
-        hidden_size=1024,
-        intermediate_size=4736,
-        num_hidden_layers=32,
-        num_attention_heads=16,
-        num_channels=3,
-        image_size=1008,
-        patch_size=14,
-        hidden_act="gelu",
-        layer_norm_eps=1e-6,
-        attention_dropout=0.0,
-        rope_theta=10000.0,
-        window_size=24,
-        global_attn_indexes=None,
-        layer_scale_init_value=None,
-        pretrain_image_size=336,
-        hidden_dropout=0.0,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        if global_attn_indexes is None:
-            global_attn_indexes = [7, 15, 23, 31]
+    hidden_size: int = 1024
+    intermediate_size: int = 4736
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 16
+    num_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] = 1008
+    patch_size: int | list[int] | tuple[int, int] = 14
+    hidden_act: str = "gelu"
+    layer_norm_eps: float = 1e-6
+    attention_dropout: float | int = 0.0
+    rope_theta: float = 10000.0
+    window_size: int = 24
+    global_attn_indexes: list[int] | None = None
+    layer_scale_init_value: float | None = None
+    pretrain_image_size: int | list[int] | tuple[int, int] = 336
+    hidden_dropout: float | int = 0.0
+    initializer_range: float = 0.02
 
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.hidden_act = hidden_act
-        self.layer_norm_eps = layer_norm_eps
-        self.attention_dropout = attention_dropout
-        self.rope_theta = rope_theta
-        self.window_size = window_size
-        self.global_attn_indexes = global_attn_indexes
-        self.layer_scale_init_value = layer_scale_init_value
-        self.pretrain_image_size = pretrain_image_size
-        self.hidden_dropout = hidden_dropout
-        self.initializer_range = initializer_range
+    def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
+        if self.global_attn_indexes is None:
+            self.global_attn_indexes = [7, 15, 23, 31]
 
 
+@auto_docstring(checkpoint="facebook/sam3")
+@strict(accept_kwargs=True)
 class Sam3VisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Sam3VisionModel`]. It is used to instantiate a SAM
-    vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
-    defaults will yield a similar configuration to that of SAM 3
-    [facebook/sam3](https://huggingface.co/facebook/sam3) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `Sam3ViTConfig()`):
-            Configuration for the vision backbone. This is used to instantiate the backbone using
-            `AutoModel.from_config`.
-        fpn_hidden_size (`int`, *optional*, defaults to 256):
-            The hidden dimension of the FPN.
-        backbone_feature_sizes (`List[List[int]]`, *optional*, defaults to `[[288, 288], [144, 144], [72, 72]]`):
-            The spatial sizes (height, width) of the feature maps from the backbone at different scales.
-        scale_factors (`list[float]`, *optional*, defaults to `[4.0, 2.0, 1.0, 0.5]`):
-            Scale factors for FPN multi-scale features. List of scaling factors for each FPN level.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the neck.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon for the layer normalization.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
+    fpn_hidden_size (`int`, *optional*, defaults to 256):
+        The hidden dimension of the FPN.
+    backbone_feature_sizes (`List[List[int]]`, *optional*, defaults to `[[288, 288], [144, 144], [72, 72]]`):
+        The spatial sizes (height, width) of the feature maps from the backbone at different scales.
+    scale_factors (`list[float]`, *optional*, defaults to `[4.0, 2.0, 1.0, 0.5]`):
+        Scale factors for FPN multi-scale features. List of scaling factors for each FPN level.
     """
 
     base_config_key = "vision_config"
@@ -145,38 +83,26 @@ class Sam3VisionConfig(PreTrainedConfig):
         "backbone_config": AutoConfig,
     }
 
-    def __init__(
-        self,
-        backbone_config=None,
-        fpn_hidden_size=256,
-        backbone_feature_sizes=None,
-        scale_factors=None,
-        hidden_act="gelu",
-        layer_norm_eps=1e-6,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        scale_factors = [4.0, 2.0, 1.0, 0.5] if scale_factors is None else scale_factors
-        if backbone_feature_sizes is None:
-            backbone_feature_sizes = [[288, 288], [144, 144], [72, 72]]
+    backbone_config: dict | PreTrainedConfig | None = None
+    fpn_hidden_size: int = 256
+    backbone_feature_sizes: list | None = None
+    scale_factors: list[float] | None = None
+    hidden_act: str = "gelu"
+    layer_norm_eps: float = 1e-6
+    initializer_range: float = 0.02
 
-        if isinstance(backbone_config, dict):
-            backbone_config["model_type"] = backbone_config.get("model_type", "sam3_vit_model")
-            backbone_config = CONFIG_MAPPING[backbone_config["model_type"]](**backbone_config)
-        elif backbone_config is None:
-            backbone_config = CONFIG_MAPPING["sam3_vit_model"]()
+    def __post_init__(self, **kwargs):
+        self.scale_factors = [4.0, 2.0, 1.0, 0.5] if self.scale_factors is None else self.scale_factors
+        if self.backbone_feature_sizes is None:
+            self.backbone_feature_sizes = [[288, 288], [144, 144], [72, 72]]
 
-        self.backbone_config = backbone_config
+        if isinstance(self.backbone_config, dict):
+            self.backbone_config["model_type"] = self.backbone_config.get("model_type", "sam3_vit_model")
+            self.backbone_config = CONFIG_MAPPING[self.backbone_config["model_type"]](**self.backbone_config)
+        elif self.backbone_config is None:
+            self.backbone_config = CONFIG_MAPPING["sam3_vit_model"]()
 
-        # Neck
-        self.fpn_hidden_size = fpn_hidden_size
-        self.scale_factors = scale_factors
-        self.backbone_feature_sizes = backbone_feature_sizes
-
-        self.hidden_act = hidden_act
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
     @property
     def image_size(self):
@@ -189,242 +115,101 @@ class Sam3VisionConfig(PreTrainedConfig):
         self.backbone_config.image_size = value
 
 
+@auto_docstring(checkpoint="facebook/sam3")
+@strict(accept_kwargs=True)
 class Sam3GeometryEncoderConfig(PreTrainedConfig):
     r"""
-    Configuration class for SAM3 Geometry Encoder.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the encoder layers.
-        num_layers (`int`, *optional*, defaults to 3):
-            Number of transformer encoder layers for processing geometry prompts.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads in the geometry encoder.
-        intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimensionality of the feedforward layers.
-        dropout (`float`, *optional*, defaults to 0.1):
-            Dropout probability.
-        hidden_act (`str`, *optional*, defaults to `"relu"`):
-            Activation function in FFN.
-        hidden_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for hidden states.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            Epsilon for layer normalization.
-        roi_size (`int`, *optional*, defaults to 7):
-            ROI size for box pooling operations.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing weight matrices.
+    roi_size (`int`, *optional*, defaults to 7):
+        ROI size for box pooling operations.
     """
 
     model_type = "sam3_geometry_encoder"
 
-    def __init__(
-        self,
-        hidden_size=256,
-        num_layers=3,
-        num_attention_heads=8,
-        intermediate_size=2048,
-        dropout=0.1,
-        hidden_act="relu",
-        hidden_dropout=0.0,
-        layer_norm_eps=1e-6,
-        roi_size=7,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.hidden_act = hidden_act
-        self.hidden_dropout = hidden_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.roi_size = roi_size
-        self.initializer_range = initializer_range
+    hidden_size: int = 256
+    num_layers: int = 3
+    num_attention_heads: int = 8
+    intermediate_size: int = 2048
+    dropout: float | int = 0.1
+    hidden_act: str = "relu"
+    hidden_dropout: float | int = 0.0
+    layer_norm_eps: float = 1e-6
+    roi_size: int = 7
+    initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="facebook/sam3")
+@strict(accept_kwargs=True)
 class Sam3DETREncoderConfig(PreTrainedConfig):
     r"""
-    Configuration class for SAM3 DETR Encoder (vision-text fusion encoder).
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the encoder layers.
-        num_layers (`int`, *optional*, defaults to 6):
-            Number of encoder layers.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads.
-        intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimensionality of the feedforward layers.
-        dropout (`float`, *optional*, defaults to 0.1):
-            Dropout probability.
-        hidden_act (`str`, *optional*, defaults to `"relu"`):
-            Activation function in FFN.
-        hidden_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for hidden states.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            Epsilon for layer normalization.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing weight matrices.
+    hidden_dropout (`float`, *optional*, defaults to 0.0):
+        Dropout probability for hidden states.
     """
 
     model_type = "sam3_detr_encoder"
 
-    def __init__(
-        self,
-        hidden_size=256,
-        num_layers=6,
-        num_attention_heads=8,
-        intermediate_size=2048,
-        dropout=0.1,
-        hidden_act="relu",
-        hidden_dropout=0.0,
-        layer_norm_eps=1e-6,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.hidden_act = hidden_act
-        self.hidden_dropout = hidden_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
+    hidden_size: int = 256
+    num_layers: int = 6
+    num_attention_heads: int = 8
+    intermediate_size: int = 2048
+    dropout: float | int = 0.1
+    hidden_act: str = "relu"
+    hidden_dropout: float | int = 0.0
+    layer_norm_eps: float = 1e-6
+    initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="facebook/sam3")
+@strict(accept_kwargs=True)
 class Sam3DETRDecoderConfig(PreTrainedConfig):
     r"""
-    Configuration class for SAM3 DETR Decoder (object query decoder).
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the decoder layers.
-        num_layers (`int`, *optional*, defaults to 6):
-            Number of decoder layers.
-        num_queries (`int`, *optional*, defaults to 200):
-            Number of object queries.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads.
-        intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimensionality of the feedforward layers.
-        dropout (`float`, *optional*, defaults to 0.1):
-            Dropout probability.
-        hidden_act (`str`, *optional*, defaults to `"relu"`):
-            Activation function in FFN.
-        hidden_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for hidden states.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            Epsilon for layer normalization.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing weight matrices.
+    num_queries (`int`, *optional*, defaults to 200):
+        Number of object queries.
     """
 
     model_type = "sam3_detr_decoder"
 
-    def __init__(
-        self,
-        hidden_size=256,
-        num_layers=6,
-        num_queries=200,
-        num_attention_heads=8,
-        intermediate_size=2048,
-        dropout=0.1,
-        hidden_act="relu",
-        hidden_dropout=0.0,
-        layer_norm_eps=1e-6,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.num_queries = num_queries
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.hidden_act = hidden_act
-        self.hidden_dropout = hidden_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
+    hidden_size: int = 256
+    num_layers: int = 6
+    num_queries: int = 200
+    num_attention_heads: int = 8
+    intermediate_size: int = 2048
+    dropout: float | int = 0.1
+    hidden_act: str = "relu"
+    hidden_dropout: float | int = 0.0
+    layer_norm_eps: float = 1e-6
+    initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="facebook/sam3")
+@strict(accept_kwargs=True)
 class Sam3MaskDecoderConfig(PreTrainedConfig):
     r"""
-    Configuration class for SAM3 Mask Decoder (pixel-level mask prediction).
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the mask decoder.
-        num_upsampling_stages (`int`, *optional*, defaults to 3):
-            Number of upsampling stages in the pixel decoder (FPN).
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            Epsilon for layer normalization.
-        dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for prompt cross-attention.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for prompt cross-attention.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing weight matrices.
+    num_upsampling_stages (`int`, *optional*, defaults to 3):
+        Number of upsampling stages in the pixel decoder (FPN).
     """
 
     model_type = "sam3_mask_decoder"
 
-    def __init__(
-        self,
-        hidden_size=256,
-        num_upsampling_stages=3,
-        layer_norm_eps=1e-6,
-        dropout=0.0,
-        num_attention_heads=8,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.hidden_size = hidden_size
-        self.num_upsampling_stages = num_upsampling_stages
-        self.layer_norm_eps = layer_norm_eps
-        self.dropout = dropout
-        self.num_attention_heads = num_attention_heads
-        self.initializer_range = initializer_range
+    hidden_size: int = 256
+    num_upsampling_stages: int = 3
+    layer_norm_eps: float = 1e-6
+    dropout: float | int = 0.0
+    num_attention_heads: int = 8
+    initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="facebook/sam3")
+@strict(accept_kwargs=True)
 class Sam3Config(PreTrainedConfig):
     r"""
-    Configuration class to store the configuration of a [`Sam3Model`].
-
-    Instantiating a configuration defaults will yield a similar configuration to that of SAM 3
-    [facebook/sam3](https://huggingface.co/facebook/sam3) architecture.
-
-    This is the main configuration class that combines all sub-configurations for the SAM3 model.
-
-    <Tip>
-
-    SAM3 checkpoints with `model_type="sam3_video"` are compatible with `Sam3Model` since the video variant weights
-    are a superset of the image-only model weights. You may see a warning about model type mismatch when loading
-    such checkpoints, which can be safely ignored in this case.
-
-    </Tip>
-
-    Args:
-        vision_config (`dict` or `Sam3VisionConfig`, *optional*):
-            Configuration for the vision encoder.
-        text_config (`dict` or `Sam3TextConfig`, *optional*):
-            Configuration for the text encoder.
-        geometry_encoder_config (`dict` or `Sam3GeometryEncoderConfig`, *optional*):
-            Configuration for the geometry encoder.
-        detr_encoder_config (`dict` or `Sam3DETREncoderConfig`, *optional*):
-            Configuration for the DETR encoder.
-        detr_decoder_config (`dict` or `Sam3DETRDecoderConfig`, *optional*):
-            Configuration for the DETR decoder.
-        mask_decoder_config (`dict` or `Sam3MaskDecoderConfig`, *optional*):
-            Configuration for the mask decoder.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing weight matrices.
+    geometry_encoder_config (`dict` or `Sam3GeometryEncoderConfig`, *optional*):
+        Configuration for the geometry encoder.
+    detr_encoder_config (`dict` or `Sam3DETREncoderConfig`, *optional*):
+        Configuration for the DETR encoder.
+    detr_decoder_config (`dict` or `Sam3DETRDecoderConfig`, *optional*):
+        Configuration for the DETR decoder.
+    mask_decoder_config (`dict` or `Sam3MaskDecoderConfig`, *optional*):
+        Configuration for the mask decoder.
 
     Example:
     ```python
@@ -452,76 +237,57 @@ class Sam3Config(PreTrainedConfig):
         "mask_decoder_config": Sam3MaskDecoderConfig,
     }
 
-    def __init__(
-        self,
-        vision_config=None,
-        text_config=None,
-        geometry_encoder_config=None,
-        detr_encoder_config=None,
-        detr_decoder_config=None,
-        mask_decoder_config=None,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        # Vision config
-        if vision_config is None:
-            vision_config = {}
-        if isinstance(vision_config, dict):
-            self.vision_config = Sam3VisionConfig(**vision_config)
-        else:
-            self.vision_config = vision_config
+    vision_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    geometry_encoder_config: dict | PreTrainedConfig | None = None
+    detr_encoder_config: dict | PreTrainedConfig | None = None
+    detr_decoder_config: dict | PreTrainedConfig | None = None
+    mask_decoder_config: dict | PreTrainedConfig | None = None
+    initializer_range: float = 0.02
 
-        # Text config (CLIPTextModelWithProjection defaults)
-        if text_config is None:
-            text_config = {
-                "vocab_size": 49408,
-                "hidden_size": 1024,
-                "intermediate_size": 4096,  # hidden_size * mlp_ratio (1024 * 4)
-                "projection_dim": 512,  # CLIP's internal projection dimension
-                "num_hidden_layers": 24,
-                "num_attention_heads": 16,
-                "max_position_embeddings": 32,
-                "hidden_act": "gelu",
-            }
-        if isinstance(text_config, dict):
-            self.text_config = CLIPTextConfig(**text_config)
-        else:
-            self.text_config = text_config
+    def __post_init__(self, **kwargs):
+        if self.vision_config is None:
+            self.vision_config = Sam3VisionConfig()
+        if isinstance(self.vision_config, dict):
+            self.vision_config = Sam3VisionConfig(**self.vision_config)
 
-        # Geometry encoder config
-        if geometry_encoder_config is None:
-            geometry_encoder_config = {}
-        if isinstance(geometry_encoder_config, dict):
-            self.geometry_encoder_config = Sam3GeometryEncoderConfig(**geometry_encoder_config)
-        else:
-            self.geometry_encoder_config = geometry_encoder_config
+        if self.text_config is None:
+            self.text_config = CLIPTextConfig(
+                **{
+                    "vocab_size": 49408,
+                    "hidden_size": 1024,
+                    "intermediate_size": 4096,  # hidden_size * mlp_ratio (1024 * 4)
+                    "projection_dim": 512,  # CLIP's internal projection dimension
+                    "num_hidden_layers": 24,
+                    "num_attention_heads": 16,
+                    "max_position_embeddings": 32,
+                    "hidden_act": "gelu",
+                }
+            )
+        if isinstance(self.text_config, dict):
+            self.text_config = CLIPTextConfig(**self.text_config)
 
-        # DETR encoder config
-        if detr_encoder_config is None:
-            detr_encoder_config = {}
-        if isinstance(detr_encoder_config, dict):
-            self.detr_encoder_config = Sam3DETREncoderConfig(**detr_encoder_config)
-        else:
-            self.detr_encoder_config = detr_encoder_config
+        if self.geometry_encoder_config is None:
+            self.geometry_encoder_config = Sam3GeometryEncoderConfig()
+        if isinstance(self.geometry_encoder_config, dict):
+            self.geometry_encoder_config = Sam3GeometryEncoderConfig(**self.geometry_encoder_config)
 
-        # DETR decoder config
-        if detr_decoder_config is None:
-            detr_decoder_config = {}
-        if isinstance(detr_decoder_config, dict):
-            self.detr_decoder_config = Sam3DETRDecoderConfig(**detr_decoder_config)
-        else:
-            self.detr_decoder_config = detr_decoder_config
+        if self.detr_encoder_config is None:
+            self.detr_encoder_config = Sam3DETREncoderConfig()
+        if isinstance(self.detr_encoder_config, dict):
+            self.detr_encoder_config = Sam3DETREncoderConfig(**self.detr_encoder_config)
 
-        # Mask decoder config
-        if mask_decoder_config is None:
-            mask_decoder_config = {}
-        if isinstance(mask_decoder_config, dict):
-            self.mask_decoder_config = Sam3MaskDecoderConfig(**mask_decoder_config)
-        else:
-            self.mask_decoder_config = mask_decoder_config
+        if self.detr_decoder_config is None:
+            self.detr_decoder_config = Sam3DETRDecoderConfig()
+        if isinstance(self.detr_decoder_config, dict):
+            self.detr_decoder_config = Sam3DETRDecoderConfig(**self.detr_decoder_config)
 
-        self.initializer_range = initializer_range
-        super().__init__(**kwargs)
+        if self.mask_decoder_config is None:
+            self.mask_decoder_config = Sam3MaskDecoderConfig()
+        if isinstance(self.mask_decoder_config, dict):
+            self.mask_decoder_config = Sam3MaskDecoderConfig(**self.mask_decoder_config)
+
+        super().__post_init__(**kwargs)
 
     @property
     def image_size(self):

@@ -30,6 +30,7 @@ COMMON_ENV_VARIABLES = {
     # will be adjust in `CircleCIJob.to_dict`.
     "RUN_FLAKY": True,
     "DISABLE_SAFETENSORS_CONVERSION": True,
+    "NETWORK_DEBUG_REPORT": True,
 }
 # Disable the use of {"s": None} as the output is way too long, causing the navigation on CircleCI impractical
 COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "vvv": None, "rsfE":None, "random-order-bucket": "module", "random-order-seed": "${CIRCLE_BUILD_NUM:-0}"}
@@ -64,6 +65,7 @@ class EmptyJob:
             steps.extend(
                 [
                     "checkout",
+                    {"run": "pip install requests || true"},
                     {"run": """while [[ $(curl --location --request GET "https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/job" --header "Circle-Token: $CCI_TOKEN"| jq -r '.items[]|select(.name != "collection_job")|.status' | grep -c "running") -gt 0 ]]; do sleep 5; done || true"""},
                     {"run": 'python utils/process_circleci_workflow_test_reports.py --workflow_id $CIRCLE_WORKFLOW_ID || true'},
                     {"store_artifacts": {"path": "outputs"}},
@@ -217,6 +219,7 @@ class CircleCIJob:
             {"store_artifacts": {"path": "tests.txt"}},
             {"store_artifacts": {"path": "splitted_tests.txt"}},
             {"store_artifacts": {"path": "installed.txt"}},
+            {"store_artifacts": {"path": "network_debug_report.json"}},
         ]
         if self.parallelism:
             job["parallelism"] = parallel
@@ -328,6 +331,15 @@ training_ci_job = CircleCIJob(
     parallelism=6,
 )
 
+tensor_parallel_ci_job = CircleCIJob(
+    "tensor_parallel_ci",
+    additional_env={"RUN_TENSOR_PARALLEL_TESTS": True},
+    docker_image=[{"image": "huggingface/transformers-torch-light"}],
+    install_steps=["uv pip install .", "uv pip install torchao"],
+    marker="is_tensor_parallel_test",
+    parallelism=6,
+)
+
 # We also include a `dummy.py` file in the files to be doc-tested to prevent edge case failure. Otherwise, the pytest
 # hangs forever during test collection while showing `collecting 0 items / 21 errors`. (To see this, we have to remove
 # the bash output redirection.)
@@ -358,7 +370,8 @@ PIPELINE_TESTS = [pipelines_torch_job]
 REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
 TRAINING_CI_TESTS = [training_ci_job]
-ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job] + TRAINING_CI_TESTS  # fmt: skip
+TENSOR_PARALLEL_CI_TESTS = [tensor_parallel_ci_job]
+ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job] + TRAINING_CI_TESTS + TENSOR_PARALLEL_CI_TESTS  # fmt: skip
 
 
 def create_circleci_config(folder=None):

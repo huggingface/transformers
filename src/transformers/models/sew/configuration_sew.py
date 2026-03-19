@@ -16,123 +16,84 @@
 import functools
 import operator
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring
 
 
-logger = logging.get_logger(__name__)
-
-
+@auto_docstring(checkpoint="BAAI/seggpt-vit-large")
+@strict(accept_kwargs=True)
 class SEWConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SEWModel`]. It is used to instantiate a SEW model
-    according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the SEW
-    [asapp/sew-tiny-100k](https://huggingface.co/asapp/sew-tiny-100k) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 32):
-            Vocabulary size of the SEW model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`SEW`].
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        squeeze_factor (`int`, *optional*, defaults to 2):
-            Sequence length downsampling factor after the encoder and upsampling factor after the transformer.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        activation_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for activations inside the fully connected layer.
-        attention_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-        final_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for the final projection layer of [`SEWForCTC`].
-        layerdrop (`float`, *optional*, defaults to 0.1):
-            The LayerDrop probability. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556) for more
-            details.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        feat_extract_norm (`str`, *optional*, defaults to `"group"`):
-            The norm to be applied to 1D convolutional layers in feature encoder. One of `"group"` for group
-            normalization of only the first 1D convolutional layer or `"layer"` for layer normalization of all 1D
-            convolutional layers.
-        feat_proj_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for output of the feature encoder.
-        feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the 1D convolutional layers of the feature
-            extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        conv_dim (`tuple[int]` or `list[int]`, *optional*, defaults to `(64, 128, 128, 128, 128, 256, 256, 256, 256, 512, 512, 512, 512)`):
-            A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
-            feature encoder. The length of *conv_dim* defines the number of 1D convolutional layers.
-        conv_stride (`tuple[int]` or `list[int]`, *optional*, defaults to `(5, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1)`):
-            A tuple of integers defining the stride of each 1D convolutional layer in the feature encoder. The length
-            of *conv_stride* defines the number of convolutional layers and has to match the length of *conv_dim*.
-        conv_kernel (`tuple[int]` or `list[int]`, *optional*, defaults to `(10, 3, 1, 3, 1, 3, 1, 3, 1, 2, 1, 2, 1)`):
-            A tuple of integers defining the kernel size of each 1D convolutional layer in the feature encoder. The
-            length of *conv_kernel* defines the number of convolutional layers and has to match the length of
-            *conv_dim*.
-        conv_bias (`bool`, *optional*, defaults to `False`):
-            Whether the 1D convolutional layers have a bias.
-        num_conv_pos_embeddings (`int`, *optional*, defaults to 128):
-            Number of convolutional positional embeddings. Defines the kernel size of 1D convolutional positional
-            embeddings layer.
-        num_conv_pos_embedding_groups (`int`, *optional*, defaults to 16):
-            Number of groups of 1D convolutional positional embeddings layer.
-        apply_spec_augment (`bool`, *optional*, defaults to `True`):
-            Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder. For reference see
-            [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
-            Recognition](https://huggingface.co/papers/1904.08779).
-        mask_time_prob (`float`, *optional*, defaults to 0.05):
-            Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
-            procedure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
-            reasoning from the probability of each feature vector to be chosen as the start of the vector span to be
-            masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the
-            actual percentage of masked vectors. This is only relevant if `apply_spec_augment is True`.
-        mask_time_length (`int`, *optional*, defaults to 10):
-            Length of vector span along the time axis.
-        mask_time_min_masks (`int`, *optional*, defaults to 2),:
-            The minimum number of masks of length `mask_feature_length` generated along the time axis, each time step,
-            irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length <
-            mask_time_min_masks''
-        mask_feature_prob (`float`, *optional*, defaults to 0.0):
-            Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
-            masking procedure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
-            the axis. If reasoning from the probability of each feature vector to be chosen as the start of the vector
-            span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
-            may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
-            True`.
-        mask_feature_length (`int`, *optional*, defaults to 10):
-            Length of vector span along the feature axis.
-        mask_feature_min_masks (`int`, *optional*, defaults to 0),:
-            The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
-            step, irrespectively of `mask_feature_prob`. Only relevant if
-            ''mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks''
-        ctc_loss_reduction (`str`, *optional*, defaults to `"sum"`):
-            Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
-            instance of [`SEWForCTC`].
-        ctc_zero_infinity (`bool`, *optional*, defaults to `False`):
-            Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
-            occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
-            of [`SEWForCTC`].
-        use_weighted_layer_sum (`bool`, *optional*, defaults to `False`):
-            Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
-            instance of [`Wav2Vec2ForSequenceClassification`].
-        classifier_proj_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the projection before token mean-pooling for classification.
+    squeeze_factor (`int`, *optional*, defaults to 2):
+        Sequence length downsampling factor after the encoder and upsampling factor after the transformer.
+    final_dropout (`float`, *optional*, defaults to 0.1):
+        The dropout probability for the final projection layer of [`SEWForCTC`].
+    feat_extract_norm (`str`, *optional*, defaults to `"group"`):
+        The norm to be applied to 1D convolutional layers in feature encoder. One of `"group"` for group
+        normalization of only the first 1D convolutional layer or `"layer"` for layer normalization of all 1D
+        convolutional layers.
+    feat_proj_dropout (`float`, *optional*, defaults to 0.0):
+        The dropout probability for output of the feature encoder.
+    feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
+        The non-linear activation function (function or string) in the 1D convolutional layers of the feature
+        extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
+    conv_dim (`tuple[int]` or `list[int]`, *optional*, defaults to `(64, 128, 128, 128, 128, 256, 256, 256, 256, 512, 512, 512, 512)`):
+        A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
+        feature encoder. The length of *conv_dim* defines the number of 1D convolutional layers.
+    conv_stride (`tuple[int]` or `list[int]`, *optional*, defaults to `(5, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1)`):
+        A tuple of integers defining the stride of each 1D convolutional layer in the feature encoder. The length
+        of *conv_stride* defines the number of convolutional layers and has to match the length of *conv_dim*.
+    conv_kernel (`tuple[int]` or `list[int]`, *optional*, defaults to `(10, 3, 1, 3, 1, 3, 1, 3, 1, 2, 1, 2, 1)`):
+        A tuple of integers defining the kernel size of each 1D convolutional layer in the feature encoder. The
+        length of *conv_kernel* defines the number of convolutional layers and has to match the length of
+        *conv_dim*.
+    conv_bias (`bool`, *optional*, defaults to `False`):
+        Whether the 1D convolutional layers have a bias.
+    num_conv_pos_embeddings (`int`, *optional*, defaults to 128):
+        Number of convolutional positional embeddings. Defines the kernel size of 1D convolutional positional
+        embeddings layer.
+    num_conv_pos_embedding_groups (`int`, *optional*, defaults to 16):
+        Number of groups of 1D convolutional positional embeddings layer.
+    apply_spec_augment (`bool`, *optional*, defaults to `True`):
+        Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder. For reference see
+        [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
+        Recognition](https://huggingface.co/papers/1904.08779).
+    mask_time_prob (`float`, *optional*, defaults to 0.05):
+        Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
+        procedure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
+        reasoning from the probability of each feature vector to be chosen as the start of the vector span to be
+        masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the
+        actual percentage of masked vectors. This is only relevant if `apply_spec_augment is True`.
+    mask_time_length (`int`, *optional*, defaults to 10):
+        Length of vector span along the time axis.
+    mask_time_min_masks (`int`, *optional*, defaults to 2),:
+        The minimum number of masks of length `mask_feature_length` generated along the time axis, each time step,
+        irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length <
+        mask_time_min_masks''
+    mask_feature_prob (`float`, *optional*, defaults to 0.0):
+        Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
+        masking procedure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
+        the axis. If reasoning from the probability of each feature vector to be chosen as the start of the vector
+        span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
+        may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
+        True`.
+    mask_feature_length (`int`, *optional*, defaults to 10):
+        Length of vector span along the feature axis.
+    mask_feature_min_masks (`int`, *optional*, defaults to 0):
+        The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
+        step, irrespectively of `mask_feature_prob`. Only relevant if
+        ''mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks''
+    ctc_zero_infinity (`bool`, *optional*, defaults to `False`):
+        Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
+        occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
+        of [`SEWForCTC`].
+    use_weighted_layer_sum (`bool`, *optional*, defaults to `False`):
+        Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
+        instance of [`Wav2Vec2ForSequenceClassification`].
+    classifier_proj_size (`int`, *optional*, defaults to 256):
+        Dimensionality of the projection before token mean-pooling for classification.
 
     Example:
 
@@ -151,76 +112,50 @@ class SEWConfig(PreTrainedConfig):
 
     model_type = "sew"
 
-    def __init__(
-        self,
-        vocab_size=32,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        squeeze_factor=2,
-        hidden_act="gelu",
-        hidden_dropout=0.1,
-        activation_dropout=0.1,
-        attention_dropout=0.1,
-        feat_proj_dropout=0.0,
-        final_dropout=0.1,
-        layerdrop=0.1,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        feat_extract_norm="group",
-        feat_extract_activation="gelu",
-        conv_dim=(64, 128, 128, 128, 128, 256, 256, 256, 256, 512, 512, 512, 512),
-        conv_stride=(5, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1),
-        conv_kernel=(10, 3, 1, 3, 1, 3, 1, 3, 1, 2, 1, 2, 1),
-        conv_bias=False,
-        num_conv_pos_embeddings=128,
-        num_conv_pos_embedding_groups=16,
-        apply_spec_augment=True,
-        mask_time_prob=0.05,
-        mask_time_length=10,
-        mask_time_min_masks=2,
-        mask_feature_prob=0.0,
-        mask_feature_length=10,
-        mask_feature_min_masks=0,
-        ctc_loss_reduction="mean",
-        ctc_zero_infinity=False,
-        use_weighted_layer_sum=False,
-        classifier_proj_size=256,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.hidden_size = hidden_size
-        self.feat_extract_norm = feat_extract_norm
-        self.feat_extract_activation = feat_extract_activation
-        self.conv_dim = list(conv_dim)
-        self.conv_stride = list(conv_stride)
-        self.conv_kernel = list(conv_kernel)
-        self.conv_bias = conv_bias
-        self.num_conv_pos_embeddings = num_conv_pos_embeddings
-        self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
-        self.num_feat_extract_layers = len(self.conv_dim)
-        self.num_hidden_layers = num_hidden_layers
-        self.intermediate_size = intermediate_size
-        self.squeeze_factor = squeeze_factor
-        self.hidden_act = hidden_act
-        self.num_attention_heads = num_attention_heads
-        self.hidden_dropout = hidden_dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.feat_proj_dropout = feat_proj_dropout
-        self.final_dropout = final_dropout
-        self.layerdrop = layerdrop
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
-        self.vocab_size = vocab_size
+    vocab_size: int = 32
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    squeeze_factor: int = 2
+    hidden_act: str = "gelu"
+    hidden_dropout: float | int = 0.1
+    activation_dropout: float | int = 0.1
+    attention_dropout: float | int = 0.1
+    feat_proj_dropout: float | int = 0.0
+    final_dropout: float | int = 0.1
+    layerdrop: float | int = 0.1
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-5
+    feat_extract_norm: str = "group"
+    feat_extract_activation: str = "gelu"
+    conv_dim: list[int] | tuple[int, ...] = (64, 128, 128, 128, 128, 256, 256, 256, 256, 512, 512, 512, 512)
+    conv_stride: list[int] | tuple[int, ...] = (5, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1)
+    conv_kernel: list[int] | tuple[int, ...] = (10, 3, 1, 3, 1, 3, 1, 3, 1, 2, 1, 2, 1)
+    conv_bias: bool = False
+    num_conv_pos_embeddings: int = 128
+    num_conv_pos_embedding_groups: int = 16
+    apply_spec_augment: bool = True
+    mask_time_prob: float = 0.05
+    mask_time_length: int = 10
+    mask_time_min_masks: int = 2
+    mask_feature_prob: float = 0.0
+    mask_feature_length: int = 10
+    mask_feature_min_masks: int = 0
+    ctc_loss_reduction: str = "mean"
+    ctc_zero_infinity: bool = False
+    use_weighted_layer_sum: bool = False
+    classifier_proj_size: int = 256
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 1
+    eos_token_id: int | None = 2
 
+    def __post_init__(self, **kwargs):
+        self.num_feat_extract_layers = len(self.conv_dim)
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)
             or (len(self.conv_kernel) != self.num_feat_extract_layers)
@@ -232,23 +167,6 @@ class SEWConfig(PreTrainedConfig):
                 f"but is `len(config.conv_dim) = {len(self.conv_dim)}`, `len(config.conv_stride) "
                 f"= {len(self.conv_stride)}`, `len(config.conv_kernel) = {len(self.conv_kernel)}`."
             )
-
-        # fine-tuning config parameters for SpecAugment: https://huggingface.co/papers/1904.08779
-        self.apply_spec_augment = apply_spec_augment
-        self.mask_time_prob = mask_time_prob
-        self.mask_time_length = mask_time_length
-        self.mask_time_min_masks = mask_time_min_masks
-        self.mask_feature_prob = mask_feature_prob
-        self.mask_feature_length = mask_feature_length
-        self.mask_feature_min_masks = mask_feature_min_masks
-
-        # ctc loss
-        self.ctc_loss_reduction = ctc_loss_reduction
-        self.ctc_zero_infinity = ctc_zero_infinity
-
-        # sequence classification
-        self.use_weighted_layer_sum = use_weighted_layer_sum
-        self.classifier_proj_size = classifier_proj_size
 
     @property
     def inputs_to_logits_ratio(self):

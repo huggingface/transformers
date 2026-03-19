@@ -90,7 +90,7 @@ def batch_generate(
     displayed_samples: int = 0,  # -1: no display, 0: display stats, >0: display inputs and some outputs
     output_file: str | None = None,
     expected_outputs: list[str] | None = None,
-    use_async: bool | None = None,
+    use_async_batching: bool | None = None,
 ) -> tuple[float, float]:
     # Actual batch generation
     if displayed_samples >= 0:
@@ -99,7 +99,7 @@ def batch_generate(
     batch_outputs = model.generate_batch(
         inputs=simple_batch_inputs,
         generation_config=generation_config,
-        use_async=use_async,
+        use_async_batching=use_async_batching,
     )
     end_time_simple = time.time()
     if displayed_samples >= 0:
@@ -177,7 +177,10 @@ if __name__ == "__main__":
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable
     parser.add_argument("--cuda-graph", "-cg", help="Use cuda graphs", type=str, default=None)
     parser.add_argument("--compile", action="store_true", help="Compile the model using torch.compile")
-    parser.add_argument("--use-async", action="store_true", help="Use the asynchronous API for CB")
+    parser.add_argument("--use-async", action=argparse.BooleanOptionalAction, help="Use asynchronous batching")
+    parser.add_argument("--block-table", type=int, default=0, help="Block table size, ie. number of blocks / request")
+
+    # Generation parameters
     parser.add_argument("--do-sample", action="store_true", help="Activate sampling")
     parser.add_argument("--num-return-sequences", type=int, default=1, help="Number of return sequences")
 
@@ -302,6 +305,7 @@ if __name__ == "__main__":
         num_blocks=args.num_blocks,
         max_batch_tokens=args.max_batch_tokens,
         num_return_sequences=args.num_return_sequences,
+        max_blocks_per_request=args.block_table,
     )
 
     # Add a compile config if requested
@@ -334,7 +338,7 @@ if __name__ == "__main__":
             generation_cfg,
             tokenizer,
             displayed_samples=-1,
-            use_async=args.use_async,
+            use_async_batching=args.use_async,
         )
 
     if args.profile is not None:
@@ -351,7 +355,7 @@ if __name__ == "__main__":
             displayed_samples=args.displayed,
             output_file=args.output_file,
             expected_outputs=expected_outputs,
-            use_async=args.use_async,
+            use_async_batching=args.use_async,
         )
     if args.profile is not None:
         filename = args.profile if args.profile.endswith(".json") else args.profile + ".json"

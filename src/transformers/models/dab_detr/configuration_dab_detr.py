@@ -13,111 +13,52 @@
 # limitations under the License.
 """DAB-DETR model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-logger = logging.get_logger(__name__)
-
-
+@auto_docstring(checkpoint="IDEA-Research/dab-detr-resnet-50")
+@strict(accept_kwargs=True)
 class DabDetrConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DabDetrModel`]. It is used to instantiate
-    a DAB-DETR model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the DAB-DETR
-    [IDEA-Research/dab_detr-base](https://huggingface.co/IDEA-Research/dab_detr-base) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `ResNetConfig()`):
-            The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
-            case it will default to `ResNetConfig()`.
-        num_queries (`int`, *optional*, defaults to 300):
-            Number of object queries, i.e. detection slots. This is the maximal number of objects
-            [`DabDetrModel`] can detect in a single image. For COCO, we recommend 100 queries.
-        encoder_layers (`int`, *optional*, defaults to 6):
-            Number of encoder layers.
-        encoder_ffn_dim (`int`, *optional*, defaults to 2048):
-            Dimension of the "intermediate" (often named feed-forward) layer in encoder.
-        encoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_layers (`int`, *optional*, defaults to 6):
-            Number of decoder layers.
-        decoder_ffn_dim (`int`, *optional*, defaults to 2048):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
-            Indicates whether the transformer model architecture is an encoder-decoder or not.
-        activation_function (`str` or `function`, *optional*, defaults to `"prelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        hidden_size (`int`, *optional*, defaults to 256):
-            This parameter is a general dimension parameter, defining dimensions for components such as the encoder layer and projection parameters in the decoder layer, among others.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        init_std (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        init_xavier_std (`float`, *optional*, defaults to 1.0):
-            The scaling factor used for the Xavier initialization gain in the HM Attention map module.
-        auxiliary_loss (`bool`, *optional*, defaults to `False`):
-            Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
-        dilation (`bool`, *optional*, defaults to `False`):
-            Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when `use_timm_backbone` = `True`.
-        class_cost (`float`, *optional*, defaults to 2):
-            Relative weight of the classification error in the Hungarian matching cost.
-        bbox_cost (`float`, *optional*, defaults to 5):
-            Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.
-        giou_cost (`float`, *optional*, defaults to 2):
-            Relative weight of the generalized IoU loss of the bounding box in the Hungarian matching cost.
-        cls_loss_coefficient (`float`, *optional*, defaults to 2):
-            Relative weight of the classification loss in the object detection loss function.
-        bbox_loss_coefficient (`float`, *optional*, defaults to 5):
-            Relative weight of the L1 bounding box loss in the object detection loss.
-        giou_loss_coefficient (`float`, *optional*, defaults to 2):
-            Relative weight of the generalized IoU loss in the object detection loss.
-        focal_alpha (`float`, *optional*, defaults to 0.25):
-            Alpha parameter in the focal loss.
-        temperature_height (`int`, *optional*, defaults to 20):
-            Temperature parameter to tune the flatness of positional attention (HEIGHT)
-        temperature_width (`int`, *optional*, defaults to 20):
-            Temperature parameter to tune the flatness of positional attention (WIDTH)
-        query_dim (`int`, *optional*, defaults to 4):
-            Query dimension parameter represents the size of the output vector.
-        random_refpoints_xy (`bool`, *optional*, defaults to `False`):
-            Whether to fix the x and y coordinates of the anchor boxes with random initialization.
-        keep_query_pos (`bool`, *optional*, defaults to `False`):
-            Whether to concatenate the projected positional embedding from the object query into the original query (key) in every decoder layer.
-        num_patterns (`int`, *optional*, defaults to 0):
-            Number of pattern embeddings.
-        normalize_before (`bool`, *optional*, defaults to `False`):
-            Whether we use a normalization layer in the Encoder or not.
-        sine_position_embedding_scale (`float`, *optional*, defaults to 'None'):
-            Scaling factor applied to the normalized positional encodings.
-        initializer_bias_prior_prob (`float`, *optional*):
-            The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
-            If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
-
+    num_queries (`int`, *optional*, defaults to 300):
+        Number of object queries, i.e. detection slots. This is the maximal number of objects
+        [`DabDetrModel`] can detect in a single image. For COCO, we recommend 100 queries.
+    dilation (`bool`, *optional*, defaults to `False`):
+        Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when `use_timm_backbone` = `True`.
+    temperature_height (`int`, *optional*, defaults to 20):
+        Temperature parameter to tune the flatness of positional attention (HEIGHT)
+    temperature_width (`int`, *optional*, defaults to 20):
+        Temperature parameter to tune the flatness of positional attention (WIDTH)
+    query_dim (`int`, *optional*, defaults to 4):
+        Query dimension parameter represents the size of the output vector.
+    random_refpoints_xy (`bool`, *optional*, defaults to `False`):
+        Whether to fix the x and y coordinates of the anchor boxes with random initialization.
+    keep_query_pos (`bool`, *optional*, defaults to `False`):
+        Whether to concatenate the projected positional embedding from the object query into the original query (key) in every decoder layer.
+    num_patterns (`int`, *optional*, defaults to 0):
+        Number of pattern embeddings.
+    normalize_before (`bool`, *optional*, defaults to `False`):
+        Whether we use a normalization layer in the Encoder or not.
+    sine_position_embedding_scale (`float`, *optional*, defaults to 'None'):
+        Scaling factor applied to the normalized positional encodings.
+    initializer_bias_prior_prob (`float`, *optional*):
+        The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
+        If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
 
     Examples:
 
     ```python
     >>> from transformers import DabDetrConfig, DabDetrModel
 
-    >>> # Initializing a DAB-DETR IDEA-Research/dab_detr-base style configuration
+    >>> # Initializing a DAB-DETR IDEA-Research/dab-detr-resnet-50 style configuration
     >>> configuration = DabDetrConfig()
 
-    >>> # Initializing a model (with random weights) from the IDEA-Research/dab_detr-base style configuration
+    >>> # Initializing a model (with random weights) from the IDEA-Research/dab-detr-resnet-50 style configuration
     >>> model = DabDetrModel(configuration)
 
     >>> # Accessing the model configuration
@@ -129,50 +70,46 @@ class DabDetrConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",
+        "num_hidden_layers": "encoder_layers",
     }
 
-    def __init__(
-        self,
-        backbone_config=None,
-        num_queries=300,
-        encoder_layers=6,
-        encoder_ffn_dim=2048,
-        encoder_attention_heads=8,
-        decoder_layers=6,
-        decoder_ffn_dim=2048,
-        decoder_attention_heads=8,
-        is_encoder_decoder=True,
-        activation_function="prelu",
-        hidden_size=256,
-        dropout=0.1,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        init_std=0.02,
-        init_xavier_std=1.0,
-        auxiliary_loss=False,
-        dilation=False,
-        class_cost=2,
-        bbox_cost=5,
-        giou_cost=2,
-        cls_loss_coefficient=2,
-        bbox_loss_coefficient=5,
-        giou_loss_coefficient=2,
-        focal_alpha=0.25,
-        temperature_height=20,
-        temperature_width=20,
-        query_dim=4,
-        random_refpoints_xy=False,
-        keep_query_pos=False,
-        num_patterns=0,
-        normalize_before=False,
-        sine_position_embedding_scale=None,
-        initializer_bias_prior_prob=None,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        if query_dim != 4:
-            raise ValueError("The query dimensions has to be 4.")
+    backbone_config: dict | PreTrainedConfig | None = None
+    num_queries: int = 300
+    encoder_layers: int = 6
+    encoder_ffn_dim: int = 2048
+    encoder_attention_heads: int = 8
+    decoder_layers: int = 6
+    decoder_ffn_dim: int = 2048
+    decoder_attention_heads: int = 8
+    is_encoder_decoder: int = True
+    activation_function: str = "prelu"
+    hidden_size: int = 256
+    dropout: float | int = 0.1
+    attention_dropout: float | int = 0.0
+    activation_dropout: float | int = 0.0
+    init_std: float = 0.02
+    init_xavier_std: float = 1.0
+    auxiliary_loss: bool = False
+    dilation: bool = False
+    class_cost: int = 2
+    bbox_cost: int = 5
+    giou_cost: int = 2
+    cls_loss_coefficient: int = 2
+    bbox_loss_coefficient: int = 5
+    giou_loss_coefficient: int = 2
+    focal_alpha: float = 0.25
+    temperature_height: int = 20
+    temperature_width: int = 20
+    query_dim: int = 4
+    random_refpoints_xy: bool = False
+    keep_query_pos: bool = False
+    num_patterns: int = 0
+    normalize_before: bool = False
+    sine_position_embedding_scale: float | None = None
+    initializer_bias_prior_prob: float | None = None
+    tie_word_embeddings: bool = True
 
+    def __post_init__(self, **kwargs):
         # Init timm backbone with hardcoded values for BC
         timm_default_kwargs = {
             "num_channels": 3,
@@ -180,11 +117,11 @@ class DabDetrConfig(PreTrainedConfig):
             "use_pretrained_backbone": False,
             "out_indices": [1, 2, 3, 4],
         }
-        if dilation:
+        if self.dilation:
             timm_default_kwargs["output_stride"] = 16
 
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_backbone="resnet50",
             default_config_type="resnet50",
             default_config_kwargs={"out_features": ["stage4"]},
@@ -192,44 +129,12 @@ class DabDetrConfig(PreTrainedConfig):
             **kwargs,
         )
 
-        self.backbone_config = backbone_config
-        self.num_queries = num_queries
-        self.hidden_size = hidden_size
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.encoder_layers = encoder_layers
-        self.encoder_attention_heads = encoder_attention_heads
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.activation_function = activation_function
-        self.init_std = init_std
-        self.init_xavier_std = init_xavier_std
-        self.num_hidden_layers = encoder_layers
-        self.auxiliary_loss = auxiliary_loss
-        # Hungarian matcher
-        self.class_cost = class_cost
-        self.bbox_cost = bbox_cost
-        self.giou_cost = giou_cost
-        # Loss coefficients
-        self.cls_loss_coefficient = cls_loss_coefficient
-        self.bbox_loss_coefficient = bbox_loss_coefficient
-        self.giou_loss_coefficient = giou_loss_coefficient
-        self.focal_alpha = focal_alpha
-        self.query_dim = query_dim
-        self.random_refpoints_xy = random_refpoints_xy
-        self.keep_query_pos = keep_query_pos
-        self.num_patterns = num_patterns
-        self.normalize_before = normalize_before
-        self.temperature_width = temperature_width
-        self.temperature_height = temperature_height
-        self.sine_position_embedding_scale = sine_position_embedding_scale
-        self.initializer_bias_prior_prob = initializer_bias_prior_prob
-        self.tie_word_embeddings = tie_word_embeddings
+        super().__post_init__(**kwargs)
 
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.query_dim != 4:
+            raise ValueError("The query dimensions has to be 4.")
 
 
 __all__ = ["DabDetrConfig"]
