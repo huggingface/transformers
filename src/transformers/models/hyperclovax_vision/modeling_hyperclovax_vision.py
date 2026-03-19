@@ -545,7 +545,7 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
     def __init__(self, config: HCXVisionConfig):
         super().__init__(config)
 
-        self.vision_config = AutoModel.from_config(config.vision_config)
+        self.vision_model = AutoModel.from_config(config.vision_config)
 
         self.multi_modal_projector = nn.Linear(config.vision_config.out_hidden_size, config.text_config.hidden_size)
 
