@@ -503,7 +503,12 @@ def sdpa_mask(
         return None
 
     # Potentially add the padding 2D mask
-    if padding_mask is not None:
+    # For the non-vmap path, we apply padding separately using slice-based indexing
+    # instead of advanced tensor indexing to avoid a torch inductor C++ codegen bug
+    # where the generated boundary-check code references undeclared variables.
+    # See: https://github.com/huggingface/transformers/issues/44458
+    _apply_padding_separately = padding_mask is not None and not use_vmap
+    if padding_mask is not None and not _apply_padding_separately:
         mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
 
     batch_arange = torch.arange(batch_size, device=device)
@@ -518,6 +523,9 @@ def sdpa_mask(
         attention_mask = mask_function(*_non_vmap_expansion_sdpa(batch_arange, head_arange, q_arange, kv_arange))
         # Expand the mask to match batch size and query length if they weren't used in the mask function
         attention_mask = attention_mask.expand(batch_size, -1, q_length, kv_length)
+        # Apply padding mask separately using compile-friendly slice-based indexing
+        if _apply_padding_separately:
+            attention_mask = attention_mask & padding_mask[:, kv_offset : kv_offset + kv_length].unsqueeze(1).unsqueeze(1)
 
     # Option 2: Vmap mask creation (torch>=2.6 and custom patterns)
     elif _is_torch_greater_or_equal_than_2_6:
