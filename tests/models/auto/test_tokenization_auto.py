@@ -302,7 +302,9 @@ class AutoTokenizerTest(unittest.TestCase):
 
     def test_auto_tokenizer_from_mistral_patching(self):
         """See #43376, regression when kwarg is manually passed to patch the regex in mistral tokenizers"""
-        AutoTokenizer.from_pretrained("mistralai/Ministral-3-3B-Instruct-2512", fix_mistral_regex=True)  # should not error
+        AutoTokenizer.from_pretrained(
+            "mistralai/Ministral-3-3B-Instruct-2512", fix_mistral_regex=True
+        )  # should not error
 
     @require_tokenizers
     def test_auto_tokenizer_loads_bloom_repo_without_tokenizer_class(self):
