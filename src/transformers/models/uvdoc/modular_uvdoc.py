@@ -481,7 +481,7 @@ class UVDocModel(UVDocPreTrainedModel):
         self.out_point_positions2D = UVDocPointPositions2D(config)
         self.post_init()
 
-    @capture_outputs
+    @merge_with_config_defaults
     @auto_docstring
     def forward(
         self,

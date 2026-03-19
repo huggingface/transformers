@@ -29,7 +29,7 @@ from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.output_capturing import capture_outputs
+from ...utils.generic import merge_with_config_defaults
 from .configuration_uvdoc import UVDocConfig
 
 
@@ -298,7 +298,7 @@ class UVDocModel(UVDocPreTrainedModel):
         self.out_point_positions2D = UVDocPointPositions2D(config)
         self.post_init()
 
-    @capture_outputs
+    @merge_with_config_defaults
     @auto_docstring
     def forward(
         self,
