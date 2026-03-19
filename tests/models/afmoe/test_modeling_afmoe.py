@@ -189,9 +189,6 @@ class AfmoeIntegrationTest(unittest.TestCase):
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(dynamic_text, static_text)
 
-        # Clear any existing cache object before static+compiled generation.
-        if hasattr(model, "_cache"):
-            del model._cache
         model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
         generated_ids = model.generate(
             **inputs,
