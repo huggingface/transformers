@@ -155,7 +155,7 @@ class ContinuousBatchProcessor:
         else:
             self._compiled_decode = None
 
-        # Padding is turned on it either cuda graphs or compile is used
+        # Padding is turned on when either cuda graphs or compile is used
         self._pad_inputs = self.use_cuda_graph or (varlen_config is not None or decode_config is not None)
 
         # Setup inputs and outputs
