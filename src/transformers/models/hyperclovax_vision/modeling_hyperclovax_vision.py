@@ -632,7 +632,6 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
         """
-        pixel_values = pixel_values.type(self.vision_model.dtype)
         vision_outputs = self.vision_model(pixel_values, grid_thw=image_grid_thw, **kwargs)
         vision_outputs.pooler_output = self.projector(vision_outputs.pooler_output)
 

@@ -91,7 +91,6 @@ class HCXVisionModel(VideoLlama3Model):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        pixel_values = pixel_values.type(self.vision_model.dtype)
         vision_outputs = self.vision_model(pixel_values, grid_thw=image_grid_thw, **kwargs)
         vision_outputs.pooler_output = self.projector(vision_outputs.pooler_output)
 
