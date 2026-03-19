@@ -109,9 +109,4 @@ vocabulary differ from standard subword tokenizers.
 [[autodoc]] CharacterBertForQuestionAnswering
     - forward
 
-## CharacterBertForMultipleChoice
-
-[[autodoc]] CharacterBertForMultipleChoice
-    - forward
-
 [characterbert-paper]: https://aclanthology.org/2020.coling-main.609/
