@@ -14,7 +14,9 @@
 # limitations under the License.
 
 
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 
@@ -23,6 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="meta-llama/Llama-4-Scout-17B-16E")
+@strict(accept_kwargs=True)
 class Llama4VisionConfig(PreTrainedConfig):
     r"""
     vision_output_dim (`int`, *optional*, defaults to 7680):
@@ -50,54 +53,29 @@ class Llama4VisionConfig(PreTrainedConfig):
     model_type = "llama4_vision_model"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        hidden_size: int | None = 768,
-        hidden_act: str | None = "gelu",
-        num_hidden_layers: int | None = 34,
-        num_attention_heads: int | None = 16,
-        num_channels: int | None = 3,
-        intermediate_size: int | None = 5632,
-        vision_output_dim: int | None = 7680,
-        image_size: int | None = 448,
-        patch_size: int | None = 14,
-        norm_eps: float | None = 1e-5,
-        vision_feature_select_strategy: str | None = "default",
-        initializer_range: float | None = 0.02,
-        pixel_shuffle_ratio: float | None = 0.5,
-        projector_input_dim: int | None = 4096,
-        projector_output_dim: int | None = 4096,
-        multi_modal_projector_bias: bool | None = False,
-        projector_dropout: float | None = 0.0,
-        attention_dropout: float | None = 0.0,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        **kwargs,
-    ):
-        self.hidden_size = hidden_size
-        self.hidden_act = hidden_act
-        self.num_hidden_layers = num_hidden_layers
-        self.num_channels = num_channels
-        self.intermediate_size = intermediate_size
-        self.image_size = image_size
-        self.vision_output_dim = vision_output_dim
-        self.patch_size = patch_size
-        self.norm_eps = norm_eps
-        self.num_attention_heads = num_attention_heads
-        self.initializer_range = initializer_range
-        self.pixel_shuffle_ratio = pixel_shuffle_ratio
-        self.projector_input_dim = projector_input_dim
-        self.projector_output_dim = projector_output_dim
-        self.multi_modal_projector_bias = multi_modal_projector_bias
-        self.projector_dropout = projector_dropout
-        self.attention_dropout = attention_dropout
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-
-        self.rope_parameters = rope_parameters
-
-        super().__init__(**kwargs)
+    hidden_size: int = 768
+    hidden_act: str = "gelu"
+    num_hidden_layers: int = 34
+    num_attention_heads: int = 16
+    num_channels: int = 3
+    intermediate_size: int = 5632
+    vision_output_dim: int = 7680
+    image_size: int | list[int] | tuple[int, int] = 448
+    patch_size: int | list[int] | tuple[int, int] = 14
+    norm_eps: float = 1e-5
+    vision_feature_select_strategy: str = "default"
+    initializer_range: float = 0.02
+    pixel_shuffle_ratio: float = 0.5
+    projector_input_dim: int = 4096
+    projector_output_dim: int = 4096
+    multi_modal_projector_bias: bool = False
+    projector_dropout: float | int = 0.0
+    attention_dropout: float | int = 0.0
+    rope_parameters: RopeParameters | dict | None = None
 
 
 @auto_docstring(checkpoint="meta-llama/Llama-4-Scout-17B-16E")
+@strict(accept_kwargs=True)
 class Llama4TextConfig(PreTrainedConfig):
     r"""
     intermediate_size_mlp (`int`, *optional*, defaults to 16384):
@@ -158,114 +136,74 @@ class Llama4TextConfig(PreTrainedConfig):
         "layers.*.feed_forward.router": "ep_router",
     }
 
-    def __init__(
-        self,
-        vocab_size=202048,
-        hidden_size=5120,
-        intermediate_size=8192,
-        intermediate_size_mlp=16384,
-        num_hidden_layers=48,
-        num_attention_heads=40,
-        num_key_value_heads=8,
-        head_dim=128,
-        hidden_act="silu",
-        max_position_embeddings=4096 * 32,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
-        tie_word_embeddings=False,
-        attention_dropout=0.0,
-        num_experts_per_tok=1,
-        num_local_experts=16,
-        moe_layers=None,
-        interleave_moe_layer_step=1,
-        use_qk_norm=True,
-        output_router_logits=False,
-        router_aux_loss_coef=0.001,
-        router_jitter_noise=0.0,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        no_rope_layers=None,
-        no_rope_layer_interval=4,
-        attention_chunk_size=8192,
-        layer_types=None,
-        attn_temperature_tuning=True,
-        floor_scale=8192,
-        attn_scale=0.1,
-        **kwargs,
-    ):
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.attn_temperature_tuning = attn_temperature_tuning
-        self.attn_scale = attn_scale
-        self.floor_scale = floor_scale
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.intermediate_size_mlp = intermediate_size_mlp
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.attention_bias = False
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    vocab_size: int = 202048
+    hidden_size: int = 5120
+    intermediate_size: int = 8192
+    intermediate_size_mlp: int = 16384
+    num_hidden_layers: int = 48
+    num_attention_heads: int = 40
+    num_key_value_heads: int = 8
+    head_dim: int = 128
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 4096 * 32
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    pad_token_id: int | None = None
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    tie_word_embeddings: bool = False
+    attention_dropout: float | int = 0.0
+    num_experts_per_tok: int = 1
+    num_local_experts: int = 16
+    moe_layers: list[int] | None = None
+    interleave_moe_layer_step: int = 1
+    use_qk_norm: bool = True
+    output_router_logits: bool = False
+    router_aux_loss_coef: float = 0.001
+    router_jitter_noise: float = 0.0
+    rope_parameters: RopeParameters | dict | None = None
+    no_rope_layers: list[int] | None = None
+    no_rope_layer_interval: int = 4
+    attention_chunk_size: int = 8192
+    layer_types: list[int] | None = None
+    attn_temperature_tuning: bool = True
+    floor_scale: int = 8192
+    attn_scale: float = 0.1
+    attention_bias: bool = False
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_dropout = attention_dropout
-        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        self.use_qk_norm = use_qk_norm
-        self.num_experts_per_tok = num_experts_per_tok
-        self.num_local_experts = num_local_experts
-
-        self.output_router_logits = output_router_logits
-        self.router_aux_loss_coef = router_aux_loss_coef
-        self.router_jitter_noise = router_jitter_noise
-
-        # Backwards compatibility
-        if no_rope_layers == []:
-            no_rope_layers = None
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
         default_no_rope_layers = [
-            int((layer_idx + 1) % no_rope_layer_interval != 0) for layer_idx in range(self.num_hidden_layers)
+            int((layer_idx + 1) % self.no_rope_layer_interval != 0) for layer_idx in range(self.num_hidden_layers)
         ]
+        self.no_rope_layers = self.no_rope_layers if self.no_rope_layers else default_no_rope_layers
+        self.head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
 
-        self.no_rope_layers = no_rope_layers if no_rope_layers else default_no_rope_layers
-
-        self.interleave_moe_layer_step = interleave_moe_layer_step
         self.moe_layers = (
-            moe_layers
-            if moe_layers is not None
+            self.moe_layers
+            if self.moe_layers is not None
             else list(
                 range(
-                    interleave_moe_layer_step - 1,
-                    num_hidden_layers,
-                    interleave_moe_layer_step,
+                    self.interleave_moe_layer_step - 1,
+                    self.num_hidden_layers,
+                    self.interleave_moe_layer_step,
                 )
             )
         )
-        self.attention_chunk_size = attention_chunk_size
 
-        self.layer_types = layer_types
-        if layer_types is None:
+        if self.layer_types is None:
             self.layer_types = [
                 "chunked_attention" if no_rope else "full_attention" for no_rope in self.no_rope_layers
             ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        self.rope_parameters = rope_parameters
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="meta-llama/Llama-4-Scout-17B-16E")
+@strict(accept_kwargs=True)
 class Llama4Config(PreTrainedConfig):
     r"""
     boi_token_index (`int`, *optional*, defaults to 200080):
@@ -297,37 +235,26 @@ class Llama4Config(PreTrainedConfig):
         "multi_modal_projector.linear_1": "colwise_rep",
     }
 
-    def __init__(
-        self,
-        vision_config=None,
-        text_config=None,
-        boi_token_index=200080,
-        eoi_token_index=200081,
-        image_token_index=200092,
-        tie_word_embeddings=False,
-        **kwargs,
-    ):
-        if vision_config is None:
+    vision_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    boi_token_index: int = 200080
+    eoi_token_index: int = 200081
+    image_token_index: int = 200092
+    tie_word_embeddings: bool = False
+
+    def __post_init__(self, **kwargs):
+        if self.vision_config is None:
             self.vision_config = Llama4VisionConfig()
             logger.info("vision_config is None, using default llama4 vision config")
-        elif isinstance(vision_config, dict):
-            self.vision_config = Llama4VisionConfig(**vision_config)
-        elif isinstance(vision_config, Llama4VisionConfig):
-            self.vision_config = vision_config
+        elif isinstance(self.vision_config, dict):
+            self.vision_config = Llama4VisionConfig(**self.vision_config)
 
-        self.boi_token_index = boi_token_index
-        self.eoi_token_index = eoi_token_index
-        self.image_token_index = image_token_index
-        if text_config is None:
+        if self.text_config is None:
             self.text_config = Llama4TextConfig()
             logger.info("text_config is None, using default llama4 text config")
-        elif isinstance(text_config, dict):
-            self.text_config = Llama4TextConfig(**text_config)
-        elif isinstance(text_config, Llama4TextConfig):
-            self.text_config = text_config
-
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+        elif isinstance(self.text_config, dict):
+            self.text_config = Llama4TextConfig(**self.text_config)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Llama4Config", "Llama4TextConfig", "Llama4VisionConfig"]

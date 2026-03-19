@@ -16,10 +16,10 @@
 
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -43,6 +43,7 @@ from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
 @auto_docstring(checkpoint="LGAI-EXAONE/K-EXAONE-236B-A23B")
+@strict(accept_kwargs=True)
 class ExaoneMoeConfig(Exaone4Config):
     r"""
     n_group (`int`, *optional*, defaults to 1):
@@ -79,92 +80,44 @@ class ExaoneMoeConfig(Exaone4Config):
     >>> configuration = model.config
     ```"""
 
-    model_type = "exaone_moe"
+    vocab_size: int = 102400
+    hidden_size: int = 4096
+    intermediate_size: int = 16384
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    num_key_value_heads: int = 32
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 2048
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 53
+    pad_token_id: int | None = 0
+    tie_word_embeddings: bool = False
+    rope_parameters: dict | None = None
+    attention_dropout: float | int = 0.0
+    sliding_window: int = 4096
+    sliding_window_pattern: str | int | None = 4
+    layer_types: list[str] | None = None
+    mlp_layer_types: list[str] | None = None
+    first_k_dense_replace: int = 1
+    moe_intermediate_size: int = 1024
+    num_experts: int = 64
+    num_experts_per_tok: int = 8
+    num_shared_experts: int = 1
+    norm_topk_prob: bool = True
+    routed_scaling_factor: float = 2.5
+    n_group: int = 1
+    topk_group: int = 1
 
-    def __init__(
-        self,
-        vocab_size=102400,
-        hidden_size=4096,
-        intermediate_size=16384,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=32,
-        hidden_act="silu",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        bos_token_id=1,
-        eos_token_id=53,
-        pad_token_id=0,
-        tie_word_embeddings=False,
-        rope_parameters=None,
-        attention_dropout=0.0,
-        sliding_window=4096,
-        sliding_window_pattern=4,
-        layer_types=None,
-        mlp_layer_types=None,
-        first_k_dense_replace=1,
-        moe_intermediate_size=1024,
-        num_experts=64,
-        num_experts_per_tok=8,
-        num_shared_experts=1,
-        norm_topk_prob=True,
-        routed_scaling_factor=2.5,
-        n_group=1,
-        topk_group=1,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_dropout = attention_dropout
-        self.sliding_window = sliding_window
-        self.sliding_window_pattern = sliding_window_pattern
-        self.first_k_dense_replace = first_k_dense_replace
-        self.moe_intermediate_size = moe_intermediate_size
-        self.num_experts = num_experts
-        self.num_experts_per_tok = num_experts_per_tok
-        self.num_shared_experts = num_shared_experts
-        self.norm_topk_prob = norm_topk_prob
-        self.routed_scaling_factor = routed_scaling_factor
-        self.n_group = n_group
-        self.topk_group = topk_group
-        self.rope_parameters = rope_parameters
-
-        self.layer_types = layer_types
-        if self.sliding_window is None:
-            sliding_window_pattern = 0
-        if self.layer_types is None:
-            self.layer_types = [
-                "sliding_attention"
-                if ((i + 1) % (sliding_window_pattern) != 0 and i < self.num_hidden_layers)
-                else "full_attention"
-                for i in range(self.num_hidden_layers)
-            ]
-        layer_type_validation(self.layer_types)
-
-        self.mlp_layer_types = mlp_layer_types
+    def __post_init__(self, **kwargs):
         if self.mlp_layer_types is None:
             self.mlp_layer_types = [
                 "dense" if i < self.first_k_dense_replace else "sparse" for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.mlp_layer_types, self.num_hidden_layers, attention=False)
 
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-
-        PreTrainedConfig.__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 class ExaoneMoeAttention(Exaone4Attention):

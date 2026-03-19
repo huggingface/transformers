@@ -13,14 +13,14 @@
 # limitations under the License.
 """GLPN model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="vinvino02/glpn-kitti")
+@strict(accept_kwargs=True)
 class GLPNConfig(PreTrainedConfig):
     r"""
     num_encoder_blocks (`int`, *optional*, defaults to 4):
@@ -64,48 +64,24 @@ class GLPNConfig(PreTrainedConfig):
 
     model_type = "glpn"
 
-    def __init__(
-        self,
-        num_channels=3,
-        num_encoder_blocks=4,
-        depths=[2, 2, 2, 2],
-        sr_ratios=[8, 4, 2, 1],
-        hidden_sizes=[32, 64, 160, 256],
-        patch_sizes=[7, 3, 3, 3],
-        strides=[4, 2, 2, 2],
-        num_attention_heads=[1, 2, 5, 8],
-        mlp_ratios=[4, 4, 4, 4],
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        drop_path_rate=0.1,
-        layer_norm_eps=1e-6,
-        decoder_hidden_size=64,
-        max_depth=10,
-        head_in_index=-1,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.num_channels = num_channels
-        self.num_encoder_blocks = num_encoder_blocks
-        self.depths = depths
-        self.sr_ratios = sr_ratios
-        self.hidden_sizes = hidden_sizes
-        self.patch_sizes = patch_sizes
-        self.strides = strides
-        self.mlp_ratios = mlp_ratios
-        self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.drop_path_rate = drop_path_rate
-        self.layer_norm_eps = layer_norm_eps
-        self.decoder_hidden_size = decoder_hidden_size
-        self.max_depth = max_depth
-        self.head_in_index = head_in_index
+    num_channels: int = 3
+    num_encoder_blocks: int = 4
+    depths: list[int] | tuple[int, ...] = (2, 2, 2, 2)
+    sr_ratios: list[int] | tuple[int, ...] = (8, 4, 2, 1)
+    hidden_sizes: list[int] | tuple[int, ...] = (32, 64, 160, 256)
+    patch_sizes: list[int] | tuple[int, ...] = (7, 3, 3, 3)
+    strides: list[int] | tuple[int, ...] = (4, 2, 2, 2)
+    num_attention_heads: list[int] | tuple[int, ...] = (1, 2, 5, 8)
+    mlp_ratios: list[int] | tuple[int, ...] = (4, 4, 4, 4)
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    initializer_range: float = 0.02
+    drop_path_rate: float = 0.1
+    layer_norm_eps: float = 1e-6
+    decoder_hidden_size: int = 64
+    max_depth: int = 10
+    head_in_index: int = -1
 
 
 __all__ = ["GLPNConfig"]

@@ -13,14 +13,14 @@
 # limitations under the License.
 """XGLM model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/xglm-564M")
+@strict(accept_kwargs=True)
 class XGLMConfig(PreTrainedConfig):
     r"""
     Example:
@@ -47,52 +47,26 @@ class XGLMConfig(PreTrainedConfig):
         "num_hidden_layers": "num_layers",
     }
 
-    def __init__(
-        self,
-        vocab_size=256008,
-        max_position_embeddings=2048,
-        d_model=1024,
-        ffn_dim=4096,
-        num_layers=24,
-        attention_heads=16,
-        activation_function="gelu",
-        dropout=0.1,
-        attention_dropout=0.1,
-        activation_dropout=0.0,
-        layerdrop=0.0,
-        init_std=0.02,
-        scale_embedding=True,
-        use_cache=True,
-        decoder_start_token_id=2,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        add_cross_attention=False,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        self.add_cross_attention = add_cross_attention
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.d_model = d_model
-        self.ffn_dim = ffn_dim
-        self.num_layers = num_layers
-        self.attention_heads = attention_heads
-        self.activation_function = activation_function
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.layerdrop = layerdrop
-        self.init_std = init_std
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.use_cache = use_cache
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.decoder_start_token_id = decoder_start_token_id
-
-        super().__init__(**kwargs)
+    vocab_size: int = 256008
+    max_position_embeddings: int = 2048
+    d_model: int = 1024
+    ffn_dim: int = 4096
+    num_layers: int = 24
+    attention_heads: int = 16
+    activation_function: str = "gelu"
+    dropout: float | int = 0.1
+    attention_dropout: float | int = 0.1
+    activation_dropout: float | int = 0.0
+    layerdrop: float | int = 0.0
+    init_std: float = 0.02
+    scale_embedding: bool = True
+    use_cache: bool = True
+    decoder_start_token_id: int = 2
+    pad_token_id: int | None = 1
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 2
+    add_cross_attention: bool = False
+    tie_word_embeddings: bool = True
 
 
 __all__ = ["XGLMConfig"]

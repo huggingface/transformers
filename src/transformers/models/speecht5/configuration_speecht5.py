@@ -16,14 +16,14 @@
 import functools
 import operator
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/speecht5_asr")
+@strict(accept_kwargs=True)
 class SpeechT5Config(PreTrainedConfig):
     r"""
     positional_dropout (`float`, *optional*, defaults to 0.1):
@@ -139,98 +139,71 @@ class SpeechT5Config(PreTrainedConfig):
     model_type = "speecht5"
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "num_hidden_layers": "encoder_layers"}
 
-    def __init__(
-        self,
-        vocab_size=81,
-        hidden_size=768,
-        encoder_layers=12,
-        encoder_attention_heads=12,
-        encoder_ffn_dim=3072,
-        encoder_layerdrop=0.1,
-        decoder_layers=6,
-        decoder_ffn_dim=3072,
-        decoder_attention_heads=12,
-        decoder_layerdrop=0.1,
-        hidden_act="gelu",
-        positional_dropout=0.1,
-        hidden_dropout=0.1,
-        attention_dropout=0.1,
-        activation_dropout=0.1,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        scale_embedding=False,
-        feat_extract_norm="group",
-        feat_proj_dropout=0.0,
-        feat_extract_activation="gelu",
-        conv_dim=(512, 512, 512, 512, 512, 512, 512),
-        conv_stride=(5, 2, 2, 2, 2, 2, 2),
-        conv_kernel=(10, 3, 3, 3, 3, 2, 2),
-        conv_bias=False,
-        num_conv_pos_embeddings=128,
-        num_conv_pos_embedding_groups=16,
-        apply_spec_augment=True,
-        mask_time_prob=0.05,
-        mask_time_length=10,
-        mask_time_min_masks=2,
-        mask_feature_prob=0.0,
-        mask_feature_length=10,
-        mask_feature_min_masks=0,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        decoder_start_token_id=2,
-        num_mel_bins=80,
-        speech_decoder_prenet_layers=2,
-        speech_decoder_prenet_units=256,
-        speech_decoder_prenet_dropout=0.5,
-        speaker_embedding_dim=512,
-        speech_decoder_postnet_layers=5,
-        speech_decoder_postnet_units=256,
-        speech_decoder_postnet_kernel=5,
-        speech_decoder_postnet_dropout=0.5,
-        reduction_factor=2,
-        max_speech_positions=4000,
-        max_text_positions=450,
-        encoder_max_relative_position=160,
-        use_guided_attention_loss=True,
-        guided_attention_loss_num_heads=2,
-        guided_attention_loss_sigma=0.4,
-        guided_attention_loss_scale=10.0,
-        use_cache=True,
-        is_encoder_decoder=True,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.encoder_layers = encoder_layers
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.encoder_attention_heads = encoder_attention_heads
-        self.encoder_layerdrop = encoder_layerdrop
-        self.decoder_layers = decoder_layers
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_attention_heads = decoder_attention_heads
-        self.decoder_layerdrop = decoder_layerdrop
-        self.hidden_act = hidden_act
-        self.positional_dropout = positional_dropout
-        self.hidden_dropout = hidden_dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.scale_embedding = scale_embedding
+    vocab_size: int = 81
+    hidden_size: int = 768
+    encoder_layers: int = 12
+    encoder_attention_heads: int = 12
+    encoder_ffn_dim: int = 3072
+    encoder_layerdrop: float | int = 0.1
+    decoder_layers: int = 6
+    decoder_ffn_dim: int = 3072
+    decoder_attention_heads: int = 12
+    decoder_layerdrop: float | int = 0.1
+    hidden_act: str = "gelu"
+    positional_dropout: float | int = 0.1
+    hidden_dropout: float | int = 0.1
+    attention_dropout: float | int = 0.1
+    activation_dropout: float | int = 0.1
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-5
+    scale_embedding: bool = False
+    feat_extract_norm: str = "group"
+    feat_proj_dropout: float | int = 0.0
+    feat_extract_activation: str = "gelu"
+    conv_dim: list[int] | tuple[int, ...] = (512, 512, 512, 512, 512, 512, 512)
+    conv_stride: list[int] | tuple[int, ...] = (5, 2, 2, 2, 2, 2, 2)
+    conv_kernel: list[int] | tuple[int, ...] = (10, 3, 3, 3, 3, 2, 2)
+    conv_bias: bool = False
+    num_conv_pos_embeddings: int = 128
+    num_conv_pos_embedding_groups: int = 16
+    apply_spec_augment: bool = True
+    mask_time_prob: float = 0.05
+    mask_time_length: int = 10
+    mask_time_min_masks: int = 2
+    mask_feature_prob: float = 0.0
+    mask_feature_length: int = 10
+    mask_feature_min_masks: int = 0
+    pad_token_id: int | None = 1
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 2
+    decoder_start_token_id: int | None = 2
+    num_mel_bins: int = 80
+    speech_decoder_prenet_layers: int = 2
+    speech_decoder_prenet_units: int = 256
+    speech_decoder_prenet_dropout: float | int = 0.5
+    speaker_embedding_dim: int = 512
+    speech_decoder_postnet_layers: int = 5
+    speech_decoder_postnet_units: int = 256
+    speech_decoder_postnet_kernel: int = 5
+    speech_decoder_postnet_dropout: float | int = 0.5
+    reduction_factor: int = 2
+    max_speech_positions: int = 4000
+    max_text_positions: int = 450
+    encoder_max_relative_position: int = 160
+    use_guided_attention_loss: bool = True
+    guided_attention_loss_num_heads: int = 2
+    guided_attention_loss_sigma: float = 0.4
+    guided_attention_loss_scale: float = 10.0
+    use_cache: bool = True
+    is_encoder_decoder: bool = True
+    tie_word_embeddings: bool = True
 
-        self.feat_extract_norm = feat_extract_norm
-        self.feat_proj_dropout = feat_proj_dropout
-        self.feat_extract_activation = feat_extract_activation
-        self.conv_dim = list(conv_dim)
-        self.conv_stride = list(conv_stride)
-        self.conv_kernel = list(conv_kernel)
-        self.conv_bias = conv_bias
-        self.num_conv_pos_embeddings = num_conv_pos_embeddings
-        self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
+    def __post_init__(self, **kwargs):
         self.num_feat_extract_layers = len(self.conv_dim)
+        super().__post_init__(**kwargs)
 
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)
             or (len(self.conv_kernel) != self.num_feat_extract_layers)
@@ -243,51 +216,12 @@ class SpeechT5Config(PreTrainedConfig):
                 f" `len(config.conv_kernel) = {len(self.conv_kernel)}`."
             )
 
-        # fine-tuning config parameters for SpecAugment: https://huggingface.co/papers/1904.08779
-        self.apply_spec_augment = apply_spec_augment
-        self.mask_time_prob = mask_time_prob
-        self.mask_time_length = mask_time_length
-        self.mask_time_min_masks = mask_time_min_masks
-        self.mask_feature_prob = mask_feature_prob
-        self.mask_feature_length = mask_feature_length
-        self.mask_feature_min_masks = mask_feature_min_masks
-
-        self.num_mel_bins = num_mel_bins
-        self.speech_decoder_prenet_layers = speech_decoder_prenet_layers
-        self.speech_decoder_prenet_units = speech_decoder_prenet_units
-        self.speech_decoder_prenet_dropout = speech_decoder_prenet_dropout
-        self.speaker_embedding_dim = speaker_embedding_dim
-
-        self.speech_decoder_postnet_layers = speech_decoder_postnet_layers
-        self.speech_decoder_postnet_units = speech_decoder_postnet_units
-        self.speech_decoder_postnet_kernel = speech_decoder_postnet_kernel
-        self.speech_decoder_postnet_dropout = speech_decoder_postnet_dropout
-        self.reduction_factor = reduction_factor
-
-        self.max_speech_positions = max_speech_positions
-        self.max_text_positions = max_text_positions
-        self.encoder_max_relative_position = encoder_max_relative_position
-
-        self.use_guided_attention_loss = use_guided_attention_loss
-        self.guided_attention_loss_num_heads = guided_attention_loss_num_heads
-        self.guided_attention_loss_sigma = guided_attention_loss_sigma
-        self.guided_attention_loss_scale = guided_attention_loss_scale
-
-        self.use_cache = use_cache
-        self.is_encoder_decoder = is_encoder_decoder
-        self.tie_word_embeddings = tie_word_embeddings
-
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
 
 
 @auto_docstring(checkpoint="microsoft/speecht5_asr")
+@strict(accept_kwargs=True)
 class SpeechT5HifiGanConfig(PreTrainedConfig):
     r"""
     model_in_dim (`int`, *optional*, defaults to 80):
@@ -332,31 +266,16 @@ class SpeechT5HifiGanConfig(PreTrainedConfig):
 
     model_type = "hifigan"
 
-    def __init__(
-        self,
-        model_in_dim=80,
-        sampling_rate=16000,
-        upsample_initial_channel=512,
-        upsample_rates=[4, 4, 4, 4],
-        upsample_kernel_sizes=[8, 8, 8, 8],
-        resblock_kernel_sizes=[3, 7, 11],
-        resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
-        initializer_range=0.01,
-        leaky_relu_slope=0.1,
-        normalize_before=True,
-        **kwargs,
-    ):
-        self.model_in_dim = model_in_dim
-        self.sampling_rate = sampling_rate
-        self.upsample_initial_channel = upsample_initial_channel
-        self.upsample_rates = upsample_rates
-        self.upsample_kernel_sizes = upsample_kernel_sizes
-        self.resblock_kernel_sizes = resblock_kernel_sizes
-        self.resblock_dilation_sizes = resblock_dilation_sizes
-        self.initializer_range = initializer_range
-        self.leaky_relu_slope = leaky_relu_slope
-        self.normalize_before = normalize_before
-        super().__init__(**kwargs)
+    model_in_dim: int = 80
+    sampling_rate: int = 16000
+    upsample_initial_channel: int = 512
+    upsample_rates: list[int] | tuple[int, ...] = (4, 4, 4, 4)
+    upsample_kernel_sizes: list[int] | tuple[int, ...] = (8, 8, 8, 8)
+    resblock_kernel_sizes: list[int] | tuple[int, ...] = (3, 7, 11)
+    resblock_dilation_sizes: list | tuple = ((1, 3, 5), (1, 3, 5), (1, 3, 5))
+    initializer_range: float = 0.01
+    leaky_relu_slope: float = 0.1
+    normalize_before: bool = True
 
 
 __all__ = ["SpeechT5Config", "SpeechT5HifiGanConfig"]

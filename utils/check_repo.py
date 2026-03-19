@@ -189,6 +189,10 @@ IGNORE_NON_TESTED = (
         "PPDocLayoutV2ReadingOrder",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
         "PPDocLayoutV2Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
         "PPDocLayoutV3Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV3ForObjectDetection.
+        "PPOCRV5MobileRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
+        "PPOCRV5MobileRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
+        "PPOCRV5ServerRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
+        "PPOCRV5ServerRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
         "PPLCNetModel",  # Building part of bigger (tested) model. Tested implicitly through PPLCNetForImageClassification.
         "PaddleOCRVLModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
         "PaddleOCRVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
@@ -253,6 +257,7 @@ IGNORE_NON_TESTED = (
         "PeAudioVideoModel",
         "VibeVoiceAcousticTokenizerEncoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "VibeVoiceAcousticTokenizerDecoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
+        "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
     ]
 )
 
@@ -904,22 +909,24 @@ def check_all_auto_object_names_being_defined():
 
     for name, mapping in mappings_to_check.items():
         for class_names in mapping.values():
+            if isinstance(class_names, dict):
+                class_names = tuple(class_names.values())
             if not isinstance(class_names, tuple):
                 class_names = (class_names,)
-                for class_name in class_names:
-                    if class_name is None:
+            for class_name in class_names:
+                if class_name is None:
+                    continue
+                # dummy object is accepted
+                if not hasattr(transformers, class_name):
+                    # If the class name is in a model name mapping, let's not check if there is a definition in any modeling
+                    # module, if it's a private model defined in this file.
+                    if name.endswith("MODEL_MAPPING_NAMES") and is_a_private_model(class_name):
                         continue
-                    # dummy object is accepted
-                    if not hasattr(transformers, class_name):
-                        # If the class name is in a model name mapping, let's not check if there is a definition in any modeling
-                        # module, if it's a private model defined in this file.
-                        if name.endswith("MODEL_MAPPING_NAMES") and is_a_private_model(class_name):
-                            continue
-                        if name.endswith("MODEL_FOR_IMAGE_MAPPING_NAMES") and is_a_private_model(class_name):
-                            continue
-                        failures.append(
-                            f"`{class_name}` appears in the mapping `{name}` but it is not defined in the library."
-                        )
+                    if name.endswith("MODEL_FOR_IMAGE_MAPPING_NAMES") and is_a_private_model(class_name):
+                        continue
+                    failures.append(
+                        f"`{class_name}` appears in the mapping `{name}` but it is not defined in the library."
+                    )
     if len(failures) > 0:
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
@@ -1105,6 +1112,7 @@ UNDOCUMENTED_OBJECTS = [
     "Ernie4_5_VL_MoeForConditionalGeneration",  # BC Alias
     "Ernie4_5_VL_MoeImageProcessor",  # BC Alias
     "Ernie4_5_VL_MoeImageProcessorFast",  # BC Alias
+    "Ernie4_5_VL_MoeImageProcessorPil",  # BC Alias
     "Ernie4_5_VL_MoeModel",  # BC Alias
     "Ernie4_5_VL_MoeTextConfig",  # BC Alias
     "Ernie4_5_VL_MoeTextModel",  # BC Alias

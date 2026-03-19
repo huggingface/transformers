@@ -13,6 +13,8 @@
 # limitations under the License.
 """Dia model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
@@ -22,42 +24,26 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="nari-labs/Dia-1.6B")
+@strict(accept_kwargs=True)
 class DiaEncoderConfig(PreTrainedConfig):
     model_type = "dia_encoder"
 
-    def __init__(
-        self,
-        max_position_embeddings: int = 1024,
-        num_hidden_layers: int = 12,
-        hidden_size: int = 1024,
-        num_attention_heads: int = 16,
-        num_key_value_heads: int = 16,
-        head_dim: int = 128,
-        intermediate_size: int = 4096,
-        norm_eps: float = 1e-5,
-        vocab_size: int = 256,
-        hidden_act: str = "silu",
-        rope_parameters: RopeParameters | None = None,
-        initializer_range: float = 0.02,
-        **kwargs,
-    ):
-        self.max_position_embeddings = max_position_embeddings
-        self.num_hidden_layers = num_hidden_layers
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_attention_heads = num_attention_heads
-        self.head_dim = head_dim
-        self.norm_eps = norm_eps
-        self.vocab_size = vocab_size
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rope_parameters = rope_parameters
-
-        super().__init__(**kwargs)
+    max_position_embeddings: int = 1024
+    num_hidden_layers: int = 12
+    hidden_size: int = 1024
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 16
+    head_dim: int = 128
+    intermediate_size: int = 4096
+    norm_eps: float = 1e-5
+    vocab_size: int = 256
+    hidden_act: str = "silu"
+    rope_parameters: dict | None = None
+    initializer_range: float = 0.02
 
 
 @auto_docstring(checkpoint="nari-labs/Dia-1.6B")
+@strict(accept_kwargs=True)
 class DiaDecoderConfig(PreTrainedConfig):
     r"""
     cross_num_attention_heads (`int`, *optional*, defaults to 16):
@@ -72,58 +58,32 @@ class DiaDecoderConfig(PreTrainedConfig):
 
     model_type = "dia_decoder"
 
-    def __init__(
-        self,
-        max_position_embeddings: int = 3072,
-        num_hidden_layers: int = 18,
-        hidden_size: int = 2048,
-        intermediate_size: int = 8192,
-        num_attention_heads: int = 16,
-        num_key_value_heads: int = 4,
-        head_dim: int = 128,
-        cross_num_attention_heads: int = 16,
-        cross_head_dim: int = 128,
-        cross_num_key_value_heads: int = 16,
-        cross_hidden_size: int = 1024,
-        norm_eps: float = 1e-5,
-        vocab_size: int = 1028,
-        hidden_act: str = "silu",
-        num_channels: int = 9,
-        rope_parameters: RopeParameters | None = None,
-        initializer_range: float = 0.02,
-        use_cache: bool = True,
-        is_encoder_decoder: bool = True,
-        pad_token_id: int = 1025,
-        eos_token_id: int = 1024,
-        bos_token_id: int = 1026,
-        **kwargs,
-    ):
-        self.max_position_embeddings = max_position_embeddings
-        self.num_hidden_layers = num_hidden_layers
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.head_dim = head_dim
-        self.cross_num_key_value_heads = cross_num_key_value_heads
-        self.cross_num_attention_heads = cross_num_attention_heads
-        self.cross_head_dim = cross_head_dim
-        self.cross_hidden_size = cross_hidden_size
-        self.norm_eps = norm_eps
-        self.vocab_size = vocab_size
-        self.hidden_act = hidden_act
-        self.num_channels = num_channels
-        self.initializer_range = initializer_range
-        self.use_cache = use_cache
-        self.rope_parameters = rope_parameters
-        self.pad_token_id = pad_token_id
-        self.eos_token_id = eos_token_id
-        self.bos_token_id = bos_token_id
-
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+    max_position_embeddings: int = 3072
+    num_hidden_layers: int = 18
+    hidden_size: int = 2048
+    intermediate_size: int = 8192
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 4
+    head_dim: int = 128
+    cross_num_attention_heads: int = 16
+    cross_head_dim: int = 128
+    cross_num_key_value_heads: int = 16
+    cross_hidden_size: int = 1024
+    norm_eps: float = 1e-5
+    vocab_size: int = 1028
+    hidden_act: str = "silu"
+    num_channels: int = 9
+    rope_parameters: RopeParameters | dict | None = None
+    initializer_range: float = 0.02
+    use_cache: bool = True
+    is_encoder_decoder: bool = True
+    pad_token_id: int | None = 1025
+    eos_token_id: int | list[int] | None = 1024
+    bos_token_id: int | None = 1026
 
 
 @auto_docstring(checkpoint="nari-labs/Dia-1.6B")
+@strict(accept_kwargs=True)
 class DiaConfig(PreTrainedConfig):
     r"""
     delay_pattern (`list[int]`, *optional*, defaults to `[0, 8, 9, 10, 11, 12, 13, 14, 15]`):
@@ -149,57 +109,57 @@ class DiaConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {"encoder_config": DiaEncoderConfig, "decoder_config": DiaDecoderConfig}
 
-    def __init__(
-        self,
-        encoder_config: DiaEncoderConfig | None = None,
-        decoder_config: DiaDecoderConfig | None = None,
-        norm_eps: float = 1e-5,
-        is_encoder_decoder: bool = True,
-        pad_token_id: int | None = None,
-        eos_token_id: int | None = None,
-        bos_token_id: int | None = None,
-        delay_pattern: list[int] | None = None,
-        initializer_range: float = 0.02,
-        use_cache: bool = True,
-        **kwargs,
-    ):
-        if isinstance(encoder_config, dict):
-            encoder_config = DiaEncoderConfig(**encoder_config)
-        if isinstance(decoder_config, dict):
-            decoder_config = DiaDecoderConfig(**decoder_config)
-        self.encoder_config = encoder_config if encoder_config is not None else DiaEncoderConfig()
-        self.decoder_config = decoder_config if decoder_config is not None else DiaDecoderConfig()
-        self.norm_eps = norm_eps
-        self.delay_pattern = delay_pattern if delay_pattern is not None else [0, 8, 9, 10, 11, 12, 13, 14, 15]
-        self.initializer_range = initializer_range
-        self.use_cache = use_cache
+    encoder_config: DiaEncoderConfig | dict | None = None
+    decoder_config: DiaDecoderConfig | dict | None = None
+    norm_eps: float = 1e-5
+    is_encoder_decoder: bool = True
+    pad_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
+    bos_token_id: int | None = None
+    delay_pattern: list[int] | None = None
+    initializer_range: float = 0.02
+    use_cache: bool = True
 
-        # TODO: Remove token ID forwarding once the `nari-labs/Dia-1.6B`
-        # checkpoint is updated
-        if pad_token_id is not None:
+    def __post_init__(self, **kwargs):
+        if isinstance(self.encoder_config, dict):
+            self.encoder_config = DiaEncoderConfig(**self.encoder_config)
+        if isinstance(self.decoder_config, dict):
+            self.decoder_config = DiaDecoderConfig(**self.decoder_config)
+
+        self.encoder_config = self.encoder_config if self.encoder_config is not None else DiaEncoderConfig()
+        self.decoder_config = self.decoder_config if self.decoder_config is not None else DiaDecoderConfig()
+        self.delay_pattern = (
+            self.delay_pattern if self.delay_pattern is not None else [0, 8, 9, 10, 11, 12, 13, 14, 15]
+        )
+
+        # TODO: Remove token ID forwarding once the `nari-labs/Dia-1.6B` checkpoint is updated
+        if self.pad_token_id is not None:
             logger.warning_once(
                 "Passing `pad_token_id` to `DiaConfig` is deprecated. "
                 "Please set it directly on `DiaDecoderConfig` instead."
             )
-            self.decoder_config.pad_token_id = pad_token_id
-        if eos_token_id is not None:
+            self.decoder_config.pad_token_id = self.pad_token_id
+
+        if self.eos_token_id is not None:
             logger.warning_once(
                 "Passing `eos_token_id` to `DiaConfig` is deprecated. "
                 "Please set it directly on `DiaDecoderConfig` instead."
             )
-            self.decoder_config.eos_token_id = eos_token_id
-        if bos_token_id is not None:
+            self.decoder_config.eos_token_id = self.eos_token_id
+
+        if self.bos_token_id is not None:
             logger.warning_once(
                 "Passing `bos_token_id` to `DiaConfig` is deprecated. "
                 "Please set it directly on `DiaDecoderConfig` instead."
             )
-            self.decoder_config.bos_token_id = bos_token_id
+            self.decoder_config.bos_token_id = self.bos_token_id
 
-        assert self.decoder_config.num_channels == len(self.delay_pattern), (
-            "Number of channels must match delay pattern length."
-        )
+        super().__post_init__(**kwargs)
 
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.decoder_config.num_channels != len(self.delay_pattern):
+            raise ValueError("Number of channels must match delay pattern length.")
 
     def get_text_config(self, *args, **kwargs):
         """Defaulting to audio config as it's the decoder in this case which is usually the text backbone"""

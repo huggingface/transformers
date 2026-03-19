@@ -13,14 +13,14 @@
 # limitations under the License.
 """MarkupLM model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/markuplm-base")
+@strict(accept_kwargs=True)
 class MarkupLMConfig(PreTrainedConfig):
     r"""
     max_tree_id_unit_embeddings (`int`, *optional*, defaults to 1024):
@@ -61,58 +61,29 @@ class MarkupLMConfig(PreTrainedConfig):
 
     model_type = "markuplm"
 
-    def __init__(
-        self,
-        vocab_size=30522,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=2,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        pad_token_id=0,
-        bos_token_id=0,
-        eos_token_id=2,
-        max_xpath_tag_unit_embeddings=256,
-        max_xpath_subs_unit_embeddings=1024,
-        tag_pad_id=216,
-        subs_pad_id=1001,
-        xpath_unit_hidden_size=32,
-        max_depth=50,
-        use_cache=True,
-        classifier_dropout=None,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
-        self.intermediate_size = intermediate_size
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        self.classifier_dropout = classifier_dropout
-        # additional properties
-        self.max_depth = max_depth
-        self.max_xpath_tag_unit_embeddings = max_xpath_tag_unit_embeddings
-        self.max_xpath_subs_unit_embeddings = max_xpath_subs_unit_embeddings
-        self.tag_pad_id = tag_pad_id
-        self.subs_pad_id = subs_pad_id
-        self.xpath_unit_hidden_size = xpath_unit_hidden_size
+    vocab_size: int = 30522
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.1
+    attention_probs_dropout_prob: float = 0.1
+    max_position_embeddings: int = 512
+    type_vocab_size: int = 2
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 2
+    max_xpath_tag_unit_embeddings: int = 256
+    max_xpath_subs_unit_embeddings: int = 1024
+    tag_pad_id: int = 216
+    subs_pad_id: int = 1001
+    xpath_unit_hidden_size: int = 32
+    max_depth: int = 50
+    use_cache: bool = True
+    classifier_dropout: float | int | None = None
 
 
 __all__ = ["MarkupLMConfig"]

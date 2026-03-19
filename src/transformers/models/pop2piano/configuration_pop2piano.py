@@ -13,14 +13,14 @@
 # limitations under the License.
 """Pop2Piano model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="sweetcocoa/pop2piano")
+@strict(accept_kwargs=True)
 class Pop2PianoConfig(PreTrainedConfig):
     r"""
     composer_vocab_size (`int`, *optional*, defaults to 21):
@@ -37,58 +37,34 @@ class Pop2PianoConfig(PreTrainedConfig):
 
     model_type = "pop2piano"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"num_hidden_layers": "num_layers", "hidden_size": "d_model", "num_attention_heads": "num_heads"}
 
-    def __init__(
-        self,
-        vocab_size=2400,
-        composer_vocab_size=21,
-        d_model=512,
-        d_kv=64,
-        d_ff=2048,
-        num_layers=6,
-        num_decoder_layers=None,
-        num_heads=8,
-        relative_attention_num_buckets=32,
-        relative_attention_max_distance=128,
-        dropout_rate=0.1,
-        layer_norm_epsilon=1e-6,
-        initializer_factor=1.0,
-        feed_forward_proj="gated-gelu",
-        is_encoder_decoder=True,
-        use_cache=True,
-        pad_token_id=0,
-        eos_token_id=1,
-        dense_act_fn="relu",
-        is_decoder=False,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        self.is_decoder = is_decoder
-        self.tie_word_embeddings = tie_word_embeddings
-        self.vocab_size = vocab_size
-        self.composer_vocab_size = composer_vocab_size
-        self.d_model = d_model
-        self.d_kv = d_kv
-        self.d_ff = d_ff
-        self.num_layers = num_layers
-        self.num_decoder_layers = num_decoder_layers if num_decoder_layers is not None else self.num_layers
-        self.num_heads = num_heads
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.relative_attention_max_distance = relative_attention_max_distance
-        self.dropout_rate = dropout_rate
-        self.layer_norm_epsilon = layer_norm_epsilon
-        self.initializer_factor = initializer_factor
-        self.feed_forward_proj = feed_forward_proj
-        self.use_cache = use_cache
-        self.dense_act_fn = dense_act_fn
+    vocab_size: int = 2400
+    composer_vocab_size: int = 21
+    d_model: int = 512
+    d_kv: int = 64
+    d_ff: int = 2048
+    num_layers: int = 6
+    num_decoder_layers: int | None = None
+    num_heads: int = 8
+    relative_attention_num_buckets: int = 32
+    relative_attention_max_distance: int = 128
+    dropout_rate: float = 0.1
+    layer_norm_epsilon: float = 1e-6
+    initializer_factor: float = 1.0
+    feed_forward_proj: str = "gated-gelu"
+    is_encoder_decoder: bool = True
+    use_cache: bool = True
+    pad_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 1
+    dense_act_fn: str = "relu"
+    is_decoder: bool = False
+    tie_word_embeddings: bool = True
+
+    def __post_init__(self, **kwargs):
+        self.num_decoder_layers = self.num_decoder_layers if self.num_decoder_layers is not None else self.num_layers
         self.is_gated_act = self.feed_forward_proj.split("-")[0] == "gated"
-        self.hidden_size = self.d_model
-        self.num_attention_heads = num_heads
-        self.num_hidden_layers = num_layers
-        self.pad_token_id = pad_token_id
-        self.eos_token_id = eos_token_id
-
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Pop2PianoConfig"]

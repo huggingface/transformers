@@ -13,14 +13,14 @@
 # limitations under the License.
 """RemBERT model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/rembert")
+@strict(accept_kwargs=True)
 class RemBertConfig(PreTrainedConfig):
     r"""
     input_embedding_size (`int`, *optional*, defaults to 256):
@@ -45,55 +45,28 @@ class RemBertConfig(PreTrainedConfig):
 
     model_type = "rembert"
 
-    def __init__(
-        self,
-        vocab_size=250300,
-        hidden_size=1152,
-        num_hidden_layers=32,
-        num_attention_heads=18,
-        input_embedding_size=256,
-        output_embedding_size=1664,
-        intermediate_size=4608,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        classifier_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=2,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        use_cache=True,
-        pad_token_id=0,
-        bos_token_id=312,
-        eos_token_id=313,
-        is_decoder=False,
-        add_cross_attention=False,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-
-        self.is_decoder = is_decoder
-        self.add_cross_attention = add_cross_attention
-        self.vocab_size = vocab_size
-        self.input_embedding_size = input_embedding_size
-        self.output_embedding_size = output_embedding_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.classifier_dropout_prob = classifier_dropout_prob
-        self.initializer_range = initializer_range
-        self.type_vocab_size = type_vocab_size
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        self.tie_word_embeddings = False
+    vocab_size: int = 250300
+    hidden_size: int = 1152
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 18
+    input_embedding_size: int = 256
+    output_embedding_size: int = 1664
+    intermediate_size: int = 4608
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
+    classifier_dropout_prob: float | int = 0.1
+    max_position_embeddings: int = 512
+    type_vocab_size: int = 2
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    use_cache: bool = True
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 312
+    eos_token_id: int | list[int] | None = 313
+    is_decoder: bool = False
+    add_cross_attention: bool = False
+    tie_word_embeddings: bool = False
 
 
 __all__ = ["RemBertConfig"]

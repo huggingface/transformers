@@ -15,6 +15,7 @@
 
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
@@ -31,7 +32,7 @@ from ...utils import (
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
 from ..janus.image_processing_janus import JanusImageProcessor
-from ..janus.image_processing_janus_fast import JanusImageProcessorFast
+from ..janus.image_processing_pil_janus import JanusImageProcessorPil
 from ..janus.modeling_janus import JanusForConditionalGeneration, JanusModel, JanusPreTrainedModel
 
 
@@ -39,6 +40,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="deepseek-community/deepseek-vl-1.3b-chat")
+@strict(accept_kwargs=True)
 class DeepseekVLConfig(PreTrainedConfig):
     r"""
     Example:
@@ -59,35 +61,27 @@ class DeepseekVLConfig(PreTrainedConfig):
     model_type = "deepseek_vl"
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
-    def __init__(
-        self,
-        text_config: AutoConfig | None = None,
-        vision_config: AutoConfig | None = None,
-        image_token_id: int = 100015,
-        tie_word_embeddings: bool | None = True,
-        **kwargs,
-    ):
-        if text_config is None:
-            text_config = {}
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 100015
+    tie_word_embeddings: bool = True
+
+    def __post_init__(self, **kwargs):
+        if self.text_config is None:
+            self.text_config = {}
             logger.info("`text_config` is `None`. Initializing the `LlamaConfig` with default values.")
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "llama")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
 
-        if vision_config is None:
-            vision_config = {}
+        if self.vision_config is None:
+            self.vision_config = {}
             logger.info("`vision_config` is `None`. Initializing the `SiglipVisionConfig` with default values.")
+        if isinstance(self.vision_config, dict):
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "siglip_vision_model")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
 
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "llama")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "siglip_vision_model")
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.image_token_id = image_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 class DeepseekVLBaseModelOutputWithPast(IdeficsBaseModelOutputWithPast):
@@ -158,10 +152,7 @@ class DeepseekVLForConditionalGeneration(JanusForConditionalGeneration):
         raise AttributeError("Not needed for DeepseekVL")
 
 
-class DeepseekVLImageProcessor(JanusImageProcessor):
-    def __init__(self, **super_kwargs):
-        super().__init__(**super_kwargs)
-
+class DeepseekVLImageProcessorPil(JanusImageProcessorPil):
     def postprocess(self):
         raise AttributeError("Not needed for DeepseekVL")
 
@@ -169,10 +160,7 @@ class DeepseekVLImageProcessor(JanusImageProcessor):
         raise AttributeError("Not needed for DeepseekVL")
 
 
-class DeepseekVLImageProcessorFast(JanusImageProcessorFast):
-    def __init__(self, **super_kwargs):
-        super().__init__(**super_kwargs)
-
+class DeepseekVLImageProcessor(JanusImageProcessor):
     def postprocess(self):
         raise AttributeError("Not needed for DeepseekVL")
 
@@ -272,6 +260,6 @@ __all__ = [
     "DeepseekVLModel",
     "DeepseekVLForConditionalGeneration",
     "DeepseekVLImageProcessor",
-    "DeepseekVLImageProcessorFast",
+    "DeepseekVLImageProcessorPil",
     "DeepseekVLProcessor",
 ]
