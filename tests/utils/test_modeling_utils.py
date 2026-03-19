@@ -1579,6 +1579,20 @@ class ModelUtilsTest(TestCasePlus):
             # They should still be tied though
             self.assertIs(new_model.linear.weight, new_model.linear_2.weight, msg="Weights are not tied!")
 
+    def test_get_tied_weight_keys_with_list_type(self):
+        """Test that _get_tied_weight_keys handles _tied_weights_keys as a list (not just dict).
+
+        Some models (e.g. Nemotron-H) define _tied_weights_keys as a list, which caused
+        an AttributeError: 'list' object has no attribute 'keys' when saving full finetunes.
+        """
+        from transformers.modeling_utils import _get_tied_weight_keys
+
+        model = BaseModelWithTiedWeights(PreTrainedConfig(tie_word_embeddings=True))
+        # Simulate a submodule that uses a list for _tied_weights_keys (as some models do)
+        model.linear._tied_weights_keys = ["weight"]
+        result = _get_tied_weight_keys(model)
+        self.assertIn("linear.weight", result)
+
     def test_tied_weights_are_always_tied_from_config(self):
         """Test that if a model is initialized from config it's always tied, and that the context `no_tie_weights` works
         as expected"""
