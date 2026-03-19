@@ -309,7 +309,6 @@ class ClvpSelfAttention(nn.Module):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, torch.FloatTensor | None]:
         # Raise error when position_ids is None but rotary_pos_emb is provided, because we need that when applying
@@ -325,9 +324,7 @@ class ClvpSelfAttention(nn.Module):
         value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
         if past_key_values is not None:
-            key_states, value_states = past_key_values.update(
-                key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-            )
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         if rotary_pos_emb is not None:
             rotary_emb_dim = rotary_pos_emb.shape[-1]
@@ -598,7 +595,6 @@ class ClvpDecoderLayer(nn.Module):
         attention_mask: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -609,7 +605,6 @@ class ClvpDecoderLayer(nn.Module):
             attention_mask=attention_mask,
             position_ids=position_ids,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
         # residual connection
@@ -954,7 +949,6 @@ class ClvpDecoder(ClvpPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -964,24 +958,16 @@ class ClvpDecoder(ClvpPreTrainedModel):
             inputs_embeds = self.input_embeds_layer(input_ids)
 
         seq_len = inputs_embeds.shape[1]
-        device = inputs_embeds.device
-
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, seq_len)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_len, device=inputs_embeds.device
-            )
         if position_ids is None:
-            position_ids = torch.arange(
-                past_key_values_length, seq_len + past_key_values_length, dtype=torch.long, device=device
-            )
-            position_ids = position_ids.unsqueeze(0).view(-1, seq_len)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         position_embeds = self.position_embeds_layer(position_ids)
         inputs_embeds = inputs_embeds + position_embeds
@@ -990,7 +976,6 @@ class ClvpDecoder(ClvpPreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
         )
 
@@ -1014,7 +999,6 @@ class ClvpDecoder(ClvpPreTrainedModel):
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -1057,7 +1041,6 @@ class ClvpModel(ClvpPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
         # decoder outputs consists of (dec_features, past_key_values, dec_hidden, dec_attn)
@@ -1069,7 +1052,6 @@ class ClvpModel(ClvpPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1184,7 +1166,6 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         past_key_values=None,
         inputs_embeds=None,
         conditioning_embeds=None,
-        cache_position=None,
         is_first_iteration=False,
         **kwargs,
     ):
@@ -1196,7 +1177,6 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
@@ -1217,7 +1197,6 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
@@ -1235,7 +1214,6 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1482,7 +1460,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         text_encoder_inputs_embeds: torch.FloatTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         return_loss: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | ClvpOutput:
         r"""
@@ -1530,7 +1507,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
 
         decoder_outputs: CausalLMOutputWithCrossAttentions = self.speech_decoder_model(
             inputs_embeds=conditioning_embeds,
-            cache_position=cache_position,
             **kwargs,
         )
 
