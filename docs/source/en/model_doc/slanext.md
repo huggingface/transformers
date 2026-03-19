@@ -74,6 +74,6 @@ print(result['structure_score'])
 
 [[autodoc]] SLANeXtModel
 
-## SLANeXtImageProcessor
+## SLANeXtImageProcessorFast
 
-[[autodoc]] SLANeXtImageProcessor
+[[autodoc]] SLANeXtImageProcessorFast
