@@ -153,6 +153,7 @@ class RequestState:
         default_factory=list
     )  # Initial tokens left to process (initialized in __post_init__)
     generated_tokens: list[int] = field(default_factory=list)  # Generated tokens
+    logprobs: list[float] = field(default_factory=list)  # Log probabilities of the generated tokens
     allocated_blocks: int = 0  # Number of blocks allocated to the request
     position_offset: int = 0  # Current position in the sequence for position_ids
     _status: RequestStatus = RequestStatus.PENDING  # Status of the request, hidden behind a property
@@ -222,7 +223,7 @@ class RequestState:
 
     # TODO: this logic seems one token off, check it out
     @traced
-    def update_and_check_completion(self, token_id: int) -> bool:
+    def update_and_check_completion(self, token_id: int, logprob: float | None) -> bool:
         """Update the request with a newly generated token and check for completion.
 
         Args:
@@ -249,6 +250,8 @@ class RequestState:
             self.generated_tokens.append(token_id)
             self.tokens_to_process = [token_id]  # this works for 2 levels of pipelines, but not sure for more
             current_len += 1
+            if logprob is not None:
+                self.logprobs.append(logprob)
         else:
             logger.warning(f"Request {self.request_id} generated a useless token: {token_id}")
             self.generated_tokens.pop()
@@ -281,7 +284,7 @@ class RequestState:
             request_id=self.request_id,
             prompt_ids=self.initial_tokens,
             generated_tokens=self.generated_tokens,
-            logprobs=[],
+            logprobs=self.logprobs,
             error=self.error,
             status=self.status,
             created_time=self.created_time,
@@ -298,6 +301,7 @@ class RequestState:
             num_children=self.num_children,
             tokens_to_process=self.tokens_to_process[:],
             generated_tokens=self.generated_tokens[:],
+            logprobs=self.logprobs[:],
             allocated_blocks=self.allocated_blocks,
             position_offset=self.position_offset,
             _status=self.status,
@@ -322,13 +326,19 @@ class RequestState:
         new_state = RequestState(
             request_id=self.request_id,
             initial_tokens=self.initial_tokens + self.generated_tokens,
+            logprobs=self.logprobs[:],
             num_children=self.num_children,
             record_timestamps=self.record_timestamps,
             max_new_tokens=max_new_tokens,
             eos_token_id=self.eos_token_id,
             streaming=self.streaming,
         )
-        new_state._true_initial_tokens = self._true_initial_tokens + len(self.initial_tokens)
+        # If the request has been soft reset once already, this stays the same
+        if self._true_initial_tokens:
+            new_state._true_initial_tokens = self._true_initial_tokens
+        # Otherwise, we set the true initial tokens to the number of initial tokens
+        else:
+            new_state._true_initial_tokens = len(self.initial_tokens)
         return new_state
 
 

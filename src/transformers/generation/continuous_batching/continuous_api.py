@@ -110,7 +110,6 @@ class ContinuousBatchProcessor:
         """
         self.cache = cache
         self.config = config
-        self.generation_config = generation_config
         self.cb_config = continuous_batching_config
         self.input_queue = input_queue
         self.output_queue = output_queue
@@ -142,33 +141,36 @@ class ContinuousBatchProcessor:
         )
 
         # Compile the varlen path if config provided
-        varlen_config = self.cb_config.varlen_compile_config
-        if varlen_config is not None:
-            self._compiled_varlen = torch.compile(self._forward_process_and_sample, **varlen_config.to_dict())
-        else:
-            self._compiled_varlen = None
+        self._compiled_varlen = None
+        if self.cb_config.varlen_compile_config is not None:
+            self._compiled_varlen = torch.compile(
+                self._forward_process_and_sample,
+                **self.cb_config.varlen_compile_config.to_dict()
+            )
 
         # Compile the decode path if config provided
-        decode_config = self.cb_config.decode_compile_config
-        if decode_config is not None:
-            self._compiled_decode = torch.compile(self._forward_process_and_sample, **decode_config.to_dict())
-        else:
-            self._compiled_decode = None
+        self._compiled_decode = None
+        if self.cb_config.decode_compile_config is not None:
+            self._compiled_decode = torch.compile(
+                self._forward_process_and_sample,
+                **self.cb_config.decode_compile_config.to_dict()
+            )
 
         # Padding is turned on when either cuda graphs or compile is used
         self._pad_inputs = self.use_cuda_graph or (varlen_config is not None or decode_config is not None)
 
         # Setup inputs and outputs
+        self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
         self.use_async_batching = self.cb_config.use_async_batching
         if self.use_async_batching:
             # Since in async there are 2 IO pairs, there are also 2 graph buffers: we divide the max_cached_graphs by 2
             max_cached_graphs = ceil(self.max_cached_graphs / 2)
             self.inputs_and_outputs = ContinuousBatchingAsyncIOs(
-                cache, config, model_device, model_dtype, max_cached_graphs
+                cache, config, model_device, model_dtype, max_cached_graphs, self.log_prob_generation
             )
         else:
             self.inputs_and_outputs = ContinuousBatchingIOs(
-                cache, config, model_device, model_dtype, self.max_cached_graphs
+                cache, config, model_device, model_dtype, self.max_cached_graphs, self.log_prob_generation
             )
         # Set up the graph pool. This allows all graphs to share the same memory pool, which is fine because they never
         # run concurrently. This greatly saves memory.
@@ -328,7 +330,7 @@ class ContinuousBatchProcessor:
     @traced
     def update_batch(self) -> None:
         """Update request states based on generated tokens."""
-        requests_in_batch, new_tokens = self.inputs_and_outputs.prepare_batch_update()
+        requests_in_batch, new_tokens, logprobs = self.inputs_and_outputs.prepare_batch_update()
         current_logits_index = 0
         for future_state in requests_in_batch:
             state = future_state.state
@@ -348,10 +350,11 @@ class ContinuousBatchProcessor:
                     state.status = RequestStatus.DECODING
 
                 token = new_tokens[current_logits_index]
+                logprob = logprobs[current_logits_index] if self.log_prob_generation else None
                 current_logits_index += 1
 
                 # Update the request and stop if it is complete
-                is_finished = state.update_and_check_completion(token)
+                is_finished = state.update_and_check_completion(token, logprob)
                 # We mark the completed blocks as such
                 self.cache.mark_shareable_blocks_as_complete(state, future_state.complete_blocks)
                 if is_finished:
@@ -525,18 +528,38 @@ class ContinuousBatchProcessor:
 
     @traced(span_name="sampling")
     def _sample(self, probs: torch.Tensor, batch_data: dict, do_sample: bool, output_ids: torch.Tensor) -> None:
-        if do_sample:
-            probs = nn.functional.softmax(probs, dim=-1)
-            # probs[0] has shape [seq_len, vocab_size], multinomial returns [seq_len, 1]
-            next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(-1)  # Now [seq_len]
+
+        # Apply softmax if we are sampling or if we are generating log probabilities
+        if do_sample or self.log_prob_generation:
+            probs = nn.functional.softmax(probs[0], dim=-1)  # shape [seq_len, vocab_size]
+        # Otherwise just remove the bastch size dimension, which is always 1
         else:
-            next_tokens = torch.argmax(probs, dim=-1)  # shape is [1, seq_len]
-            next_tokens = next_tokens.squeeze(0)  # shape is [seq_len]
-        tokens = next_tokens.size(0)  # Get seq_len dimension
-        #
+            probs = probs.squeeze(0)  # shape [seq_len, vocab_size]
+
+        # Retrieve next tokens through sampling or argmax
+        if do_sample:
+            next_tokens = torch.multinomial(probs, num_samples=1)  # shape [seq_len, 1]
+        else:
+            next_tokens = torch.argmax(probs, dim=-1, keepdim=True)  # shape [seq_len, 1]
+
+        # Maybe retrieve log probabilities
+        if self.log_prob_generation:
+            logprobs = probs.gather(dim=1, index=next_tokens).squeeze(-1).log()  # shape [seq_len]
+        # And always remove the extra dimension for the gather
+        next_tokens = next_tokens.squeeze(-1)  # shape [seq_len]
+
+        # Get seq_len dimension to slice the logits indices
+        tokens = next_tokens.size(0)
+        # Shuffle the next tokens to match the order of the batch's requests
         indices = batch_data["logits_indices"][:tokens]
         next_tokens = next_tokens[indices]
-        output_ids[:tokens].copy_(next_tokens)
+        # Copy the next tokens and maybe their logprobs to the static output tensor
+        output_ids[0, :tokens].copy_(next_tokens)
+        if self.log_prob_generation:
+            # Shuffle the logprobs the same way as the next tokens
+            logprobs = logprobs[indices]
+            # In order to match the dtype of the output ids, we convert them to fp32 and cast them as int32
+            output_ids[1, :tokens].copy_(logprobs.float().view(dtype=torch.int32))
 
 
 # Manager Class (User Interface)
@@ -604,10 +627,6 @@ class ContinuousBatchingManager:
         self.q_padding_interval_size = self.continuous_batching_config.q_padding_interval_size
         self.kv_padding_interval_size = self.continuous_batching_config.kv_padding_interval_size
         self.max_cached_graphs = self.continuous_batching_config.max_cached_graphs
-
-        # Log probability generation is not supported yet (TODO)
-        if self.log_prob_generation:
-            raise NotImplementedError("log_prob_generation is not supported yet")
 
     @traced
     def start(self) -> None:
