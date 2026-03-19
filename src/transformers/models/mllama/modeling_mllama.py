@@ -1389,7 +1389,7 @@ class MllamaModel(MllamaPreTrainedModel):
             )
             cross_attention_states = vision_outputs.last_hidden_state
             cross_attention_states = self.multi_modal_projector(cross_attention_states).reshape(
-                -1, cross_attention_states.shape[-2], self.hidden_size
+                vision_outputs.last_hidden_state.shape[0], -1, self.hidden_size
             )
 
         if cross_attention_mask is not None:
