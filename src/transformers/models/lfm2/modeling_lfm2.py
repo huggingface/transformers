@@ -239,10 +239,10 @@ class Lfm2HybridConvCache:
         # as it will `roll` anyway in the first decoding step even though it should `roll` ONLY if the cache is already full.
         # But since `conv_kernel_size=4` in practice, it's almost impossible to have a smaller prefill so it's mostly fine for now
         if cache_init:
-            self.conv_cache[layer_idx] = new_conv_state.to(self.conv_states.device)
+            self.conv_cache[layer_idx] = new_conv_state.to(self.conv_cache[layer_idx].device)
         else:
-            self.conv_cache[layer_idx] = self.conv_states[layer_idx].roll(shifts=-1, dims=-1)
-            self.conv_cache[layer_idx][:, :, -1:] = new_conv_state.to(self.conv_states.device)
+            self.conv_cache[layer_idx] = self.conv_cache[layer_idx].roll(shifts=-1, dims=-1)
+            self.conv_cache[layer_idx][:, :, -1:] = new_conv_state.to(self.conv_cache[layer_idx].device)
 
         # If last layer is updated, set the flag
         if layer_idx == self.last_conv_layer:
