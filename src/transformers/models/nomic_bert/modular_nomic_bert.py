@@ -30,6 +30,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..bert.configuration_bert import BertConfig
 from ..bert.modeling_bert import (
     BertForMaskedLM,
     BertForNextSentencePrediction,
@@ -57,7 +58,23 @@ from ..llama.modeling_llama import (
 
 @auto_docstring(checkpoint="nomic-ai/nomic-embed-text-v1.5")
 @strict(accept_kwargs=True)
-class NomicBertConfig(PreTrainedConfig):
+class NomicBertConfig(BertConfig):
+    r"""
+    Examples:
+
+    ```python
+    >>> from transformers import NomicBertConfig, NomicBertModel
+
+    >>> # Initializing a Nomic BERT nomic-ai/nomic-embed-text-v1.5 style configuration
+    >>> configuration = NomicBertConfig()
+
+    >>> # Initializing a model (with random weights) from the nomic-ai/nomic-embed-text-v1.5 style configuration
+    >>> model = NomicBertModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "nomic_bert"
 
     vocab_size: int = 30522
@@ -84,40 +101,13 @@ class NomicBertConfig(PreTrainedConfig):
     use_cache = AttributeError()
 
     def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
+        PreTrainedConfig.__post_init__(self, **kwargs)
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads
 
 
 class NomicBertEmbeddings(JinaEmbeddingsV3Embeddings):
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        token_type_ids: torch.LongTensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-    ) -> torch.Tensor:
-        if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids)
-
-        batch_size, seq_length = inputs_embeds.size()[:-1]
-
-        if token_type_ids is None:
-            if hasattr(self, "token_type_ids"):
-                # NOTE: We assume either pos ids to have bsz == 1 (broadcastable) or bsz == effective bsz (input_shape[0])
-                buffered_token_type_ids = self.token_type_ids.expand(position_ids.shape[0], -1)
-                buffered_token_type_ids = torch.gather(buffered_token_type_ids, dim=1, index=position_ids)
-                token_type_ids = buffered_token_type_ids.expand(batch_size, seq_length)
-            else:
-                input_shape = inputs_embeds.size()[:-1]
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
-
-        token_type_embeddings = self.token_type_embeddings(token_type_ids)
-        embeddings = inputs_embeds + token_type_embeddings
-
-        embeddings = self.LayerNorm(embeddings)
-        embeddings = self.dropout(embeddings)
-        return embeddings
+    pass
 
 
 class NomicBertRotaryEmbedding(LlamaRotaryEmbedding):
@@ -126,10 +116,6 @@ class NomicBertRotaryEmbedding(LlamaRotaryEmbedding):
 
 @use_kernelized_func(apply_rotary_pos_emb)
 class NomicBertAttention(JinaEmbeddingsV3Attention):
-    """
-    Self-Attention mechanism is essentially Llama attention without caching.
-    """
-
     def __init__(self, config):
         super().__init__(config)
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
@@ -280,9 +266,6 @@ class NomicBertForMaskedLM(BertForMaskedLM):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.cls.predictions.decoder = new_embeddings
 
     @can_return_tuple
     @auto_docstring

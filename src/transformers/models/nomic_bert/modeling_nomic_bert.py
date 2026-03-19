@@ -73,26 +73,28 @@ class NomicBertEmbeddings(nn.Module):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
     ) -> torch.Tensor:
+        embeddings = inputs_embeds
         if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids)
+            embeddings = self.word_embeddings(input_ids)
 
-        batch_size, seq_length = inputs_embeds.size()[:-1]
+        input_shape = embeddings.shape[:-1]
+        device = embeddings.device
 
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
                 # NOTE: We assume either pos ids to have bsz == 1 (broadcastable) or bsz == effective bsz (input_shape[0])
                 buffered_token_type_ids = self.token_type_ids.expand(position_ids.shape[0], -1)
                 buffered_token_type_ids = torch.gather(buffered_token_type_ids, dim=1, index=position_ids)
-                token_type_ids = buffered_token_type_ids.expand(batch_size, seq_length)
+                token_type_ids = buffered_token_type_ids.expand(*input_shape)
             else:
-                input_shape = inputs_embeds.size()[:-1]
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-        embeddings = inputs_embeds + token_type_embeddings
 
+        embeddings = embeddings + token_type_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
+
         return embeddings
 
 
@@ -224,9 +226,7 @@ def eager_attention_forward(
 
 @use_kernelized_func(apply_rotary_pos_emb)
 class NomicBertAttention(nn.Module):
-    """
-    Self-Attention mechanism is essentially Llama attention without caching.
-    """
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
         super().__init__()
@@ -841,6 +841,7 @@ class NomicBertForMaskedLM(NomicBertPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @can_return_tuple
     @auto_docstring

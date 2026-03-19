@@ -29,6 +29,22 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="nomic-ai/nomic-embed-text-v1.5")
 @strict(accept_kwargs=True)
 class NomicBertConfig(PreTrainedConfig):
+    r"""
+    Examples:
+
+    ```python
+    >>> from transformers import NomicBertConfig, NomicBertModel
+
+    >>> # Initializing a Nomic BERT nomic-ai/nomic-embed-text-v1.5 style configuration
+    >>> configuration = NomicBertConfig()
+
+    >>> # Initializing a model (with random weights) from the nomic-ai/nomic-embed-text-v1.5 style configuration
+    >>> model = NomicBertModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "nomic_bert"
 
     vocab_size: int = 30522
@@ -39,20 +55,17 @@ class NomicBertConfig(PreTrainedConfig):
     hidden_act: str = "gelu"
     hidden_dropout_prob: float = 0.1
     attention_probs_dropout_prob: float = 0.1
+    max_position_embeddings: int = 2048
+    type_vocab_size: int = 2
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
+    pad_token_id: int = 0
     classifier_dropout: float | None = None
-    type_vocab_size: int = 2
     bos_token_id: int | None = None
     eos_token_id: int | None = None
-    pad_token_id: int = 0
     tie_word_embeddings = True
     rope_parameters: RopeParameters | dict | None = None
-    max_position_embeddings: int = 2048
     head_dim: int | None = None
-    is_decoder = AttributeError()
-    add_cross_attention = AttributeError()
-    use_cache = AttributeError()
 
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)
